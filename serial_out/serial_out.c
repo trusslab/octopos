@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-char fifo[64] = "/tmp/octopos_serial_out";
+char fifo[64] = "/tmp/octopos_mailbox_serial_out";
 #define CHANNEL_MSG_SIZE	256
 
 int main(int argc, char **argv)
@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 
 	mkfifo(fifo, 0666);
 
-	fd = open(fifo, O_RDWR);
+	fd = open(fifo, O_RDONLY);
 	
 	while(1) {
 		memset(buf, 0x0, CHANNEL_MSG_SIZE);

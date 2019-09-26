@@ -29,7 +29,7 @@ int command_pipe[2];
 /*
  * Communications to keyboard and serial output
  */
-char output_fifo[64] = "/tmp/octopos_serial_out";
+char output_fifo[64] = "/tmp/octopos_mailbox_shell_out";
 int output_fd;
 
 #define OUTPUT_CHANNEL_MSG_SIZE	256
@@ -37,7 +37,7 @@ int output_fd;
 
 char output_buf[OUTPUT_CHANNEL_MSG_SIZE];
 
-char input_fifo[64] = "/tmp/octopos_keyboard";
+char input_fifo[64] = "/tmp/octopos_mailbox_shell_in";
 int input_fd;
 
 #define INPUT_CHANNEL_MSG_SIZE	1

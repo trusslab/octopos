@@ -6,7 +6,7 @@
 #include <termios.h>
 #include <sys/stat.h>
 
-char fifo[64] = "/tmp/octopos_keyboard";
+char fifo[64] = "/tmp/octopos_mailbox_keyboard";
 #define CHANNEL_MSG_SIZE	1
 
 int main(int argc, char **argv)
@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 
 	mkfifo(fifo, 0666);
 
-	fd = open(fifo, O_RDWR);
+	fd = open(fifo, O_WRONLY);
 
 	/*
 	 * put tty in raw mode.
