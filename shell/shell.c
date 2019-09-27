@@ -26,58 +26,78 @@ int command_pipe[2];
 #define WRITE 1
 
 #ifdef OCTOPOS_SHELL
+
+enum processors {
+	OS = 1,
+	KEYBOARD = 2,
+	SERIAL_OUT = 3
+};
+
 /*
  * Communications to keyboard and serial output
  */
-char output_fifo[64] = "/tmp/octopos_mailbox_shell_out";
-int output_fd;
+char fifo_out[64] = "/tmp/octopos_mailbox_shell_out";
+int fd_out;
 
-#define OUTPUT_CHANNEL_MSG_SIZE	256
+#define CHANNEL_MSG_SIZE	64
 #define channel_printf(fmt, args...); sprintf(output_buf, fmt, ##args); send_output(output_buf);
 
-char output_buf[OUTPUT_CHANNEL_MSG_SIZE];
+char output_buf[CHANNEL_MSG_SIZE];
 
-char input_fifo[64] = "/tmp/octopos_mailbox_shell_in";
-int input_fd;
+char fifo_in[64] = "/tmp/octopos_mailbox_shell_in";
+int fd_in;
 
-#define INPUT_CHANNEL_MSG_SIZE	1
+char input_buf[CHANNEL_MSG_SIZE];
 
-char input_buf[INPUT_CHANNEL_MSG_SIZE];
+char fifo_intr[64] = "/tmp/octopos_mailbox_shell_intr";
+int fd_intr;
 
-static int intialize_output_channel(void)
+static int intialize_channels(void)
 {
-	mkfifo(output_fifo, 0666);
-	output_fd = open(output_fifo, O_WRONLY);
+	mkfifo(fifo_out, 0666);
+	mkfifo(fifo_in, 0666);
+	mkfifo(fifo_intr, 0666);
+
+	fd_out = open(fifo_out, O_WRONLY);
+	fd_in = open(fifo_in, O_RDONLY);
+	fd_intr = open(fifo_intr, O_RDONLY);
 
 	return 0;
 }
 
-static void close_output_channel(void)
+static void close_channels(void)
 {
-	close(output_fd);
-}
+	close(fd_out);
+	close(fd_in);
+	close(fd_intr);
 
-static int intialize_input_channel(void)
-{
-	mkfifo(input_fifo, 0666);
-	input_fd = open(input_fifo, O_RDONLY);
-
-	return 0;
-}
-
-static void close_input_channel(void)
-{
-	close(input_fd);
+	remove(fifo_out);
+	remove(fifo_in);
+	remove(fifo_intr);
 }
 
 static int send_output(char *buf)
 {
-	return write(output_fd, buf, OUTPUT_CHANNEL_MSG_SIZE);
+	char opcode;
+
+	opcode = SERIAL_OUT;
+	write(fd_out, &opcode, 1);
+	write(fd_out, buf, CHANNEL_MSG_SIZE);
+
+	return 0;
 }
 
 static int recv_input(char *buf)
 {
-	return read(input_fd, buf, INPUT_CHANNEL_MSG_SIZE);
+	char interrupt, opcode;
+
+	opcode = 0; /* read queue */
+
+	read(fd_intr, &interrupt, 1);
+	write(fd_out, &opcode, 1);
+	read(fd_in, buf, CHANNEL_MSG_SIZE);
+
+	return 0;
 }
 
 static int channel_read_line(char *line, int size)
@@ -85,9 +105,9 @@ static int channel_read_line(char *line, int size)
 	int i;
 
 	for (i = 0; i < size; i++) {
-		memset(input_buf, 0x0, INPUT_CHANNEL_MSG_SIZE);
+		memset(input_buf, 0x0, CHANNEL_MSG_SIZE);
 		recv_input(input_buf);
-		line[i] = input_buf[0]; /* only support INPUT_CHANNEL_MSG_SIZE of 1 */
+		line[i] = input_buf[0];
 		channel_printf("%c", input_buf[0]);
 		if (input_buf[0] == '\n')
 			break;
@@ -145,7 +165,7 @@ static int command(int input, int first, int last)
 #ifdef OCTOPOS_SHELL
 			/* FIXME: we should not use the output_buf here. */
 			sprintf(output_buf, "Error: Failed to execute %s\n", args[0]);
-			write(pipettes[WRITE], output_buf, OUTPUT_CHANNEL_MSG_SIZE); 
+			write(pipettes[WRITE], output_buf, CHANNEL_MSG_SIZE); 
 #endif /* OCTOPOS_SHELL */
 			_exit(EXIT_FAILURE); // If child fails
 		}
@@ -153,8 +173,8 @@ static int command(int input, int first, int last)
 
 #ifdef OCTOPOS_SHELL
 	if (pid > 0 && last == 1) {
-		memset(output_buf, 0x0, OUTPUT_CHANNEL_MSG_SIZE);
-		read(pipettes[READ], output_buf, OUTPUT_CHANNEL_MSG_SIZE);
+		memset(output_buf, 0x0, CHANNEL_MSG_SIZE);
+		read(pipettes[READ], output_buf, CHANNEL_MSG_SIZE);
 		send_output(output_buf);
 	}
 #endif /* OCTOPOS_SHELL */
@@ -190,8 +210,7 @@ static int n = 0; /* number of calls to 'command' */
 int main()
 {
 #ifdef OCTOPOS_SHELL
-	intialize_input_channel();
-	intialize_output_channel();
+	intialize_channels();
 
 	channel_printf("SIMPLE SHELL: Type 'exit' or send EOF to exit.\n");
 #else /* OCTOPOS_SHELL */
@@ -235,8 +254,7 @@ int main()
 	}
 
 #ifdef OCTOPOS_SHELL
-	close_output_channel();
-	close_input_channel();
+	close_channels();
 #endif /* OCTOPOS_SHELL */
 	return 0;
 }
