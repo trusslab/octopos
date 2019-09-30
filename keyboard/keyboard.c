@@ -5,24 +5,16 @@
 #include <unistd.h>
 #include <termios.h>
 #include <sys/stat.h>
-
-enum processors {
-	OS = 1,
-	KEYBOARD = 2,
-	SERIAL_OUT = 3
-};
-
-char fifo[64] = "/tmp/octopos_mailbox_keyboard";
-#define CHANNEL_MSG_SIZE	64
+#include <octopos/mailbox.h>
 
 int main(int argc, char **argv)
 {
 	int fd;
-	char buf[CHANNEL_MSG_SIZE], opcode;
+	char buf[MAILBOX_QUEUE_MSG_SIZE], opcode[2];
 
-	mkfifo(fifo, 0666);
+	mkfifo(FIFO_KEYBOARD, 0666);
 
-	fd = open(fifo, O_WRONLY);
+	fd = open(FIFO_KEYBOARD, O_WRONLY);
 
 	/*
 	 * put tty in raw mode.
@@ -40,11 +32,12 @@ int main(int argc, char **argv)
         tcsetattr(0, TCSANOW, &now);
 
 	while(1) {
-		memset(buf, 0x0, CHANNEL_MSG_SIZE);
+		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		buf[0] = getchar();
-		opcode = OS;
-		write(fd, &opcode, 1);
-		write(fd, buf, CHANNEL_MSG_SIZE);
+		opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+		opcode[1] = KEYBOARD;
+		write(fd, opcode, 2);
+		write(fd, buf, MAILBOX_QUEUE_MSG_SIZE);
 		if (buf[0] == 3) { /* ETX */
 			printf("^C");
 			break;
@@ -55,5 +48,5 @@ int main(int argc, char **argv)
 
 	tcsetattr(0, TCSANOW, &orig);
 	close(fd);
-	remove(fifo);
+	remove(FIFO_KEYBOARD);
 }

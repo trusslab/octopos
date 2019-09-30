@@ -15,8 +15,6 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 
-#define OCTOPOS_SHELL	1
-
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];
 pid_t pid;
@@ -25,97 +23,13 @@ int command_pipe[2];
 #define READ  0
 #define WRITE 1
 
-#ifdef OCTOPOS_SHELL
-
-enum processors {
-	OS = 1,
-	KEYBOARD = 2,
-	SERIAL_OUT = 3
-};
-
-/*
- * Communications to keyboard and serial output
- */
-char fifo_out[64] = "/tmp/octopos_mailbox_shell_out";
-int fd_out;
-
+/* move to header file */
 #define CHANNEL_MSG_SIZE	64
-#define channel_printf(fmt, args...); sprintf(output_buf, fmt, ##args); send_output(output_buf);
 
 char output_buf[CHANNEL_MSG_SIZE];
 
-char fifo_in[64] = "/tmp/octopos_mailbox_shell_in";
-int fd_in;
-
-char input_buf[CHANNEL_MSG_SIZE];
-
-char fifo_intr[64] = "/tmp/octopos_mailbox_shell_intr";
-int fd_intr;
-
-static int intialize_channels(void)
-{
-	mkfifo(fifo_out, 0666);
-	mkfifo(fifo_in, 0666);
-	mkfifo(fifo_intr, 0666);
-
-	fd_out = open(fifo_out, O_WRONLY);
-	fd_in = open(fifo_in, O_RDONLY);
-	fd_intr = open(fifo_intr, O_RDONLY);
-
-	return 0;
-}
-
-static void close_channels(void)
-{
-	close(fd_out);
-	close(fd_in);
-	close(fd_intr);
-
-	remove(fifo_out);
-	remove(fifo_in);
-	remove(fifo_intr);
-}
-
-static int send_output(char *buf)
-{
-	char opcode;
-
-	opcode = SERIAL_OUT;
-	write(fd_out, &opcode, 1);
-	write(fd_out, buf, CHANNEL_MSG_SIZE);
-
-	return 0;
-}
-
-static int recv_input(char *buf)
-{
-	char interrupt, opcode;
-
-	opcode = 0; /* read queue */
-
-	read(fd_intr, &interrupt, 1);
-	write(fd_out, &opcode, 1);
-	read(fd_in, buf, CHANNEL_MSG_SIZE);
-
-	return 0;
-}
-
-static int channel_read_line(char *line, int size)
-{
-	int i;
-
-	for (i = 0; i < size; i++) {
-		memset(input_buf, 0x0, CHANNEL_MSG_SIZE);
-		recv_input(input_buf);
-		line[i] = input_buf[0];
-		channel_printf("%c", input_buf[0]);
-		if (input_buf[0] == '\n')
-			break;
-	}
-
-	return i;
-}	
-#endif /* OCTOPOS_SHELL */
+int send_output(char *buf);
+#define channel_printf(fmt, args...); sprintf(output_buf, fmt, ##args); send_output(output_buf);
 
 /*
  * Handle commands separatly
@@ -156,28 +70,26 @@ static int command(int input, int first, int last)
 			// Last command
 			dup2( input, STDIN_FILENO );
 			//Ardalan
-#ifdef OCTOPOS_SHELL
 			dup2(pipettes[WRITE], STDOUT_FILENO);
-#endif /* OCTOPOS_SHELL */
 		}
  
 		if (execvp( args[0], args) == -1) {
-#ifdef OCTOPOS_SHELL
+			//Ardalan start
 			/* FIXME: we should not use the output_buf here. */
 			sprintf(output_buf, "Error: Failed to execute %s\n", args[0]);
 			write(pipettes[WRITE], output_buf, CHANNEL_MSG_SIZE); 
-#endif /* OCTOPOS_SHELL */
+			//Ardalan end
 			_exit(EXIT_FAILURE); // If child fails
 		}
 	}
 
-#ifdef OCTOPOS_SHELL
+	//Ardalan start
 	if (pid > 0 && last == 1) {
 		memset(output_buf, 0x0, CHANNEL_MSG_SIZE);
 		read(pipettes[READ], output_buf, CHANNEL_MSG_SIZE);
 		send_output(output_buf);
 	}
-#endif /* OCTOPOS_SHELL */
+	//Ardalan end
 
 	if (input != 0) 
 		close(input);
@@ -204,59 +116,51 @@ static void cleanup(int n)
 }
  
 static int run(char* cmd, int input, int first, int last);
-static char line[1024];
 static int n = 0; /* number of calls to 'command' */
 
-int main()
+/* Process a command line */
+static void process_input_line(char *line)
 {
-#ifdef OCTOPOS_SHELL
-	intialize_channels();
+	int input = 0;
+	int first = 1;
 
-	channel_printf("SIMPLE SHELL: Type 'exit' or send EOF to exit.\n");
-#else /* OCTOPOS_SHELL */
-	printf("SIMPLE SHELL: Type 'exit' or send EOF to exit.\n");
-#endif /* OCTOPOS_SHELL */
-	while (1) {
-		/* Print the command prompt */
-#ifdef OCTOPOS_SHELL
-		channel_printf("octopos$> ");
-#else /* OCTOPOS_SHELL */
-		printf("$> ");
-#endif /* OCTOPOS_SHELL */
-		fflush(NULL);
- 
-		/* Read a command line */
-#ifdef OCTOPOS_SHELL
-		if (!channel_read_line(line, 1024)) 
-#else /* OCTOPOS_SHELL */
-		if (!fgets(line, 1024, stdin)) 
-#endif /* OCTOPOS_SHELL */
-			return 0;
- 
-		int input = 0;
-		int first = 1;
- 
-		char* cmd = line;
-		char* next = strchr(cmd, '|'); /* Find first '|' */
- 
-		while (next != NULL) {
-			/* 'next' points to '|' */
-			*next = '\0';
-			input = run(cmd, input, first, 0);
- 
-			cmd = next + 1;
-			next = strchr(cmd, '|'); /* Find next '|' */
-			first = 0;
-		}
-		input = run(cmd, input, first, 1);
-		cleanup(n);
-		n = 0;
+	char* cmd = line;
+	char* next = strchr(cmd, '|'); /* Find first '|' */
+
+	while (next != NULL) {
+		/* 'next' points to '|' */
+		*next = '\0';
+		input = run(cmd, input, first, 0);
+
+		cmd = next + 1;
+		next = strchr(cmd, '|'); /* Find next '|' */
+		first = 0;
 	}
+	input = run(cmd, input, first, 1);
+	cleanup(n);
+	n = 0;
+}
 
-#ifdef OCTOPOS_SHELL
-	close_channels();
-#endif /* OCTOPOS_SHELL */
-	return 0;
+#define MAX_LINE_SIZE	1024
+static char line[MAX_LINE_SIZE];
+static int num_chars = 0;
+
+void shell_process_input(char buf)
+{
+	line[num_chars] = buf;
+	channel_printf("%c", buf);
+	num_chars++;
+	if (buf == '\n' || num_chars >= MAX_LINE_SIZE) {
+		process_input_line(line);
+		num_chars = 0;
+	}
+}
+
+void initialize_shell(void)
+{
+	channel_printf("octopos shell: Type 'exit' or send EOF to exit.\n");
+	/* Print the command prompt */
+	channel_printf("octopos$> ");
 }
  
 static void split(char* cmd);

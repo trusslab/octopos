@@ -1,2 +1,2 @@
 all:
-	g++ -Wall -Werror mailbox.c -o mailbox
+	g++ -Wall -Werror -I ../include/ mailbox.c -o mailbox

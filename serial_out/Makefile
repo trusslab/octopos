@@ -1,2 +1,2 @@
 all:
-	g++ -Wall -Werror serial_out.c -o serial_out
+	g++ -Wall -Werror -I ../include/ serial_out.c -o serial_out

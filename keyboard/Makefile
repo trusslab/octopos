@@ -1,2 +1,2 @@
 all:
-	g++ -Wall -Werror keyboard.c -o keyboard
+	g++ -Wall -Werror -I ../include/ keyboard.c -o keyboard
