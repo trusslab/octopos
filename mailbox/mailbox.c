@@ -175,25 +175,20 @@ static bool proc_has_queue_write_access(char proc_id, char queue_id)
 static void handle_read_queue(char queue_id, char reader_id)
 {
 	char buf[MAILBOX_QUEUE_MSG_SIZE];
-	printf("%s [1]\n", __func__);
 
 	if (proc_has_queue_read_access(reader_id, queue_id)) {
-		printf("%s [2]\n", __func__);
 		read_queue(&queues[(int) queue_id], buf);
 		write(processors[(int) reader_id].in_handle, buf, MAILBOX_QUEUE_MSG_SIZE);
 	} else {
 		printf("Error: processor %d can't read from queue %d\n", reader_id, queue_id);
 	}
-	printf("%s [3]\n", __func__);
 }
 
 static void handle_write_queue(char queue_id, char writer_id)
 {
 	char buf[MAILBOX_QUEUE_MSG_SIZE];
-	printf("%s [1]\n", __func__);
 
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
-		printf("%s [2]\n", __func__);
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		read(processors[(int) writer_id].out_handle, buf, MAILBOX_QUEUE_MSG_SIZE);
 		write_queue(&queues[(int) queue_id], buf);
@@ -203,7 +198,6 @@ static void handle_write_queue(char queue_id, char writer_id)
 	} else {
 		printf("Error: processor %d can't write to queue %d\n", writer_id, queue_id);
 	}
-	printf("%s [3]\n", __func__);
 }
 
 int main(int argc, char **argv)
@@ -236,16 +230,12 @@ int main(int argc, char **argv)
 		if (FD_ISSET(processors[OS].out_handle, &listen_fds)) {
 			memset(opcode, 0x0, 2);
 			read(processors[OS].out_handle, opcode, 2);
-			printf("[1]: opcode[0] = %d, opcode[1] = %d\n",
-						opcode[0], opcode[1]);
 			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				printf("[1.1]\n");
 				reader_id = OS;
 				queue_id = opcode[1];
 				writer_id = INVALID_PROCESSOR;
 				handle_read_queue(queue_id, reader_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				printf("[1.2]\n");
 				writer_id = OS;
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
@@ -256,7 +246,6 @@ int main(int argc, char **argv)
 		}
 
 		if (FD_ISSET(processors[KEYBOARD].out_handle, &listen_fds)) {
-			printf("[2]\n");
 			memset(opcode, 0x0, 2);
 			read(processors[KEYBOARD].out_handle, opcode, 2);
 			if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
@@ -270,11 +259,9 @@ int main(int argc, char **argv)
 		}		
 
 		if (FD_ISSET(processors[SERIAL_OUT].out_handle, &listen_fds)) {
-			printf("[3]\n");
 			memset(opcode, 0x0, 2);
 			read(processors[SERIAL_OUT].out_handle, opcode, 2);
 			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				printf("[3.1]\n");
 				reader_id = SERIAL_OUT;
 				queue_id = opcode[1];
 				writer_id = INVALID_PROCESSOR;
