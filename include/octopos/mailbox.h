@@ -4,14 +4,14 @@ enum mailbox_opcodes {
 };
 
 enum processors {
-	OS = 1,
-	KEYBOARD = 2,
-	SERIAL_OUT = 3,
-	RUNTIME = 4
+	OS = 0,
+	KEYBOARD = 1,
+	SERIAL_OUT = 2,
+	RUNTIME = 3
 };
 
 #define NUM_PROCESSORS		4
-#define ALL_PROCESSORS		0
+#define ALL_PROCESSORS		4
 #define INVALID_PROCESSOR	5
 
 #define MAILBOX_QUEUE_SIZE	4
@@ -24,3 +24,6 @@ enum processors {
 #define FIFO_SERIAL_OUT_OUT	"/tmp/octopos_mailbox_serial_out_out"
 #define FIFO_SERIAL_OUT_IN	"/tmp/octopos_mailbox_serial_out_in"
 #define FIFO_SERIAL_OUT_INTR	"/tmp/octopos_mailbox_serial_out_intr"
+#define FIFO_RUNTIME_OUT	"/tmp/octopos_mailbox_runtime_out"
+#define FIFO_RUNTIME_IN		"/tmp/octopos_mailbox_runtime_in"
+#define FIFO_RUNTIME_INTR	"/tmp/octopos_mailbox_runtime_intr"

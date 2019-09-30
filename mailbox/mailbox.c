@@ -47,6 +47,11 @@ static void serial_out_send_interrupt(void)
 	send_interrupt(&processors[SERIAL_OUT]);
 }
 
+static void runtime_send_interrupt(void)
+{
+	send_interrupt(&processors[RUNTIME]);
+}
+
 static void initialize_processors(void)
 {
 	/* initialize connections to the processors */
@@ -57,6 +62,9 @@ static void initialize_processors(void)
 	mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
 	mkfifo(FIFO_SERIAL_OUT_IN, 0666);
 	mkfifo(FIFO_SERIAL_OUT_INTR, 0666);
+	mkfifo(FIFO_RUNTIME_OUT, 0666);
+	mkfifo(FIFO_RUNTIME_IN, 0666);
+	mkfifo(FIFO_RUNTIME_INTR, 0666);
 
 	/* initialize processor objects */
 	/* OS processor */
@@ -78,6 +86,13 @@ static void initialize_processors(void)
 	processors[SERIAL_OUT].out_handle = open(FIFO_SERIAL_OUT_OUT, O_RDWR);
 	processors[SERIAL_OUT].in_handle = open(FIFO_SERIAL_OUT_IN, O_RDWR);
 	processors[SERIAL_OUT].intr_handle = open(FIFO_SERIAL_OUT_INTR, O_RDWR);
+
+	/* runtime processor */
+	processors[RUNTIME].processor_id = RUNTIME;
+	processors[RUNTIME].send_interrupt = runtime_send_interrupt;
+	processors[RUNTIME].out_handle = open(FIFO_RUNTIME_OUT, O_RDWR);
+	processors[RUNTIME].in_handle = open(FIFO_RUNTIME_IN, O_RDWR);
+	processors[RUNTIME].intr_handle = open(FIFO_RUNTIME_INTR, O_RDWR);
 }
 
 static void close_processors(void)
@@ -89,6 +104,9 @@ static void close_processors(void)
 	close(processors[SERIAL_OUT].out_handle);
 	close(processors[SERIAL_OUT].in_handle);
 	close(processors[SERIAL_OUT].intr_handle);
+	close(processors[RUNTIME].out_handle);
+	close(processors[RUNTIME].in_handle);
+	close(processors[RUNTIME].intr_handle);
 
 	remove(FIFO_OS_OUT);
 	remove(FIFO_OS_IN);
@@ -97,6 +115,9 @@ static void close_processors(void)
 	remove(FIFO_SERIAL_OUT_OUT);
 	remove(FIFO_SERIAL_OUT_IN);
 	remove(FIFO_SERIAL_OUT_INTR);
+	remove(FIFO_RUNTIME_OUT);
+	remove(FIFO_RUNTIME_IN);
+	remove(FIFO_RUNTIME_INTR);
 }
 
 int write_queue(struct queue *queue, char *buf)
@@ -153,6 +174,13 @@ static void initialize_queues(void)
 	queues[SERIAL_OUT].counter = 0;
 	queues[SERIAL_OUT].reader_id = SERIAL_OUT;
 	queues[SERIAL_OUT].writer_id = OS;
+
+	/* runtime queue */
+	queues[RUNTIME].head = 0;
+	queues[RUNTIME].tail = 0;
+	queues[RUNTIME].counter = 0;
+	queues[RUNTIME].reader_id = RUNTIME;
+	queues[RUNTIME].writer_id = OS;
 }
 
 static bool proc_has_queue_read_access(char proc_id, char queue_id)
@@ -217,11 +245,14 @@ int main(int argc, char **argv)
 		nfds = processors[OS].out_handle;
 	if (processors[SERIAL_OUT].out_handle > nfds)
 		nfds = processors[SERIAL_OUT].out_handle;
+	if (processors[RUNTIME].out_handle > nfds)
+		nfds = processors[RUNTIME].out_handle;
 
 	while(1) {
 		FD_SET(processors[OS].out_handle, &listen_fds);
 		FD_SET(processors[KEYBOARD].out_handle, &listen_fds);
 		FD_SET(processors[SERIAL_OUT].out_handle, &listen_fds);
+		FD_SET(processors[RUNTIME].out_handle, &listen_fds);
 		if (select(nfds + 1, &listen_fds, NULL, NULL, NULL) < 0) {
 			printf("Error: select\n");
 			break;
@@ -268,6 +299,24 @@ int main(int argc, char **argv)
 				handle_read_queue(queue_id, reader_id);
 			} else {
 				printf("Error: invalid opcode from serial_out\n");
+			}
+		}
+
+		if (FD_ISSET(processors[RUNTIME].out_handle, &listen_fds)) {
+			memset(opcode, 0x0, 2);
+			read(processors[RUNTIME].out_handle, opcode, 2);
+			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
+				reader_id = RUNTIME;
+				queue_id = opcode[1];
+				writer_id = INVALID_PROCESSOR;
+				handle_read_queue(queue_id, reader_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
+				writer_id = RUNTIME;
+				queue_id = opcode[1];
+				reader_id = INVALID_PROCESSOR;
+				handle_write_queue(queue_id, writer_id);
+			} else {
+				printf("Error: invalid opcode from OS\n");
 			}
 		}
 	}	

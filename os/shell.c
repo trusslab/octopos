@@ -29,6 +29,7 @@ int command_pipe[2];
 char output_buf[CHANNEL_MSG_SIZE];
 
 int send_output(char *buf);
+int send_msg_to_runtime(char *buf);
 #define channel_printf(fmt, args...); sprintf(output_buf, fmt, ##args); send_output(output_buf);
 
 /*
@@ -48,7 +49,13 @@ int send_output(char *buf);
 static int command(int input, int first, int last)
 {
 	int pipettes[2];
- 
+
+	if (strcmp(args[0], "run") == 0) {
+		/* octopos run command */
+		send_msg_to_runtime(args[1]);
+		return 0;
+	}
+
 	/* Invoke pipe */
 	pipe( pipettes );	
 	pid = fork();
@@ -139,6 +146,8 @@ static void process_input_line(char *line)
 	input = run(cmd, input, first, 1);
 	cleanup(n);
 	n = 0;
+		
+	channel_printf("octopos$> ");
 }
 
 #define MAX_LINE_SIZE	1024

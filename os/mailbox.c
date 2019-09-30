@@ -68,6 +68,18 @@ static int recv_input(char *buf)
 	return 0;
 }
 
+int send_msg_to_runtime(char *buf)
+{
+	char opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = RUNTIME;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
+
 void initialize_shell(void);
 void shell_process_input(char buf);
 
