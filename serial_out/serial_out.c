@@ -3,14 +3,15 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 
 int main(int argc, char **argv)
 {
 	int fd_out, fd_in, fd_intr;
-	char buf[MAILBOX_QUEUE_MSG_SIZE];
-	char interrupt, opcode[2];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t interrupt, opcode[2];
 
 	mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
 	mkfifo(FIFO_SERIAL_OUT_IN, 0666);

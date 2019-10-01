@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -26,9 +27,9 @@ int command_pipe[2];
 /* FIXME: move all mailbox-related stuff out of shell */
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 
-int send_output(char *buf);
-int send_msg_to_runtime(char *buf);
-#define channel_printf(fmt, args...); sprintf(output_buf, fmt, ##args); send_output(output_buf);
+int send_output(uint8_t *buf);
+int send_msg_to_runtime(uint8_t *buf);
+#define channel_printf(fmt, args...); sprintf(output_buf, fmt, ##args); send_output((uint8_t *) output_buf);
 
 /*
  * Handle commands separatly
@@ -50,7 +51,7 @@ static int command(int input, int first, int last)
 
 	if (strcmp(args[0], "run") == 0) {
 		/* octopos run command */
-		send_msg_to_runtime(args[1]);
+		send_msg_to_runtime((uint8_t *) args[1]);
 		return 0;
 	}
 
@@ -92,7 +93,7 @@ static int command(int input, int first, int last)
 	if (pid > 0 && last == 1) {
 		memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		read(pipettes[READ], output_buf, MAILBOX_QUEUE_MSG_SIZE);
-		send_output(output_buf);
+		send_output((uint8_t *) output_buf);
 	}
 	//Ardalan end
 

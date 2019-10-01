@@ -5,6 +5,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -39,9 +40,9 @@ static void close_channels(void)
 	remove(FIFO_OS_INTR);
 }
 
-int send_output(char *buf)
+int send_output(uint8_t *buf)
 {
-	char opcode[2];
+	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = SERIAL_OUT;
@@ -51,9 +52,9 @@ int send_output(char *buf)
 	return 0;
 }
 
-static int recv_input(char *buf, char *queue_id)
+static int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
-	char interrupt, opcode[2];
+	uint8_t interrupt, opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 
@@ -66,9 +67,9 @@ static int recv_input(char *buf, char *queue_id)
 	return 0;
 }
 
-int send_msg_to_runtime(char *buf)
+int send_msg_to_runtime(uint8_t *buf)
 {
-	char opcode[2];
+	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = RUNTIME;
@@ -82,11 +83,11 @@ void initialize_shell(void);
 void shell_process_input(char buf);
 
 /* FIXME: move to a different file */
-void process_system_call(char *buf)
+void process_system_call(uint8_t *buf)
 {
-	char opcode[2], ret;
+	uint8_t opcode[2], ret;
 	if (buf[0] == RUNTIME) {
-		char ret_buf[MAILBOX_QUEUE_MSG_SIZE];
+		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
 
 		if (buf[1] == 0) {
 			opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
@@ -127,13 +128,13 @@ void process_system_call(char *buf)
 
 static void distribute_input(void)
 {
-	char input_buf[MAILBOX_QUEUE_MSG_SIZE];
-	char queue_id;
+	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t queue_id;
 
 	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	recv_input(input_buf, &queue_id);
 	if (queue_id == KEYBOARD)
-		shell_process_input(input_buf[0]);
+		shell_process_input((char) input_buf[0]);
 	else if (queue_id == OS)
 		process_system_call(input_buf);
 	else

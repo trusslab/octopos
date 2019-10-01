@@ -3,6 +3,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <termios.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
@@ -10,7 +11,7 @@
 int main(int argc, char **argv)
 {
 	int fd;
-	char buf[MAILBOX_QUEUE_MSG_SIZE], opcode[2];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE], opcode[2];
 
 	mkfifo(FIFO_KEYBOARD, 0666);
 
@@ -33,7 +34,7 @@ int main(int argc, char **argv)
 
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-		buf[0] = getchar();
+		buf[0] = (uint8_t) getchar();
 		opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 		opcode[1] = KEYBOARD;
 		write(fd, opcode, 2);

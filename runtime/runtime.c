@@ -3,6 +3,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
@@ -18,10 +19,10 @@ struct runtime_api {
 	void (*read_char_from_keyboard)(char *buf);
 };
 
-static char issue_syscall(char syscall_nr)
+static uint8_t issue_syscall(uint8_t syscall_nr)
 {
-	char opcode[2], interrupt;
-	char buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t opcode[2], interrupt;
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = OS;
@@ -62,25 +63,25 @@ static int yield_serial_out_access(void)
 
 static void write_to_serial_out(char *buf)
 {
-	char opcode[2];
+	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = SERIAL_OUT;
 	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+	write(fd_out, (uint8_t *) buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 static void read_char_from_keyboard(char *buf)
 {
-	char input_buf[MAILBOX_QUEUE_MSG_SIZE];
-	char opcode[2], interrupt;
+	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t opcode[2], interrupt;
 
 	read(fd_intr, &interrupt, 1);
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = KEYBOARD;
 	write(fd_out, opcode, 2);
 	read(fd_in, input_buf, MAILBOX_QUEUE_MSG_SIZE);
-	*buf = input_buf[0];
+	*buf = (char) input_buf[0];
 }
 
 typedef void (*app_main_proc)(struct runtime_api *);
@@ -121,8 +122,8 @@ static void load_application(char *msg)
 
 int main(int argc, char **argv)
 {
-	char buf[MAILBOX_QUEUE_MSG_SIZE];
-	char interrupt, opcode[2];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t interrupt, opcode[2];
 
 	mkfifo(FIFO_RUNTIME_OUT, 0666);
 	mkfifo(FIFO_RUNTIME_IN, 0666);
@@ -140,7 +141,7 @@ int main(int argc, char **argv)
 		read(fd_intr, &interrupt, 1);
 		write(fd_out, opcode, 2), 
 		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-		load_application(buf);
+		load_application((char *) buf);
 	}
 	
 	close(fd_out);

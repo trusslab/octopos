@@ -3,13 +3,14 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <octopos/mailbox.h>
 
 struct processor {
-	char processor_id;
-	void (*send_interrupt)(char);
+	uint8_t processor_id;
+	void (*send_interrupt)(uint8_t);
 	/* FIXME: do we need separate handles? */
 	int out_handle;
 	int in_handle;
@@ -17,14 +18,14 @@ struct processor {
 };
 
 struct queue {
-	char queue_id;
-	char messages[MAILBOX_QUEUE_SIZE][MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t queue_id;
+	uint8_t messages[MAILBOX_QUEUE_SIZE][MAILBOX_QUEUE_MSG_SIZE];
 	int head;
 	int tail;
 	int counter;
 	/* access control */
-	char reader_id;
-	char writer_id;
+	uint8_t reader_id;
+	uint8_t writer_id;
 };
 
 struct processor processors[NUM_PROCESSORS];
@@ -33,22 +34,22 @@ struct queue queues[NUM_PROCESSORS];
 //#define OUTPUT_CHANNEL_MSG_SIZE	256
 //#define INPUT_CHANNEL_MSG_SIZE	1
 
-static void send_interrupt(struct processor *proc, char queue_id)
+static void send_interrupt(struct processor *proc, uint8_t queue_id)
 {
 	write(proc->intr_handle, &queue_id, 1);
 }
 
-static void os_send_interrupt(char queue_id)
+static void os_send_interrupt(uint8_t queue_id)
 {
 	send_interrupt(&processors[OS], queue_id);
 }
 
-static void serial_out_send_interrupt(char queue_id)
+static void serial_out_send_interrupt(uint8_t queue_id)
 {
 	send_interrupt(&processors[SERIAL_OUT], queue_id);
 }
 
-static void runtime_send_interrupt(char queue_id)
+static void runtime_send_interrupt(uint8_t queue_id)
 {
 	send_interrupt(&processors[RUNTIME], queue_id);
 }
@@ -121,7 +122,7 @@ static void close_processors(void)
 	remove(FIFO_RUNTIME_INTR);
 }
 
-int write_queue(struct queue *queue, char *buf)
+int write_queue(struct queue *queue, uint8_t *buf)
 {
 	if (queue->counter == MAILBOX_QUEUE_SIZE) {
 		/* FIXME: we should communicate that back to the sender processor */
@@ -137,7 +138,7 @@ int write_queue(struct queue *queue, char *buf)
 	return 0;
 }
 
-int read_queue(struct queue *queue, char *buf)
+int read_queue(struct queue *queue, uint8_t *buf)
 {
 	if (queue->counter == 0) {
 		/* FIXME: we should communicate that back to the sender processor */
@@ -188,7 +189,7 @@ static void initialize_queues(void)
 	queues[RUNTIME].writer_id = OS;
 }
 
-static bool proc_has_queue_read_access(char queue_id, char proc_id)
+static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
 {
 	if (queues[(int) queue_id].reader_id == proc_id)
 		return true;
@@ -196,7 +197,7 @@ static bool proc_has_queue_read_access(char queue_id, char proc_id)
 	return false;
 }
 
-static bool proc_has_queue_write_access(char queue_id, char proc_id)
+static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 {
 	if (queues[(int) queue_id].writer_id == proc_id ||
 	    queues[(int) queue_id].writer_id == ALL_PROCESSORS)
@@ -205,9 +206,9 @@ static bool proc_has_queue_write_access(char queue_id, char proc_id)
 	return false;
 }
 
-static void handle_read_queue(char queue_id, char reader_id)
+static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	char buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		read_queue(&queues[(int) queue_id], buf);
@@ -217,9 +218,9 @@ static void handle_read_queue(char queue_id, char reader_id)
 	}
 }
 
-static void handle_write_queue(char queue_id, char writer_id)
+static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	char buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
@@ -235,7 +236,7 @@ static void handle_write_queue(char queue_id, char writer_id)
 
 int main(int argc, char **argv)
 {
-	char opcode[2], writer_id, reader_id, queue_id;
+	uint8_t opcode[2], writer_id, reader_id, queue_id;
 
 	initialize_processors();
 	initialize_queues();
