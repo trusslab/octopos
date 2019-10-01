@@ -10,10 +10,10 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <fcntl.h>
- 
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <octopos/mailbox.h>
 
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];
@@ -23,10 +23,8 @@ int command_pipe[2];
 #define READ  0
 #define WRITE 1
 
-/* move to header file */
-#define CHANNEL_MSG_SIZE	64
-
-char output_buf[CHANNEL_MSG_SIZE];
+/* FIXME: move all mailbox-related stuff out of shell */
+char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 
 int send_output(char *buf);
 int send_msg_to_runtime(char *buf);
@@ -84,7 +82,7 @@ static int command(int input, int first, int last)
 			//Ardalan start
 			/* FIXME: we should not use the output_buf here. */
 			sprintf(output_buf, "Error: Failed to execute %s\n", args[0]);
-			write(pipettes[WRITE], output_buf, CHANNEL_MSG_SIZE); 
+			write(pipettes[WRITE], output_buf, MAILBOX_QUEUE_MSG_SIZE); 
 			//Ardalan end
 			_exit(EXIT_FAILURE); // If child fails
 		}
@@ -92,8 +90,8 @@ static int command(int input, int first, int last)
 
 	//Ardalan start
 	if (pid > 0 && last == 1) {
-		memset(output_buf, 0x0, CHANNEL_MSG_SIZE);
-		read(pipettes[READ], output_buf, CHANNEL_MSG_SIZE);
+		memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+		read(pipettes[READ], output_buf, MAILBOX_QUEUE_MSG_SIZE);
 		send_output(output_buf);
 	}
 	//Ardalan end

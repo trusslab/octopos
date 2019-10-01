@@ -9,7 +9,7 @@
 
 struct processor {
 	char processor_id;
-	void (*send_interrupt)(void);
+	void (*send_interrupt)(char);
 	/* FIXME: do we need separate handles? */
 	int out_handle;
 	int in_handle;
@@ -17,6 +17,7 @@ struct processor {
 };
 
 struct queue {
+	char queue_id;
 	char messages[MAILBOX_QUEUE_SIZE][MAILBOX_QUEUE_MSG_SIZE];
 	int head;
 	int tail;
@@ -32,24 +33,24 @@ struct queue queues[NUM_PROCESSORS];
 //#define OUTPUT_CHANNEL_MSG_SIZE	256
 //#define INPUT_CHANNEL_MSG_SIZE	1
 
-static void send_interrupt(struct processor *proc)
+static void send_interrupt(struct processor *proc, char queue_id)
 {
-	write(proc->intr_handle, "1", 1);
+	write(proc->intr_handle, &queue_id, 1);
 }
 
-static void os_send_interrupt(void)
+static void os_send_interrupt(char queue_id)
 {
-	send_interrupt(&processors[OS]);
+	send_interrupt(&processors[OS], queue_id);
 }
 
-static void serial_out_send_interrupt(void)
+static void serial_out_send_interrupt(char queue_id)
 {
-	send_interrupt(&processors[SERIAL_OUT]);
+	send_interrupt(&processors[SERIAL_OUT], queue_id);
 }
 
-static void runtime_send_interrupt(void)
+static void runtime_send_interrupt(char queue_id)
 {
-	send_interrupt(&processors[RUNTIME]);
+	send_interrupt(&processors[RUNTIME], queue_id);
 }
 
 static void initialize_processors(void)
@@ -140,7 +141,7 @@ int read_queue(struct queue *queue, char *buf)
 {
 	if (queue->counter == 0) {
 		/* FIXME: we should communicate that back to the sender processor */
-		printf("Error: queue is empty\n");
+		printf("Error: queue %d is empty\n", queue->queue_id);
 		_exit(-1);
 		return -1;
 	}
@@ -155,6 +156,7 @@ int read_queue(struct queue *queue, char *buf)
 static void initialize_queues(void)
 {
 	/* OS queue */
+	queues[OS].queue_id = OS;
 	queues[OS].head = 0;
 	queues[OS].tail = 0;
 	queues[OS].counter = 0;
@@ -162,6 +164,7 @@ static void initialize_queues(void)
 	queues[OS].writer_id = ALL_PROCESSORS;
 
 	/* keyboard queue */
+	queues[KEYBOARD].queue_id = KEYBOARD;
 	queues[KEYBOARD].head = 0;
 	queues[KEYBOARD].tail = 0;
 	queues[KEYBOARD].counter = 0;
@@ -169,6 +172,7 @@ static void initialize_queues(void)
 	queues[KEYBOARD].writer_id = KEYBOARD;
 
 	/* serial output queue */
+	queues[SERIAL_OUT].queue_id = SERIAL_OUT;
 	queues[SERIAL_OUT].head = 0;
 	queues[SERIAL_OUT].tail = 0;
 	queues[SERIAL_OUT].counter = 0;
@@ -176,6 +180,7 @@ static void initialize_queues(void)
 	queues[SERIAL_OUT].writer_id = OS;
 
 	/* runtime queue */
+	queues[RUNTIME].queue_id = RUNTIME;
 	queues[RUNTIME].head = 0;
 	queues[RUNTIME].tail = 0;
 	queues[RUNTIME].counter = 0;
@@ -183,7 +188,7 @@ static void initialize_queues(void)
 	queues[RUNTIME].writer_id = OS;
 }
 
-static bool proc_has_queue_read_access(char proc_id, char queue_id)
+static bool proc_has_queue_read_access(char queue_id, char proc_id)
 {
 	if (queues[(int) queue_id].reader_id == proc_id)
 		return true;
@@ -191,7 +196,7 @@ static bool proc_has_queue_read_access(char proc_id, char queue_id)
 	return false;
 }
 
-static bool proc_has_queue_write_access(char proc_id, char queue_id)
+static bool proc_has_queue_write_access(char queue_id, char proc_id)
 {
 	if (queues[(int) queue_id].writer_id == proc_id ||
 	    queues[(int) queue_id].writer_id == ALL_PROCESSORS)
@@ -204,7 +209,7 @@ static void handle_read_queue(char queue_id, char reader_id)
 {
 	char buf[MAILBOX_QUEUE_MSG_SIZE];
 
-	if (proc_has_queue_read_access(reader_id, queue_id)) {
+	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		read_queue(&queues[(int) queue_id], buf);
 		write(processors[(int) reader_id].in_handle, buf, MAILBOX_QUEUE_MSG_SIZE);
 	} else {
@@ -222,7 +227,7 @@ static void handle_write_queue(char queue_id, char writer_id)
 		write_queue(&queues[(int) queue_id], buf);
 		/* FIXME: check to make sure queues[queue_id].reader_id points to a
 		 * single processor */
-		processors[(int) queues[(int) queue_id].reader_id].send_interrupt();
+		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't write to queue %d\n", writer_id, queue_id);
 	}
@@ -271,6 +276,17 @@ int main(int argc, char **argv)
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
+				if (opcode[1] == 0) {
+					queues[SERIAL_OUT].writer_id = RUNTIME;
+				} else if (opcode[1] == 1) {
+					queues[SERIAL_OUT].writer_id = OS;
+				} else if (opcode[1] == 2) {
+					queues[KEYBOARD].reader_id = RUNTIME;
+				} else if (opcode[1] == 3) {
+					queues[KEYBOARD].reader_id = OS;
+				} else
+					printf("Error: invalid config option\n");
 			} else {
 				printf("Error: invalid opcode from OS\n");
 			}
