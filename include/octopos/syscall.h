@@ -1,0 +1,5 @@
+/* syscall numbers */
+#define REQUEST_ACCESS_SERIAL_OUT	0
+#define YIELD_ACCESS_SERIAL_OUT		1
+#define REQUEST_ACCESS_KEYBOARD		2
+#define YIELD_ACCESS_KEYBOARD		3
