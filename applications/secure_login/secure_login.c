@@ -6,10 +6,10 @@
 #include <sys/stat.h>
 
 struct runtime_api {
-	int (*request_keyboard_access)(int);
-	int (*yield_keyboard_access)(void);
-	int (*request_serial_out_access)(int);
-	int (*yield_serial_out_access)(void);
+	int (*request_access_keyboard)(int);
+	int (*yield_access_keyboard)(void);
+	int (*request_access_serial_out)(int);
+	int (*yield_access_serial_out)(void);
 	void (*write_to_serial_out)(char *buf);
 	void (*read_char_from_keyboard)(char *buf);
 };
@@ -24,8 +24,8 @@ void app_main(struct runtime_api *api)
 	char line[1024];
 	int i;
 
-	api->request_keyboard_access(0);
-	api->request_serial_out_access(0);
+	api->request_access_keyboard(0);
+	api->request_access_serial_out(0);
 	channel_printf("\nThis is secure login speaking.\n");	
 	channel_printf("Please enter your password: ");	
 
@@ -37,6 +37,6 @@ void app_main(struct runtime_api *api)
 
 	channel_printf("\nYour password is: %s\n", line);	
 	channel_printf("Secure login terminating.\n");	
-	api->yield_keyboard_access();
-	api->yield_serial_out_access();
+	api->yield_access_keyboard();
+	api->yield_access_serial_out();
 }

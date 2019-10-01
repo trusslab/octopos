@@ -79,52 +79,20 @@ int send_msg_to_runtime(uint8_t *buf)
 	return 0;
 }
 
+void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+{
+	uint8_t opcode[4];
+
+	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
+	opcode[1] = queue_id;
+	opcode[2] = access;
+	opcode[3] = proc_id;
+	write(fd_out, opcode, 4);
+}
+
 void initialize_shell(void);
 void shell_process_input(char buf);
-
-/* FIXME: move to a different file */
-void process_system_call(uint8_t *buf)
-{
-	uint8_t opcode[2], ret;
-	if (buf[0] == RUNTIME) {
-		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
-
-		if (buf[1] == 0) {
-			opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
-			opcode[1] = 0;
-			write(fd_out, opcode, 2);
-			ret = 0;
-		} else if (buf[1] == 1) {
-			opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
-			opcode[1] = 1;
-			write(fd_out, opcode, 2);
-			ret = 0;
-		} else if (buf[1] == 2) {
-			opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
-			opcode[1] = 2;
-			write(fd_out, opcode, 2);
-			ret = 0;
-		} else if (buf[1] == 3) {
-			opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
-			opcode[1] = 3;
-			write(fd_out, opcode, 2);
-			ret = 0;
-		} else {
-			printf("Error: invalid syscall\n");
-			ret = 1;
-		}
-
-		/* send response */
-		ret_buf[0] = ret;
-		opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-		opcode[1] = RUNTIME;
-		write(fd_out, opcode, 2);
-		write(fd_out, ret_buf, MAILBOX_QUEUE_MSG_SIZE);
-	} else {
-		printf("Error: invalid data\n");
-	}
-
-}
+void process_system_call(uint8_t *buf);
 
 static void distribute_input(void)
 {

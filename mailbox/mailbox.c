@@ -234,6 +234,21 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 	}
 }
 
+static void change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+{
+	/* sanity checks */
+	if (!((queue_id == SERIAL_OUT && access == WRITE_ACCESS && (proc_id == RUNTIME || proc_id == OS)) ||
+	    (queue_id == KEYBOARD && access == READ_ACCESS && (proc_id == RUNTIME || proc_id == OS)))) {
+		printf("Error: invalid config option\n");
+		return;
+	}
+
+	if (access == READ_ACCESS)
+		queues[(int) queue_id].reader_id = proc_id;
+	else /* access == WRITER_ACCESS */
+		queues[(int) queue_id].writer_id = proc_id;
+}
+
 int main(int argc, char **argv)
 {
 	uint8_t opcode[2], writer_id, reader_id, queue_id;
@@ -278,16 +293,10 @@ int main(int argc, char **argv)
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				if (opcode[1] == 0) {
-					queues[SERIAL_OUT].writer_id = RUNTIME;
-				} else if (opcode[1] == 1) {
-					queues[SERIAL_OUT].writer_id = OS;
-				} else if (opcode[1] == 2) {
-					queues[KEYBOARD].reader_id = RUNTIME;
-				} else if (opcode[1] == 3) {
-					queues[KEYBOARD].reader_id = OS;
-				} else
-					printf("Error: invalid config option\n");
+				uint8_t opcode_rest[2];
+				memset(opcode_rest, 0x0, 2);
+				read(processors[OS].out_handle, opcode_rest, 2);
+				change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
 			} else {
 				printf("Error: invalid opcode from OS\n");
 			}

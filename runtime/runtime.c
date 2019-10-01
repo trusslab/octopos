@@ -7,19 +7,21 @@
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <octopos/syscall.h>
+#include <octopos/error.h>
 
 int fd_out, fd_in, fd_intr;
 
 struct runtime_api {
-	int (*request_keyboard_access)(int);
-	int (*yield_keyboard_access)(void);
-	int (*request_serial_out_access)(int);
-	int (*yield_serial_out_access)(void);
+	int (*request_access_keyboard)(int);
+	int (*yield_access_keyboard)(void);
+	int (*request_access_serial_out)(int);
+	int (*yield_access_serial_out)(void);
 	void (*write_to_serial_out)(char *buf);
 	void (*read_char_from_keyboard)(char *buf);
 };
 
-static uint8_t issue_syscall(uint8_t syscall_nr)
+static uint32_t issue_syscall(uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
 {
 	uint8_t opcode[2], interrupt;
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
@@ -27,8 +29,10 @@ static uint8_t issue_syscall(uint8_t syscall_nr)
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = OS;
 	write(fd_out, opcode, 2);
-	buf[0] = RUNTIME; /* dummy. format not specified yet. */
-	buf[1] = syscall_nr; /* dummy. format not specified yet. */
+	buf[0] = RUNTIME;
+	*((uint16_t *) &buf[1]) = syscall_nr;
+	*((uint16_t *) &buf[3]) = arg0;
+	*((uint16_t *) &buf[7]) = arg1;
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* wait for response */
@@ -38,27 +42,27 @@ static uint8_t issue_syscall(uint8_t syscall_nr)
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 
-	return buf[0]; /* dummy. format not specified yet. */
+	return *((uint32_t *) &buf[0]);
 }
 
-static int request_keyboard_access(int access_type)
+static int request_access_keyboard(int access_type)
 {
-	return (int) issue_syscall(2);
+	return (int) issue_syscall(REQUEST_ACCESS_KEYBOARD, (uint32_t) access_type, 0);
 }
 
-static int yield_keyboard_access(void)
+static int yield_access_keyboard(void)
 {
-	return (int) issue_syscall(3);
+	return (int) issue_syscall(YIELD_ACCESS_KEYBOARD, 0, 0);
 }
 
-static int request_serial_out_access(int access_type)
+static int request_access_serial_out(int access_type)
 {
-	return (int) issue_syscall(0);
+	return (int) issue_syscall(REQUEST_ACCESS_SERIAL_OUT, (uint32_t) access_type, 0);
 }
 
-static int yield_serial_out_access(void)
+static int yield_access_serial_out(void)
 {
-	return (int) issue_syscall(1);
+	return (int) issue_syscall(YIELD_ACCESS_SERIAL_OUT, 0, 0);
 }
 
 static void write_to_serial_out(char *buf)
@@ -92,10 +96,10 @@ static void load_application(char *msg)
 	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "../applications/bin/";
 	app_main_proc app_main;
 	struct runtime_api api = {
-		.request_keyboard_access = request_keyboard_access,
-		.yield_keyboard_access = yield_keyboard_access,
-		.request_serial_out_access = request_serial_out_access,
-		.yield_serial_out_access = yield_serial_out_access,
+		.request_access_keyboard = request_access_keyboard,
+		.yield_access_keyboard = yield_access_keyboard,
+		.request_access_serial_out = request_access_serial_out,
+		.yield_access_serial_out = yield_access_serial_out,
 		.write_to_serial_out = write_to_serial_out,
 		.read_char_from_keyboard = read_char_from_keyboard,
 	};

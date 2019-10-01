@@ -1,16 +1,13 @@
-enum mailbox_opcodes {
-	MAILBOX_OPCODE_READ_QUEUE = 0,
-	MAILBOX_OPCODE_WRITE_QUEUE = 1,
-	MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS = 2
-};
+/* mailbox opcodes */
+#define	MAILBOX_OPCODE_READ_QUEUE		0
+#define	MAILBOX_OPCODE_WRITE_QUEUE		1
+#define	MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS	2
 
-enum processors {
-	OS = 0,
-	KEYBOARD = 1,
-	SERIAL_OUT = 2,
-	RUNTIME = 3
-};
-
+/* processor numbers */
+#define	OS			0
+#define	KEYBOARD		1
+#define	SERIAL_OUT		2
+#define	RUNTIME			3
 #define NUM_PROCESSORS		4
 #define ALL_PROCESSORS		4
 #define INVALID_PROCESSOR	5
@@ -28,3 +25,6 @@ enum processors {
 #define FIFO_RUNTIME_OUT	"/tmp/octopos_mailbox_runtime_out"
 #define FIFO_RUNTIME_IN		"/tmp/octopos_mailbox_runtime_in"
 #define FIFO_RUNTIME_INTR	"/tmp/octopos_mailbox_runtime_intr"
+
+#define READ_ACCESS		0
+#define WRITE_ACCESS		1
