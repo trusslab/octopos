@@ -79,15 +79,17 @@ int send_msg_to_runtime(uint8_t *buf)
 	return 0;
 }
 
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t access_mode, uint8_t count)
 {
-	uint8_t opcode[4];
+	uint8_t opcode[6];
 
 	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
 	opcode[1] = queue_id;
 	opcode[2] = access;
 	opcode[3] = proc_id;
-	write(fd_out, opcode, 4);
+	opcode[4] = access_mode;
+	opcode[5] = count;
+	write(fd_out, opcode, 6);
 }
 
 void initialize_shell(void);

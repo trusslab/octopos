@@ -26,6 +26,8 @@ struct queue {
 	/* access control */
 	uint8_t reader_id;
 	uint8_t writer_id;
+	uint8_t access_mode;
+	uint8_t access_count;
 };
 
 struct processor processors[NUM_PROCESSORS];
@@ -151,6 +153,9 @@ int read_queue(struct queue *queue, uint8_t *buf)
 	memcpy(buf, queue->messages[queue->tail], MAILBOX_QUEUE_MSG_SIZE);
 	queue->tail = (queue->tail + 1) % MAILBOX_QUEUE_SIZE;
 
+	if (queue->access_count > 0)
+		queue->access_count--;
+
 	return 0;
 }
 
@@ -163,6 +168,8 @@ static void initialize_queues(void)
 	queues[OS].counter = 0;
 	queues[OS].reader_id = OS;
 	queues[OS].writer_id = ALL_PROCESSORS;
+	queues[OS].access_mode = 0; /* irrelevant for the OS queue */
+	queues[OS].access_count = 0; /* irrelevant for the OS queue */
 
 	/* keyboard queue */
 	queues[KEYBOARD].queue_id = KEYBOARD;
@@ -171,6 +178,8 @@ static void initialize_queues(void)
 	queues[KEYBOARD].counter = 0;
 	queues[KEYBOARD].reader_id = OS;
 	queues[KEYBOARD].writer_id = KEYBOARD;
+	queues[KEYBOARD].access_mode = 0; /* irrelevant when OS is reader */
+	queues[KEYBOARD].access_count = 0;
 
 	/* serial output queue */
 	queues[SERIAL_OUT].queue_id = SERIAL_OUT;
@@ -179,6 +188,8 @@ static void initialize_queues(void)
 	queues[SERIAL_OUT].counter = 0;
 	queues[SERIAL_OUT].reader_id = SERIAL_OUT;
 	queues[SERIAL_OUT].writer_id = OS;
+	queues[SERIAL_OUT].access_mode = 0; /* irrelevant when OS is writer */
+	queues[SERIAL_OUT].access_count = 0;
 
 	/* runtime queue */
 	queues[RUNTIME].queue_id = RUNTIME;
@@ -187,6 +198,8 @@ static void initialize_queues(void)
 	queues[RUNTIME].counter = 0;
 	queues[RUNTIME].reader_id = RUNTIME;
 	queues[RUNTIME].writer_id = OS;
+	queues[RUNTIME].access_mode = 0; /* irrelevant for the RUNTIME queue */
+	queues[RUNTIME].access_count = 0; /* irrelevant for the RUNTIME queue */
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -234,12 +247,39 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 	}
 }
 
-static void change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+/* FIXME: we also have a copy of these definitions in syscall.h */
+/* access modes */
+#define ACCESS_UNLIMITED_REVOCABLE	0
+#define ACCESS_LIMITED_IRREVOCABLE	1
+
+static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t access_mode, uint8_t count)
 {
+	bool allowed = false;
 	/* sanity checks */
-	if (!((queue_id == SERIAL_OUT && access == WRITE_ACCESS && (proc_id == RUNTIME || proc_id == OS)) ||
-	    (queue_id == KEYBOARD && access == READ_ACCESS && (proc_id == RUNTIME || proc_id == OS)))) {
-		printf("Error: invalid config option\n");
+	if (queue_id == SERIAL_OUT && access == WRITE_ACCESS) {
+		if (queues[SERIAL_OUT].writer_id == OS && proc_id == RUNTIME)
+			allowed = true;
+
+		if (queues[SERIAL_OUT].writer_id == RUNTIME && proc_id == OS && queues[SERIAL_OUT].access_mode == ACCESS_UNLIMITED_REVOCABLE)
+			allowed = true;
+
+		if (queues[SERIAL_OUT].writer_id == RUNTIME && proc_id == OS && queues[SERIAL_OUT].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
+		    queues[SERIAL_OUT].access_count == 0)
+			allowed = true;
+	} else if (queue_id == KEYBOARD && access == READ_ACCESS) {
+		if (queues[KEYBOARD].reader_id == OS && proc_id == RUNTIME)
+			allowed = true;
+
+		if (queues[KEYBOARD].reader_id == RUNTIME && proc_id == OS && queues[KEYBOARD].access_mode == ACCESS_UNLIMITED_REVOCABLE)
+			allowed = true;
+
+		if (queues[KEYBOARD].reader_id == RUNTIME && proc_id == OS && queues[KEYBOARD].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
+		    queues[KEYBOARD].access_count == 0)
+			allowed = true;
+	}
+	
+	if (!allowed) {		
+		printf("Error: invalid config option by os\n");
 		return;
 	}
 
@@ -247,6 +287,36 @@ static void change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_i
 		queues[(int) queue_id].reader_id = proc_id;
 	else /* access == WRITER_ACCESS */
 		queues[(int) queue_id].writer_id = proc_id;
+
+	queues[(int) queue_id].access_mode = access_mode;
+	if (access_mode == ACCESS_LIMITED_IRREVOCABLE)
+		queues[(int) queue_id].access_count = count;
+	else
+		/* Not really needed. access_count in this case doesn't matter anyway. */
+		queues[(int) queue_id].access_count = 0;
+}
+
+static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+{
+	bool allowed = false;
+	/* sanity checks */
+	if (queue_id == SERIAL_OUT && access == WRITE_ACCESS && queues[SERIAL_OUT].writer_id == RUNTIME && proc_id == OS)
+			allowed = true;
+	else if (queue_id == KEYBOARD && access == READ_ACCESS && queues[KEYBOARD].reader_id == RUNTIME && proc_id == OS)
+			allowed = true;
+	
+	if (!allowed) {		
+		printf("Error: invalid config option by runtime\n");
+		return;
+	}
+
+	if (access == READ_ACCESS)
+		queues[(int) queue_id].reader_id = proc_id;
+	else /* access == WRITER_ACCESS */
+		queues[(int) queue_id].writer_id = proc_id;
+
+	queues[(int) queue_id].access_mode = 0; /* irrelevant in this case */
+	queues[(int) queue_id].access_count = 0; /* irrelevant in this case */
 }
 
 int main(int argc, char **argv)
@@ -293,10 +363,10 @@ int main(int argc, char **argv)
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				uint8_t opcode_rest[2];
-				memset(opcode_rest, 0x0, 2);
-				read(processors[OS].out_handle, opcode_rest, 2);
-				change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
+				uint8_t opcode_rest[4];
+				memset(opcode_rest, 0x0, 4);
+				read(processors[OS].out_handle, opcode_rest, 4);
+				os_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2], opcode_rest[3]);				
 			} else {
 				printf("Error: invalid opcode from OS\n");
 			}
@@ -341,6 +411,11 @@ int main(int argc, char **argv)
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
+				uint8_t opcode_rest[2];
+				memset(opcode_rest, 0x0, 2);
+				read(processors[RUNTIME].out_handle, opcode_rest, 2);
+				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
 			} else {
 				printf("Error: invalid opcode from OS\n");
 			}

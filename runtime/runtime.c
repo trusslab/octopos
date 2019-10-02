@@ -13,9 +13,9 @@
 int fd_out, fd_in, fd_intr;
 
 struct runtime_api {
-	int (*request_access_keyboard)(int);
+	int (*request_access_keyboard)(int, int);
 	int (*yield_access_keyboard)(void);
-	int (*request_access_serial_out)(int);
+	int (*request_access_serial_out)(int, int);
 	int (*yield_access_serial_out)(void);
 	void (*write_to_serial_out)(char *buf);
 	void (*read_char_from_keyboard)(char *buf);
@@ -31,8 +31,8 @@ static uint32_t issue_syscall(uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
 	write(fd_out, opcode, 2);
 	buf[0] = RUNTIME;
 	*((uint16_t *) &buf[1]) = syscall_nr;
-	*((uint16_t *) &buf[3]) = arg0;
-	*((uint16_t *) &buf[7]) = arg1;
+	*((uint32_t *) &buf[3]) = arg0;
+	*((uint32_t *) &buf[7]) = arg1;
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* wait for response */
@@ -45,24 +45,39 @@ static uint32_t issue_syscall(uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
 	return *((uint32_t *) &buf[0]);
 }
 
-static int request_access_keyboard(int access_type)
+static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
-	return (int) issue_syscall(REQUEST_ACCESS_KEYBOARD, (uint32_t) access_type, 0);
+	uint8_t opcode[4];
+
+	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
+	opcode[1] = queue_id;
+	opcode[2] = access;
+	opcode[3] = proc_id;
+	write(fd_out, opcode, 4);
+}
+
+static int request_access_keyboard(int access_mode, int count)
+{
+	return (int) issue_syscall(SYSCALL_REQUEST_ACCESS_KEYBOARD,
+					(uint32_t) access_mode, (uint32_t) count);
 }
 
 static int yield_access_keyboard(void)
 {
-	return (int) issue_syscall(YIELD_ACCESS_KEYBOARD, 0, 0);
+	mailbox_change_queue_access(KEYBOARD, READ_ACCESS, OS);
+	return 0;
 }
 
-static int request_access_serial_out(int access_type)
+static int request_access_serial_out(int access_mode, int count)
 {
-	return (int) issue_syscall(REQUEST_ACCESS_SERIAL_OUT, (uint32_t) access_type, 0);
+	return (int) issue_syscall(SYSCALL_REQUEST_ACCESS_SERIAL_OUT,
+					(uint32_t) access_mode, (uint32_t) count);
 }
 
 static int yield_access_serial_out(void)
 {
-	return (int) issue_syscall(YIELD_ACCESS_SERIAL_OUT, 0, 0);
+	mailbox_change_queue_access(SERIAL_OUT, WRITE_ACCESS, OS);
+	return 0;
 }
 
 static void write_to_serial_out(char *buf)

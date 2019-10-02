@@ -14,29 +14,47 @@
 #include <octopos/syscall.h>
 #include <octopos/error.h>
 
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id);
+void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t access_mode, uint8_t count);
 
 uint32_t handle_syscall(uint8_t caller_id, uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
 {
 	uint32_t ret;
 
 	switch (syscall_nr) {
-	case REQUEST_ACCESS_SERIAL_OUT:
-		mailbox_change_queue_access(SERIAL_OUT, WRITE_ACCESS, caller_id);
+	case SYSCALL_REQUEST_ACCESS_SERIAL_OUT: {
+		uint32_t access_mode = arg0, count = arg1;
+		if (!(access_mode == ACCESS_LIMITED_IRREVOCABLE || access_mode == ACCESS_UNLIMITED_REVOCABLE)) {
+			ret = (uint32_t) ERR_INVALID;
+			break;
+		}
+
+		/* No more than 100 characters to be printed without revocability */
+		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 100) {
+			ret = (uint32_t) ERR_INVALID;
+			break;
+		}
+
+		mailbox_change_queue_access(SERIAL_OUT, WRITE_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
 		ret = 0;
 		break;
-	case YIELD_ACCESS_SERIAL_OUT:
-		mailbox_change_queue_access(SERIAL_OUT, WRITE_ACCESS, OS);
+	}
+	case SYSCALL_REQUEST_ACCESS_KEYBOARD: {
+		uint32_t access_mode = arg0, count = arg1;
+		if (!(access_mode == ACCESS_LIMITED_IRREVOCABLE || access_mode == ACCESS_UNLIMITED_REVOCABLE)) {
+			ret = (uint32_t) ERR_INVALID;
+			break;
+		}
+
+		/* No more than 10 characters to be received from keyboard without revocability */
+		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 10) {
+			ret = (uint32_t) ERR_INVALID;
+			break;
+		}
+
+		mailbox_change_queue_access(KEYBOARD, READ_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
 		ret = 0;
 		break;
-	case REQUEST_ACCESS_KEYBOARD:
-		mailbox_change_queue_access(KEYBOARD, READ_ACCESS, caller_id);
-		ret = 0;
-		break;
-	case YIELD_ACCESS_KEYBOARD:
-		mailbox_change_queue_access(KEYBOARD, READ_ACCESS, OS);
-		ret = 0;
-		break;
+	}
 	default:
 		printf("Error: invalid syscall\n");
 		ret = (uint32_t) ERR_INVALID;
