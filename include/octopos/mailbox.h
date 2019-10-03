@@ -19,7 +19,7 @@
 #define	Q_SERIAL_OUT		2
 #define	Q_RUNTIME		3
 #define	Q_STORAGE		4
-#define NUM_QUEUES		20
+#define NUM_QUEUES		5
 
 #define MAILBOX_QUEUE_SIZE	4
 #define MAILBOX_QUEUE_MSG_SIZE	64
