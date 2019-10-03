@@ -36,7 +36,7 @@ int main(int argc, char **argv)
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		buf[0] = (uint8_t) getchar();
 		opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-		opcode[1] = KEYBOARD;
+		opcode[1] = Q_KEYBOARD;
 		write(fd, opcode, 2);
 		write(fd, buf, MAILBOX_QUEUE_MSG_SIZE);
 		if (buf[0] == 3) { /* ETX */

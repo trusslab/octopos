@@ -34,7 +34,7 @@ uint32_t handle_syscall(uint8_t caller_id, uint16_t syscall_nr, uint32_t arg0, u
 			break;
 		}
 
-		mailbox_change_queue_access(SERIAL_OUT, WRITE_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
+		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
 		ret = 0;
 		break;
 	}
@@ -51,7 +51,7 @@ uint32_t handle_syscall(uint8_t caller_id, uint16_t syscall_nr, uint32_t arg0, u
 			break;
 		}
 
-		mailbox_change_queue_access(KEYBOARD, READ_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
+		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
 		ret = 0;
 		break;
 	}
@@ -73,12 +73,14 @@ void process_system_call(uint8_t *buf)
 	uint32_t arg0, arg1, ret;
 
 	/* only allow syscalls from RUNTIME, for now */
-	if (buf[0] == RUNTIME) {
+	/* FIXME: we can't rely on the other processor declaring who it is.
+	 * Must be set automatically in the mailbox */
+	if (buf[0] == P_RUNTIME) {
 		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
 		syscall_nr = *((uint16_t *) &buf[1]);
 		arg0 = *((uint32_t *) &buf[3]);
 		arg1 = *((uint32_t *) &buf[7]);
-		ret = handle_syscall(RUNTIME, syscall_nr, arg0, arg1);
+		ret = handle_syscall(P_RUNTIME, syscall_nr, arg0, arg1);
 
 		/* send response */
 		*((uint32_t *) &ret_buf[0]) = ret;

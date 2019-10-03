@@ -31,7 +31,7 @@ struct queue {
 };
 
 struct processor processors[NUM_PROCESSORS];
-struct queue queues[NUM_PROCESSORS];
+struct queue queues[NUM_QUEUES];
 
 //#define OUTPUT_CHANNEL_MSG_SIZE	256
 //#define INPUT_CHANNEL_MSG_SIZE	1
@@ -43,17 +43,22 @@ static void send_interrupt(struct processor *proc, uint8_t queue_id)
 
 static void os_send_interrupt(uint8_t queue_id)
 {
-	send_interrupt(&processors[OS], queue_id);
+	send_interrupt(&processors[P_OS], queue_id);
 }
 
 static void serial_out_send_interrupt(uint8_t queue_id)
 {
-	send_interrupt(&processors[SERIAL_OUT], queue_id);
+	send_interrupt(&processors[P_SERIAL_OUT], queue_id);
 }
 
 static void runtime_send_interrupt(uint8_t queue_id)
 {
-	send_interrupt(&processors[RUNTIME], queue_id);
+	send_interrupt(&processors[P_RUNTIME], queue_id);
+}
+
+static void storage_send_interrupt(uint8_t queue_id)
+{
+	send_interrupt(&processors[P_STORAGE], queue_id);
 }
 
 static void initialize_processors(void)
@@ -69,48 +74,61 @@ static void initialize_processors(void)
 	mkfifo(FIFO_RUNTIME_OUT, 0666);
 	mkfifo(FIFO_RUNTIME_IN, 0666);
 	mkfifo(FIFO_RUNTIME_INTR, 0666);
+	mkfifo(FIFO_STORAGE_OUT, 0666);
+	mkfifo(FIFO_STORAGE_IN, 0666);
+	mkfifo(FIFO_STORAGE_INTR, 0666);
 
 	/* initialize processor objects */
 	/* OS processor */
-	processors[OS].processor_id = OS;
-	processors[OS].send_interrupt = os_send_interrupt;
-	processors[OS].out_handle = open(FIFO_OS_OUT, O_RDWR);
-	processors[OS].in_handle = open(FIFO_OS_IN, O_RDWR);
-	processors[OS].intr_handle = open(FIFO_OS_INTR, O_RDWR);
+	processors[P_OS].processor_id = P_OS;
+	processors[P_OS].send_interrupt = os_send_interrupt;
+	processors[P_OS].out_handle = open(FIFO_OS_OUT, O_RDWR);
+	processors[P_OS].in_handle = open(FIFO_OS_IN, O_RDWR);
+	processors[P_OS].intr_handle = open(FIFO_OS_INTR, O_RDWR);
 
 	/* keyboard processor */
-	processors[KEYBOARD].processor_id = KEYBOARD;
-	processors[KEYBOARD].send_interrupt = NULL; /* not needed */
-	processors[KEYBOARD].out_handle = open(FIFO_KEYBOARD, O_RDWR);
-	processors[KEYBOARD].in_handle = -1; /* not needed */
+	processors[P_KEYBOARD].processor_id = P_KEYBOARD;
+	processors[P_KEYBOARD].send_interrupt = NULL; /* not needed */
+	processors[P_KEYBOARD].out_handle = open(FIFO_KEYBOARD, O_RDWR);
+	processors[P_KEYBOARD].in_handle = -1; /* not needed */
 
 	/* serial output processor */
-	processors[SERIAL_OUT].processor_id = KEYBOARD;
-	processors[SERIAL_OUT].send_interrupt = serial_out_send_interrupt;
-	processors[SERIAL_OUT].out_handle = open(FIFO_SERIAL_OUT_OUT, O_RDWR);
-	processors[SERIAL_OUT].in_handle = open(FIFO_SERIAL_OUT_IN, O_RDWR);
-	processors[SERIAL_OUT].intr_handle = open(FIFO_SERIAL_OUT_INTR, O_RDWR);
+	processors[P_SERIAL_OUT].processor_id = P_SERIAL_OUT;
+	processors[P_SERIAL_OUT].send_interrupt = serial_out_send_interrupt;
+	processors[P_SERIAL_OUT].out_handle = open(FIFO_SERIAL_OUT_OUT, O_RDWR);
+	processors[P_SERIAL_OUT].in_handle = open(FIFO_SERIAL_OUT_IN, O_RDWR);
+	processors[P_SERIAL_OUT].intr_handle = open(FIFO_SERIAL_OUT_INTR, O_RDWR);
 
 	/* runtime processor */
-	processors[RUNTIME].processor_id = RUNTIME;
-	processors[RUNTIME].send_interrupt = runtime_send_interrupt;
-	processors[RUNTIME].out_handle = open(FIFO_RUNTIME_OUT, O_RDWR);
-	processors[RUNTIME].in_handle = open(FIFO_RUNTIME_IN, O_RDWR);
-	processors[RUNTIME].intr_handle = open(FIFO_RUNTIME_INTR, O_RDWR);
+	processors[P_RUNTIME].processor_id = P_RUNTIME;
+	processors[P_RUNTIME].send_interrupt = runtime_send_interrupt;
+	processors[P_RUNTIME].out_handle = open(FIFO_RUNTIME_OUT, O_RDWR);
+	processors[P_RUNTIME].in_handle = open(FIFO_RUNTIME_IN, O_RDWR);
+	processors[P_RUNTIME].intr_handle = open(FIFO_RUNTIME_INTR, O_RDWR);
+
+	/* storage processor */
+	processors[P_STORAGE].processor_id = P_STORAGE;
+	processors[P_STORAGE].send_interrupt = storage_send_interrupt;
+	processors[P_STORAGE].out_handle = open(FIFO_STORAGE_OUT, O_RDWR);
+	processors[P_STORAGE].in_handle = open(FIFO_STORAGE_IN, O_RDWR);
+	processors[P_STORAGE].intr_handle = open(FIFO_STORAGE_INTR, O_RDWR);
 }
 
 static void close_processors(void)
 {
-	close(processors[OS].out_handle);
-	close(processors[OS].in_handle);
-	close(processors[OS].intr_handle);
-	close(processors[KEYBOARD].out_handle);
-	close(processors[SERIAL_OUT].out_handle);
-	close(processors[SERIAL_OUT].in_handle);
-	close(processors[SERIAL_OUT].intr_handle);
-	close(processors[RUNTIME].out_handle);
-	close(processors[RUNTIME].in_handle);
-	close(processors[RUNTIME].intr_handle);
+	close(processors[P_OS].out_handle);
+	close(processors[P_OS].in_handle);
+	close(processors[P_OS].intr_handle);
+	close(processors[P_KEYBOARD].out_handle);
+	close(processors[P_SERIAL_OUT].out_handle);
+	close(processors[P_SERIAL_OUT].in_handle);
+	close(processors[P_SERIAL_OUT].intr_handle);
+	close(processors[P_RUNTIME].out_handle);
+	close(processors[P_RUNTIME].in_handle);
+	close(processors[P_RUNTIME].intr_handle);
+	close(processors[P_STORAGE].out_handle);
+	close(processors[P_STORAGE].in_handle);
+	close(processors[P_STORAGE].intr_handle);
 
 	remove(FIFO_OS_OUT);
 	remove(FIFO_OS_IN);
@@ -122,6 +140,9 @@ static void close_processors(void)
 	remove(FIFO_RUNTIME_OUT);
 	remove(FIFO_RUNTIME_IN);
 	remove(FIFO_RUNTIME_INTR);
+	remove(FIFO_STORAGE_OUT);
+	remove(FIFO_STORAGE_IN);
+	remove(FIFO_STORAGE_INTR);
 }
 
 int write_queue(struct queue *queue, uint8_t *buf)
@@ -162,44 +183,54 @@ int read_queue(struct queue *queue, uint8_t *buf)
 static void initialize_queues(void)
 {
 	/* OS queue */
-	queues[OS].queue_id = OS;
-	queues[OS].head = 0;
-	queues[OS].tail = 0;
-	queues[OS].counter = 0;
-	queues[OS].reader_id = OS;
-	queues[OS].writer_id = ALL_PROCESSORS;
-	queues[OS].access_mode = 0; /* irrelevant for the OS queue */
-	queues[OS].access_count = 0; /* irrelevant for the OS queue */
+	queues[Q_OS].queue_id = Q_OS;
+	queues[Q_OS].head = 0;
+	queues[Q_OS].tail = 0;
+	queues[Q_OS].counter = 0;
+	queues[Q_OS].reader_id = P_OS;
+	queues[Q_OS].writer_id = ALL_PROCESSORS;
+	queues[Q_OS].access_mode = 0; /* irrelevant for the OS queue */
+	queues[Q_OS].access_count = 0; /* irrelevant for the OS queue */
 
 	/* keyboard queue */
-	queues[KEYBOARD].queue_id = KEYBOARD;
-	queues[KEYBOARD].head = 0;
-	queues[KEYBOARD].tail = 0;
-	queues[KEYBOARD].counter = 0;
-	queues[KEYBOARD].reader_id = OS;
-	queues[KEYBOARD].writer_id = KEYBOARD;
-	queues[KEYBOARD].access_mode = 0; /* irrelevant when OS is reader */
-	queues[KEYBOARD].access_count = 0;
+	queues[Q_KEYBOARD].queue_id = Q_KEYBOARD;
+	queues[Q_KEYBOARD].head = 0;
+	queues[Q_KEYBOARD].tail = 0;
+	queues[Q_KEYBOARD].counter = 0;
+	queues[Q_KEYBOARD].reader_id = P_OS;
+	queues[Q_KEYBOARD].writer_id = P_KEYBOARD;
+	queues[Q_KEYBOARD].access_mode = 0; /* irrelevant when OS is reader */
+	queues[Q_KEYBOARD].access_count = 0;
 
 	/* serial output queue */
-	queues[SERIAL_OUT].queue_id = SERIAL_OUT;
-	queues[SERIAL_OUT].head = 0;
-	queues[SERIAL_OUT].tail = 0;
-	queues[SERIAL_OUT].counter = 0;
-	queues[SERIAL_OUT].reader_id = SERIAL_OUT;
-	queues[SERIAL_OUT].writer_id = OS;
-	queues[SERIAL_OUT].access_mode = 0; /* irrelevant when OS is writer */
-	queues[SERIAL_OUT].access_count = 0;
+	queues[Q_SERIAL_OUT].queue_id = Q_SERIAL_OUT;
+	queues[Q_SERIAL_OUT].head = 0;
+	queues[Q_SERIAL_OUT].tail = 0;
+	queues[Q_SERIAL_OUT].counter = 0;
+	queues[Q_SERIAL_OUT].reader_id = P_SERIAL_OUT;
+	queues[Q_SERIAL_OUT].writer_id = P_OS;
+	queues[Q_SERIAL_OUT].access_mode = 0; /* irrelevant when OS is writer */
+	queues[Q_SERIAL_OUT].access_count = 0;
 
 	/* runtime queue */
-	queues[RUNTIME].queue_id = RUNTIME;
-	queues[RUNTIME].head = 0;
-	queues[RUNTIME].tail = 0;
-	queues[RUNTIME].counter = 0;
-	queues[RUNTIME].reader_id = RUNTIME;
-	queues[RUNTIME].writer_id = OS;
-	queues[RUNTIME].access_mode = 0; /* irrelevant for the RUNTIME queue */
-	queues[RUNTIME].access_count = 0; /* irrelevant for the RUNTIME queue */
+	queues[Q_RUNTIME].queue_id = Q_RUNTIME;
+	queues[Q_RUNTIME].head = 0;
+	queues[Q_RUNTIME].tail = 0;
+	queues[Q_RUNTIME].counter = 0;
+	queues[Q_RUNTIME].reader_id = P_RUNTIME;
+	queues[Q_RUNTIME].writer_id = P_OS;
+	queues[Q_RUNTIME].access_mode = 0; /* irrelevant for the RUNTIME queue */
+	queues[Q_RUNTIME].access_count = 0; /* irrelevant for the RUNTIME queue */
+
+	/* storage queue */
+	queues[Q_STORAGE].queue_id = Q_STORAGE;
+	queues[Q_STORAGE].head = 0;
+	queues[Q_STORAGE].tail = 0;
+	queues[Q_STORAGE].counter = 0;
+	queues[Q_STORAGE].reader_id = P_STORAGE;
+	queues[Q_STORAGE].writer_id = P_OS;
+	queues[Q_STORAGE].access_mode = 0; /* irrelevant for the STORAGE queue */
+	queues[Q_STORAGE].access_count = 0; /* irrelevant for the STORAGE queue */
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -256,25 +287,29 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 {
 	bool allowed = false;
 	/* sanity checks */
-	if (queue_id == SERIAL_OUT && access == WRITE_ACCESS) {
-		if (queues[SERIAL_OUT].writer_id == OS && proc_id == RUNTIME)
+	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS) {
+		if (queues[Q_SERIAL_OUT].writer_id == P_OS && proc_id == P_RUNTIME)
 			allowed = true;
 
-		if (queues[SERIAL_OUT].writer_id == RUNTIME && proc_id == OS && queues[SERIAL_OUT].access_mode == ACCESS_UNLIMITED_REVOCABLE)
+		if (queues[Q_SERIAL_OUT].writer_id == P_RUNTIME && proc_id == P_OS &&
+		    queues[Q_SERIAL_OUT].access_mode == ACCESS_UNLIMITED_REVOCABLE)
 			allowed = true;
 
-		if (queues[SERIAL_OUT].writer_id == RUNTIME && proc_id == OS && queues[SERIAL_OUT].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
-		    queues[SERIAL_OUT].access_count == 0)
+		if (queues[Q_SERIAL_OUT].writer_id == P_RUNTIME && proc_id == P_OS &&
+		    queues[Q_SERIAL_OUT].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
+		    queues[Q_SERIAL_OUT].access_count == 0)
 			allowed = true;
-	} else if (queue_id == KEYBOARD && access == READ_ACCESS) {
-		if (queues[KEYBOARD].reader_id == OS && proc_id == RUNTIME)
-			allowed = true;
-
-		if (queues[KEYBOARD].reader_id == RUNTIME && proc_id == OS && queues[KEYBOARD].access_mode == ACCESS_UNLIMITED_REVOCABLE)
+	} else if (queue_id == Q_KEYBOARD && access == READ_ACCESS) {
+		if (queues[Q_KEYBOARD].reader_id == P_OS && proc_id == P_RUNTIME)
 			allowed = true;
 
-		if (queues[KEYBOARD].reader_id == RUNTIME && proc_id == OS && queues[KEYBOARD].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
-		    queues[KEYBOARD].access_count == 0)
+		if (queues[Q_KEYBOARD].reader_id == P_RUNTIME && proc_id == P_OS &&
+		    queues[Q_KEYBOARD].access_mode == ACCESS_UNLIMITED_REVOCABLE)
+			allowed = true;
+
+		if (queues[Q_KEYBOARD].reader_id == P_RUNTIME && proc_id == P_OS &&
+		    queues[Q_KEYBOARD].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
+		    queues[Q_KEYBOARD].access_count == 0)
 			allowed = true;
 	}
 	
@@ -300,9 +335,10 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 {
 	bool allowed = false;
 	/* sanity checks */
-	if (queue_id == SERIAL_OUT && access == WRITE_ACCESS && queues[SERIAL_OUT].writer_id == RUNTIME && proc_id == OS)
+	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS &&
+	    queues[Q_SERIAL_OUT].writer_id == P_RUNTIME && proc_id == P_OS)
 			allowed = true;
-	else if (queue_id == KEYBOARD && access == READ_ACCESS && queues[KEYBOARD].reader_id == RUNTIME && proc_id == OS)
+	else if (queue_id == Q_KEYBOARD && access == READ_ACCESS && queues[Q_KEYBOARD].reader_id == P_RUNTIME && proc_id == P_OS)
 			allowed = true;
 	
 	if (!allowed) {		
@@ -331,52 +367,56 @@ int main(int argc, char **argv)
 	
 	FD_ZERO(&listen_fds);
 
-	nfds = processors[KEYBOARD].out_handle;
-	if (processors[OS].out_handle > nfds)
-		nfds = processors[OS].out_handle;
-	if (processors[SERIAL_OUT].out_handle > nfds)
-		nfds = processors[SERIAL_OUT].out_handle;
-	if (processors[RUNTIME].out_handle > nfds)
-		nfds = processors[RUNTIME].out_handle;
+	nfds = processors[P_KEYBOARD].out_handle;
+	if (processors[P_OS].out_handle > nfds)
+		nfds = processors[P_OS].out_handle;
+	if (processors[P_SERIAL_OUT].out_handle > nfds)
+		nfds = processors[P_SERIAL_OUT].out_handle;
+	if (processors[P_RUNTIME].out_handle > nfds)
+		nfds = processors[P_RUNTIME].out_handle;
+	if (processors[P_STORAGE].out_handle > nfds)
+		nfds = processors[P_STORAGE].out_handle;
 
 	while(1) {
-		FD_SET(processors[OS].out_handle, &listen_fds);
-		FD_SET(processors[KEYBOARD].out_handle, &listen_fds);
-		FD_SET(processors[SERIAL_OUT].out_handle, &listen_fds);
-		FD_SET(processors[RUNTIME].out_handle, &listen_fds);
+		FD_SET(processors[P_OS].out_handle, &listen_fds);
+		FD_SET(processors[P_KEYBOARD].out_handle, &listen_fds);
+		FD_SET(processors[P_SERIAL_OUT].out_handle, &listen_fds);
+		FD_SET(processors[P_RUNTIME].out_handle, &listen_fds);
+		FD_SET(processors[P_STORAGE].out_handle, &listen_fds);
+
 		if (select(nfds + 1, &listen_fds, NULL, NULL, NULL) < 0) {
 			printf("Error: select\n");
 			break;
 		}
 
-		if (FD_ISSET(processors[OS].out_handle, &listen_fds)) {
+		if (FD_ISSET(processors[P_OS].out_handle, &listen_fds)) {
 			memset(opcode, 0x0, 2);
-			read(processors[OS].out_handle, opcode, 2);
+			read(processors[P_OS].out_handle, opcode, 2);
 			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = OS;
+				reader_id = P_OS;
 				queue_id = opcode[1];
 				writer_id = INVALID_PROCESSOR;
 				handle_read_queue(queue_id, reader_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = OS;
+				writer_id = P_OS;
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
 				uint8_t opcode_rest[4];
 				memset(opcode_rest, 0x0, 4);
-				read(processors[OS].out_handle, opcode_rest, 4);
+				read(processors[P_OS].out_handle, opcode_rest, 4);
 				os_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2], opcode_rest[3]);				
 			} else {
 				printf("Error: invalid opcode from OS\n");
 			}
 		}
 
-		if (FD_ISSET(processors[KEYBOARD].out_handle, &listen_fds)) {
+		if (FD_ISSET(processors[P_KEYBOARD].out_handle, &listen_fds)) {
 			memset(opcode, 0x0, 2);
-			read(processors[KEYBOARD].out_handle, opcode, 2);
+			read(processors[P_KEYBOARD].out_handle, opcode, 2);
 			if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = KEYBOARD;
+				writer_id = P_KEYBOARD;
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
@@ -385,11 +425,11 @@ int main(int argc, char **argv)
 			}
 		}		
 
-		if (FD_ISSET(processors[SERIAL_OUT].out_handle, &listen_fds)) {
+		if (FD_ISSET(processors[P_SERIAL_OUT].out_handle, &listen_fds)) {
 			memset(opcode, 0x0, 2);
-			read(processors[SERIAL_OUT].out_handle, opcode, 2);
+			read(processors[P_SERIAL_OUT].out_handle, opcode, 2);
 			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = SERIAL_OUT;
+				reader_id = P_SERIAL_OUT;
 				queue_id = opcode[1];
 				writer_id = INVALID_PROCESSOR;
 				handle_read_queue(queue_id, reader_id);
@@ -398,23 +438,23 @@ int main(int argc, char **argv)
 			}
 		}
 
-		if (FD_ISSET(processors[RUNTIME].out_handle, &listen_fds)) {
+		if (FD_ISSET(processors[P_RUNTIME].out_handle, &listen_fds)) {
 			memset(opcode, 0x0, 2);
-			read(processors[RUNTIME].out_handle, opcode, 2);
+			read(processors[P_RUNTIME].out_handle, opcode, 2);
 			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = RUNTIME;
+				reader_id = P_RUNTIME;
 				queue_id = opcode[1];
 				writer_id = INVALID_PROCESSOR;
 				handle_read_queue(queue_id, reader_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = RUNTIME;
+				writer_id = P_RUNTIME;
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
 				uint8_t opcode_rest[2];
 				memset(opcode_rest, 0x0, 2);
-				read(processors[RUNTIME].out_handle, opcode_rest, 2);
+				read(processors[P_RUNTIME].out_handle, opcode_rest, 2);
 				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
 			} else {
 				printf("Error: invalid opcode from OS\n");

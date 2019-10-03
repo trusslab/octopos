@@ -3,14 +3,23 @@
 #define	MAILBOX_OPCODE_WRITE_QUEUE		1
 #define	MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS	2
 
-/* processor numbers */
-#define	OS			0
-#define	KEYBOARD		1
-#define	SERIAL_OUT		2
-#define	RUNTIME			3
-#define NUM_PROCESSORS		4
-#define ALL_PROCESSORS		4
-#define INVALID_PROCESSOR	5
+/* processor IDs */
+#define	P_OS			0
+#define	P_KEYBOARD		1
+#define	P_SERIAL_OUT		2
+#define	P_RUNTIME		3
+#define	P_STORAGE		4
+#define NUM_PROCESSORS		5
+#define ALL_PROCESSORS		5
+#define INVALID_PROCESSOR	6
+
+/* queue IDs */
+#define	Q_OS			0
+#define	Q_KEYBOARD		1
+#define	Q_SERIAL_OUT		2
+#define	Q_RUNTIME		3
+#define	Q_STORAGE		4
+#define NUM_QUEUES		20
 
 #define MAILBOX_QUEUE_SIZE	4
 #define MAILBOX_QUEUE_MSG_SIZE	64
@@ -25,6 +34,9 @@
 #define FIFO_RUNTIME_OUT	"/tmp/octopos_mailbox_runtime_out"
 #define FIFO_RUNTIME_IN		"/tmp/octopos_mailbox_runtime_in"
 #define FIFO_RUNTIME_INTR	"/tmp/octopos_mailbox_runtime_intr"
+#define FIFO_STORAGE_OUT	"/tmp/octopos_mailbox_storage_out"
+#define FIFO_STORAGE_IN		"/tmp/octopos_mailbox_storage_in"
+#define FIFO_STORAGE_INTR	"/tmp/octopos_mailbox_storage_intr"
 
 #define READ_ACCESS		0
 #define WRITE_ACCESS		1

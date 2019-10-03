@@ -45,7 +45,7 @@ int send_output(uint8_t *buf)
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = SERIAL_OUT;
+	opcode[1] = Q_SERIAL_OUT;
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -72,7 +72,7 @@ int send_msg_to_runtime(uint8_t *buf)
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = RUNTIME;
+	opcode[1] = Q_RUNTIME;
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -103,9 +103,9 @@ static void distribute_input(void)
 
 	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	recv_input(input_buf, &queue_id);
-	if (queue_id == KEYBOARD)
+	if (queue_id == Q_KEYBOARD)
 		shell_process_input((char) input_buf[0]);
-	else if (queue_id == OS)
+	else if (queue_id == Q_OS)
 		process_system_call(input_buf);
 	else
 		printf("Error: Interrupt received from an invalid queue\n");

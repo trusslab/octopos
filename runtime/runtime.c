@@ -27,9 +27,9 @@ static uint32_t issue_syscall(uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = OS;
+	opcode[1] = Q_OS;
 	write(fd_out, opcode, 2);
-	buf[0] = RUNTIME;
+	buf[0] = P_RUNTIME; /* FIXME: can't be set by RUNTIME itself */
 	*((uint16_t *) &buf[1]) = syscall_nr;
 	*((uint32_t *) &buf[3]) = arg0;
 	*((uint32_t *) &buf[7]) = arg1;
@@ -38,7 +38,7 @@ static uint32_t issue_syscall(uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
 	/* wait for response */
 	read(fd_intr, &interrupt, 1);
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = RUNTIME;
+	opcode[1] = Q_RUNTIME;
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -64,7 +64,7 @@ static int request_access_keyboard(int access_mode, int count)
 
 static int yield_access_keyboard(void)
 {
-	mailbox_change_queue_access(KEYBOARD, READ_ACCESS, OS);
+	mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, P_OS);
 	return 0;
 }
 
@@ -76,7 +76,7 @@ static int request_access_serial_out(int access_mode, int count)
 
 static int yield_access_serial_out(void)
 {
-	mailbox_change_queue_access(SERIAL_OUT, WRITE_ACCESS, OS);
+	mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, P_OS);
 	return 0;
 }
 
@@ -85,7 +85,7 @@ static void write_to_serial_out(char *buf)
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = SERIAL_OUT;
+	opcode[1] = Q_SERIAL_OUT;
 	write(fd_out, opcode, 2);
 	write(fd_out, (uint8_t *) buf, MAILBOX_QUEUE_MSG_SIZE);
 }
@@ -97,7 +97,7 @@ static void read_char_from_keyboard(char *buf)
 
 	read(fd_intr, &interrupt, 1);
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = KEYBOARD;
+	opcode[1] = Q_KEYBOARD;
 	write(fd_out, opcode, 2);
 	read(fd_in, input_buf, MAILBOX_QUEUE_MSG_SIZE);
 	*buf = (char) input_buf[0];
@@ -153,7 +153,7 @@ int main(int argc, char **argv)
 	fd_intr = open(FIFO_RUNTIME_INTR, O_RDONLY);
 		
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = RUNTIME;
+	opcode[1] = Q_RUNTIME;
 	
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);

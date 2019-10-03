@@ -22,7 +22,7 @@ int main(int argc, char **argv)
 	fd_intr = open(FIFO_SERIAL_OUT_INTR, O_RDONLY);
 		
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = SERIAL_OUT;
+	opcode[1] = Q_SERIAL_OUT;
 	
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
