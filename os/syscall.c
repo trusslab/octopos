@@ -14,7 +14,9 @@
 #include <octopos/syscall.h>
 #include <octopos/error.h>
 
+/* FIXME: move to header file */
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t access_mode, uint8_t count);
+int send_msg_to_storage(uint8_t *msg_buf, uint8_t *resp_buf);
 
 uint32_t handle_syscall(uint8_t caller_id, uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
 {
@@ -53,6 +55,24 @@ uint32_t handle_syscall(uint8_t caller_id, uint16_t syscall_nr, uint32_t arg0, u
 
 		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
 		ret = 0;
+		break;
+	}
+	case SYSCALL_WRITE_TO_FILE: {
+		uint32_t data = arg0;
+		uint8_t data_buf[MAILBOX_QUEUE_MSG_SIZE];
+		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
+		data_buf[0] = 0; /* write */
+		*((uint32_t *) &data_buf[1]) = data;
+		send_msg_to_storage(data_buf, resp_buf);
+		ret = 0;
+		break;
+	}
+	case SYSCALL_READ_FROM_FILE: {
+		uint8_t data_buf[MAILBOX_QUEUE_MSG_SIZE];
+		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
+		data_buf[0] = 1; /* read */
+		send_msg_to_storage(data_buf, resp_buf);
+		ret = *((uint32_t *) &resp_buf[1]);
 		break;
 	}
 	default:

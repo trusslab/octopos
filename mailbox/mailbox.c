@@ -222,15 +222,24 @@ static void initialize_queues(void)
 	queues[Q_RUNTIME].access_mode = 0; /* irrelevant for the RUNTIME queue */
 	queues[Q_RUNTIME].access_count = 0; /* irrelevant for the RUNTIME queue */
 
-	/* storage queue */
-	queues[Q_STORAGE].queue_id = Q_STORAGE;
-	queues[Q_STORAGE].head = 0;
-	queues[Q_STORAGE].tail = 0;
-	queues[Q_STORAGE].counter = 0;
-	queues[Q_STORAGE].reader_id = P_STORAGE;
-	queues[Q_STORAGE].writer_id = P_OS;
-	queues[Q_STORAGE].access_mode = 0; /* irrelevant for the STORAGE queue */
-	queues[Q_STORAGE].access_count = 0; /* irrelevant for the STORAGE queue */
+	/* storage queues */
+	queues[Q_STORAGE_IN].queue_id = Q_STORAGE_IN;
+	queues[Q_STORAGE_IN].head = 0;
+	queues[Q_STORAGE_IN].tail = 0;
+	queues[Q_STORAGE_IN].counter = 0;
+	queues[Q_STORAGE_IN].reader_id = P_STORAGE;
+	queues[Q_STORAGE_IN].writer_id = P_OS;
+	queues[Q_STORAGE_IN].access_mode = 0; /* irrelevant for STORAGE queues */
+	queues[Q_STORAGE_IN].access_count = 0; /* irrelevant for STORAGE queues */
+
+	queues[Q_STORAGE_OUT].queue_id = Q_STORAGE_OUT;
+	queues[Q_STORAGE_OUT].head = 0;
+	queues[Q_STORAGE_OUT].tail = 0;
+	queues[Q_STORAGE_OUT].counter = 0;
+	queues[Q_STORAGE_OUT].reader_id = P_OS;
+	queues[Q_STORAGE_OUT].writer_id = P_STORAGE;
+	queues[Q_STORAGE_OUT].access_mode = 0; /* irrelevant for STORAGE queues */
+	queues[Q_STORAGE_OUT].access_count = 0; /* irrelevant for STORAGE queues */
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -457,7 +466,25 @@ int main(int argc, char **argv)
 				read(processors[P_RUNTIME].out_handle, opcode_rest, 2);
 				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
 			} else {
-				printf("Error: invalid opcode from OS\n");
+				printf("Error: invalid opcode from runtime\n");
+			}
+		}
+
+		if (FD_ISSET(processors[P_STORAGE].out_handle, &listen_fds)) {
+			memset(opcode, 0x0, 2);
+			read(processors[P_STORAGE].out_handle, opcode, 2);
+			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
+				reader_id = P_STORAGE;
+				queue_id = opcode[1];
+				writer_id = INVALID_PROCESSOR;
+				handle_read_queue(queue_id, reader_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
+				writer_id = P_STORAGE;
+				queue_id = opcode[1];
+				reader_id = INVALID_PROCESSOR;
+				handle_write_queue(queue_id, writer_id);
+			} else {
+				printf("Error: invalid opcode from storage\n");
 			}
 		}
 	}	

@@ -19,6 +19,8 @@ struct runtime_api {
 	int (*yield_access_serial_out)(void);
 	void (*write_to_serial_out)(char *buf);
 	void (*read_char_from_keyboard)(char *buf);
+	int (*write_to_file)(char *filename, uint32_t data);
+	uint32_t (*read_from_file)(char *filename);
 };
 
 static uint32_t issue_syscall(uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
@@ -103,6 +105,16 @@ static void read_char_from_keyboard(char *buf)
 	*buf = (char) input_buf[0];
 }
 
+static int write_to_file(char *filename, uint32_t data)
+{
+	return (int) issue_syscall(SYSCALL_WRITE_TO_FILE, data, 0);
+
+}
+static uint32_t read_from_file(char *filename)
+{
+	return issue_syscall(SYSCALL_READ_FROM_FILE, 0, 0);
+}
+
 typedef void (*app_main_proc)(struct runtime_api *);
 
 static void load_application(char *msg)
@@ -117,6 +129,8 @@ static void load_application(char *msg)
 		.yield_access_serial_out = yield_access_serial_out,
 		.write_to_serial_out = write_to_serial_out,
 		.read_char_from_keyboard = read_char_from_keyboard,
+		.write_to_file = write_to_file,
+		.read_from_file = read_from_file,
 	};
 
 	strcat(path, msg);

@@ -4,3 +4,5 @@
   /* access modes */
   #define ACCESS_UNLIMITED_REVOCABLE	0
   #define ACCESS_LIMITED_IRREVOCABLE	1
+#define SYSCALL_WRITE_TO_FILE			2
+#define SYSCALL_READ_FROM_FILE			3
