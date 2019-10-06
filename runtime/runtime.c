@@ -9,32 +9,37 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/error.h>
+#include <octopos/runtime.h>
+
+#define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
+	*((uint16_t *) &buf[1]) = syscall_nr;		\
+
+#define SYSCALL_SET_ONE_ARG(syscall_nr, arg0)		\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
+	*((uint16_t *) &buf[1]) = syscall_nr;		\
+	*((uint32_t *) &buf[3]) = arg0;			\
+
+#define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
+	*((uint16_t *) &buf[1]) = syscall_nr;		\
+	*((uint32_t *) &buf[3]) = arg0;			\
+	*((uint32_t *) &buf[7]) = arg1;			\
+
+#define SYSCALL_GET_ONE_RET				\
+	uint32_t ret0;					\
+	ret0 = *((uint32_t *) &buf[0]);			\
 
 int fd_out, fd_in, fd_intr;
 
-struct runtime_api {
-	int (*request_access_keyboard)(int, int);
-	int (*yield_access_keyboard)(void);
-	int (*request_access_serial_out)(int, int);
-	int (*yield_access_serial_out)(void);
-	void (*write_to_serial_out)(char *buf);
-	void (*read_char_from_keyboard)(char *buf);
-	int (*write_to_file)(char *filename, uint32_t data);
-	uint32_t (*read_from_file)(char *filename);
-};
-
-static uint32_t issue_syscall(uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
+static void issue_syscall(uint8_t *buf)
 {
 	uint8_t opcode[2], interrupt;
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_OS;
 	write(fd_out, opcode, 2);
 	buf[0] = P_RUNTIME; /* FIXME: can't be set by RUNTIME itself */
-	*((uint16_t *) &buf[1]) = syscall_nr;
-	*((uint32_t *) &buf[3]) = arg0;
-	*((uint32_t *) &buf[7]) = arg1;
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* wait for response */
@@ -43,8 +48,6 @@ static uint32_t issue_syscall(uint16_t syscall_nr, uint32_t arg0, uint32_t arg1)
 	opcode[1] = Q_RUNTIME;
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-
-	return *((uint32_t *) &buf[0]);
 }
 
 static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
@@ -60,8 +63,10 @@ static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 
 static int request_access_keyboard(int access_mode, int count)
 {
-	return (int) issue_syscall(SYSCALL_REQUEST_ACCESS_KEYBOARD,
-					(uint32_t) access_mode, (uint32_t) count);
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_ACCESS_KEYBOARD, access_mode, count)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
 }
 
 static int yield_access_keyboard(void)
@@ -72,8 +77,10 @@ static int yield_access_keyboard(void)
 
 static int request_access_serial_out(int access_mode, int count)
 {
-	return (int) issue_syscall(SYSCALL_REQUEST_ACCESS_SERIAL_OUT,
-					(uint32_t) access_mode, (uint32_t) count);
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_ACCESS_SERIAL_OUT, access_mode, count)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
 }
 
 static int yield_access_serial_out(void)
@@ -107,13 +114,26 @@ static void read_char_from_keyboard(char *buf)
 
 static int write_to_file(char *filename, uint32_t data)
 {
-	return (int) issue_syscall(SYSCALL_WRITE_TO_FILE, data, 0);
+	SYSCALL_SET_ONE_ARG(SYSCALL_WRITE_TO_FILE, data)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
 
 }
 static uint32_t read_from_file(char *filename)
 {
-	return issue_syscall(SYSCALL_READ_FROM_FILE, 0, 0);
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_READ_FROM_FILE)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return ret0; 
 }
+
+//static void write_to_shell(char *buf)
+//{
+//	//issue_syscall(SYSCALL_WRITE_TO_SHELL, 0, 0);
+//
+//}
+//void (*read_from_shell)(char *buf);
 
 typedef void (*app_main_proc)(struct runtime_api *);
 

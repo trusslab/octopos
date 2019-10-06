@@ -5,18 +5,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/stat.h>
-
-struct runtime_api {
-	int (*request_access_keyboard)(int, int);
-	int (*yield_access_keyboard)(void);
-	int (*request_access_serial_out)(int, int);
-	int (*yield_access_serial_out)(void);
-	void (*write_to_serial_out)(char *buf);
-	void (*read_char_from_keyboard)(char *buf);
-	int (*write_to_file)(char *filename, uint32_t data);
-	uint32_t (*read_from_file)(char *filename);
-};
-
+#include <octopos/runtime.h>
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
