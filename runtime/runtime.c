@@ -26,9 +26,39 @@
 	*((uint32_t *) &buf[3]) = arg0;			\
 	*((uint32_t *) &buf[7]) = arg1;			\
 
+#define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 4;				\
+	if (max_size >= 256) {							\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return ERR_INVALID;						\
+	}									\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return ERR_INVALID;						\
+	}									\
+	*((uint16_t *) &buf[1]) = syscall_nr;					\
+	buf[3] = size;								\
+	memcpy(&buf[4], data, size);						\
+
 #define SYSCALL_GET_ONE_RET				\
 	uint32_t ret0;					\
 	ret0 = *((uint32_t *) &buf[0]);			\
+
+#define SYSCALL_GET_ONE_RET_DATA(data)						\
+	uint32_t ret0;								\
+	uint8_t size, max_size = MAILBOX_QUEUE_MSG_SIZE - 5;			\
+	ret0 = *((uint32_t *) &buf[0]);						\
+	if (max_size >= 256) {							\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return ERR_INVALID;						\
+	}									\
+	size = buf[4];								\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return ERR_INVALID;						\
+	}									\
+	memcpy(data, &buf[5], size);						\
 
 int fd_out, fd_in, fd_intr;
 
@@ -120,6 +150,7 @@ static int write_to_file(char *filename, uint32_t data)
 	return (int) ret0; 
 
 }
+
 static uint32_t read_from_file(char *filename)
 {
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_READ_FROM_FILE)
@@ -128,11 +159,32 @@ static uint32_t read_from_file(char *filename)
 	return ret0; 
 }
 
-//static void write_to_shell(char *buf)
-//{
-//	//issue_syscall(SYSCALL_WRITE_TO_SHELL, 0, 0);
-//
-//}
+static int inform_os_of_termination(void)
+{
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_TERMINATION)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
+}
+
+static int write_to_shell(char *data, int size)
+{
+	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_WRITE_TO_SHELL, data, size)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0;
+}
+
+static int read_from_shell(char *data, int *data_size)
+{
+	/* FIXME: check the data buf to make sure it is allocated. */
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_READ_FROM_SHELL)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET_DATA(data)
+	*data_size = (int) size;
+	return (int) ret0;
+}
+
 //void (*read_from_shell)(char *buf);
 
 typedef void (*app_main_proc)(struct runtime_api *);
@@ -151,6 +203,8 @@ static void load_application(char *msg)
 		.read_char_from_keyboard = read_char_from_keyboard,
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
+		.write_to_shell = write_to_shell,
+		.read_from_shell = read_from_shell,
 	};
 
 	strcat(path, msg);
@@ -195,6 +249,7 @@ int main(int argc, char **argv)
 		write(fd_out, opcode, 2), 
 		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 		load_application((char *) buf);
+		inform_os_of_termination();
 	}
 	
 	close(fd_out);

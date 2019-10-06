@@ -17,6 +17,23 @@
 /* FIXME: move to header file */
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t access_mode, uint8_t count);
 int send_msg_to_storage(uint8_t *msg_buf, uint8_t *resp_buf);
+void inform_shell_of_termination(void);
+int app_write_to_shell(uint8_t *data, int size);
+int app_read_from_shell(void);
+
+#define SYSCALL_SET_ONE_RET(ret0)	\
+	*((uint32_t *) &buf[0]) = ret0; \
+
+#define SYSCALL_SET_ONE_RET_DATA(ret0, data, size)		\
+	*((uint32_t *) &buf[0]) = ret0;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 5;		\
+	if (max_size < 256 && size <= ((int) max_size)) {	\
+		buf[4] = (uint8_t) size;			\
+		memcpy(&buf[5], data, size);			\
+	} else {						\
+		printf("Error: invalid max_size or size\n");	\
+		buf[4] = 0;					\
+	}							\
 
 #define SYSCALL_GET_ONE_ARG		\
 	uint32_t arg0;			\
@@ -27,14 +44,27 @@ int send_msg_to_storage(uint8_t *msg_buf, uint8_t *resp_buf);
 	arg0 = *((uint32_t *) &buf[3]); \
 	arg1 = *((uint32_t *) &buf[7]); \
 
-#define SYSCALL_SET_ONE_RET(ret0)	\
-	*((uint32_t *) &buf[0]) = ret0; \
+#define SYSCALL_GET_ZERO_ARGS_DATA				\
+	uint8_t data_size, *data;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 4;		\
+	if (max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+	}							\
+	data_size = buf[3];					\
+	if (data_size > max_size) {				\
+		printf("Error: size not supported\n");		\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+	}							\
+	data = &buf[4];						\
 
-static void handle_syscall(uint8_t caller_id, uint8_t *buf)
+
+static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 {
 	uint16_t syscall_nr;
 
 	syscall_nr = *((uint16_t *) &buf[1]);
+	*is_async = false;
 
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_ACCESS_SERIAL_OUT: {
@@ -92,6 +122,23 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf)
 		SYSCALL_SET_ONE_RET(*((uint32_t *) &resp_buf[1]))
 		break;
 	}
+	case SYSCALL_INFORM_OS_OF_TERMINATION: {
+		inform_shell_of_termination();
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+	case SYSCALL_WRITE_TO_SHELL: {
+		int ret;
+		SYSCALL_GET_ZERO_ARGS_DATA
+		ret = app_write_to_shell(data, data_size);
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
+	case SYSCALL_READ_FROM_SHELL: {
+		app_read_from_shell();
+		*is_async = true;
+		break;
+	}
 	default:
 		printf("Error: invalid syscall\n");
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -99,8 +146,17 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf)
 	}
 }
 
+
 /* FIXME: move to header file */
 int send_msg_to_runtime(uint8_t *buf);
+
+/* response for async syscalls */
+void syscall_read_from_shell_response(uint8_t *line, int size)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	SYSCALL_SET_ONE_RET_DATA(0, line, size)
+	send_msg_to_runtime(buf);
+}
 
 void process_system_call(uint8_t *buf)
 {
@@ -108,11 +164,13 @@ void process_system_call(uint8_t *buf)
 	/* FIXME: we can't rely on the other processor declaring who it is.
 	 * Must be set automatically in the mailbox */
 	if (buf[0] == P_RUNTIME) {
+		bool is_async = false;
 		
-		handle_syscall(P_RUNTIME, buf);
+		handle_syscall(P_RUNTIME, buf, &is_async);
 
 		/* send response */
-		send_msg_to_runtime(buf);
+		if (!is_async)
+			send_msg_to_runtime(buf);
 	} else {
 		printf("Error: invalid syscall caller\n");
 	}
