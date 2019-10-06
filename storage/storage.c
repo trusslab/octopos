@@ -6,28 +6,24 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <octopos/error.h>
 
 int fd_out, fd_in, fd_intr;
-FILE *filep = NULL;
 
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 static void initialize_storage_space(void)
 {
         int size = 1024;
+	FILE *filep = NULL;
 
-        filep = fopen("octopos_disk", "rw");
+        filep = fopen("octopos_disk", "w");
 	if (!filep) {
 		printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
 		_exit(-1);
 	}
         fseek(filep, size , SEEK_SET);
         fputc('\0', filep);
-}
-
-static void close_storage_space(void)
-{
         fclose(filep);
-	filep = NULL;
 }
 
 static void send_response(uint8_t *buf)
@@ -43,17 +39,43 @@ static void send_response(uint8_t *buf)
 static void process_request(uint8_t *buf)
 {
 	uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
+	size_t size;
+	FILE *filep = NULL;
 
 	/* write */
 	if (buf[0] == 0) {
+		filep = fopen("octopos_disk", "w");
+		if (!filep) {
+			printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
+			ret_buf[0] = ERR_FAULT; /* ret */
+			send_response(ret_buf);
+		}
 		fseek(filep, 0, SEEK_SET);
-		fwrite(&buf[1], sizeof(uint8_t), MAILBOX_QUEUE_MSG_SIZE - 1, filep);
-		ret_buf[0] = 0; /* ret */
+		size = fwrite(&buf[1], sizeof(uint8_t), MAILBOX_QUEUE_MSG_SIZE - 1, filep);
+		if (size == (MAILBOX_QUEUE_MSG_SIZE - 1)) {
+			ret_buf[0] = 0; /* ret */
+		} else {
+			printf("Error: write failed, size = %d\n", (int) size);
+			ret_buf[0] = ERR_FAULT; /* ret */
+		}
+		fclose(filep);
 		send_response(ret_buf);
 	} else { /* read */
+		filep = fopen("octopos_disk", "r");
+		if (!filep) {
+			printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
+			ret_buf[0] = ERR_FAULT; /* ret */
+			send_response(ret_buf);
+		}
 		fseek(filep, 0, SEEK_SET);
-		fread(&ret_buf[1], sizeof(uint8_t), MAILBOX_QUEUE_MSG_SIZE - 1, filep);
-		ret_buf[0] = 0; /* ret */
+		size = fread(&ret_buf[1], sizeof(uint8_t), MAILBOX_QUEUE_MSG_SIZE - 1, filep);
+		if (size == (MAILBOX_QUEUE_MSG_SIZE - 1)) {
+			ret_buf[0] = 0; /* ret */
+		} else {
+			printf("Error: read failed, size = %d\n", (int) size);
+			ret_buf[0] = ERR_FAULT; /* ret */
+		}
+		fclose(filep);
 		send_response(ret_buf);
 	}
 }
@@ -91,6 +113,4 @@ int main(int argc, char **argv)
 	remove(FIFO_SERIAL_OUT_OUT);
 	remove(FIFO_SERIAL_OUT_IN);
 	remove(FIFO_SERIAL_OUT_INTR);
-
-	close_storage_space();
 }
