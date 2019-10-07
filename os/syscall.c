@@ -16,10 +16,13 @@
 
 /* FIXME: move to header file */
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t access_mode, uint8_t count);
-int send_msg_to_storage(uint8_t *msg_buf, uint8_t *resp_buf);
 void inform_shell_of_termination(void);
 int app_write_to_shell(uint8_t *data, int size);
 int app_read_from_shell(void);
+uint32_t file_system_open_file(char *filename);
+int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset);
+int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset);
+int file_system_close_file(uint32_t fd);
 
 #define SYSCALL_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
@@ -44,6 +47,12 @@ int app_read_from_shell(void);
 	arg0 = *((uint32_t *) &buf[3]); \
 	arg1 = *((uint32_t *) &buf[7]); \
 
+#define SYSCALL_GET_THREE_ARGS		\
+	uint32_t arg0, arg1, arg2;	\
+	arg0 = *((uint32_t *) &buf[3]); \
+	arg1 = *((uint32_t *) &buf[7]); \
+	arg2 = *((uint32_t *) &buf[11]);\
+
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
 	uint8_t data_size, *data;				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 4;		\
@@ -58,6 +67,22 @@ int app_read_from_shell(void);
 	}							\
 	data = &buf[4];						\
 
+#define SYSCALL_GET_TWO_ARGS_DATA				\
+	uint32_t arg0, arg1;					\
+	uint8_t data_size, *data;				\
+	arg0 = *((uint32_t *) &buf[3]);				\
+	arg1 = *((uint32_t *) &buf[7]);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 12;		\
+	if (max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+	}							\
+	data_size = buf[11];					\
+	if (data_size > max_size) {				\
+		printf("Error: size not supported\n");		\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+	}							\
+	data = &buf[12];					\
 
 static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 {
@@ -103,25 +128,6 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
-	case SYSCALL_WRITE_TO_FILE: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t data = arg0;
-		uint8_t data_buf[MAILBOX_QUEUE_MSG_SIZE];
-		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
-		data_buf[0] = 0; /* write */
-		*((uint32_t *) &data_buf[1]) = data;
-		send_msg_to_storage(data_buf, resp_buf);
-		SYSCALL_SET_ONE_RET(0)
-		break;
-	}
-	case SYSCALL_READ_FROM_FILE: {
-		uint8_t data_buf[MAILBOX_QUEUE_MSG_SIZE];
-		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
-		data_buf[0] = 1; /* read */
-		send_msg_to_storage(data_buf, resp_buf);
-		SYSCALL_SET_ONE_RET(*((uint32_t *) &resp_buf[1]))
-		break;
-	}
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
 		inform_shell_of_termination();
 		SYSCALL_SET_ONE_RET(0)
@@ -137,6 +143,47 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 	case SYSCALL_READ_FROM_SHELL: {
 		app_read_from_shell();
 		*is_async = true;
+		break;
+	}
+	case SYSCALL_OPEN_FILE: {
+		SYSCALL_GET_ZERO_ARGS_DATA
+		uint32_t fd = file_system_open_file((char *) data);
+		SYSCALL_SET_ONE_RET(fd)
+		break;
+	}
+	case SYSCALL_WRITE_TO_FILE: {
+		uint32_t ret;
+		SYSCALL_GET_TWO_ARGS_DATA
+		ret = (uint32_t) file_system_write_to_file(arg0, data, (int) data_size, (int) arg1);
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
+	case SYSCALL_READ_FROM_FILE: {
+		int fs_ret;
+		uint32_t ret;
+		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
+		SYSCALL_GET_THREE_ARGS
+		int size = (int) arg1;
+		/* FIXME: the size info should only be in the corresponding de/marshalling macro. */
+		if (size > (MAILBOX_QUEUE_MSG_SIZE - 5)) {
+			printf("Error: read size too big. Will truncate\n");
+			size = MAILBOX_QUEUE_MSG_SIZE - 5;
+		}
+		fs_ret = file_system_read_from_file(arg0, ret_buf, size, (int) arg2);
+		/* safety check */
+		if (fs_ret > size) {
+			printf("Error: unexpected return from file_system_read_from_file\n");
+			fs_ret = size;
+		}
+		ret = (uint32_t) fs_ret;
+		SYSCALL_SET_ONE_RET_DATA(ret, ret_buf, ret)
+		break;
+	}
+	case SYSCALL_CLOSE_FILE: {
+		uint32_t ret;
+		SYSCALL_GET_ONE_ARG
+		ret = (uint32_t) file_system_close_file(arg0);
+		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
 	default:

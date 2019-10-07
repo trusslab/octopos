@@ -31,7 +31,8 @@ void app_main(struct runtime_api *api)
 	api->request_access_keyboard(0, 10);
 	api->request_access_serial_out(0, 100);
 	
-	secret = api->read_from_file((char *) "secret");
+	uint32_t fd = api->open_file((char *) "secret");
+	api->read_from_file(fd, (uint8_t *) &secret, 4, 0);
 	secure_printf("Your secret = %d\n", secret);	
 
 	secure_printf("Please enter your password: ");	
@@ -46,7 +47,8 @@ void app_main(struct runtime_api *api)
 
 	secret = 105;
 	secure_printf("Updating your secret to %d\n", secret);	
-	api->write_to_file((char *) "secret", secret);
+	api->write_to_file(fd, (uint8_t *) &secret, 4, 0);
+	api->close_file(fd);
 
 	secure_printf("Secure login terminating.\n");	
 	api->yield_access_keyboard();
