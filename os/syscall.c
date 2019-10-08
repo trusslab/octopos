@@ -27,6 +27,7 @@ int file_system_close_file(uint32_t fd);
 #define SYSCALL_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
 
+/* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
 #define SYSCALL_SET_ONE_RET_DATA(ret0, data, size)		\
 	*((uint32_t *) &buf[0]) = ret0;				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 5;		\
@@ -212,7 +213,7 @@ void process_system_call(uint8_t *buf)
 	 * Must be set automatically in the mailbox */
 	if (buf[0] == P_RUNTIME) {
 		bool is_async = false;
-		
+	
 		handle_syscall(P_RUNTIME, buf, &is_async);
 
 		/* send response */

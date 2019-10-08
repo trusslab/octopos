@@ -31,12 +31,16 @@ void app_main(struct runtime_api *api)
 	api->request_access_keyboard(0, 10);
 	api->request_access_serial_out(0, 100);
 	
-	uint32_t fd = api->open_file((char *) "secret");
+	uint32_t fd = api->open_file((char *) "test_file_1.txt");
+	if (!fd)
+		secure_printf("Couldn't open file (fd = %d)\n", fd);
 	api->read_from_file(fd, (uint8_t *) &secret, 4, 0);
-	secure_printf("Your secret = %d\n", secret);	
+	secure_printf("Your secret code = %d\n", secret);	
+	api->write_to_file(fd, (uint8_t *) line, size, 50);
 
 	secure_printf("Please enter your password: ");	
 
+	memset(line, 0x0, 1024);
 	for (i = 0; i < 1024; i++) {
 		api->read_char_from_keyboard(&line[i]);
 		if (line[i] == '\n')
@@ -45,12 +49,16 @@ void app_main(struct runtime_api *api)
 
 	secure_printf("\nYour password is: %s\n", line);	
 
-	secret = 105;
+	secret = 109;
 	secure_printf("Updating your secret to %d\n", secret);	
 	api->write_to_file(fd, (uint8_t *) &secret, 4, 0);
-	api->close_file(fd);
 
 	secure_printf("Secure login terminating.\n");	
 	api->yield_access_keyboard();
 	api->yield_access_serial_out();
+
+	memset(line, 0x0, 1024);
+	api->read_from_file(fd, (uint8_t *) line, size, 50);
+	insecure_printf("Your secret phrase: %s (size = %d)\n", line, size);	
+	api->close_file(fd);
 }

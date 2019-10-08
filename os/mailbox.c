@@ -93,14 +93,14 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	write(fd_out, opcode, 6);
 }
 
-int send_msg_to_storage(uint8_t *msg_buf, uint8_t *resp_buf) {
+int send_msg_to_storage(uint8_t *buf)
 {
 	uint8_t opcode[2], interrupt;
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_STORAGE_IN;
 	write(fd_out, opcode, 2);
-	write(fd_out, msg_buf, MAILBOX_QUEUE_MSG_SIZE);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* wait for response */
 	read(fd_intr, &interrupt, 1);
@@ -113,15 +113,16 @@ int send_msg_to_storage(uint8_t *msg_buf, uint8_t *resp_buf) {
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_STORAGE_OUT;
 	write(fd_out, opcode, 2), 
-	read(fd_in, resp_buf, MAILBOX_QUEUE_MSG_SIZE);
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	return 0;
 }
 
-}
+/* FIXME: move to header files */
 void initialize_shell(void);
 void shell_process_input(char buf);
 void process_system_call(uint8_t *buf);
+void initialize_file_system(void);
 
 static void distribute_input(void)
 {
@@ -142,6 +143,7 @@ int main()
 {
 	intialize_channels();
 	initialize_shell();
+	initialize_file_system();
 
 	while (1) {
 		distribute_input();

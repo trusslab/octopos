@@ -13,21 +13,25 @@
 
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
 	*((uint16_t *) &buf[1]) = syscall_nr;		\
 
 #define SYSCALL_SET_ONE_ARG(syscall_nr, arg0)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
 	*((uint16_t *) &buf[1]) = syscall_nr;		\
 	*((uint32_t *) &buf[3]) = arg0;			\
 
 #define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
 	*((uint16_t *) &buf[1]) = syscall_nr;		\
 	*((uint32_t *) &buf[3]) = arg0;			\
 	*((uint32_t *) &buf[7]) = arg1;			\
 
 #define SYSCALL_SET_THREE_ARGS(syscall_nr, arg0, arg1, arg2)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
 	*((uint16_t *) &buf[1]) = syscall_nr;			\
 	*((uint32_t *) &buf[3]) = arg0;				\
 	*((uint32_t *) &buf[7]) = arg1;				\
@@ -35,6 +39,7 @@
 
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 4;				\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
@@ -48,8 +53,9 @@
 	buf[3] = size;								\
 	memcpy(&buf[4], (uint8_t *) data, size);				\
 
-#define SYSCALL_SET_TWO_ARGS_DATA(syscall_nr, arg0, arg1, data, size)			\
+#define SYSCALL_SET_TWO_ARGS_DATA(syscall_nr, arg0, arg1, data, size)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 12;				\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\

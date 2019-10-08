@@ -8,22 +8,67 @@
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
 
+#define STORAGE_SET_ONE_RET(ret0)	\
+	*((uint32_t *) &buf[0]) = ret0; \
+
+/* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
+#define STORAGE_SET_ONE_RET_DATA(ret0, data, size)		\
+	*((uint32_t *) &buf[0]) = ret0;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 5;		\
+	if (max_size < 256 && size <= ((int) max_size)) {	\
+		buf[4] = (uint8_t) size;			\
+		memcpy(&buf[5], data, size);			\
+	} else {						\
+		printf("Error: invalid max_size or size\n");	\
+		buf[4] = 0;					\
+	}
+
+#define STORAGE_GET_THREE_ARGS		\
+	uint32_t arg0, arg1, arg2;	\
+	arg0 = *((uint32_t *) &buf[1]); \
+	arg1 = *((uint32_t *) &buf[5]); \
+	arg2 = *((uint32_t *) &buf[9]);\
+
+#define STORAGE_GET_TWO_ARGS_DATA				\
+	uint32_t arg0, arg1;					\
+	uint8_t data_size, *data;				\
+	arg0 = *((uint32_t *) &buf[1]);				\
+	arg1 = *((uint32_t *) &buf[5]);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 10;		\
+	if (max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+	}							\
+	data_size = buf[9];					\
+	if (data_size > max_size) {				\
+		printf("Error: size not supported\n");		\
+		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+	}							\
+	data = &buf[10];					\
+
+/* partition information */
+#define NUM_PARTITIONS		2
+#define PARTITION_ONE_SIZE	100 /* blocks */
+#define PARTITION_TWO_SIZE	20  /* blocks */
+
+#define BLOCK_SIZE		32  /* bytes */
+
 int fd_out, fd_in, fd_intr;
 
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 static void initialize_storage_space(void)
 {
-        int size = 1024;
-	FILE *filep = NULL;
+        //int size = 1024;
+	//FILE *filep = NULL;
 
-        filep = fopen("octopos_disk", "w");
-	if (!filep) {
-		printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
-		_exit(-1);
-	}
-        fseek(filep, size , SEEK_SET);
-        fputc('\0', filep);
-        fclose(filep);
+        //filep = fopen("octopos_disk", "w");
+	//if (!filep) {
+	//	printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
+	//	_exit(-1);
+	//}
+        //fseek(filep, size , SEEK_SET);
+        //fputc('\0', filep);
+        //fclose(filep);
 }
 
 static void send_response(uint8_t *buf)
@@ -38,45 +83,48 @@ static void send_response(uint8_t *buf)
 
 static void process_request(uint8_t *buf)
 {
-	uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
-	size_t size;
 	FILE *filep = NULL;
 
 	/* write */
 	if (buf[0] == 0) {
-		filep = fopen("octopos_disk", "w");
+		filep = fopen("octopos_disk", "r+");
 		if (!filep) {
 			printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
-			ret_buf[0] = ERR_FAULT; /* ret */
-			send_response(ret_buf);
+			STORAGE_SET_ONE_RET(0)
+			return;
 		}
-		fseek(filep, 0, SEEK_SET);
-		size = fwrite(&buf[1], sizeof(uint8_t), MAILBOX_QUEUE_MSG_SIZE - 1, filep);
-		if (size == (MAILBOX_QUEUE_MSG_SIZE - 1)) {
-			ret_buf[0] = 0; /* ret */
-		} else {
-			printf("Error: write failed, size = %d\n", (int) size);
-			ret_buf[0] = ERR_FAULT; /* ret */
+		STORAGE_GET_TWO_ARGS_DATA
+		if (arg0 > PARTITION_ONE_SIZE) {
+			printf("Error: invalid partition number\n");
+			STORAGE_SET_ONE_RET(0)
+			fclose(filep);
+			return;
 		}
+		int seek_off = (arg0 * BLOCK_SIZE) + arg1;
+		fseek(filep, seek_off, SEEK_SET);
+		uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), data_size, filep);
+		STORAGE_SET_ONE_RET(size);
 		fclose(filep);
-		send_response(ret_buf);
 	} else { /* read */
 		filep = fopen("octopos_disk", "r");
 		if (!filep) {
 			printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
-			ret_buf[0] = ERR_FAULT; /* ret */
-			send_response(ret_buf);
+			STORAGE_SET_ONE_RET(0)
+			return;
 		}
-		fseek(filep, 0, SEEK_SET);
-		size = fread(&ret_buf[1], sizeof(uint8_t), MAILBOX_QUEUE_MSG_SIZE - 1, filep);
-		if (size == (MAILBOX_QUEUE_MSG_SIZE - 1)) {
-			ret_buf[0] = 0; /* ret */
-		} else {
-			printf("Error: read failed, size = %d\n", (int) size);
-			ret_buf[0] = ERR_FAULT; /* ret */
+		STORAGE_GET_THREE_ARGS
+		if (arg0 > PARTITION_ONE_SIZE) {
+			printf("Error: invalid partition number\n");
+			STORAGE_SET_ONE_RET(0)
+			fclose(filep);
+			return;
 		}
+		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
+		int seek_off = (arg0 * BLOCK_SIZE) + arg1;
+		fseek(filep, seek_off, SEEK_SET);
+		uint32_t size = (uint32_t) fread(ret_buf, sizeof(uint8_t), arg2, filep);
+		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);
 		fclose(filep);
-		send_response(ret_buf);
 	}
 }
 
@@ -104,6 +152,7 @@ int main(int argc, char **argv)
 		write(fd_out, opcode, 2), 
 		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 		process_request(buf);
+		send_response(buf);
 	}
 	
 	close(fd_out);
