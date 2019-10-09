@@ -11,8 +11,11 @@
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
 int num_chars = 0;
-#define secure_printf(fmt, args...) {memset(output_buf, 0x0, 64); sprintf(output_buf, fmt, ##args); api->write_to_serial_out(output_buf);}
-#define insecure_printf(fmt, args...) {memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args); api->write_to_shell(output_buf, num_chars);}
+#define secure_printf(fmt, args...) {memset(output_buf, 0x0, 64); sprintf(output_buf, fmt, ##args);	\
+				     api->write_to_secure_serial_out(output_buf);}			\
+
+#define insecure_printf(fmt, args...) {memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args);\
+				     api->write_to_shell(output_buf, num_chars);}				 \
 
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
@@ -30,15 +33,15 @@ void app_main(struct runtime_api *api)
 
 	insecure_printf("Switching to secure mode now.\n");
 
-	ret = api->request_access_keyboard(ACCESS_LIMITED_IRREVOCABLE, 100);
+	ret = api->request_secure_keyboard(ACCESS_LIMITED_IRREVOCABLE, 100);
 	if (ret) {
 		printf("Error: could not get secure access to keyboard\n");
 		insecure_printf("Failed to switch.\n");
 		return;
 	}
-	ret = api->request_access_serial_out(ACCESS_LIMITED_IRREVOCABLE, 200);
+	ret = api->request_secure_serial_out(ACCESS_LIMITED_IRREVOCABLE, 200);
 	if (ret) {
-		api->yield_access_keyboard();
+		api->yield_secure_keyboard();
 		printf("Error: could not get secure access to serial_out\n");
 		insecure_printf("Failed to switch.\n");
 		return;
@@ -55,7 +58,7 @@ void app_main(struct runtime_api *api)
 
 	memset(line, 0x0, 1024);
 	for (i = 0; i < 1024; i++) {
-		api->read_char_from_keyboard(&line[i]);
+		api->read_char_from_secure_keyboard(&line[i]);
 		if (line[i] == '\n')
 			break;
 	}
@@ -67,8 +70,8 @@ void app_main(struct runtime_api *api)
 	api->write_to_file(fd, (uint8_t *) &secret, 4, 0);
 
 	secure_printf("Secure login terminating.\n");	
-	api->yield_access_keyboard();
-	api->yield_access_serial_out();
+	api->yield_secure_keyboard();
+	api->yield_secure_serial_out();
 
 	memset(line, 0x0, 1024);
 	api->read_from_file(fd, (uint8_t *) line, size, 50);

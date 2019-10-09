@@ -93,7 +93,7 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 	*is_async = false;
 
 	switch (syscall_nr) {
-	case SYSCALL_REQUEST_ACCESS_SERIAL_OUT: {
+	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
 		SYSCALL_GET_TWO_ARGS
 		uint32_t access_mode = arg0, count = arg1;
 		if (!(access_mode == ACCESS_LIMITED_IRREVOCABLE || access_mode == ACCESS_UNLIMITED_REVOCABLE)) {
@@ -111,7 +111,7 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
-	case SYSCALL_REQUEST_ACCESS_KEYBOARD: {
+	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
 		SYSCALL_GET_TWO_ARGS
 		uint32_t access_mode = arg0, count = arg1;
 		if (!(access_mode == ACCESS_LIMITED_IRREVOCABLE || access_mode == ACCESS_UNLIMITED_REVOCABLE)) {

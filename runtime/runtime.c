@@ -136,9 +136,9 @@ static int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t
 	return (int) ret; 
 }
 
-static int request_access_keyboard(int access_mode, int count)
+static int request_secure_keyboard(int access_mode, int count)
 {
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_ACCESS_KEYBOARD, access_mode, count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, access_mode, count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
@@ -153,15 +153,15 @@ static int request_access_keyboard(int access_mode, int count)
 	return (int) ret0; 
 }
 
-static int yield_access_keyboard(void)
+static int yield_secure_keyboard(void)
 {
 	mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, P_OS);
 	return 0;
 }
 
-static int request_access_serial_out(int access_mode, int count)
+static int request_secure_serial_out(int access_mode, int count)
 {
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_ACCESS_SERIAL_OUT, access_mode, count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_SERIAL_OUT, access_mode, count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
@@ -176,13 +176,13 @@ static int request_access_serial_out(int access_mode, int count)
 	return (int) ret0; 
 }
 
-static int yield_access_serial_out(void)
+static int yield_secure_serial_out(void)
 {
 	mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, P_OS);
 	return 0;
 }
 
-static void write_to_serial_out(char *buf)
+static void write_to_secure_serial_out(char *buf)
 {
 	uint8_t opcode[2];
 
@@ -192,7 +192,7 @@ static void write_to_serial_out(char *buf)
 	write(fd_out, (uint8_t *) buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
-static void read_char_from_keyboard(char *buf)
+static void read_char_from_secure_keyboard(char *buf)
 {
 	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t opcode[2], interrupt;
@@ -272,12 +272,12 @@ static void load_application(char *msg)
 	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "../applications/bin/";
 	app_main_proc app_main;
 	struct runtime_api api = {
-		.request_access_keyboard = request_access_keyboard,
-		.yield_access_keyboard = yield_access_keyboard,
-		.request_access_serial_out = request_access_serial_out,
-		.yield_access_serial_out = yield_access_serial_out,
-		.write_to_serial_out = write_to_serial_out,
-		.read_char_from_keyboard = read_char_from_keyboard,
+		.request_secure_keyboard = request_secure_keyboard,
+		.yield_secure_keyboard = yield_secure_keyboard,
+		.request_secure_serial_out = request_secure_serial_out,
+		.yield_secure_serial_out = yield_secure_serial_out,
+		.write_to_secure_serial_out = write_to_secure_serial_out,
+		.read_char_from_secure_keyboard = read_char_from_secure_keyboard,
 		.write_to_shell = write_to_shell,
 		.read_from_shell = read_from_shell,
 		.open_file = open_file,
