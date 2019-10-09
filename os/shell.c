@@ -36,7 +36,7 @@ char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 
 int send_output(uint8_t *buf);
 int send_msg_to_runtime(uint8_t *buf);
-#define output_printf(fmt, args...); memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE); sprintf(output_buf, fmt, ##args); send_output((uint8_t *) output_buf);
+#define output_printf(fmt, args...) {memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE); sprintf(output_buf, fmt, ##args); send_output((uint8_t *) output_buf);}
 
 /* FIXME: move to a header file */
 void syscall_read_from_shell_response(uint8_t *line, int size);

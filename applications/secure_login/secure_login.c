@@ -10,8 +10,8 @@
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
 int num_chars = 0;
-#define secure_printf(fmt, args...); memset(output_buf, 0x0, 64); sprintf(output_buf, fmt, ##args); api->write_to_serial_out(output_buf);
-#define insecure_printf(fmt, args...); memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args); api->write_to_shell(output_buf, num_chars);
+#define secure_printf(fmt, args...) {memset(output_buf, 0x0, 64); sprintf(output_buf, fmt, ##args); api->write_to_serial_out(output_buf);}
+#define insecure_printf(fmt, args...) {memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args); api->write_to_shell(output_buf, num_chars);}
 
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
@@ -32,7 +32,7 @@ void app_main(struct runtime_api *api)
 	api->request_access_serial_out(0, 100);
 	
 	uint32_t fd = api->open_file((char *) "test_file_1.txt");
-	if (!fd)
+	if (fd == 0)
 		secure_printf("Couldn't open file (fd = %d)\n", fd);
 	api->read_from_file(fd, (uint8_t *) &secret, 4, 0);
 	secure_printf("Your secret code = %d\n", secret);	
