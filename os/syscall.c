@@ -148,7 +148,15 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 	}
 	case SYSCALL_OPEN_FILE: {
 		SYSCALL_GET_ZERO_ARGS_DATA
-		uint32_t fd = file_system_open_file((char *) data);
+		char filename[256];
+		if (data_size >= 256) {
+			printf("Error: filename is too large\n");
+			SYSCALL_SET_ONE_RET(0)
+		}
+		memcpy(filename, data, data_size);
+		/* playing it safe */
+		filename[data_size] = '\0';
+		uint32_t fd = file_system_open_file(filename);
 		SYSCALL_SET_ONE_RET(fd)
 		break;
 	}
