@@ -101,8 +101,8 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 			break;
 		}
 
-		/* No more than 100 characters to be printed without revocability */
-		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 100) {
+		/* No more than 200 characters to be printed without revocability */
+		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 200) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -119,8 +119,8 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 			break;
 		}
 
-		/* No more than 10 characters to be received from keyboard without revocability */
-		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 10) {
+		/* No more than 100 characters to be received from keyboard without revocability */
+		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}

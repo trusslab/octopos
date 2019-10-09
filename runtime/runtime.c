@@ -121,11 +121,35 @@ static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	write(fd_out, opcode, 4);
 }
 
+static int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t access_mode, uint8_t count)
+{
+	uint8_t opcode[5], ret;
+
+	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
+	opcode[1] = queue_id;
+	opcode[2] = access;
+	opcode[3] = access_mode;
+	opcode[4] = count;
+	write(fd_out, opcode, 5);
+	read(fd_in, &ret, 1);
+
+	return (int) ret; 
+}
+
 static int request_access_keyboard(int access_mode, int count)
 {
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_ACCESS_KEYBOARD, access_mode, count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
+	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+		int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
+						READ_ACCESS, access_mode, count);
+		if (!attest_ret) {
+			printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+			return ERR_FAULT;
+		}
+	}
+
 	return (int) ret0; 
 }
 
@@ -140,6 +164,15 @@ static int request_access_serial_out(int access_mode, int count)
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_ACCESS_SERIAL_OUT, access_mode, count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
+	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+		int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
+						WRITE_ACCESS, access_mode, count);
+		if (!attest_ret) {
+			printf("%s: Error: failed to attest secure serial_out access\n", __func__);
+			return ERR_FAULT;
+		}
+	}
+
 	return (int) ret0; 
 }
 

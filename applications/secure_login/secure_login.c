@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <octopos/runtime.h>
+#include <octopos/syscall.h>
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
@@ -19,6 +20,7 @@ void app_main(struct runtime_api *api)
 	char line[1024];
 	int i, size;
 	uint32_t secret = 0;
+	int ret;
 
 	insecure_printf("\nThis is secure login speaking.\n");
 	insecure_printf("Provide an insecure phrase:\n");
@@ -28,8 +30,19 @@ void app_main(struct runtime_api *api)
 
 	insecure_printf("Switching to secure mode now.\n");
 
-	api->request_access_keyboard(0, 10);
-	api->request_access_serial_out(0, 100);
+	ret = api->request_access_keyboard(ACCESS_LIMITED_IRREVOCABLE, 100);
+	if (ret) {
+		printf("Error: could not get secure access to keyboard\n");
+		insecure_printf("Failed to switch.\n");
+		return;
+	}
+	ret = api->request_access_serial_out(ACCESS_LIMITED_IRREVOCABLE, 200);
+	if (ret) {
+		api->yield_access_keyboard();
+		printf("Error: could not get secure access to serial_out\n");
+		insecure_printf("Failed to switch.\n");
+		return;
+	}
 	
 	uint32_t fd = api->open_file((char *) "test_file_1.txt");
 	if (fd == 0)

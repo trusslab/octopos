@@ -27,6 +27,7 @@ struct queue {
 	uint8_t reader_id;
 	uint8_t writer_id;
 	uint8_t access_mode;
+	/* FIXME: too small */
 	uint8_t access_count;
 };
 
@@ -364,6 +365,27 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	queues[(int) queue_id].access_count = 0; /* irrelevant in this case */
 }
 
+static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t access_mode, uint8_t count)
+{
+	if (queue_id == Q_KEYBOARD && access == READ_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+		if (queues[(int) queue_id].reader_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	}
+
+	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+		if (queues[(int) queue_id].writer_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	}
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	uint8_t opcode[2], writer_id, reader_id, queue_id;
@@ -465,6 +487,12 @@ int main(int argc, char **argv)
 				memset(opcode_rest, 0x0, 2);
 				read(processors[P_RUNTIME].out_handle, opcode_rest, 2);
 				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
+			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
+				uint8_t opcode_rest[3];
+				memset(opcode_rest, 0x0, 3);
+				read(processors[P_RUNTIME].out_handle, opcode_rest, 3);
+				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2]);				
+				write(processors[P_RUNTIME].in_handle, &ret, 1);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
