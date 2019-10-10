@@ -77,4 +77,17 @@ void app_main(struct runtime_api *api)
 	api->read_from_file(fd, (uint8_t *) line, size, 50);
 	insecure_printf("Your secret phrase: %s (size = %d)\n", line, size);	
 	api->close_file(fd);
+	
+	insecure_printf("Now testing secure storage\n");
+	ret = api->request_secure_storage(ACCESS_LIMITED_IRREVOCABLE, 200);
+	if (ret) {
+		printf("Error: could not get secure access to storage\n");
+		insecure_printf("Failed to get secure access to storage.\n");
+		return;
+	}
+
+	api->write_to_secure_storage((uint8_t *) line, 0, 0, size);
+	memset(line, 0x0, 1024);
+	api->read_from_secure_storage((uint8_t *) line, 0, 0, size);
+	insecure_printf("secret (from secure storage): %s (size = %d)\n", line, size);	
 }

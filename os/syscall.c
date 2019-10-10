@@ -195,6 +195,25 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
+	case SYSCALL_REQUEST_SECURE_STORAGE: {
+		SYSCALL_GET_TWO_ARGS
+		uint32_t access_mode = arg0, count = arg1;
+		if (!(access_mode == ACCESS_LIMITED_IRREVOCABLE || access_mode == ACCESS_UNLIMITED_REVOCABLE)) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		/* No more than 200 block reads/writes without revocability */
+		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 200) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
+		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
 	default:
 		printf("Error: invalid syscall\n");
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)

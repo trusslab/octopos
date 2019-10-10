@@ -90,6 +90,51 @@
 	}									\
 	memcpy(data, &buf[5], _size);						\
 
+/* FIXME: there are a lot of repetition in these macros (also see file_system.c) */
+#define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
+	*((uint32_t *) &buf[1]) = arg0;				\
+	*((uint32_t *) &buf[5]) = arg1;				\
+	*((uint32_t *) &buf[9]) = arg2;				\
+
+
+#define STORAGE_SET_TWO_ARGS_DATA(arg0, arg1, data, size)			\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 10;				\
+	if (max_size >= 256) {							\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return ERR_INVALID;						\
+	}									\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return ERR_INVALID;						\
+	}									\
+	*((uint32_t *) &buf[1]) = arg0;						\
+	*((uint32_t *) &buf[5]) = arg1;						\
+	buf[9] = size;								\
+	memcpy(&buf[10], (uint8_t *) data, size);				\
+
+#define STORAGE_GET_ONE_RET				\
+	uint32_t ret0;					\
+	ret0 = *((uint32_t *) &buf[0]);			\
+
+#define STORAGE_GET_ONE_RET_DATA(data)						\
+	uint32_t ret0;								\
+	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 5;			\
+	ret0 = *((uint32_t *) &buf[0]);						\
+	if (max_size >= 256) {							\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return ERR_INVALID;						\
+	}									\
+	_size = buf[4];								\
+	if (_size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return ERR_INVALID;						\
+	}									\
+	memcpy(data, &buf[5], _size);						\
+
 int fd_out, fd_in, fd_intr;
 
 static void issue_syscall(uint8_t *buf)
@@ -138,7 +183,7 @@ static int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t
 
 static int request_secure_keyboard(int access_mode, int count)
 {
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, access_mode, count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) access_mode, (uint32_t) count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
@@ -161,7 +206,7 @@ static int yield_secure_keyboard(void)
 
 static int request_secure_serial_out(int access_mode, int count)
 {
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_SERIAL_OUT, access_mode, count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) access_mode, (uint32_t) count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
@@ -264,6 +309,81 @@ static int close_file(uint32_t fd)
 	return (int) ret0;
 }
 
+static int request_secure_storage(int access_mode, int count)
+{
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE, access_mode, count)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+		int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
+						WRITE_ACCESS, access_mode, count);
+		if (!attest_ret) {
+			printf("%s: Error: failed to attest secure storage write access\n", __func__);
+			return ERR_FAULT;
+		}
+
+		attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
+						READ_ACCESS, access_mode, count);
+		if (!attest_ret) {
+			printf("%s: Error: failed to attest secure storage read access\n", __func__);
+			return ERR_FAULT;
+		}
+	}
+
+	return (int) ret0; 
+}
+
+int yield_secure_storage(void)
+{
+	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+	return 0;
+}
+
+/* FIXME: (mostly) copied from os/mailbox.c */
+int send_msg_to_storage(uint8_t *buf)
+{
+	uint8_t opcode[2], interrupt;
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_STORAGE_IN_2;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	/* wait for response */
+	read(fd_intr, &interrupt, 1);
+	if (!(interrupt == Q_STORAGE_OUT_2)) {
+		printf("Interrupt from an unexpected queue\n");
+		_exit(-1);
+		return ERR_UNEXPECTED;
+	}
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = Q_STORAGE_OUT_2;
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
+
+int write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+{
+	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
+	buf[0] = 0; /* write */
+	send_msg_to_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
+int read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
+{
+	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
+	buf[0] = 1; /* read */
+	send_msg_to_storage(buf);
+	STORAGE_GET_ONE_RET_DATA(data)
+	return (int) ret0;
+}
+
 typedef void (*app_main_proc)(struct runtime_api *);
 
 static void load_application(char *msg)
@@ -284,6 +404,10 @@ static void load_application(char *msg)
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
 		.close_file = close_file,
+		.request_secure_storage = request_secure_storage,
+		.yield_secure_storage = yield_secure_storage,
+		.write_to_secure_storage = write_to_secure_storage,
+		.read_from_secure_storage = read_from_secure_storage,
 	};
 
 	strcat(path, msg);

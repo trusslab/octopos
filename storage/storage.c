@@ -58,30 +58,34 @@ int fd_out, fd_in, fd_intr;
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 static void initialize_storage_space(void)
 {
-        //int size = 1024;
-	//FILE *filep = NULL;
+	FILE *filep = NULL;
 
-        //filep = fopen("octopos_disk", "w");
-	//if (!filep) {
-	//	printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
-	//	_exit(-1);
-	//}
-        //fseek(filep, size , SEEK_SET);
-        //fputc('\0', filep);
-        //fclose(filep);
+        filep = fopen("octopos_disk", "w");
+	if (!filep) {
+		printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
+		_exit(-1);
+	}
+        fclose(filep);
+
+        filep = fopen("octopos_disk_2", "w");
+	if (!filep) {
+		printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
+		_exit(-1);
+	}
+        fclose(filep);
 }
 
-static void send_response(uint8_t *buf)
+static void send_response(uint8_t *buf, uint8_t queue_id)
 {
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_STORAGE_OUT;
+	opcode[1] = queue_id;
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
-static void process_request(uint8_t *buf)
+static void process_request_partition_1(uint8_t *buf)
 {
 	FILE *filep = NULL;
 
@@ -89,7 +93,7 @@ static void process_request(uint8_t *buf)
 	if (buf[0] == 0) {
 		filep = fopen("octopos_disk", "r+");
 		if (!filep) {
-			printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
+			printf("Error: couldn't open octopos_disk\n");
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
@@ -108,12 +112,59 @@ static void process_request(uint8_t *buf)
 	} else { /* read */
 		filep = fopen("octopos_disk", "r");
 		if (!filep) {
-			printf("Error: initialize_storage_space: couldn't open octopos_disk\n");
+			printf("Error: couldn't open octopos_disk\n");
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
 		STORAGE_GET_THREE_ARGS
 		if (arg0 > PARTITION_ONE_SIZE) {
+			printf("Error: invalid partition number\n");
+			STORAGE_SET_ONE_RET(0)
+			fclose(filep);
+			return;
+		}
+		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
+		int seek_off = (arg0 * BLOCK_SIZE) + arg1;
+		fseek(filep, seek_off, SEEK_SET);
+		uint32_t size = (uint32_t) fread(ret_buf, sizeof(uint8_t), arg2, filep);
+		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);
+		fclose(filep);
+	}
+}
+
+static void process_request_partition_2(uint8_t *buf)
+{
+	FILE *filep = NULL;
+
+	/* write */
+	if (buf[0] == 0) {
+		filep = fopen("octopos_disk_2", "r+");
+		if (!filep) {
+			printf("Error: couldn't open octopos_disk_2\n");
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+		STORAGE_GET_TWO_ARGS_DATA
+		if (arg0 > PARTITION_TWO_SIZE) {
+			printf("Error: invalid partition number\n");
+			STORAGE_SET_ONE_RET(0)
+			fclose(filep);
+			return;
+		}
+		int seek_off = (arg0 * BLOCK_SIZE) + arg1;
+		fseek(filep, seek_off, SEEK_SET);
+		uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), data_size, filep);
+		STORAGE_SET_ONE_RET(size);
+		fclose(filep);
+	} else { /* read */
+		filep = fopen("octopos_disk_2", "r");
+		if (!filep) {
+			printf("Error: couldn't open octopos_disk\n");
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+		STORAGE_GET_THREE_ARGS
+		if (arg0 > PARTITION_TWO_SIZE) {
 			printf("Error: invalid partition number\n");
 			STORAGE_SET_ONE_RET(0)
 			fclose(filep);
@@ -144,15 +195,23 @@ int main(int argc, char **argv)
 	fd_intr = open(FIFO_STORAGE_INTR, O_RDONLY);
 		
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = Q_STORAGE_IN;
 	
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		read(fd_intr, &interrupt, 1);
-		write(fd_out, opcode, 2), 
-		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-		process_request(buf);
-		send_response(buf);
+		if (interrupt == Q_STORAGE_IN) {
+			opcode[1] = Q_STORAGE_IN;
+			write(fd_out, opcode, 2), 
+			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+			process_request_partition_1(buf);
+			send_response(buf, Q_STORAGE_OUT);
+		} else if (interrupt == Q_STORAGE_IN_2) {
+			opcode[1] = Q_STORAGE_IN_2;
+			write(fd_out, opcode, 2), 
+			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+			process_request_partition_2(buf);
+			send_response(buf, Q_STORAGE_OUT_2);
+		}
 	}
 	
 	close(fd_out);

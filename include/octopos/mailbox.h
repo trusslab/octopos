@@ -21,7 +21,9 @@
 #define	Q_RUNTIME		3
 #define	Q_STORAGE_IN		4
 #define	Q_STORAGE_OUT		5
-#define NUM_QUEUES		6
+#define	Q_STORAGE_IN_2		6
+#define	Q_STORAGE_OUT_2		7
+#define NUM_QUEUES		8
 
 #define MAILBOX_QUEUE_SIZE	4
 #define MAILBOX_QUEUE_MSG_SIZE	64

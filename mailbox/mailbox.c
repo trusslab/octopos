@@ -230,8 +230,8 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_IN].counter = 0;
 	queues[Q_STORAGE_IN].reader_id = P_STORAGE;
 	queues[Q_STORAGE_IN].writer_id = P_OS;
-	queues[Q_STORAGE_IN].access_mode = 0; /* irrelevant for STORAGE queues */
-	queues[Q_STORAGE_IN].access_count = 0; /* irrelevant for STORAGE queues */
+	queues[Q_STORAGE_IN].access_mode = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_IN].access_count = 0; /* irrelevant for main STORAGE queues */
 
 	queues[Q_STORAGE_OUT].queue_id = Q_STORAGE_OUT;
 	queues[Q_STORAGE_OUT].head = 0;
@@ -239,8 +239,26 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_OUT].counter = 0;
 	queues[Q_STORAGE_OUT].reader_id = P_OS;
 	queues[Q_STORAGE_OUT].writer_id = P_STORAGE;
-	queues[Q_STORAGE_OUT].access_mode = 0; /* irrelevant for STORAGE queues */
-	queues[Q_STORAGE_OUT].access_count = 0; /* irrelevant for STORAGE queues */
+	queues[Q_STORAGE_OUT].access_mode = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_OUT].access_count = 0; /* irrelevant for main STORAGE queues */
+
+	queues[Q_STORAGE_IN_2].queue_id = Q_STORAGE_IN_2;
+	queues[Q_STORAGE_IN_2].head = 0;
+	queues[Q_STORAGE_IN_2].tail = 0;
+	queues[Q_STORAGE_IN_2].counter = 0;
+	queues[Q_STORAGE_IN_2].reader_id = P_STORAGE;
+	queues[Q_STORAGE_IN_2].writer_id = P_OS;
+	queues[Q_STORAGE_IN_2].access_mode = 0; /* irrelevant when OS is writer */
+	queues[Q_STORAGE_IN_2].access_count = 0;
+
+	queues[Q_STORAGE_OUT_2].queue_id = Q_STORAGE_OUT;
+	queues[Q_STORAGE_OUT_2].head = 0;
+	queues[Q_STORAGE_OUT_2].tail = 0;
+	queues[Q_STORAGE_OUT_2].counter = 0;
+	queues[Q_STORAGE_OUT_2].reader_id = P_OS;
+	queues[Q_STORAGE_OUT_2].writer_id = P_STORAGE;
+	queues[Q_STORAGE_OUT_2].access_mode = 0; /* irrelevant when OS is reader */
+	queues[Q_STORAGE_OUT_2].access_count = 0;
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -321,6 +339,30 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 		    queues[Q_KEYBOARD].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
 		    queues[Q_KEYBOARD].access_count == 0)
 			allowed = true;
+	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS) {
+		if (queues[Q_STORAGE_IN_2].writer_id == P_OS && proc_id == P_RUNTIME)
+			allowed = true;
+
+		if (queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME && proc_id == P_OS &&
+		    queues[Q_STORAGE_IN_2].access_mode == ACCESS_UNLIMITED_REVOCABLE)
+			allowed = true;
+
+		if (queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME && proc_id == P_OS &&
+		    queues[Q_STORAGE_IN_2].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
+		    queues[Q_STORAGE_IN_2].access_count == 0)
+			allowed = true;
+	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS) {
+		if (queues[Q_STORAGE_OUT_2].reader_id == P_OS && proc_id == P_RUNTIME)
+			allowed = true;
+
+		if (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME && proc_id == P_OS &&
+		    queues[Q_STORAGE_OUT_2].access_mode == ACCESS_UNLIMITED_REVOCABLE)
+			allowed = true;
+
+		if (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME && proc_id == P_OS &&
+		    queues[Q_STORAGE_OUT_2].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
+		    queues[Q_STORAGE_OUT_2].access_count == 0)
+			allowed = true;
 	}
 	
 	if (!allowed) {		
@@ -348,7 +390,14 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS &&
 	    queues[Q_SERIAL_OUT].writer_id == P_RUNTIME && proc_id == P_OS)
 			allowed = true;
-	else if (queue_id == Q_KEYBOARD && access == READ_ACCESS && queues[Q_KEYBOARD].reader_id == P_RUNTIME && proc_id == P_OS)
+	else if (queue_id == Q_KEYBOARD && access == READ_ACCESS &&
+		 queues[Q_KEYBOARD].reader_id == P_RUNTIME && proc_id == P_OS)
+			allowed = true;
+	else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS &&
+	    queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME && proc_id == P_OS)
+			allowed = true;
+	else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS &&
+		 queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME && proc_id == P_OS)
 			allowed = true;
 	
 	if (!allowed) {		
@@ -373,9 +422,19 @@ static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uin
 			return 1;
 		else
 			return 0;
-	}
-
-	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+	} else if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+		if (queues[(int) queue_id].writer_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+		if (queues[(int) queue_id].reader_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
 		if (queues[(int) queue_id].writer_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;

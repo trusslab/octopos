@@ -116,9 +116,9 @@ static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offs
 	return (int) ret0;
 }
 
-static int read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+static int read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
 {
-	STORAGE_SET_THREE_ARGS(block_num, block_offset, write_size)
+	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
 	buf[0] = 1; /* read */
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET_DATA(data)
