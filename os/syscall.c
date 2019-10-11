@@ -60,11 +60,13 @@ int file_system_close_file(uint32_t fd);
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
 	}							\
 	data_size = buf[3];					\
 	if (data_size > max_size) {				\
 		printf("Error: size not supported\n");		\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
 	}							\
 	data = &buf[4];						\
 
@@ -77,11 +79,13 @@ int file_system_close_file(uint32_t fd);
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
 	}							\
 	data_size = buf[11];					\
 	if (data_size > max_size) {				\
 		printf("Error: size not supported\n");		\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
 	}							\
 	data = &buf[12];					\
 

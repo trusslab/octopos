@@ -8,8 +8,9 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
-#include <octopos/error.h>
 #include <octopos/runtime.h>
+#include <octopos/storage.h>
+#include <octopos/error.h>
 
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
@@ -98,10 +99,24 @@
 	*((uint32_t *) &buf[5]) = arg1;				\
 	*((uint32_t *) &buf[9]) = arg2;				\
 
+#define STORAGE_SET_ZERO_ARGS_DATA(data, size)					\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;				\
+	if (max_size >= 256) {							\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return ERR_INVALID;						\
+	}									\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return ERR_INVALID;						\
+	}									\
+	buf[1] = size;								\
+	memcpy(&buf[2], (uint8_t *) data, size);				\
 
 #define STORAGE_SET_TWO_ARGS_DATA(arg0, arg1, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 10;				\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
@@ -186,6 +201,9 @@ static int request_secure_keyboard(int access_mode, int count)
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) access_mode, (uint32_t) count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int) ret0; 
+
 	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
 		int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
 						READ_ACCESS, access_mode, count);
@@ -195,7 +213,7 @@ static int request_secure_keyboard(int access_mode, int count)
 		}
 	}
 
-	return (int) ret0; 
+	return 0; 
 }
 
 static int yield_secure_keyboard(void)
@@ -209,6 +227,9 @@ static int request_secure_serial_out(int access_mode, int count)
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) access_mode, (uint32_t) count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int) ret0; 
+
 	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
 		int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
 						WRITE_ACCESS, access_mode, count);
@@ -218,7 +239,7 @@ static int request_secure_serial_out(int access_mode, int count)
 		}
 	}
 
-	return (int) ret0; 
+	return 0; 
 }
 
 static int yield_secure_serial_out(void)
@@ -309,39 +330,8 @@ static int close_file(uint32_t fd)
 	return (int) ret0;
 }
 
-static int request_secure_storage(int access_mode, int count)
-{
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE, access_mode, count)
-	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET
-	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
-		int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
-						WRITE_ACCESS, access_mode, count);
-		if (!attest_ret) {
-			printf("%s: Error: failed to attest secure storage write access\n", __func__);
-			return ERR_FAULT;
-		}
-
-		attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
-						READ_ACCESS, access_mode, count);
-		if (!attest_ret) {
-			printf("%s: Error: failed to attest secure storage read access\n", __func__);
-			return ERR_FAULT;
-		}
-	}
-
-	return (int) ret0; 
-}
-
-int yield_secure_storage(void)
-{
-	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
-	return 0;
-}
-
 /* FIXME: (mostly) copied from os/mailbox.c */
-int send_msg_to_storage(uint8_t *buf)
+static int send_msg_to_storage(uint8_t *buf)
 {
 	uint8_t opcode[2], interrupt;
 
@@ -366,19 +356,104 @@ int send_msg_to_storage(uint8_t *buf)
 	return 0;
 }
 
-int write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+static int unlock_secure_storage(uint8_t *key)
 {
-	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
-	buf[0] = 0; /* write */
+	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+	buf[0] = STORAGE_OP_UNLOCK;
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
 
-int read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
+static int set_secure_storage_key(uint8_t *key)
+{
+	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+	buf[0] = STORAGE_OP_SET_KEY;
+	send_msg_to_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
+static int wipe_secure_storage(void)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	buf[0] = STORAGE_OP_WIPE;
+	send_msg_to_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
+static int remove_secure_storage_key(void)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	buf[0] = STORAGE_OP_REMOVE_KEY;
+	send_msg_to_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
+static int request_secure_storage(int access_mode, int count, uint8_t *key)
+{
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE, access_mode, count)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int) ret0; 
+
+	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
+		int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
+						WRITE_ACCESS, access_mode, count);
+		if (!attest_ret) {
+			printf("%s: Error: failed to attest secure storage write access\n", __func__);
+			return ERR_FAULT;
+		}
+
+		attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
+						READ_ACCESS, access_mode, count);
+		if (!attest_ret) {
+			printf("%s: Error: failed to attest secure storage read access\n", __func__);
+			return ERR_FAULT;
+		}
+	}
+
+	/* unlock the storage (mainly needed to deal with reset-related interruptions.
+	 * won't do anything if it's the first time accessing it) */
+	int unlock_ret = unlock_secure_storage(key);
+	if (!unlock_ret)
+		return 0;
+
+	/* if new storage, set the key */
+	int set_key_ret = set_secure_storage_key(key);
+	return set_key_ret;
+}
+
+static int yield_secure_storage(void)
+{
+	/* wipe storage content */
+	int ret = wipe_secure_storage();
+
+	/* if wipe successful, remove the key */
+	if (!ret)
+		remove_secure_storage_key();
+
+	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+	return 0;
+}
+
+static int write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+{
+	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
+	buf[0] = STORAGE_OP_WRITE;
+	send_msg_to_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
+static int read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
 {
 	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
-	buf[0] = 1; /* read */
+	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET_DATA(data)
 	return (int) ret0;

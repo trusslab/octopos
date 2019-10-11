@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <octopos/runtime.h>
 #include <octopos/syscall.h>
+#include <octopos/storage.h>
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
@@ -79,7 +80,11 @@ void app_main(struct runtime_api *api)
 	api->close_file(fd);
 	
 	insecure_printf("Now testing secure storage\n");
-	ret = api->request_secure_storage(ACCESS_LIMITED_IRREVOCABLE, 200);
+	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
+	/* generate a key */
+	for (i = 0; i < STORAGE_KEY_SIZE; i++)
+		secure_storage_key[i] = i;
+	ret = api->request_secure_storage(ACCESS_LIMITED_IRREVOCABLE, 200, secure_storage_key);
 	if (ret) {
 		printf("Error: could not get secure access to storage\n");
 		insecure_printf("Failed to get secure access to storage.\n");
@@ -90,4 +95,5 @@ void app_main(struct runtime_api *api)
 	memset(line, 0x0, 1024);
 	api->read_from_secure_storage((uint8_t *) line, 0, 0, size);
 	insecure_printf("secret (from secure storage): %s (size = %d)\n", line, size);	
+	api->yield_secure_storage();
 }
