@@ -41,6 +41,11 @@ static void send_interrupt(struct processor *proc, uint8_t queue_id)
 	write(proc->intr_handle, &queue_id, 1);
 }
 
+static void sensor_send_interrupt(uint8_t queue_id)
+{
+	send_interrupt(&processors[P_SENSOR], queue_id);
+}
+
 static void os_send_interrupt(uint8_t queue_id)
 {
 	send_interrupt(&processors[P_OS], queue_id);
@@ -68,6 +73,7 @@ static void initialize_processors(void)
 	mkfifo(FIFO_OS_IN, 0666);
 	mkfifo(FIFO_OS_INTR, 0666);
 	mkfifo(FIFO_KEYBOARD, 0666);
+	mkfifo(FIFO_SENSOR, 0666);
 	mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
 	mkfifo(FIFO_SERIAL_OUT_IN, 0666);
 	mkfifo(FIFO_SERIAL_OUT_INTR, 0666);
@@ -91,6 +97,12 @@ static void initialize_processors(void)
 	processors[P_KEYBOARD].send_interrupt = NULL; /* not needed */
 	processors[P_KEYBOARD].out_handle = open(FIFO_KEYBOARD, O_RDWR);
 	processors[P_KEYBOARD].in_handle = -1; /* not needed */
+
+	/* sensor processor */
+	processors[P_SENSOR].processor_id = P_SENSOR;
+	processors[P_SENSOR].send_interrupt = sensors_event_t;
+	processors[P_SENSOR].out_handle = open(FIFO_SENSOR, O_RDWR);
+	processors[P_SENSOR].in_handle = open(FIFO_SENSOR_INTR, O_RDWR);
 
 	/* serial output processor */
 	processors[P_SERIAL_OUT].processor_id = P_SERIAL_OUT;

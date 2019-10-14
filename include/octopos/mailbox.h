@@ -13,6 +13,7 @@
 #define NUM_PROCESSORS		5
 #define ALL_PROCESSORS		5
 #define INVALID_PROCESSOR	6
+#define	P_SENSOR		7
 
 /* queue IDs */
 #define	Q_OS			0
@@ -24,6 +25,7 @@
 #define	Q_STORAGE_IN_2		6
 #define	Q_STORAGE_OUT_2		7
 #define NUM_QUEUES		8
+#define Q_SENSOR		9
 
 #define MAILBOX_QUEUE_SIZE	4
 #define MAILBOX_QUEUE_MSG_SIZE	64
@@ -32,6 +34,8 @@
 #define FIFO_OS_IN		"/tmp/octopos_mailbox_os_in"
 #define FIFO_OS_INTR		"/tmp/octopos_mailbox_os_intr"
 #define FIFO_KEYBOARD		"/tmp/octopos_mailbox_keyboard"
+#define FIFO_SENSOR		"/tmp/octopos_mailbox_sensor"
+#define FIFO_SENSOR_INTR	"/tmp/octopos_mailbox_sensor_intr"
 #define FIFO_SERIAL_OUT_OUT	"/tmp/octopos_mailbox_serial_out_out"
 #define FIFO_SERIAL_OUT_IN	"/tmp/octopos_mailbox_serial_out_in"
 #define FIFO_SERIAL_OUT_INTR	"/tmp/octopos_mailbox_serial_out_intr"
