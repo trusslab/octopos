@@ -26,7 +26,6 @@ struct queue {
 	/* access control */
 	uint8_t reader_id;
 	uint8_t writer_id;
-	uint8_t access_mode;
 	/* FIXME: too small */
 	uint8_t access_count;
 };
@@ -190,7 +189,6 @@ static void initialize_queues(void)
 	queues[Q_OS].counter = 0;
 	queues[Q_OS].reader_id = P_OS;
 	queues[Q_OS].writer_id = ALL_PROCESSORS;
-	queues[Q_OS].access_mode = 0; /* irrelevant for the OS queue */
 	queues[Q_OS].access_count = 0; /* irrelevant for the OS queue */
 
 	/* keyboard queue */
@@ -200,8 +198,7 @@ static void initialize_queues(void)
 	queues[Q_KEYBOARD].counter = 0;
 	queues[Q_KEYBOARD].reader_id = P_OS;
 	queues[Q_KEYBOARD].writer_id = P_KEYBOARD;
-	queues[Q_KEYBOARD].access_mode = 0; /* irrelevant when OS is reader */
-	queues[Q_KEYBOARD].access_count = 0;
+	queues[Q_KEYBOARD].access_count = 0; /* irrelevant when OS is reader */
 
 	/* serial output queue */
 	queues[Q_SERIAL_OUT].queue_id = Q_SERIAL_OUT;
@@ -210,8 +207,7 @@ static void initialize_queues(void)
 	queues[Q_SERIAL_OUT].counter = 0;
 	queues[Q_SERIAL_OUT].reader_id = P_SERIAL_OUT;
 	queues[Q_SERIAL_OUT].writer_id = P_OS;
-	queues[Q_SERIAL_OUT].access_mode = 0; /* irrelevant when OS is writer */
-	queues[Q_SERIAL_OUT].access_count = 0;
+	queues[Q_SERIAL_OUT].access_count = 0; /* irrelevant when OS is writer */
 
 	/* runtime queue */
 	queues[Q_RUNTIME].queue_id = Q_RUNTIME;
@@ -220,7 +216,6 @@ static void initialize_queues(void)
 	queues[Q_RUNTIME].counter = 0;
 	queues[Q_RUNTIME].reader_id = P_RUNTIME;
 	queues[Q_RUNTIME].writer_id = P_OS;
-	queues[Q_RUNTIME].access_mode = 0; /* irrelevant for the RUNTIME queue */
 	queues[Q_RUNTIME].access_count = 0; /* irrelevant for the RUNTIME queue */
 
 	/* storage queues */
@@ -230,7 +225,6 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_IN].counter = 0;
 	queues[Q_STORAGE_IN].reader_id = P_STORAGE;
 	queues[Q_STORAGE_IN].writer_id = P_OS;
-	queues[Q_STORAGE_IN].access_mode = 0; /* irrelevant for main STORAGE queues */
 	queues[Q_STORAGE_IN].access_count = 0; /* irrelevant for main STORAGE queues */
 
 	queues[Q_STORAGE_OUT].queue_id = Q_STORAGE_OUT;
@@ -239,7 +233,6 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_OUT].counter = 0;
 	queues[Q_STORAGE_OUT].reader_id = P_OS;
 	queues[Q_STORAGE_OUT].writer_id = P_STORAGE;
-	queues[Q_STORAGE_OUT].access_mode = 0; /* irrelevant for main STORAGE queues */
 	queues[Q_STORAGE_OUT].access_count = 0; /* irrelevant for main STORAGE queues */
 
 	queues[Q_STORAGE_IN_2].queue_id = Q_STORAGE_IN_2;
@@ -248,8 +241,7 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_IN_2].counter = 0;
 	queues[Q_STORAGE_IN_2].reader_id = P_STORAGE;
 	queues[Q_STORAGE_IN_2].writer_id = P_OS;
-	queues[Q_STORAGE_IN_2].access_mode = 0; /* irrelevant when OS is writer */
-	queues[Q_STORAGE_IN_2].access_count = 0;
+	queues[Q_STORAGE_IN_2].access_count = 0; /* irrelevant when OS is writer */
 
 	queues[Q_STORAGE_OUT_2].queue_id = Q_STORAGE_OUT;
 	queues[Q_STORAGE_OUT_2].head = 0;
@@ -257,8 +249,7 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_OUT_2].counter = 0;
 	queues[Q_STORAGE_OUT_2].reader_id = P_OS;
 	queues[Q_STORAGE_OUT_2].writer_id = P_STORAGE;
-	queues[Q_STORAGE_OUT_2].access_mode = 0; /* irrelevant when OS is reader */
-	queues[Q_STORAGE_OUT_2].access_count = 0;
+	queues[Q_STORAGE_OUT_2].access_count = 0; /* irrelevant when OS is reader */
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -311,7 +302,7 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 #define ACCESS_UNLIMITED_REVOCABLE	0
 #define ACCESS_LIMITED_IRREVOCABLE	1
 
-static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t access_mode, uint8_t count)
+static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count)
 {
 	bool allowed = false;
 	/* sanity checks */
@@ -320,11 +311,6 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			allowed = true;
 
 		if (queues[Q_SERIAL_OUT].writer_id == P_RUNTIME && proc_id == P_OS &&
-		    queues[Q_SERIAL_OUT].access_mode == ACCESS_UNLIMITED_REVOCABLE)
-			allowed = true;
-
-		if (queues[Q_SERIAL_OUT].writer_id == P_RUNTIME && proc_id == P_OS &&
-		    queues[Q_SERIAL_OUT].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
 		    queues[Q_SERIAL_OUT].access_count == 0)
 			allowed = true;
 	} else if (queue_id == Q_KEYBOARD && access == READ_ACCESS) {
@@ -332,11 +318,6 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			allowed = true;
 
 		if (queues[Q_KEYBOARD].reader_id == P_RUNTIME && proc_id == P_OS &&
-		    queues[Q_KEYBOARD].access_mode == ACCESS_UNLIMITED_REVOCABLE)
-			allowed = true;
-
-		if (queues[Q_KEYBOARD].reader_id == P_RUNTIME && proc_id == P_OS &&
-		    queues[Q_KEYBOARD].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
 		    queues[Q_KEYBOARD].access_count == 0)
 			allowed = true;
 	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS) {
@@ -344,11 +325,6 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			allowed = true;
 
 		if (queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME && proc_id == P_OS &&
-		    queues[Q_STORAGE_IN_2].access_mode == ACCESS_UNLIMITED_REVOCABLE)
-			allowed = true;
-
-		if (queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME && proc_id == P_OS &&
-		    queues[Q_STORAGE_IN_2].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
 		    queues[Q_STORAGE_IN_2].access_count == 0)
 			allowed = true;
 	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS) {
@@ -356,11 +332,6 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			allowed = true;
 
 		if (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME && proc_id == P_OS &&
-		    queues[Q_STORAGE_OUT_2].access_mode == ACCESS_UNLIMITED_REVOCABLE)
-			allowed = true;
-
-		if (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME && proc_id == P_OS &&
-		    queues[Q_STORAGE_OUT_2].access_mode == ACCESS_LIMITED_IRREVOCABLE &&
 		    queues[Q_STORAGE_OUT_2].access_count == 0)
 			allowed = true;
 	}
@@ -375,12 +346,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 	else /* access == WRITER_ACCESS */
 		queues[(int) queue_id].writer_id = proc_id;
 
-	queues[(int) queue_id].access_mode = access_mode;
-	if (access_mode == ACCESS_LIMITED_IRREVOCABLE)
-		queues[(int) queue_id].access_count = count;
-	else
-		/* Not really needed. access_count in this case doesn't matter anyway. */
-		queues[(int) queue_id].access_count = 0;
+	queues[(int) queue_id].access_count = count;
 }
 
 static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
@@ -410,32 +376,31 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	else /* access == WRITER_ACCESS */
 		queues[(int) queue_id].writer_id = proc_id;
 
-	queues[(int) queue_id].access_mode = 0; /* irrelevant in this case */
 	queues[(int) queue_id].access_count = 0; /* irrelevant in this case */
 }
 
-static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t access_mode, uint8_t count)
+static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
 {
-	if (queue_id == Q_KEYBOARD && access == READ_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
-		if (queues[(int) queue_id].reader_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
+	if (queue_id == Q_KEYBOARD && access == READ_ACCESS) {
+		if (queues[(int) queue_id].reader_id == P_RUNTIME &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
 			return 0;
-	} else if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
-		if (queues[(int) queue_id].writer_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
+	} else if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS) {
+		if (queues[(int) queue_id].writer_id == P_RUNTIME &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
 			return 0;
-	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
-		if (queues[(int) queue_id].reader_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
+	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS) {
+		if (queues[(int) queue_id].reader_id == P_RUNTIME &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
 			return 0;
-	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS && access_mode == ACCESS_LIMITED_IRREVOCABLE) {
-		if (queues[(int) queue_id].writer_id == P_RUNTIME && queues[(int) queue_id].access_mode == access_mode &&
+	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS) {
+		if (queues[(int) queue_id].writer_id == P_RUNTIME &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
@@ -493,10 +458,10 @@ int main(int argc, char **argv)
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				uint8_t opcode_rest[4];
-				memset(opcode_rest, 0x0, 4);
-				read(processors[P_OS].out_handle, opcode_rest, 4);
-				os_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2], opcode_rest[3]);				
+				uint8_t opcode_rest[3];
+				memset(opcode_rest, 0x0, 3);
+				read(processors[P_OS].out_handle, opcode_rest, 3);
+				os_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2]);				
 			} else {
 				printf("Error: invalid opcode from OS\n");
 			}
@@ -547,10 +512,10 @@ int main(int argc, char **argv)
 				read(processors[P_RUNTIME].out_handle, opcode_rest, 2);
 				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
 			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[3];
-				memset(opcode_rest, 0x0, 3);
-				read(processors[P_RUNTIME].out_handle, opcode_rest, 3);
-				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2]);				
+				uint8_t opcode_rest[2];
+				memset(opcode_rest, 0x0, 2);
+				read(processors[P_RUNTIME].out_handle, opcode_rest, 2);
+				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
 				write(processors[P_RUNTIME].in_handle, &ret, 1);
 			} else {
 				printf("Error: invalid opcode from runtime\n");

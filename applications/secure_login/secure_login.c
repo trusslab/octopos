@@ -6,7 +6,6 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <octopos/runtime.h>
-#include <octopos/syscall.h>
 #include <octopos/storage.h>
 
 /* FIXME: how does the app know the size of the buf? */
@@ -34,13 +33,13 @@ void app_main(struct runtime_api *api)
 
 	insecure_printf("Switching to secure mode now.\n");
 
-	ret = api->request_secure_keyboard(ACCESS_LIMITED_IRREVOCABLE, 100);
+	ret = api->request_secure_keyboard(100);
 	if (ret) {
 		printf("Error: could not get secure access to keyboard\n");
 		insecure_printf("Failed to switch.\n");
 		return;
 	}
-	ret = api->request_secure_serial_out(ACCESS_LIMITED_IRREVOCABLE, 200);
+	ret = api->request_secure_serial_out(200);
 	if (ret) {
 		api->yield_secure_keyboard();
 		printf("Error: could not get secure access to serial_out\n");
@@ -84,7 +83,7 @@ void app_main(struct runtime_api *api)
 	/* generate a key */
 	for (i = 0; i < STORAGE_KEY_SIZE; i++)
 		secure_storage_key[i] = i;
-	ret = api->request_secure_storage(ACCESS_LIMITED_IRREVOCABLE, 200, secure_storage_key);
+	ret = api->request_secure_storage(200, secure_storage_key);
 	if (ret) {
 		printf("Error: could not get secure access to storage\n");
 		insecure_printf("Failed to get secure access to storage.\n");

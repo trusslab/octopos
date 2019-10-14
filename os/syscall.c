@@ -15,7 +15,7 @@
 #include <octopos/error.h>
 
 /* FIXME: move to header file */
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t access_mode, uint8_t count);
+void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count);
 void inform_shell_of_termination(void);
 int app_write_to_shell(uint8_t *data, int size);
 int app_read_from_shell(void);
@@ -98,38 +98,30 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
-		SYSCALL_GET_TWO_ARGS
-		uint32_t access_mode = arg0, count = arg1;
-		if (!(access_mode == ACCESS_LIMITED_IRREVOCABLE || access_mode == ACCESS_UNLIMITED_REVOCABLE)) {
+		SYSCALL_GET_ONE_ARG
+		uint32_t count = arg0;
+
+		/* No more than 200 characters */
+		if (count > 200) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
 
-		/* No more than 200 characters to be printed without revocability */
-		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 200) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
+		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, caller_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
-		SYSCALL_GET_TWO_ARGS
-		uint32_t access_mode = arg0, count = arg1;
-		if (!(access_mode == ACCESS_LIMITED_IRREVOCABLE || access_mode == ACCESS_UNLIMITED_REVOCABLE)) {
+		SYSCALL_GET_ONE_ARG
+		uint32_t count = arg0;
+
+		/* No more than 100 characters */
+		if (count > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
 
-		/* No more than 100 characters to be received from keyboard without revocability */
-		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 100) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
+		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, caller_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -200,21 +192,17 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE: {
-		SYSCALL_GET_TWO_ARGS
-		uint32_t access_mode = arg0, count = arg1;
-		if (!(access_mode == ACCESS_LIMITED_IRREVOCABLE || access_mode == ACCESS_UNLIMITED_REVOCABLE)) {
+		SYSCALL_GET_ONE_ARG
+		uint32_t count = arg0;
+
+		/* No more than 200 block reads/writes */
+		if (count > 200) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
 
-		/* No more than 200 block reads/writes without revocability */
-		if (access_mode == ACCESS_LIMITED_IRREVOCABLE && count > 200) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
-		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, caller_id, (uint8_t) access_mode, (uint8_t) count);
+		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, caller_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, caller_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}

@@ -181,36 +181,33 @@ static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	write(fd_out, opcode, 4);
 }
 
-static int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t access_mode, uint8_t count)
+static int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
 {
-	uint8_t opcode[5], ret;
+	uint8_t opcode[4], ret;
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
 	opcode[2] = access;
-	opcode[3] = access_mode;
-	opcode[4] = count;
-	write(fd_out, opcode, 5);
+	opcode[3] = count;
+	write(fd_out, opcode, 4);
 	read(fd_in, &ret, 1);
 
 	return (int) ret; 
 }
 
-static int request_secure_keyboard(int access_mode, int count)
+static int request_secure_keyboard(int count)
 {
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) access_mode, (uint32_t) count)
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0; 
 
-	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
-		int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
-						READ_ACCESS, access_mode, count);
-		if (!attest_ret) {
-			printf("%s: Error: failed to attest secure keyboard access\n", __func__);
-			return ERR_FAULT;
-		}
+	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
+					READ_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+		return ERR_FAULT;
 	}
 
 	return 0; 
@@ -222,21 +219,19 @@ static int yield_secure_keyboard(void)
 	return 0;
 }
 
-static int request_secure_serial_out(int access_mode, int count)
+static int request_secure_serial_out(int count)
 {
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) access_mode, (uint32_t) count)
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0; 
 
-	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
-		int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
-						WRITE_ACCESS, access_mode, count);
-		if (!attest_ret) {
-			printf("%s: Error: failed to attest secure serial_out access\n", __func__);
-			return ERR_FAULT;
-		}
+	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
+					WRITE_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest secure serial_out access\n", __func__);
+		return ERR_FAULT;
 	}
 
 	return 0; 
@@ -392,32 +387,30 @@ static int remove_secure_storage_key(void)
 	return (int) ret0;
 }
 
-static int request_secure_storage(int access_mode, int count, uint8_t *key)
+static int request_secure_storage(int count, uint8_t *key)
 {
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE, access_mode, count)
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE, count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0; 
 
-	if (access_mode == ACCESS_LIMITED_IRREVOCABLE) {
-		int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
-						WRITE_ACCESS, access_mode, count);
-		if (!attest_ret) {
-			printf("%s: Error: failed to attest secure storage write access\n", __func__);
-			return ERR_FAULT;
-		}
+	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
+					WRITE_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest secure storage write access\n", __func__);
+		return ERR_FAULT;
+	}
 
-		attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
-						READ_ACCESS, access_mode, count);
-		if (!attest_ret) {
-			printf("%s: Error: failed to attest secure storage read access\n", __func__);
-			return ERR_FAULT;
-		}
+	attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
+					READ_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest secure storage read access\n", __func__);
+		return ERR_FAULT;
 	}
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
-	 * won't do anything if it's the first time accessing it) */
+	 * won't do anything if it's the first time accessing the secure storage) */
 	int unlock_ret = unlock_secure_storage(key);
 	if (!unlock_ret)
 		return 0;

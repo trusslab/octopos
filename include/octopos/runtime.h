@@ -1,8 +1,8 @@
 struct runtime_api {
 	/* secure keyboard/serial_out */
-	int (*request_secure_keyboard)(int access_mode, int count);
+	int (*request_secure_keyboard)(int count);
 	int (*yield_secure_keyboard)(void);
-	int (*request_secure_serial_out)(int access_mode, int count);
+	int (*request_secure_serial_out)(int count);
 	int (*yield_secure_serial_out)(void);
 	void (*write_to_secure_serial_out)(char *buf);
 	void (*read_char_from_secure_keyboard)(char *buf);
@@ -18,7 +18,7 @@ struct runtime_api {
 	int (*close_file)(uint32_t fd);
 
 	/* secure storage */
-	int (*request_secure_storage)(int access_mode, int count, uint8_t *key);
+	int (*request_secure_storage)(int count, uint8_t *key);
 	int (*yield_secure_storage)(void);
 	int (*write_to_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size);
 	int (*read_from_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
