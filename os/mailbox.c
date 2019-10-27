@@ -68,11 +68,12 @@ static int recv_input(uint8_t *buf, uint8_t *queue_id)
 	return 0;
 }
 
-int send_msg_to_runtime(uint8_t *buf)
+int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 {
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	/* FIXME: this depends on the runtime_proc_id */
 	opcode[1] = Q_RUNTIME;
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
@@ -122,6 +123,8 @@ void initialize_shell(void);
 void shell_process_input(char buf);
 void process_system_call(uint8_t *buf);
 void initialize_file_system(void);
+void initialize_scheduler(void);
+void sched_next_app(void);
 
 static void distribute_input(void)
 {
@@ -143,9 +146,11 @@ int main()
 	intialize_channels();
 	initialize_shell();
 	initialize_file_system();
+	initialize_scheduler();
 
 	while (1) {
 		distribute_input();
+		sched_next_app();
 	}
 
 	close_channels();

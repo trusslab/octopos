@@ -16,6 +16,7 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
+#include "scheduler.h" 
 
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];
@@ -25,21 +26,30 @@ int command_pipe[2];
 #define READ  0
 #define WRITE 1
 
-#define WAITING_FOR_CMD		0
-#define RUNNING_APP		1
-#define APP_WAITING_FOR_INPUT	2
+#define SHELL_STATE_WAITING_FOR_CMD		0
+#define SHELL_STATE_RUNNING_APP			1
+#define SHELL_STATE_APP_WAITING_FOR_INPUT	2
 
-int shell_status = WAITING_FOR_CMD;
+struct app *foreground_app = NULL;
+
+int shell_status = SHELL_STATE_WAITING_FOR_CMD;
 
 /* FIXME: move all mailbox-related stuff out of shell */
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 
+/* FIXME: move to header file */
+int sched_create_app(char *app_name);
+int sched_connect_apps(int input_app_id, int output_app_id);
+int sched_run_app(int app_id);
+void sched_clean_up_app(uint8_t runtime_proc_id);
+struct runtime_proc *get_runtime_proc(int id);
+
 int send_output(uint8_t *buf);
-int send_msg_to_runtime(uint8_t *buf);
 #define output_printf(fmt, args...) {memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE); sprintf(output_buf, fmt, ##args); send_output((uint8_t *) output_buf);}
 
 /* FIXME: move to a header file */
-void syscall_read_from_shell_response(uint8_t *line, int size);
+void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size);
+struct app *get_app(int app_id);
 
 /*
  * Handle commands separatly
@@ -57,17 +67,43 @@ void syscall_read_from_shell_response(uint8_t *line, int size);
  */
 static int command(int input, int first, int last)
 {
-	//int pipettes[2];
+	/* FIXME: add support for passing args to apps */
 
-	if (strcmp(args[0], "run") == 0) {
-		/* octopos run command */
-		send_msg_to_runtime((uint8_t *) args[1]);
-		shell_status = RUNNING_APP;
-		return 0;
+	if (first == 1 && last == 0 && input == 0) {
+		// First command
+		return sched_create_app(args[0]);
+	} else if (first == 0 && last == 0 && input != 0) {
+		// Middle command
+		int app_id = sched_create_app(args[0]);
+		sched_connect_apps(app_id, input);
+		sched_run_app(input);
+		return app_id;
 	} else {
-		output_printf("Unsupported command\n");
-		return 0;
+		// Last command
+		int app_id = sched_create_app(args[0]);
+		if (input) {
+			sched_connect_apps(app_id, input);
+			sched_run_app(input);
+		}
+		sched_run_app(app_id);
+		foreground_app = get_app(app_id);
+		shell_status = SHELL_STATE_RUNNING_APP;
+		return app_id;
 	}
+ 
+	/*************** simple ******************/
+	//if (strcmp(args[0], "run") == 0) {
+	//	/* octopos run command */
+	//	send_msg_to_runtime((uint8_t *) args[1]);
+	//	shell_status = SHELL_STATE_RUNNING_APP;
+	//	return 0;
+	//} else {
+	//	output_printf("Unsupported command\n");
+	//	return 0;
+	//}
+
+	/*************** original ******************/
+	//int pipettes[2];
 
 	///* Invoke pipe */
 	//pipe( pipettes );	
@@ -159,14 +195,17 @@ static void process_input_line(char *line)
 	input = run(cmd, input, first, 1);
 	cleanup(n);
 	n = 0;
-		
-	output_printf("octopos$> ");
 }
 
-static void process_app_input(uint8_t * line, int num_chars)
+static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 {
-	syscall_read_from_shell_response(line, num_chars);
-	shell_status = RUNNING_APP;
+	if (app && app->runtime_proc)
+		syscall_read_from_shell_response(app->runtime_proc->id,
+					 line, num_chars);
+	else
+		printf("%s: Error: couldn't send input to app\n", __func__);
+
+	shell_status = SHELL_STATE_RUNNING_APP;
 }
 
 #define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE
@@ -179,25 +218,40 @@ void shell_process_input(char buf)
 	output_printf("%c", buf);
 	num_chars++;
 	if (buf == '\n' || num_chars >= MAX_LINE_SIZE) {
-		if (shell_status == WAITING_FOR_CMD)
+		if (shell_status == SHELL_STATE_WAITING_FOR_CMD)
 			process_input_line(line);
-		else if (shell_status == APP_WAITING_FOR_INPUT)
-			process_app_input((uint8_t *) line, num_chars);
-		/* don't need to do anything if RUNNING_APP */
+		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT)
+			process_app_input(foreground_app, (uint8_t *) line, num_chars);
+		/* don't need to do anything if SHELL_STATE_RUNNING_APP */
 		num_chars = 0;
 	}
 }
 
-void inform_shell_of_termination(void)
+void inform_shell_of_termination(uint8_t runtime_proc_id)
 {
-	shell_status = WAITING_FOR_CMD;
-	output_printf("octopos$> ");
+	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+	if (!runtime_proc || !runtime_proc->app) {
+		printf("%s: Error: NULL runtime_proc or app\n", __func__);
+		return;
+	}
+
+	if (runtime_proc->app == foreground_app) {
+		shell_status = SHELL_STATE_WAITING_FOR_CMD;
+		foreground_app = NULL;
+		output_printf("octopos$> ");
+	}
+	sched_clean_up_app(runtime_proc_id);
 }
 
 
-int app_write_to_shell(uint8_t *data, int size)
+int app_write_to_shell(struct app *app, uint8_t *data, int size)
 {
-	if (shell_status != RUNNING_APP) {
+	if (app != foreground_app) {
+		printf("%s: Error: only the foreground app can read from shell\n", __func__);
+		return -ERR_INVALID;
+	}
+
+	if (shell_status != SHELL_STATE_RUNNING_APP) {
 		printf("Error: shell is not running an app\n");
 		return ERR_INVALID;
 	}
@@ -215,9 +269,14 @@ int app_write_to_shell(uint8_t *data, int size)
 	return 0;
 }
 
-int app_read_from_shell(void)
+int app_read_from_shell(struct app *app)
 {
-	shell_status = APP_WAITING_FOR_INPUT;
+	if (app != foreground_app) {
+		printf("%s: Error: only the foreground app can read from shell\n", __func__);
+		return -ERR_INVALID;
+	}
+
+	shell_status = SHELL_STATE_APP_WAITING_FOR_INPUT;
 	
 	return 0;
 }

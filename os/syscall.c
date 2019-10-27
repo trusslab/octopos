@@ -13,12 +13,13 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/error.h>
+#include "scheduler.h"
 
 /* FIXME: move to header file */
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count);
-void inform_shell_of_termination(void);
-int app_write_to_shell(uint8_t *data, int size);
-int app_read_from_shell(void);
+void inform_shell_of_termination(uint8_t runtime_proc_id);
+int app_write_to_shell(struct app *app, uint8_t *data, int size);
+int app_read_from_shell(struct app *app);
 uint32_t file_system_open_file(char *filename);
 int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset);
 int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset);
@@ -89,12 +90,27 @@ int file_system_close_file(uint32_t fd);
 	}							\
 	data = &buf[12];					\
 
-static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
+/* FIXME: move to header file */
+int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf);
+struct runtime_proc *get_runtime_proc(int id);
+int ipc_send_data(struct app *sender, uint8_t *data, int data_size);
+void ipc_receive_data(struct app *receiver);
+
+/* response for async syscalls */
+void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	SYSCALL_SET_ONE_RET_DATA(0, line, size)
+	/* FIXME: we need to send msg to runtime proc that issues the syscall */
+	send_msg_to_runtime(runtime_proc_id, buf);
+}
+
+static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response)
 {
 	uint16_t syscall_nr;
 
 	syscall_nr = *((uint16_t *) &buf[1]);
-	*is_async = false;
+	*no_response = false;
 
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
@@ -107,7 +123,7 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 			break;
 		}
 
-		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, caller_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -121,25 +137,44 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 			break;
 		}
 
-		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, caller_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
-		inform_shell_of_termination();
+		inform_shell_of_termination(runtime_proc_id);
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_WRITE_TO_SHELL: {
 		int ret;
 		SYSCALL_GET_ZERO_ARGS_DATA
-		ret = app_write_to_shell(data, data_size);
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			SYSCALL_SET_ONE_RET(ERR_FAULT)
+			break;
+		}
+		
+		if (runtime_proc->app->output_dst)
+			ret = ipc_send_data(runtime_proc->app, data, (int) data_size);
+		else
+			ret = app_write_to_shell(runtime_proc->app, data, data_size);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
 	case SYSCALL_READ_FROM_SHELL: {
-		app_read_from_shell();
-		*is_async = true;
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			//FIXME: return Error
+		}
+	       
+		if (runtime_proc->app->input_src) {
+			ipc_receive_data(runtime_proc->app);
+		} else {
+			app_read_from_shell(runtime_proc->app);
+		}
+			
+		*no_response = true;
 		break;
 	}
 	case SYSCALL_OPEN_FILE: {
@@ -201,8 +236,8 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 			break;
 		}
 
-		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, caller_id, (uint8_t) count);
-		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, caller_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -213,31 +248,20 @@ static void handle_syscall(uint8_t caller_id, uint8_t *buf, bool *is_async)
 	}
 }
 
-
-/* FIXME: move to header file */
-int send_msg_to_runtime(uint8_t *buf);
-
-/* response for async syscalls */
-void syscall_read_from_shell_response(uint8_t *line, int size)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	SYSCALL_SET_ONE_RET_DATA(0, line, size)
-	send_msg_to_runtime(buf);
-}
-
 void process_system_call(uint8_t *buf)
 {
 	/* only allow syscalls from RUNTIME, for now */
 	/* FIXME: we can't rely on the other processor declaring who it is.
 	 * Must be set automatically in the mailbox */
 	if (buf[0] == P_RUNTIME) {
-		bool is_async = false;
+		bool no_response = false;
 	
-		handle_syscall(P_RUNTIME, buf, &is_async);
+		handle_syscall(P_RUNTIME, buf, &no_response);
 
 		/* send response */
-		if (!is_async)
-			send_msg_to_runtime(buf);
+		if (!no_response) {
+			send_msg_to_runtime(P_RUNTIME, buf);
+		}
 	} else {
 		printf("Error: invalid syscall caller\n");
 	}

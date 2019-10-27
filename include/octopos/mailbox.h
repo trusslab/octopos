@@ -10,10 +10,12 @@
 #define	P_SERIAL_OUT		2
 #define	P_RUNTIME		3
 #define	P_STORAGE		4
-#define NUM_PROCESSORS		5
-#define ALL_PROCESSORS		5
-#define INVALID_PROCESSOR	6
-#define	P_SENSOR		7
+#define	P_SENSOR		5
+#define NUM_PROCESSORS		6
+#define ALL_PROCESSORS		6
+#define INVALID_PROCESSOR	7
+
+#define NUM_RUNTIME_PROCS	1
 
 /* queue IDs */
 #define	Q_OS			0
@@ -24,8 +26,8 @@
 #define	Q_STORAGE_OUT		5
 #define	Q_STORAGE_IN_2		6
 #define	Q_STORAGE_OUT_2		7
-#define NUM_QUEUES		8
-#define Q_SENSOR		9
+#define Q_SENSOR		8
+#define NUM_QUEUES		9
 
 #define MAILBOX_QUEUE_SIZE	4
 #define MAILBOX_QUEUE_MSG_SIZE	64

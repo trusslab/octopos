@@ -100,7 +100,7 @@ static void initialize_processors(void)
 
 	/* sensor processor */
 	processors[P_SENSOR].processor_id = P_SENSOR;
-	processors[P_SENSOR].send_interrupt = sensors_event_t;
+	processors[P_SENSOR].send_interrupt = sensor_send_interrupt;
 	processors[P_SENSOR].out_handle = open(FIFO_SENSOR, O_RDWR);
 	processors[P_SENSOR].in_handle = open(FIFO_SENSOR_INTR, O_RDWR);
 

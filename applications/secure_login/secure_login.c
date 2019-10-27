@@ -1,4 +1,4 @@
-/* octopos serial output code */
+/* secure_login app */
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -25,7 +25,7 @@ void app_main(struct runtime_api *api)
 	uint32_t secret = 0;
 	int ret;
 
-	insecure_printf("\nThis is secure login speaking.\n");
+	insecure_printf("This is secure login speaking.\n");
 	insecure_printf("Provide an insecure phrase:\n");
 
 	api->read_from_shell(line, &size);
