@@ -22,7 +22,7 @@ struct app_list_node {
 struct app_list_node *app_list_head = NULL;
 struct app_list_node *app_list_tail = NULL;
 
-uint8_t RUNTIME_PROC_IDS[NUM_RUNTIME_PROCS] = {P_RUNTIME};
+uint8_t RUNTIME_PROC_IDS[NUM_RUNTIME_PROCS] = {P_RUNTIME1, P_RUNTIME2};
 
 struct runtime_proc *runtime_procs = NULL;
 

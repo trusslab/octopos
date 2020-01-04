@@ -73,8 +73,17 @@ int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	/* FIXME: this depends on the runtime_proc_id */
-	opcode[1] = Q_RUNTIME;
+	switch(runtime_proc_id) {
+	case P_RUNTIME1:
+		opcode[1] = Q_RUNTIME1;
+		break;
+	case P_RUNTIME2:
+		opcode[1] = Q_RUNTIME2;
+		break;
+	default:
+		printf("Error (%s): unexpected runtime_proc_id (%d).\n", __func__, runtime_proc_id);
+		return -1;
+	}
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 

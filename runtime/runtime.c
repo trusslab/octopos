@@ -5,12 +5,20 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <dlfcn.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+
+
+int p_runtime = 0;
+int q_runtime = 0;
+char fifo_runtime_out[64];
+char fifo_runtime_in[64];
+char fifo_runtime_intr[64];
 
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
@@ -159,13 +167,13 @@ static void issue_syscall(uint8_t *buf)
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_OS;
 	write(fd_out, opcode, 2);
-	buf[0] = P_RUNTIME; /* FIXME: can't be set by RUNTIME itself */
+	buf[0] = p_runtime; /* FIXME: can't be set by RUNTIME itself */
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* wait for response */
 	read(fd_intr, &interrupt, 1);
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = Q_RUNTIME;
+	opcode[1] = q_runtime;
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
@@ -490,7 +498,7 @@ static void load_application(char *msg)
 	
 	app_main = (app_main_proc) dlsym(app, "app_main");
 	if (!app_main) {
-		printf("Error: couldn't find app_main symbol\n");
+		printf("Error: couldn't find app_main symbol.\n");
 		return;
 	}
 
@@ -502,17 +510,50 @@ int main(int argc, char **argv)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t interrupt, opcode[2];
+	int runtime_id = -1; 
 
-	mkfifo(FIFO_RUNTIME_OUT, 0666);
-	mkfifo(FIFO_RUNTIME_IN, 0666);
-	mkfifo(FIFO_RUNTIME_INTR, 0666);
+	if (argc != 2) {
+		printf("Error: incorrect command. Use ``runtime <runtime_ID>''.\n");
+		return -1;
+	}
 
-	fd_out = open(FIFO_RUNTIME_OUT, O_WRONLY);
-	fd_in = open(FIFO_RUNTIME_IN, O_RDONLY);
-	fd_intr = open(FIFO_RUNTIME_INTR, O_RDONLY);
+	runtime_id = atoi(argv[1]);
+
+	if (runtime_id < 1 || runtime_id > 2) {
+		printf("Error: invalid runtime ID.\n");
+		return -1;
+	}
+
+	switch(runtime_id) {
+	case 1:
+		p_runtime = P_RUNTIME1;
+		q_runtime = Q_RUNTIME1;
+		strcpy(fifo_runtime_out, FIFO_RUNTIME1_OUT);
+		strcpy(fifo_runtime_in, FIFO_RUNTIME1_IN);
+		strcpy(fifo_runtime_intr, FIFO_RUNTIME1_INTR);
+		break;
+	case 2:
+		p_runtime = P_RUNTIME2;
+		q_runtime = Q_RUNTIME2;
+		strcpy(fifo_runtime_out, FIFO_RUNTIME2_OUT);
+		strcpy(fifo_runtime_in, FIFO_RUNTIME2_IN);
+		strcpy(fifo_runtime_intr, FIFO_RUNTIME2_INTR);
+		break;
+	default:
+		printf("Error: unexpected runtime ID.\n");
+		return -1;
+	}
+
+	mkfifo(fifo_runtime_out, 0666);
+	mkfifo(fifo_runtime_in, 0666);
+	mkfifo(fifo_runtime_intr, 0666);
+
+	fd_out = open(fifo_runtime_out, O_WRONLY);
+	fd_in = open(fifo_runtime_in, O_RDONLY);
+	fd_intr = open(fifo_runtime_intr, O_RDONLY);
 		
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = Q_RUNTIME;
+	opcode[1] = q_runtime;
 	
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
@@ -527,7 +568,7 @@ int main(int argc, char **argv)
 	close(fd_in);
 	close(fd_intr);
 
-	remove(FIFO_RUNTIME_OUT);
-	remove(FIFO_RUNTIME_IN);
-	remove(FIFO_RUNTIME_INTR);
+	remove(fifo_runtime_out);
+	remove(fifo_runtime_in);
+	remove(fifo_runtime_intr);
 }

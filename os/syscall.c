@@ -253,14 +253,15 @@ void process_system_call(uint8_t *buf)
 	/* only allow syscalls from RUNTIME, for now */
 	/* FIXME: we can't rely on the other processor declaring who it is.
 	 * Must be set automatically in the mailbox */
-	if (buf[0] == P_RUNTIME) {
+	int runtime_proc_id = buf[0];
+	if (runtime_proc_id == P_RUNTIME1 || runtime_proc_id == P_RUNTIME2) {
 		bool no_response = false;
 	
-		handle_syscall(P_RUNTIME, buf, &no_response);
+		handle_syscall(buf[0], buf, &no_response);
 
 		/* send response */
 		if (!no_response) {
-			send_msg_to_runtime(P_RUNTIME, buf);
+			send_msg_to_runtime(runtime_proc_id, buf);
 		}
 	} else {
 		printf("Error: invalid syscall caller\n");
