@@ -213,7 +213,7 @@ int sched_create_app(char *app_name)
 	return app_id;
 }
 
-int sched_connect_apps(int input_app_id, int output_app_id)
+int sched_connect_apps(int input_app_id, int output_app_id, int two_way)
 {
 	struct app *input_app = get_app(input_app_id);
 	if (!input_app_id) {
@@ -229,6 +229,10 @@ int sched_connect_apps(int input_app_id, int output_app_id)
 
 	input_app->input_src = output_app_id;
 	output_app->output_dst = input_app_id;
+	if (two_way) {
+		input_app->output_dst = output_app_id;
+		output_app->input_src = input_app_id;
+	}
 
 	return 0;
 }

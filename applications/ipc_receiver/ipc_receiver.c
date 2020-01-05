@@ -22,6 +22,11 @@ void app_main(struct runtime_api *api)
 	char line[1024];
 	int size;
 
+	/* receive message */
 	api->read_from_shell(line, &size);
-	insecure_printf("Received: %s (size = %d)\n", line, size);
+
+	/* send response */
+	insecure_printf("Received message: %s (size = %d)\n", line, size);
+
+	printf("finished\n");
 }

@@ -19,5 +19,16 @@ int num_chars = 0;
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
+	char line[1024];
+	int size;
+
+	/* send message */
 	insecure_printf("Secret Message");
+
+	/* receive response */
+	int ret = api->read_from_shell(line, &size);
+
+	printf("finished (ret = %d)\n", ret);
+	if (!ret)
+		printf("Received response: %s (size = %d)\n", line, size);
 }

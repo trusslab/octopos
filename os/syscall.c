@@ -170,11 +170,16 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	       
 		if (runtime_proc->app->input_src) {
 			ipc_receive_data(runtime_proc->app);
+			*no_response = true;
 		} else {
-			app_read_from_shell(runtime_proc->app);
+			int ret = app_read_from_shell(runtime_proc->app);
+			if (!ret) {
+				*no_response = true;
+			} else {
+				char dummy;
+				SYSCALL_SET_ONE_RET_DATA(ret, &dummy, 0);
+			}
 		}
-			
-		*no_response = true;
 		break;
 	}
 	case SYSCALL_OPEN_FILE: {

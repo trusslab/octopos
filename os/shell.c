@@ -39,7 +39,7 @@ char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 
 /* FIXME: move to header file */
 int sched_create_app(char *app_name);
-int sched_connect_apps(int input_app_id, int output_app_id);
+int sched_connect_apps(int input_app_id, int output_app_id, int two_way);
 int sched_run_app(int app_id);
 void sched_clean_up_app(uint8_t runtime_proc_id);
 struct runtime_proc *get_runtime_proc(int id);
@@ -65,7 +65,7 @@ struct app *get_app(int app_id);
  * So if 'command' returns a file descriptor, the next 'command' has this
  * descriptor as its 'input'.
  */
-static int command(int input, int first, int last)
+static int command(int input, int first, int last, int double_pipe)
 {
 	/* FIXME: add support for passing args to apps */
 
@@ -75,14 +75,14 @@ static int command(int input, int first, int last)
 	} else if (first == 0 && last == 0 && input != 0) {
 		// Middle command
 		int app_id = sched_create_app(args[0]);
-		sched_connect_apps(app_id, input);
+		sched_connect_apps(app_id, input, 0);
 		sched_run_app(input);
 		return app_id;
 	} else {
 		// Last command
 		int app_id = sched_create_app(args[0]);
 		if (input) {
-			sched_connect_apps(app_id, input);
+			sched_connect_apps(app_id, input, double_pipe);
 			sched_run_app(input);
 		}
 		sched_run_app(app_id);
@@ -171,7 +171,7 @@ static void cleanup(int n)
 		wait(NULL); 
 }
  
-static int run(char* cmd, int input, int first, int last);
+static int run(char* cmd, int input, int first, int last, int double_pipe);
 static int n = 0; /* number of calls to 'command' */
 
 /* Process a command line */
@@ -180,19 +180,38 @@ static void process_input_line(char *line)
 	int input = 0;
 	int first = 1;
 
+	/* detect double pipe */
 	char* cmd = line;
-	char* next = strchr(cmd, '|'); /* Find first '|' */
+	/* FIXME: use '||' instead of '%' */
+	char* next = strchr(cmd, '%'); /* Find '%' */
+	if (next != NULL) {
+		/* 'next' points to '%' */
+		*next = '\0';
+		input = run(cmd, input, first, 0, 1);
+
+		cmd = next + 1;
+		first = 0;
+		input = run(cmd, input, first, 1, 1);
+		cleanup(n);
+		n = 0;
+		return;
+	}
+
+	input = 0;
+	first = 1;
+	cmd = line;
+	next = strchr(cmd, '|'); /* Find first '|' */
 
 	while (next != NULL) {
 		/* 'next' points to '|' */
 		*next = '\0';
-		input = run(cmd, input, first, 0);
+		input = run(cmd, input, first, 0, 0);
 
 		cmd = next + 1;
 		next = strchr(cmd, '|'); /* Find next '|' */
 		first = 0;
 	}
-	input = run(cmd, input, first, 1);
+	input = run(cmd, input, first, 1, 0);
 	cleanup(n);
 	n = 0;
 }
@@ -290,14 +309,14 @@ void initialize_shell(void)
  
 static void split(char* cmd);
  
-static int run(char* cmd, int input, int first, int last)
+static int run(char* cmd, int input, int first, int last, int double_pipe)
 {
 	split(cmd);
 	if (args[0] != NULL) {
 		if (strcmp(args[0], "exit") == 0) 
 			exit(0);
 		n += 1;
-		return command(input, first, last);
+		return command(input, first, last, double_pipe);
 	}
 	return 0;
 }

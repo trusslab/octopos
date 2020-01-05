@@ -22,4 +22,10 @@ struct runtime_api {
 	int (*yield_secure_storage)(void);
 	int (*write_to_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size);
 	int (*read_from_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
+
+	/* secure IPC */
+	//int (*request_secure_ipc)(uint8_t runtime_proc_id, int count);
+	//int (*yield_secure_ipc)(void);
+	//void (*send_msg_on_secure_ipc)(char *buf);
+	//void (*recv_msg_on_secure_ipc)(char *buf);
 };
