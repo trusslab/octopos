@@ -23,11 +23,42 @@ struct app_list_node *app_list_head = NULL;
 struct app_list_node *app_list_tail = NULL;
 
 uint8_t RUNTIME_PROC_IDS[NUM_RUNTIME_PROCS] = {P_RUNTIME1, P_RUNTIME2};
+uint8_t RUNTIME_QUEUE_IDS[NUM_RUNTIME_PROCS] = {Q_RUNTIME1, Q_RUNTIME2};
 
 struct runtime_proc *runtime_procs = NULL;
 
 /* FIXME: move to header file */
 int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf);
+
+uint8_t get_runtime_queue_id(uint8_t runtime_proc_id)
+{
+	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
+		if (RUNTIME_PROC_IDS[i] == runtime_proc_id)
+			return RUNTIME_QUEUE_IDS[i];
+	}
+
+	return 0;
+}
+
+bool is_valid_runtime_queue_id(int queue_id)
+{
+	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
+		if (RUNTIME_QUEUE_IDS[i] == queue_id)
+			return true;
+	}
+
+	return false;
+}
+
+uint8_t get_runtime_proc_id(uint8_t runtime_queue_id)
+{
+	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
+		if (RUNTIME_QUEUE_IDS[i] == runtime_queue_id)
+			return RUNTIME_PROC_IDS[i];
+	}
+
+	return 0;
+}
 
 static struct runtime_proc *get_idle_runtime_proc(void)
 {
@@ -320,5 +351,7 @@ void initialize_scheduler(void)
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
 		runtime_procs[i].id = RUNTIME_PROC_IDS[i];
 		runtime_procs[i].state = RUNTIME_PROC_IDLE;
+		runtime_procs[i].app = NULL;
+		runtime_procs[i].pending_secure_ipc_request = 0;
 	}
 }

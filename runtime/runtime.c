@@ -158,6 +158,36 @@ char fifo_runtime_intr[64];
 	}									\
 	memcpy(data, &buf[5], _size);						\
 
+/* FIXME: there are a lot of repetition in these macros */
+#define IPC_SET_ZERO_ARGS_DATA(data, size)					\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;				\
+	if (max_size >= 256) {							\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return ERR_INVALID;						\
+	}									\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return ERR_INVALID;						\
+	}									\
+	buf[1] = size;								\
+	memcpy(&buf[2], (uint8_t *) data, size);				\
+
+#define IPC_GET_ZERO_ARGS_DATA					\
+	uint8_t data_size, *data;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;		\
+	if (max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		return ERR_INVALID;				\
+	}							\
+	data_size = buf[1];					\
+	if (data_size > max_size) {				\
+		printf("Error: size not supported\n");		\
+		return ERR_INVALID;				\
+	}							\
+	data = &buf[2];
+
 int fd_out, fd_in, fd_intr;
 
 static void issue_syscall(uint8_t *buf)
@@ -176,6 +206,17 @@ static void issue_syscall(uint8_t *buf)
 	opcode[1] = q_runtime;
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+}
+
+static void issue_syscall_noresponse(uint8_t *buf)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_OS;
+	write(fd_out, opcode, 2);
+	buf[0] = p_runtime; /* FIXME: can't be set by RUNTIME itself */
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
@@ -403,6 +444,7 @@ static int request_secure_storage(int count, uint8_t *key)
 	if (ret0)
 		return (int) ret0; 
 
+	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
 					WRITE_ACCESS, count);
 	if (!attest_ret) {
@@ -460,6 +502,99 @@ static int read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t 
 	return (int) ret0;
 }
 
+static bool secure_ipc_mode = false;
+static uint8_t secure_ipc_target_queue = 0;
+
+static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
+{
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_IPC, target_runtime_queue_id, count)
+	/* FIXME: the OS might need to return an error */
+	issue_syscall_noresponse(buf);
+	sleep(1); /* FIXME: this is needed because we don't properly wait for a response */
+	//SYSCALL_GET_ONE_RET
+	//if (ret0)
+	//	return (int) ret0; 
+
+	/* FIXME: if any of the attetations fail, we should yield the other one */
+	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
+					WRITE_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest secure ipc send queue access\n", __func__);
+		return ERR_FAULT;
+	}
+
+	/* FIXME
+	attest_ret = mailbox_attest_queue_access(q_runtime,
+					WRITE_ACCESS, count, other runtime);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest secure ipc recv queue access\n", __func__);
+		return ERR_FAULT;
+	}*/
+
+	secure_ipc_mode = true;
+	secure_ipc_target_queue = target_runtime_queue_id;
+
+	return 0;
+}
+
+static int yield_secure_ipc(void)
+{
+	uint8_t qid = secure_ipc_target_queue;
+	secure_ipc_target_queue = 0;
+	secure_ipc_mode = false;
+	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
+	return 0;
+}
+
+static int send_msg_on_secure_ipc(char *msg, int size)
+{
+	uint8_t opcode[2];
+	if (!secure_ipc_mode)
+		return ERR_UNEXPECTED;
+
+	IPC_SET_ZERO_ARGS_DATA(msg, size)
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = secure_ipc_target_queue;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
+
+static int recv_msg_on_secure_ipc(char *msg, int *size)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t opcode[2], interrupt;
+	/* wait for message */
+	read(fd_intr, &interrupt, 1);
+	if (!(interrupt == q_runtime)) {
+		printf("Interrupt from an unexpected queue\n");
+		_exit(-1);
+		return ERR_UNEXPECTED;
+	}
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = q_runtime;
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+	IPC_GET_ZERO_ARGS_DATA
+
+	memcpy(msg, data, data_size);
+	*size = data_size;
+
+	return 0;
+}
+
+static uint8_t get_runtime_proc_id(void)
+{
+	return (uint8_t) p_runtime;	
+}
+
+static uint8_t get_runtime_queue_id(void)
+{
+	return (uint8_t) q_runtime;
+}
+
 typedef void (*app_main_proc)(struct runtime_api *);
 
 static void load_application(char *msg)
@@ -484,6 +619,12 @@ static void load_application(char *msg)
 		.yield_secure_storage = yield_secure_storage,
 		.write_to_secure_storage = write_to_secure_storage,
 		.read_from_secure_storage = read_from_secure_storage,
+		.request_secure_ipc = request_secure_ipc,
+		.yield_secure_ipc = yield_secure_ipc,
+		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
+		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
+		.get_runtime_proc_id = get_runtime_proc_id,
+		.get_runtime_queue_id = get_runtime_queue_id,
 	};
 
 	strcat(path, msg);

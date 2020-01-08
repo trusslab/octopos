@@ -381,12 +381,32 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 		    proc_id == P_OS &&
 		    queues[Q_STORAGE_OUT_2].access_count == 0)
 			allowed = true;
+	} else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS) {
+		if (queues[Q_RUNTIME1].writer_id == P_OS &&
+		    (proc_id == P_RUNTIME2))
+			allowed = true;
+
+		if ((queues[Q_RUNTIME1].writer_id == P_RUNTIME2) &&
+		    proc_id == P_OS &&
+		    queues[Q_RUNTIME1].access_count == 0)
+			allowed = true;
+	} else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS) {
+		if (queues[Q_RUNTIME2].writer_id == P_OS &&
+		    (proc_id == P_RUNTIME1))
+			allowed = true;
+
+		if ((queues[Q_RUNTIME2].writer_id == P_RUNTIME1) &&
+		    proc_id == P_OS &&
+		    queues[Q_RUNTIME2].access_count == 0)
+			allowed = true;
 	}
 	
 	if (!allowed) {		
 		printf("Error: invalid config option by os\n");
 		return;
 	}
+
+	/* FIXME: do we need to zero out the queue? */
 
 	if (access == READ_ACCESS)
 		queues[(int) queue_id].reader_id = proc_id;
@@ -396,25 +416,33 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 	queues[(int) queue_id].access_count = count;
 }
 
-static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t requesting_proc_id)
 {
 	bool allowed = false;
 	/* sanity checks */
 	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS &&
 	    (queues[Q_SERIAL_OUT].writer_id == P_RUNTIME1 || queues[Q_SERIAL_OUT].writer_id == P_RUNTIME2) &&
-	    proc_id == P_OS)
+	    queues[Q_SERIAL_OUT].writer_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_KEYBOARD && access == READ_ACCESS &&
 		 (queues[Q_KEYBOARD].reader_id == P_RUNTIME1 || queues[Q_KEYBOARD].reader_id == P_RUNTIME2) &&
-		 proc_id == P_OS)
+		 queues[Q_KEYBOARD].reader_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS && 
 		 (queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME1 || queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME2) &&
-		 proc_id == P_OS)
+		 queues[Q_STORAGE_IN_2].writer_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS &&
 		 (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME1 || queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME2) &&
-		 proc_id == P_OS)
+		 queues[Q_STORAGE_OUT_2].reader_id == requesting_proc_id && proc_id == P_OS)
+			allowed = true;
+	else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS &&
+		 (queues[Q_RUNTIME1].writer_id == P_RUNTIME1 || queues[Q_RUNTIME1].writer_id == P_RUNTIME2) &&
+		 queues[Q_RUNTIME1].writer_id == requesting_proc_id && proc_id == P_OS)
+			allowed = true;
+	else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS &&
+		 (queues[Q_RUNTIME2].writer_id == P_RUNTIME1 || queues[Q_RUNTIME2].writer_id == P_RUNTIME2) &&
+		 queues[Q_RUNTIME2].writer_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	
 	if (!allowed) {		
@@ -422,36 +450,52 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 		return;
 	}
 
+	/* FIXME: do we need to zero out the queue? */
+
 	if (access == READ_ACCESS)
 		queues[(int) queue_id].reader_id = proc_id;
 	else /* access == WRITER_ACCESS */
 		queues[(int) queue_id].writer_id = proc_id;
 
+	/* FIXME: interrupt proc_id so that it knows it has access now? */
+
 	queues[(int) queue_id].access_count = 0; /* irrelevant in this case */
 }
 
-static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count, uint8_t proc_id)
+static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count, uint8_t requesting_proc_id)
 {
 	if (queue_id == Q_KEYBOARD && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == proc_id &&
+		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
 			return 0;
 	} else if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == proc_id &&
+		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
 			return 0;
 	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == proc_id &&
+		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
 			return 0;
 	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == proc_id &&
+		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	} else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS) {
+		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	} else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS) {
+		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
@@ -564,7 +608,7 @@ int main(int argc, char **argv)
 				uint8_t opcode_rest[2];
 				memset(opcode_rest, 0x0, 2);
 				read(processors[P_RUNTIME1].out_handle, opcode_rest, 2);
-				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
+				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME1);				
 			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
 				uint8_t opcode_rest[2];
 				memset(opcode_rest, 0x0, 2);
@@ -593,7 +637,7 @@ int main(int argc, char **argv)
 				uint8_t opcode_rest[2];
 				memset(opcode_rest, 0x0, 2);
 				read(processors[P_RUNTIME2].out_handle, opcode_rest, 2);
-				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1]);				
+				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME2);				
 			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
 				uint8_t opcode_rest[2];
 				memset(opcode_rest, 0x0, 2);

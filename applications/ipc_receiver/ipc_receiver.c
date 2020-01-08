@@ -21,12 +21,38 @@ void app_main(struct runtime_api *api)
 {
 	char line[1024];
 	int size;
+	uint8_t target_qid = 0;
+	uint8_t own_qid = api->get_runtime_queue_id();
 
 	/* receive message */
-	api->read_from_shell(line, &size);
+	int ret = api->read_from_shell(line, &size);
+	if (ret || size == 0) {
+		printf("Didn't receive a valid response\n");
+		return;
+	}
+
+	target_qid = line[0];
+	printf("Received response: target_qid = %d (size = %d)\n", target_qid, size);
 
 	/* send response */
-	insecure_printf("Received message: %s (size = %d)\n", line, size);
+	insecure_printf("%c", own_qid);
 
-	printf("finished\n");
+	/* secure IPC */
+	ret = api->request_secure_ipc(target_qid, 200);
+	if (ret) {
+		printf("Couldn't establish secure IPC (ret = %d)\n", ret);
+		return;
+	}
+
+	char secure_msg[64];
+	int secure_msg_size;
+
+	api->recv_msg_on_secure_ipc(secure_msg, &secure_msg_size);
+	printf("Received secure msg: %s (size = %d)\n", secure_msg, secure_msg_size);
+
+	strcpy(secure_msg, "secure msg 2");
+	secure_msg_size = sizeof("secure msg 2");
+	api->send_msg_on_secure_ipc(secure_msg, secure_msg_size);
+
+	api->yield_secure_ipc();
 }

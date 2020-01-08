@@ -24,6 +24,9 @@ uint32_t file_system_open_file(char *filename);
 int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset);
 int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset);
 int file_system_close_file(uint32_t fd);
+uint8_t get_runtime_queue_id(uint8_t runtime_proc_id);
+bool is_valid_runtime_queue_id(int queue_id);
+int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id, uint8_t runtime_proc_id, int count, bool *no_response);
 
 #define SYSCALL_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
@@ -105,6 +108,13 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	send_msg_to_runtime(runtime_proc_id, buf);
 }
 
+void syscall_request_secure_ipc_response(uint8_t runtime_proc_id, int ret)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	SYSCALL_SET_ONE_RET((uint32_t) ret)
+	send_msg_to_runtime(runtime_proc_id, buf);
+}
+
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response)
 {
 	uint16_t syscall_nr;
@@ -123,6 +133,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+		/* FIXME: Check to make sure secure serial_out is available */
+
 		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -136,6 +148,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
+
+		/* FIXME: Check to make sure secure keyboard is available */
 
 		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
@@ -241,9 +255,44 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+		/* FIXME: Check to make sure secure storage is available */
+
 		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+	case SYSCALL_REQUEST_SECURE_IPC: {
+		SYSCALL_GET_TWO_ARGS
+		uint8_t target_runtime_queue_id = arg0;
+		uint32_t count = arg1;
+		uint32_t runtime_queue_id = 0;
+
+		/* No more than 200 block reads/writes */
+		if (count > 200) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		if (!is_valid_runtime_queue_id(target_runtime_queue_id)) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		runtime_queue_id = get_runtime_queue_id(runtime_proc_id);
+		if (!runtime_queue_id) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			break;
+		}
+
+		int ret = set_up_secure_ipc(target_runtime_queue_id, runtime_queue_id, runtime_proc_id, count, no_response);
+		if (ret) {
+			SYSCALL_SET_ONE_RET((uint32_t) ret)
+			break;
+		}
+
+		if (!(*no_response))
+			SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	default:

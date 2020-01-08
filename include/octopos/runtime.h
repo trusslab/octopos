@@ -24,8 +24,12 @@ struct runtime_api {
 	int (*read_from_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
 
 	/* secure IPC */
-	//int (*request_secure_ipc)(uint8_t runtime_proc_id, int count);
-	//int (*yield_secure_ipc)(void);
-	//void (*send_msg_on_secure_ipc)(char *buf);
-	//void (*recv_msg_on_secure_ipc)(char *buf);
+	int (*request_secure_ipc)(uint8_t target_runtime_queue_id, int count);
+	int (*yield_secure_ipc)(void);
+	int (*send_msg_on_secure_ipc)(char *msg, int size);
+	int (*recv_msg_on_secure_ipc)(char *msg, int *size);
+
+	/* Local APIs */
+	uint8_t (*get_runtime_proc_id)(void);
+	uint8_t (*get_runtime_queue_id)(void);
 };

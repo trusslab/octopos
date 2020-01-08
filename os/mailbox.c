@@ -73,6 +73,7 @@ int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	/* FIXME: use get_runtime_queue_id() */
 	switch(runtime_proc_id) {
 	case P_RUNTIME1:
 		opcode[1] = Q_RUNTIME1;

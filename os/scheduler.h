@@ -30,4 +30,5 @@ struct runtime_proc {
 	uint8_t id;
 	int state;
 	struct app *app;
+	uint8_t pending_secure_ipc_request;
 };
