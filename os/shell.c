@@ -17,6 +17,8 @@
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
 #include "scheduler.h" 
+#include "syscall.h" 
+#include "mailbox.h" 
 
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];
@@ -36,20 +38,7 @@ int shell_status = SHELL_STATE_WAITING_FOR_CMD;
 
 /* FIXME: move all mailbox-related stuff out of shell */
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
-
-/* FIXME: move to header file */
-int sched_create_app(char *app_name);
-int sched_connect_apps(int input_app_id, int output_app_id, int two_way);
-int sched_run_app(int app_id);
-void sched_clean_up_app(uint8_t runtime_proc_id);
-struct runtime_proc *get_runtime_proc(int id);
-
-int send_output(uint8_t *buf);
 #define output_printf(fmt, args...) {memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE); sprintf(output_buf, fmt, ##args); send_output((uint8_t *) output_buf);}
-
-/* FIXME: move to a header file */
-void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size);
-struct app *get_app(int app_id);
 
 /*
  * Handle commands separatly

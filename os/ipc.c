@@ -10,14 +10,8 @@
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
 #include "scheduler.h"
-
-/* FIXME: move to header file */
-void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size);
-void syscall_request_secure_ipc_response(uint8_t runtime_proc_id, int ret);
-struct app *get_app(int app_id);
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count);
-struct runtime_proc *get_runtime_proc(int id);
-uint8_t get_runtime_proc_id(uint8_t runtime_queue_id);
+#include "syscall.h"
+#include "mailbox.h"
 
 int ipc_send_data(struct app *sender, uint8_t *data, int data_size)
 {
@@ -62,7 +56,8 @@ void ipc_receive_data(struct app *receiver)
 	}
 }
 
-int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id, uint8_t runtime_proc_id, int count, bool *no_response)
+int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
+		      uint8_t runtime_proc_id, int count, bool *no_response)
 {
 	uint8_t target_proc_id = get_runtime_proc_id(target_runtime_queue_id);
 	*no_response = false;

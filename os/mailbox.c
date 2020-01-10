@@ -12,6 +12,10 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
+#include "scheduler.h"
+#include "shell.h"
+#include "file_system.h"
+#include "syscall.h"
 
 int fd_out;
 int fd_in;
@@ -127,14 +131,6 @@ int send_msg_to_storage(uint8_t *buf)
 
 	return 0;
 }
-
-/* FIXME: move to header files */
-void initialize_shell(void);
-void shell_process_input(char buf);
-void process_system_call(uint8_t *buf);
-void initialize_file_system(void);
-void initialize_scheduler(void);
-void sched_next_app(void);
 
 static void distribute_input(void)
 {

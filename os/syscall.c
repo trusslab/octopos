@@ -14,19 +14,10 @@
 #include <octopos/syscall.h>
 #include <octopos/error.h>
 #include "scheduler.h"
-
-/* FIXME: move to header file */
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count);
-void inform_shell_of_termination(uint8_t runtime_proc_id);
-int app_write_to_shell(struct app *app, uint8_t *data, int size);
-int app_read_from_shell(struct app *app);
-uint32_t file_system_open_file(char *filename);
-int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset);
-int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset);
-int file_system_close_file(uint32_t fd);
-uint8_t get_runtime_queue_id(uint8_t runtime_proc_id);
-bool is_valid_runtime_queue_id(int queue_id);
-int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id, uint8_t runtime_proc_id, int count, bool *no_response);
+#include "ipc.h"
+#include "mailbox.h"
+#include "shell.h"
+#include "file_system.h"
 
 #define SYSCALL_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
@@ -93,25 +84,12 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 	}							\
 	data = &buf[12];					\
 
-/* FIXME: move to header file */
-int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf);
-struct runtime_proc *get_runtime_proc(int id);
-int ipc_send_data(struct app *sender, uint8_t *data, int data_size);
-void ipc_receive_data(struct app *receiver);
-
 /* response for async syscalls */
 void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	SYSCALL_SET_ONE_RET_DATA(0, line, size)
 	/* FIXME: we need to send msg to runtime proc that issues the syscall */
-	send_msg_to_runtime(runtime_proc_id, buf);
-}
-
-void syscall_request_secure_ipc_response(uint8_t runtime_proc_id, int ret)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	SYSCALL_SET_ONE_RET((uint32_t) ret)
 	send_msg_to_runtime(runtime_proc_id, buf);
 }
 

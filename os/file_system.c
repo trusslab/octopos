@@ -13,12 +13,10 @@
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include "mailbox.h"
 
 #define PARTITION_SIZE		100 /* blocks */
 #define BLOCK_SIZE		32  /* bytes */
-
-/* FIXME: move to header file */
-int send_msg_to_storage(uint8_t *buf);
 
 struct file {
 	char filename[256];

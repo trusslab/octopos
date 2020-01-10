@@ -9,6 +9,7 @@
 #include <sys/select.h>
 #include <octopos/error.h>
 #include "scheduler.h"
+#include "mailbox.h"
 
 
 #define MAX_NUM_APPS	64 /* must be divisible by 8 */
@@ -26,9 +27,6 @@ uint8_t RUNTIME_PROC_IDS[NUM_RUNTIME_PROCS] = {P_RUNTIME1, P_RUNTIME2};
 uint8_t RUNTIME_QUEUE_IDS[NUM_RUNTIME_PROCS] = {Q_RUNTIME1, Q_RUNTIME2};
 
 struct runtime_proc *runtime_procs = NULL;
-
-/* FIXME: move to header file */
-int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf);
 
 uint8_t get_runtime_queue_id(uint8_t runtime_proc_id)
 {
