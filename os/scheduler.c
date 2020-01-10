@@ -169,7 +169,7 @@ static int remove_app_from_list(struct app *app)
 	     node = node->next) {
 		if (node->app == app) {
 			if (prev_node == NULL) { /* removing head */
-				if (app_list_head == app_list_tail) { /* last node */
+				if (node == app_list_tail) { /* last node */
 					app_list_head = NULL;
 					app_list_tail = NULL;
 				} else {
@@ -177,6 +177,9 @@ static int remove_app_from_list(struct app *app)
 				}
 			} else {
 				prev_node->next = node->next;
+				if (node == app_list_tail) {
+					app_list_tail = prev_node;
+				}
 			}
 
 			return 0;

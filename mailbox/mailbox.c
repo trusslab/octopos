@@ -414,6 +414,9 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 		queues[(int) queue_id].writer_id = proc_id;
 
 	queues[(int) queue_id].access_count = count;
+
+	if (queue_id == Q_RUNTIME1 || queue_id == Q_RUNTIME2)
+		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id + 1);
 }
 
 static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t requesting_proc_id)
@@ -440,13 +443,19 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 		 (queues[Q_RUNTIME1].writer_id == P_RUNTIME1 || queues[Q_RUNTIME1].writer_id == P_RUNTIME2) &&
 		 queues[Q_RUNTIME1].writer_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
+	else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS &&
+		 requesting_proc_id == P_RUNTIME1 && proc_id == P_OS)
+			allowed = true;
 	else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS &&
 		 (queues[Q_RUNTIME2].writer_id == P_RUNTIME1 || queues[Q_RUNTIME2].writer_id == P_RUNTIME2) &&
 		 queues[Q_RUNTIME2].writer_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
+	else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS &&
+		 requesting_proc_id == P_RUNTIME2 && proc_id == P_OS)
+			allowed = true;
 	
 	if (!allowed) {		
-		printf("Error: invalid config option by runtime\n");
+		printf("Error: invalid config option by runtime (might not be an error in case of secure IPC)\n");
 		return;
 	}
 

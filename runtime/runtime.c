@@ -202,21 +202,34 @@ static void issue_syscall(uint8_t *buf)
 
 	/* wait for response */
 	read(fd_intr, &interrupt, 1);
+	/* FIXME: check that it's the right interrupt */
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = q_runtime;
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
-static void issue_syscall_noresponse(uint8_t *buf)
+static void issue_syscall_noresponse(uint8_t *buf, bool *no_response)
 {
-	uint8_t opcode[2];
+	uint8_t opcode[2], interrupt;
+	*no_response = false;
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_OS;
 	write(fd_out, opcode, 2);
 	buf[0] = p_runtime; /* FIXME: can't be set by RUNTIME itself */
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	/* wait for response */
+	read(fd_intr, &interrupt, 1);
+	if (interrupt == q_runtime) {
+		opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+		opcode[1] = q_runtime;
+		write(fd_out, opcode, 2), 
+		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+	} else { /* q_runtime + 1 */
+		*no_response = true;
+	}
 }
 
 static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
@@ -507,13 +520,15 @@ static uint8_t secure_ipc_target_queue = 0;
 
 static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 {
+	bool no_response;
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_IPC, target_runtime_queue_id, count)
 	/* FIXME: the OS might need to return an error */
-	issue_syscall_noresponse(buf);
-	sleep(1); /* FIXME: this is needed because we don't properly wait for a response */
-	//SYSCALL_GET_ONE_RET
-	//if (ret0)
-	//	return (int) ret0; 
+	issue_syscall_noresponse(buf, &no_response);
+	if (!no_response) {
+		/* error */
+		SYSCALL_GET_ONE_RET
+		return (int) ret0;
+	}
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
@@ -543,6 +558,7 @@ static int yield_secure_ipc(void)
 	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
 	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(q_runtime, WRITE_ACCESS, P_OS);
 	return 0;
 }
 

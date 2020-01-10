@@ -81,7 +81,6 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 		mailbox_change_queue_access(runtime_queue_id, WRITE_ACCESS,
 							target_runtime_proc->id, (uint8_t) count);
 		target_runtime_proc->pending_secure_ipc_request = 0;
-		//syscall_request_secure_ipc_response(target_runtime_proc->id, 0);
 		*no_response = true;
 	} else {
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
