@@ -11,7 +11,6 @@
 #include "scheduler.h"
 #include "mailbox.h"
 
-
 #define MAX_NUM_APPS	64 /* must be divisible by 8 */
 uint8_t app_id_bitmap[MAX_NUM_APPS / 8];
 

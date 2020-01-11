@@ -83,7 +83,7 @@ int fd_out, fd_in, fd_intr;
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 static void initialize_storage_space(void)
 {
-	partitions[0].size = 100;
+	partitions[0].size = 1000;
 	memset(partitions[0].data_name, 0x0, 256);
 	strcpy(partitions[0].data_name, "octopos_partition_1_data");
 	memset(partitions[0].lock_name, 0x0, 256);
