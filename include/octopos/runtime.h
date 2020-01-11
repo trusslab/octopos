@@ -12,7 +12,7 @@ struct runtime_api {
 	int (*read_from_shell)(char *data, int *data_size);
 
 	/* file system */
-	uint32_t (*open_file)(char *filename);
+	uint32_t (*open_file)(char *filename, uint32_t mode);
 	int (*write_to_file)(uint32_t fd, uint8_t *data, int size, int offset);
 	int (*read_from_file)(uint32_t fd, uint8_t *data, int size, int offset);
 	int (*close_file)(uint32_t fd);
@@ -33,3 +33,7 @@ struct runtime_api {
 	uint8_t (*get_runtime_proc_id)(void);
 	uint8_t (*get_runtime_queue_id)(void);
 };
+
+/* file open modes */
+#define FILE_OPEN_MODE		0
+#define FILE_OPEN_CREATE_MODE	1

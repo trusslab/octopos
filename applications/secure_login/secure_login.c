@@ -47,7 +47,7 @@ void app_main(struct runtime_api *api)
 		return;
 	}
 	
-	uint32_t fd = api->open_file((char *) "test_file_1.txt");
+	uint32_t fd = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
 	if (fd == 0)
 		secure_printf("Couldn't open file (fd = %d)\n", fd);
 	api->read_from_file(fd, (uint8_t *) &secret, 4, 0);

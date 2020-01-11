@@ -65,6 +65,24 @@
 	}							\
 	data = &buf[4];						\
 
+#define SYSCALL_GET_ONE_ARG_DATA				\
+	uint32_t arg0;						\
+	uint8_t data_size, *data;				\
+	arg0 = *((uint32_t *) &buf[3]);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 8;		\
+	if (max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
+	}							\
+	data_size = buf[7];					\
+	if (data_size > max_size) {				\
+		printf("Error: size not supported\n");		\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
+	}							\
+	data = &buf[8];						\
+
 #define SYSCALL_GET_TWO_ARGS_DATA				\
 	uint32_t arg0, arg1;					\
 	uint8_t data_size, *data;				\
@@ -175,7 +193,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_OPEN_FILE: {
-		SYSCALL_GET_ZERO_ARGS_DATA
+		SYSCALL_GET_ONE_ARG_DATA
+		uint32_t mode = arg0;
 		char filename[256];
 		if (data_size >= 256) {
 			printf("Error: filename is too large\n");
@@ -184,7 +203,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		memcpy(filename, data, data_size);
 		/* playing it safe */
 		filename[data_size] = '\0';
-		uint32_t fd = file_system_open_file(filename);
+		uint32_t fd = file_system_open_file(filename, mode);
 		SYSCALL_SET_ONE_RET(fd)
 		break;
 	}
