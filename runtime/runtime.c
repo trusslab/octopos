@@ -62,6 +62,23 @@ char fifo_runtime_intr[64];
 	buf[3] = size;								\
 	memcpy(&buf[4], (uint8_t *) data, size);				\
 
+#define SYSCALL_SET_ONE_ARG_DATA(syscall_nr, arg0, data, size)			\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 8;				\
+	if (max_size >= 256) {							\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return ERR_INVALID;						\
+	}									\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return ERR_INVALID;						\
+	}									\
+	*((uint16_t *) &buf[1]) = syscall_nr;					\
+	*((uint32_t *) &buf[3]) = arg0;						\
+	buf[7] = size;								\
+	memcpy(&buf[8], (uint8_t *) data, size);				\
+
 #define SYSCALL_SET_TWO_ARGS_DATA(syscall_nr, arg0, arg1, data, size)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
@@ -354,9 +371,9 @@ static int read_from_shell(char *data, int *data_size)
 	return (int) ret0;
 }
 
-static uint32_t open_file(char *filename)
+static uint32_t open_file(char *filename, uint32_t mode)
 {
-	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_OPEN_FILE, filename, strlen(filename))
+	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return ret0; 
@@ -385,6 +402,14 @@ static int close_file(uint32_t fd)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return (int) ret0;
+}
+
+static int remove_file(char *filename)
+{
+	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_REMOVE_FILE, filename, strlen(filename))
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
 }
 
 /* FIXME: (mostly) copied from os/mailbox.c */
@@ -631,6 +656,7 @@ static void load_application(char *msg)
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
 		.close_file = close_file,
+		.remove_file = remove_file,
 		.request_secure_storage = request_secure_storage,
 		.yield_secure_storage = yield_secure_storage,
 		.write_to_secure_storage = write_to_secure_storage,

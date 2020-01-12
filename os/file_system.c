@@ -15,18 +15,7 @@
 #include <octopos/error.h>
 #include "mailbox.h"
 
-#define PARTITION_SIZE		100 /* blocks */
-#define BLOCK_SIZE		32  /* bytes */
-
-struct file {
-	char filename[256];
-	int start_block;
-	int num_blocks;
-	bool opened;
-};
-
-#define NUM_FILES		3
-struct file files[NUM_FILES];
+#define PARTITION_SIZE		1000 /* blocks */
 
 #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
@@ -72,38 +61,125 @@ struct file files[NUM_FILES];
 	}									\
 	memcpy(data, &buf[5], _size);						\
 
+#define MAX_FILENAME_SIZE	256
 
-void initialize_file_system(void)
+struct file {
+	char filename[MAX_FILENAME_SIZE];
+	int start_block;
+	int num_blocks;
+	int dir_data_off;
+	bool opened;
+};
+
+/* FIXME: use per-process fd */
+#define MAX_NUM_FD	64 /* must be divisible by 8 */
+uint8_t fd_bitmap[MAX_NUM_FD / 8];
+
+struct file *file_array[MAX_NUM_FD];
+
+struct file_list_node {
+	struct file *file;
+	struct file_list_node *next;
+};
+
+struct file_list_node *file_list_head = NULL;
+struct file_list_node *file_list_tail = NULL;
+
+/* FIXME: too small */
+#define DIR_DATA_NUM_BLOCKS	16
+#define DIR_DATA_SIZE		DIR_DATA_NUM_BLOCKS * STORAGE_BLOCK_SIZE
+uint8_t dir_data[DIR_DATA_SIZE];
+int dir_data_ptr = 0;
+
+static int get_unused_fd(void)
 {
-	/* read the partition table */
-	/* dummy implementation for now */
-	strcpy(files[0].filename, "test_file_1.txt");
-	files[0].start_block = 0;
-	files[0].num_blocks = 20;
-	files[0].opened = false;
+	for (int i = 0; i < (MAX_NUM_FD / 8); i++) {
+		if (fd_bitmap[i] == 0xFF)
+			continue;
 
-	strcpy(files[1].filename, "test_file_2.txt");
-	files[1].start_block = 20;
-	files[1].num_blocks = 50;
-	files[1].opened = false;
+		uint8_t mask = 0b00000001;
+		for (int j = 0; j < 8; j++) {
+			if (((uint8_t) (fd_bitmap[i] | ~mask)) != 0xFF) {
+				fd_bitmap[i] |= mask;
+				return (i * 8) + j + 1;
+			}
 
-	strcpy(files[2].filename, "test_file_3.txt");
-	files[2].start_block = 70;
-	files[2].num_blocks = 30;
-	files[2].opened = false;
-}
-
-uint32_t file_system_open_file(char *filename)
-{
-	for (int i = 0; i < NUM_FILES; i++) {
-		if (!strcmp(filename, files[i].filename)) {
-			files[i].opened = true;
-			return (uint32_t) i+1;
+			mask = mask << 1;
 		}
 	}
 
-	/* error */
-	return (uint32_t) 0;
+	return ERR_EXIST;
+}
+
+static void mark_fd_as_unused(int _fd)
+{
+	int fd = _fd - 1;
+
+	if (fd >= MAX_NUM_FD) {
+		printf("%s: Error: invalid fd %d\n", __func__, fd);
+		return;
+	}
+
+	int byte_off = fd / 8;
+	int bit_off = fd % 8;
+
+	uint8_t mask = 0b00000001;
+	for (int i = 0; i < bit_off; i++)
+		mask = mask << 1;
+
+	fd_bitmap[byte_off] &= ~mask;
+}
+
+static int add_file_to_list(struct file *file)
+{
+	struct file_list_node *node = 
+		(struct file_list_node *) malloc(sizeof(struct file_list_node));
+	if (!node)
+		return ERR_MEMORY;
+
+	node->file = file;
+	node->next = NULL;
+
+	if (file_list_head == NULL && file_list_tail == NULL) {
+		/* first node */
+		file_list_head = node;
+		file_list_tail = node;
+	} else {
+		file_list_tail->next = node;
+		file_list_tail = node;
+	}
+
+	return 0;
+}
+
+static int remove_file_from_list(struct file *file)
+{
+	struct file_list_node *prev_node = NULL;
+
+	for (struct file_list_node *node = file_list_head; node;
+	     node = node->next) {
+		if (node->file == file) {
+			if (prev_node == NULL) { /* removing head */
+				if (node == file_list_tail) { /* last node */
+					file_list_head = NULL;
+					file_list_tail = NULL;
+				} else {
+					file_list_head = node->next;
+				}
+			} else {
+				prev_node->next = node->next;
+				if (node == file_list_tail) {
+					file_list_tail = prev_node;
+				}
+			}
+
+			return 0;
+		}
+
+		prev_node = node;
+	}
+
+	return ERR_EXIST;
 }
 
 static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
@@ -124,35 +200,222 @@ static int read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_off
 	return (int) ret0;
 }
 
+static void flush_dir_data_to_storage(void)
+{
+	for (int i = 0; i < DIR_DATA_NUM_BLOCKS; i++)
+		write_to_block(dir_data + (i * STORAGE_BLOCK_SIZE), i, 0, STORAGE_BLOCK_SIZE);
+}
+
+static void read_dir_data_from_storage(void)
+{
+	for (int i = 0; i < DIR_DATA_NUM_BLOCKS; i++)
+		read_from_block(dir_data + (i * STORAGE_BLOCK_SIZE), i, 0, STORAGE_BLOCK_SIZE);
+}
+
+static int add_file_to_directory(struct file *file)
+{
+	int filename_size = strlen(file->filename);
+	if (filename_size > MAX_FILENAME_SIZE)
+		return ERR_INVALID;
+
+	if ((dir_data_ptr + filename_size + 7) > DIR_DATA_SIZE)
+		return ERR_MEMORY;
+
+	int dir_data_off = dir_data_ptr;
+	*((uint16_t *) &dir_data[dir_data_ptr]) = filename_size;
+	dir_data_ptr += 2;
+
+	strcpy((char *) &dir_data[dir_data_ptr], file->filename);
+	dir_data_ptr = dir_data_ptr + filename_size + 1;
+
+	*((uint16_t *) &dir_data[dir_data_ptr]) = file->start_block;
+	dir_data_ptr += 2;
+	*((uint16_t *) &dir_data[dir_data_ptr]) = file->num_blocks;
+	dir_data_ptr += 2;
+
+	/* increment number of files */
+	(*((uint16_t *) &dir_data[4]))++;
+
+	flush_dir_data_to_storage();
+
+	file->dir_data_off = dir_data_off;
+
+	return 0;
+}
+
+static int remove_file_from_directory(struct file *file)
+{
+	int filename_size = *((uint16_t *) &dir_data[file->dir_data_off]);
+
+	int file_dir_info_size = filename_size + 7;
+	if ((file->dir_data_off + file_dir_info_size) > DIR_DATA_SIZE)
+		return ERR_FAULT;
+
+	memset(dir_data + file->dir_data_off, 0x0, file_dir_info_size);
+
+	if ((file->dir_data_off + file_dir_info_size) < (DIR_DATA_SIZE - 1)) {
+		/* need to shift */
+		int shift_size = DIR_DATA_SIZE - (file->dir_data_off + file_dir_info_size);
+		memcpy(dir_data + file->dir_data_off, dir_data + file->dir_data_off + file_dir_info_size, shift_size);
+
+		/* update the dir_data_off in all other files */
+		for (struct file_list_node *node = file_list_head; node;
+		     node = node->next) {
+			if (node->file->dir_data_off > file->dir_data_off)
+				node->file->dir_data_off -= file_dir_info_size;
+		}
+	}
+
+	/* decrement number of files */
+	(*((uint16_t *) &dir_data[4]))--;
+
+	dir_data_ptr -= file_dir_info_size;
+	flush_dir_data_to_storage();
+
+	return 0;
+}
+
+/* FIXME: inefficient and slow */
+static int alloc_blocks_for_file(struct file *file)
+{
+	int start_block = DIR_DATA_NUM_BLOCKS;
+	int num_blocks = 10; /* fixed for now */
+	bool found = false;
+
+	while ((start_block + num_blocks) <= STORAGE_MAIN_PARTITION_SIZE) {
+		bool used = false;
+		for (struct file_list_node *node = file_list_head; node;
+		     node = node->next) {
+			if (node->file->start_block == start_block) {
+				used = true;
+				break;
+			}
+		}
+
+		if (!used) {
+			found = true;
+			break;
+		}
+
+		start_block += num_blocks;
+	}
+
+	if (found) {
+		file->start_block = start_block;
+		file->num_blocks = num_blocks;
+		return 0;
+	} else {
+		return ERR_FOUND;
+	}
+}
+
+static void release_file_blocks(struct file *file)
+{
+	/* No op */
+}
+
+/* file open modes */
+#define FILE_OPEN_MODE		0
+#define FILE_OPEN_CREATE_MODE	1
+
+uint32_t file_system_open_file(char *filename, uint32_t mode)
+{
+	struct file *file = NULL;
+	if (!(mode == FILE_OPEN_MODE || mode == FILE_OPEN_CREATE_MODE)) {
+		printf("Error: invalid mode for opening a file\n");
+		return (uint32_t) 0;
+	}
+
+	for (struct file_list_node *node = file_list_head; node;
+	     node = node->next) {
+		if (!strcmp(node->file->filename, filename)) {
+			if (node->file->opened)
+				/* error */
+				return (uint32_t) 0;
+
+			file = node->file;			
+		}
+	}
+
+	if (file == NULL && mode == FILE_OPEN_CREATE_MODE) {
+		file = (struct file *) malloc(sizeof(struct file));
+		if (!file)
+			return (uint32_t) 0;
+
+		strcpy(file->filename, filename);
+
+		int ret = alloc_blocks_for_file(file);
+		if (ret) {
+			free(file);
+			return (uint32_t) 0;
+		}
+
+		ret = add_file_to_directory(file);
+		if (ret) {
+			release_file_blocks(file);
+			free(file);
+			return (uint32_t) 0;
+		}
+
+		add_file_to_list(file);
+	}
+
+	if (file) {
+		int ret = get_unused_fd();
+		if (ret < 0)
+			return (uint32_t) 0;
+
+		uint32_t fd = (uint32_t) ret;
+		if (fd == 0 || fd >= MAX_NUM_FD)
+			return (uint32_t) 0;
+		
+		/* Shouldn't happen, but let's check. */
+		if (file_array[fd])
+			return (uint32_t) 0;
+
+		file_array[fd] = file;
+		file->opened = true;
+
+		return fd;
+	}
+
+	/* error */
+	return (uint32_t) 0;
+}
+
 int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 {
-	if (fd < 1 && fd > 3) {
+	if (fd == 0 || fd >= MAX_NUM_FD) { 
+		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		return 0;
+	}
+
+	struct file *file = file_array[fd];
+	if (!file) {
 		printf("%s: Error: invalid fd\n", __func__);
 		return 0;
 	}
 
-	int f_index = fd - 1;
-
-	if (!files[f_index].opened) {
-		printf("%s: Error: file not opened\n", __func__);
+	if (!file->opened) {
+		printf("%s: Error: file not opened!\n", __func__);
 		return 0;
 	}
 
-	if ((files[f_index].num_blocks * BLOCK_SIZE) - offset < size) {
+	if ((file->num_blocks * STORAGE_BLOCK_SIZE) - offset < size) {
 		printf("%s: Error: invalid size/offset\n", __func__);
 		return 0;
 	}
 
-	int block_num = offset / BLOCK_SIZE;
-	int block_offset = offset % BLOCK_SIZE;
+	int block_num = offset / STORAGE_BLOCK_SIZE;
+	int block_offset = offset % STORAGE_BLOCK_SIZE;
 	int written_size = 0;
-	int next_write_size = BLOCK_SIZE - block_offset;
+	int next_write_size = STORAGE_BLOCK_SIZE - block_offset;
 	if (next_write_size > size)
 		next_write_size = size;
 	int ret = 0;
 
 	while (written_size < size) {
-		ret = write_to_block(&data[written_size], (uint32_t) files[f_index].start_block + block_num,
+		ret = write_to_block(&data[written_size], (uint32_t) file->start_block + block_num,
 				(uint32_t) block_offset, (uint32_t) next_write_size);
 		if (ret != next_write_size) {
 			written_size += ret;
@@ -161,8 +424,8 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 		written_size += next_write_size;
 		block_num++;
 		block_offset = 0;
-		if ((size - written_size) >= BLOCK_SIZE)
-			next_write_size = BLOCK_SIZE - block_offset;
+		if ((size - written_size) >= STORAGE_BLOCK_SIZE)
+			next_write_size = STORAGE_BLOCK_SIZE - block_offset;
 		else
 			next_write_size = (size - written_size);
 	}
@@ -173,33 +436,37 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 
 int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 {
-	if (fd < 1 && fd > 3) {
+	if (fd == 0 || fd >= MAX_NUM_FD) { 
+		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		return 0;
+	}
+
+	struct file *file = file_array[fd];
+	if (!file) {
 		printf("%s: Error: invalid fd\n", __func__);
 		return 0;
 	}
 
-	int f_index = fd - 1;
-
-	if (!files[f_index].opened) {
-		printf("%s: Error: file not opened\n", __func__);
+	if (!file->opened) {
+		printf("%s: Error: file not opened!\n", __func__);
 		return 0;
 	}
 
-	if ((files[f_index].num_blocks * BLOCK_SIZE) - offset < size) {
+	if ((file->num_blocks * STORAGE_BLOCK_SIZE) - offset < size) {
 		printf("%s: Error: invalid size/offset\n", __func__);
 		return 0;
 	}
 
-	int block_num = offset / BLOCK_SIZE;
-	int block_offset = offset % BLOCK_SIZE;
+	int block_num = offset / STORAGE_BLOCK_SIZE;
+	int block_offset = offset % STORAGE_BLOCK_SIZE;
 	int read_size = 0;
-	int next_read_size = BLOCK_SIZE - block_offset;
+	int next_read_size = STORAGE_BLOCK_SIZE - block_offset;
 	if (next_read_size > size)
 		next_read_size = size;
 	int ret = 0;
 
 	while (read_size < size) {
-		ret = read_from_block(&data[read_size], (uint32_t) files[f_index].start_block + block_num,
+		ret = read_from_block(&data[read_size], (uint32_t) file->start_block + block_num,
 				(uint32_t) block_offset, (uint32_t) next_read_size);
 		if (ret != next_read_size) {
 			read_size += ret;
@@ -208,8 +475,8 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 		read_size += next_read_size;
 		block_num++;
 		block_offset = 0;
-		if ((size - read_size) >= BLOCK_SIZE)
-			next_read_size = BLOCK_SIZE - block_offset;
+		if ((size - read_size) >= STORAGE_BLOCK_SIZE)
+			next_read_size = STORAGE_BLOCK_SIZE - block_offset;
 		else
 			next_read_size = (size - read_size);
 	}
@@ -219,7 +486,128 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 
 int file_system_close_file(uint32_t fd)
 {
-	int f_index = fd - 1;
-	files[f_index].opened = false;
+	if (fd == 0 || fd >= MAX_NUM_FD) { 
+		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		return ERR_INVALID;
+	}
+
+	struct file *file = file_array[fd];
+	if (!file) {
+		printf("%s: Error: invalid fd\n", __func__);
+		return ERR_INVALID;
+	}
+
+	if (!file->opened) {
+		printf("%s: Error: file not opened!\n", __func__);
+		return ERR_INVALID;
+	}
+
+	file->opened = false;
+	file_array[fd] = NULL;
+	mark_fd_as_unused(fd);
+
 	return 0;
+}
+
+int file_system_remove_file(char *filename)
+{
+	struct file *file = NULL;
+	for (struct file_list_node *node = file_list_head; node;
+	     node = node->next) {
+		if (!strcmp(node->file->filename, filename)) {
+			if (node->file->opened) {
+				printf("Error: can't remove an open file\n");
+				return ERR_INVALID;
+			}
+
+			file = node->file;			
+		}
+	}
+
+	if (file == NULL) {
+		printf("Error: file to be removed does not exist\n");
+		return ERR_INVALID;
+	}
+
+
+	int ret = remove_file_from_directory(file);
+	if (ret)
+		return ERR_FAULT;
+
+	release_file_blocks(file);
+	remove_file_from_list(file);
+
+	return 0;
+}
+
+void initialize_file_system(void)
+{
+	/* initialize fd bitmap */
+	if (MAX_NUM_FD % 8) {
+		printf("%s: Error: MAX_NUM_FD must be divisible by 8\n", __func__);
+		_exit(-1);
+	}
+
+	fd_bitmap[0] = 0x00000001; /* fd 0 is error */
+	for (int i = 1; i < (MAX_NUM_FD / 8); i++)
+		fd_bitmap[i] = 0;
+
+	/* wipe dir */
+	//memset(dir_data, 0x0, DIR_DATA_SIZE);
+	//flush_dir_data_to_storage();
+	//exit(-1);
+
+	/* read the directory */
+	read_dir_data_from_storage();
+
+	/* check to see if there's a valid directory */
+	if (dir_data[0] == '$' && dir_data[1] == '%' &&
+	    dir_data[2] == '^' && dir_data[3] == '&') {
+		/* retrieve file info */
+		uint16_t num_files = *((uint16_t *) &dir_data[4]);
+		dir_data_ptr = 6;
+
+		for (int i = 0; i < num_files; i++) {
+			int dir_data_off = dir_data_ptr;
+			if ((dir_data_ptr + 2) > DIR_DATA_SIZE)
+				break;
+			int filename_size = *((uint16_t *) &dir_data[dir_data_ptr]);
+			dir_data_ptr += 2;
+			if ((dir_data_ptr + filename_size + 5) > DIR_DATA_SIZE)
+				break;
+
+			if (filename_size > MAX_FILENAME_SIZE)
+				break;
+
+			struct file *file = (struct file *) malloc(sizeof(struct file));
+			if (!file)
+				break;
+
+			strcpy(file->filename, (char *) &dir_data[dir_data_ptr]);
+			dir_data_ptr = dir_data_ptr + filename_size + 1;
+
+			file->dir_data_off = dir_data_off;
+			file->start_block = *((uint16_t *) &dir_data[dir_data_ptr]);
+			dir_data_ptr += 2;
+			file->num_blocks = *((uint16_t *) &dir_data[dir_data_ptr]);
+			dir_data_ptr += 2;
+
+			add_file_to_list(file);
+		}
+	} else {
+		/* initialize signature */
+		dir_data[0] = '$';
+		dir_data[1] = '%';
+		dir_data[2] = '^';
+		dir_data[3] = '&';
+		/* set num files (two bytes) to 0 */
+		dir_data[4] = 0;
+		dir_data[5] = 0;
+		dir_data_ptr = 6;
+		/* update the directory in storage */
+		flush_dir_data_to_storage();
+	}
+
+	for (int i = 0; i < MAX_NUM_FD; i++)
+		file_array[i] = NULL;
 }
