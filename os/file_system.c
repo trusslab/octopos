@@ -16,7 +16,6 @@
 #include "mailbox.h"
 
 #define PARTITION_SIZE		1000 /* blocks */
-#define BLOCK_SIZE		32  /* bytes */
 
 #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
@@ -87,8 +86,9 @@ struct file_list_node *file_list_head = NULL;
 struct file_list_node *file_list_tail = NULL;
 
 /* FIXME: too small */
-#define DIR_BLOCK_SIZE 50
-uint8_t dir_data[DIR_BLOCK_SIZE];
+#define DIR_DATA_NUM_BLOCKS	16
+#define DIR_DATA_SIZE		DIR_DATA_NUM_BLOCKS * STORAGE_BLOCK_SIZE
+uint8_t dir_data[DIR_DATA_SIZE];
 int dir_data_ptr = 0;
 
 static int get_unused_fd(void)
@@ -200,6 +200,18 @@ static int read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_off
 	return (int) ret0;
 }
 
+static void flush_dir_data_to_storage(void)
+{
+	for (int i = 0; i < DIR_DATA_NUM_BLOCKS; i++)
+		write_to_block(dir_data + (i * STORAGE_BLOCK_SIZE), i, 0, STORAGE_BLOCK_SIZE);
+}
+
+static void read_dir_data_from_storage(void)
+{
+	for (int i = 0; i < DIR_DATA_NUM_BLOCKS; i++)
+		read_from_block(dir_data + (i * STORAGE_BLOCK_SIZE), i, 0, STORAGE_BLOCK_SIZE);
+}
+
 static int add_file_to_directory(struct file *file)
 {
 	int filename_size = strlen(file->filename);
@@ -208,7 +220,7 @@ static int add_file_to_directory(struct file *file)
 		return ERR_INVALID;
 	printf("%s [2]: dir_data_ptr = %d\n", __func__, dir_data_ptr);
 
-	if ((dir_data_ptr + filename_size + 7) > DIR_BLOCK_SIZE)
+	if ((dir_data_ptr + filename_size + 7) > DIR_DATA_SIZE)
 		return ERR_MEMORY;
 	printf("%s [3]\n", __func__);
 
@@ -227,41 +239,89 @@ static int add_file_to_directory(struct file *file)
 	/* increment number of files */
 	(*((uint16_t *) &dir_data[4]))++;
 
-	write_to_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
+	flush_dir_data_to_storage();
 
 	file->dir_data_off = dir_data_off;
+	printf("%s [4]: file->dir_data_off = %d\n", __func__, file->dir_data_off);
 
 	return 0;
 }
 
 static int remove_file_from_directory(struct file *file)
 {
+	printf("%s [0.1]: file->dir_data_off = %d\n", __func__, file->dir_data_off);
 	int filename_size = *((uint16_t *) &dir_data[file->dir_data_off]);
 	printf("%s [1]: filename_size = %d\n", __func__, filename_size);
 
 	int file_dir_info_size = filename_size + 7;
-	if ((file->dir_data_off + file_dir_info_size) > DIR_BLOCK_SIZE)
+	if ((file->dir_data_off + file_dir_info_size) > DIR_DATA_SIZE)
 		return ERR_FAULT;
 	printf("%s [2]\n", __func__);
 
 	memset(dir_data + file->dir_data_off, 0x0, file_dir_info_size);
 
-	if ((file->dir_data_off + file_dir_info_size) < (DIR_BLOCK_SIZE - 1)) {
+	if ((file->dir_data_off + file_dir_info_size) < (DIR_DATA_SIZE - 1)) {
 		/* need to shift */
 		printf("%s [3]\n", __func__);
-		int shift_size = DIR_BLOCK_SIZE - (file->dir_data_off + file_dir_info_size);
-		memcpy(dir_data + file->dir_data_off, dir_data + file->dir_data_off + shift_size, shift_size);
+		int shift_size = DIR_DATA_SIZE - (file->dir_data_off + file_dir_info_size);
+		memcpy(dir_data + file->dir_data_off, dir_data + file->dir_data_off + file_dir_info_size, shift_size);
+
+		/* update the dir_data_off in all other files */
+		for (struct file_list_node *node = file_list_head; node;
+		     node = node->next) {
+			if (node->file->dir_data_off > file->dir_data_off)
+				node->file->dir_data_off -= file_dir_info_size;
+		}
 	}
 
 	/* decrement number of files */
 	(*((uint16_t *) &dir_data[4]))--;
 
 	dir_data_ptr -= file_dir_info_size;
-	write_to_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
+	flush_dir_data_to_storage();
 
 	return 0;
 }
 
+/* FIXME: inefficient and slow */
+static int alloc_blocks_for_file(struct file *file)
+{
+	int start_block = DIR_DATA_NUM_BLOCKS;
+	int num_blocks = 10; /* fixed for now */
+	bool found = false;
+
+	while ((start_block + num_blocks) <= STORAGE_MAIN_PARTITION_SIZE) {
+		bool used = false;
+		for (struct file_list_node *node = file_list_head; node;
+		     node = node->next) {
+			if (node->file->start_block == start_block) {
+				used = true;
+				break;
+			}
+		}
+
+		if (!used) {
+			found = true;
+			break;
+		}
+
+		start_block += num_blocks;
+	}
+
+	if (found) {
+		file->start_block = start_block;
+		file->num_blocks = num_blocks;
+		printf("%s [1]: start_block = %d, num_blocks = %d\n", __func__, start_block, num_blocks);
+		return 0;
+	} else {
+		return ERR_FOUND;
+	}
+}
+
+static void release_file_blocks(struct file *file)
+{
+	/* No op */
+}
 
 /* file open modes */
 #define FILE_OPEN_MODE		0
@@ -299,12 +359,15 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 		strcpy(file->filename, filename);
 
-		/* FIXME: do not hardcode start_block and num_blocks */
-		file->start_block = 1;
-		file->num_blocks = 10;
-
-		int ret = add_file_to_directory(file);
+		int ret = alloc_blocks_for_file(file);
 		if (ret) {
+			free(file);
+			return (uint32_t) 0;
+		}
+
+		ret = add_file_to_directory(file);
+		if (ret) {
+			release_file_blocks(file);
 			free(file);
 			return (uint32_t) 0;
 		}
@@ -359,15 +422,15 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 		return 0;
 	}
 
-	if ((file->num_blocks * BLOCK_SIZE) - offset < size) {
+	if ((file->num_blocks * STORAGE_BLOCK_SIZE) - offset < size) {
 		printf("%s: Error: invalid size/offset\n", __func__);
 		return 0;
 	}
 
-	int block_num = offset / BLOCK_SIZE;
-	int block_offset = offset % BLOCK_SIZE;
+	int block_num = offset / STORAGE_BLOCK_SIZE;
+	int block_offset = offset % STORAGE_BLOCK_SIZE;
 	int written_size = 0;
-	int next_write_size = BLOCK_SIZE - block_offset;
+	int next_write_size = STORAGE_BLOCK_SIZE - block_offset;
 	if (next_write_size > size)
 		next_write_size = size;
 	int ret = 0;
@@ -382,8 +445,8 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 		written_size += next_write_size;
 		block_num++;
 		block_offset = 0;
-		if ((size - written_size) >= BLOCK_SIZE)
-			next_write_size = BLOCK_SIZE - block_offset;
+		if ((size - written_size) >= STORAGE_BLOCK_SIZE)
+			next_write_size = STORAGE_BLOCK_SIZE - block_offset;
 		else
 			next_write_size = (size - written_size);
 	}
@@ -410,15 +473,15 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 		return 0;
 	}
 
-	if ((file->num_blocks * BLOCK_SIZE) - offset < size) {
+	if ((file->num_blocks * STORAGE_BLOCK_SIZE) - offset < size) {
 		printf("%s: Error: invalid size/offset\n", __func__);
 		return 0;
 	}
 
-	int block_num = offset / BLOCK_SIZE;
-	int block_offset = offset % BLOCK_SIZE;
+	int block_num = offset / STORAGE_BLOCK_SIZE;
+	int block_offset = offset % STORAGE_BLOCK_SIZE;
 	int read_size = 0;
-	int next_read_size = BLOCK_SIZE - block_offset;
+	int next_read_size = STORAGE_BLOCK_SIZE - block_offset;
 	if (next_read_size > size)
 		next_read_size = size;
 	int ret = 0;
@@ -433,8 +496,8 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 		read_size += next_read_size;
 		block_num++;
 		block_offset = 0;
-		if ((size - read_size) >= BLOCK_SIZE)
-			next_read_size = BLOCK_SIZE - block_offset;
+		if ((size - read_size) >= STORAGE_BLOCK_SIZE)
+			next_read_size = STORAGE_BLOCK_SIZE - block_offset;
 		else
 			next_read_size = (size - read_size);
 	}
@@ -495,6 +558,7 @@ int file_system_remove_file(char *filename)
 	if (ret)
 		return ERR_FAULT;
 
+	release_file_blocks(file);
 	remove_file_from_list(file);
 
 	return 0;
@@ -515,12 +579,13 @@ void initialize_file_system(void)
 		fd_bitmap[i] = 0;
 
 	/* wipe dir */
-	//memset(dir_data, 0x0, DIR_BLOCK_SIZE);
-	//write_to_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
+	//memset(dir_data, 0x0, DIR_DATA_SIZE);
+	//flush_dir_data_to_storage();
 	//exit(-1);
 
 	/* read the directory */
-	read_from_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
+	read_dir_data_from_storage();
+
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
@@ -532,11 +597,11 @@ void initialize_file_system(void)
 
 		for (int i = 0; i < num_files; i++) {
 			int dir_data_off = dir_data_ptr;
-			if ((dir_data_ptr + 2) > DIR_BLOCK_SIZE)
+			if ((dir_data_ptr + 2) > DIR_DATA_SIZE)
 				break;
 			int filename_size = *((uint16_t *) &dir_data[dir_data_ptr]);
 			dir_data_ptr += 2;
-			if ((dir_data_ptr + filename_size + 5) > DIR_BLOCK_SIZE)
+			if ((dir_data_ptr + filename_size + 5) > DIR_DATA_SIZE)
 				break;
 
 			if (filename_size > MAX_FILENAME_SIZE)
@@ -570,7 +635,7 @@ void initialize_file_system(void)
 		dir_data[5] = 0;
 		dir_data_ptr = 6;
 		/* update the directory in storage */
-		write_to_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
+		flush_dir_data_to_storage();
 	}
 
 	for (int i = 0; i < MAX_NUM_FD; i++)

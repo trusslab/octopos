@@ -76,14 +76,12 @@ struct partition {
 #define NUM_PARTITIONS		2
 struct partition partitions[NUM_PARTITIONS];
 
-#define BLOCK_SIZE		32  /* bytes */
-
 int fd_out, fd_in, fd_intr;
 
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 static void initialize_storage_space(void)
 {
-	partitions[0].size = 1000;
+	partitions[0].size = STORAGE_MAIN_PARTITION_SIZE;
 	memset(partitions[0].data_name, 0x0, 256);
 	strcpy(partitions[0].data_name, "octopos_partition_1_data");
 	memset(partitions[0].lock_name, 0x0, 256);
@@ -224,7 +222,7 @@ static void send_response(uint8_t *buf, uint8_t queue_id)
 //			fclose(filep);
 //			return;
 //		}
-//		int seek_off = (arg0 * BLOCK_SIZE) + arg1;
+//		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
 //		fseek(filep, seek_off, SEEK_SET);
 //		uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), data_size, filep);
 //		STORAGE_SET_ONE_RET(size);
@@ -244,7 +242,7 @@ static void send_response(uint8_t *buf, uint8_t queue_id)
 //			return;
 //		}
 //		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
-//		int seek_off = (arg0 * BLOCK_SIZE) + arg1;
+//		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
 //		fseek(filep, seek_off, SEEK_SET);
 //		uint32_t size = (uint32_t) fread(ret_buf, sizeof(uint8_t), arg2, filep);
 //		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);
@@ -279,7 +277,7 @@ static void process_request(uint8_t *buf, int partition_id)
 			fclose(filep);
 			return;
 		}
-		int seek_off = (arg0 * BLOCK_SIZE) + arg1;
+		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
 		fseek(filep, seek_off, SEEK_SET);
 		uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), data_size, filep);
 		STORAGE_SET_ONE_RET(size);
@@ -304,7 +302,7 @@ static void process_request(uint8_t *buf, int partition_id)
 			return;
 		}
 		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
-		int seek_off = (arg0 * BLOCK_SIZE) + arg1;
+		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
 		fseek(filep, seek_off, SEEK_SET);
 		uint32_t size = (uint32_t) fread(ret_buf, sizeof(uint8_t), arg2, filep);
 		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);

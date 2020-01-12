@@ -24,17 +24,46 @@ void app_main(struct runtime_api *api)
 
 	insecure_printf("fs_test starting.\n");
 
-	uint32_t fd = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
-	if (fd == 0) {
-		insecure_printf("Couldn't open file (fd = %d)\n", fd);
+	/* test 1 */
+	//uint32_t fd = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
+	//if (fd == 0) {
+	//	insecure_printf("Couldn't open file (fd = %d)\n", fd);
+	//	return;
+	//}
+	//api->read_from_file(fd, (uint8_t *) &data, 4, 0);
+	//insecure_printf("data = %d\n", data);
+	//data++;
+	//if (data > 10)
+	//	data = 0;
+	//api->write_to_file(fd, (uint8_t *) &data, 4, 0);
+	//api->close_file(fd);
+	//api->remove_file((char *) "test_file_1.txt");
+
+	/* test 2 */
+	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
+	if (fd1 == 0) {
+		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
 		return;
 	}
-	api->read_from_file(fd, (uint8_t *) &data, 4, 0);
-	insecure_printf("data = %d\n", data);
-	data++;
-	if (data > 10)
-		data = 0;
-	api->write_to_file(fd, (uint8_t *) &data, 4, 0);
-	api->close_file(fd);
+	uint32_t fd2 = api->open_file((char *) "test_file_2.txt", FILE_OPEN_CREATE_MODE);
+	if (fd1 == 0) {
+		api->close_file(fd1);
+		insecure_printf("Couldn't open second file (fd2 = %d)\n", fd2);
+		return;
+	}
+
+	data = 13;
+	api->write_to_file(fd1, (uint8_t *) &data, 4, 10);
+	data = 15;
+	api->write_to_file(fd2, (uint8_t *) &data, 4, 10);
+
+	api->read_from_file(fd1, (uint8_t *) &data, 4, 10);
+	insecure_printf("data (first file) = %d\n", data);
+	api->read_from_file(fd2, (uint8_t *) &data, 4, 10);
+	insecure_printf("data (first file) = %d\n", data);
+
+	api->close_file(fd1);
 	api->remove_file((char *) "test_file_1.txt");
+	api->close_file(fd2);
+	api->remove_file((char *) "test_file_2.txt");
 }
