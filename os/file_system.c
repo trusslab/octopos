@@ -215,14 +215,11 @@ static void read_dir_data_from_storage(void)
 static int add_file_to_directory(struct file *file)
 {
 	int filename_size = strlen(file->filename);
-	printf("%s [1]: filename_size = %d\n", __func__, filename_size);
 	if (filename_size > MAX_FILENAME_SIZE)
 		return ERR_INVALID;
-	printf("%s [2]: dir_data_ptr = %d\n", __func__, dir_data_ptr);
 
 	if ((dir_data_ptr + filename_size + 7) > DIR_DATA_SIZE)
 		return ERR_MEMORY;
-	printf("%s [3]\n", __func__);
 
 	int dir_data_off = dir_data_ptr;
 	*((uint16_t *) &dir_data[dir_data_ptr]) = filename_size;
@@ -242,27 +239,22 @@ static int add_file_to_directory(struct file *file)
 	flush_dir_data_to_storage();
 
 	file->dir_data_off = dir_data_off;
-	printf("%s [4]: file->dir_data_off = %d\n", __func__, file->dir_data_off);
 
 	return 0;
 }
 
 static int remove_file_from_directory(struct file *file)
 {
-	printf("%s [0.1]: file->dir_data_off = %d\n", __func__, file->dir_data_off);
 	int filename_size = *((uint16_t *) &dir_data[file->dir_data_off]);
-	printf("%s [1]: filename_size = %d\n", __func__, filename_size);
 
 	int file_dir_info_size = filename_size + 7;
 	if ((file->dir_data_off + file_dir_info_size) > DIR_DATA_SIZE)
 		return ERR_FAULT;
-	printf("%s [2]\n", __func__);
 
 	memset(dir_data + file->dir_data_off, 0x0, file_dir_info_size);
 
 	if ((file->dir_data_off + file_dir_info_size) < (DIR_DATA_SIZE - 1)) {
 		/* need to shift */
-		printf("%s [3]\n", __func__);
 		int shift_size = DIR_DATA_SIZE - (file->dir_data_off + file_dir_info_size);
 		memcpy(dir_data + file->dir_data_off, dir_data + file->dir_data_off + file_dir_info_size, shift_size);
 
@@ -311,7 +303,6 @@ static int alloc_blocks_for_file(struct file *file)
 	if (found) {
 		file->start_block = start_block;
 		file->num_blocks = num_blocks;
-		printf("%s [1]: start_block = %d, num_blocks = %d\n", __func__, start_block, num_blocks);
 		return 0;
 	} else {
 		return ERR_FOUND;
@@ -330,18 +321,14 @@ static void release_file_blocks(struct file *file)
 uint32_t file_system_open_file(char *filename, uint32_t mode)
 {
 	struct file *file = NULL;
-	printf("%s [1]: mode = %d\n", __func__, mode);
 	if (!(mode == FILE_OPEN_MODE || mode == FILE_OPEN_CREATE_MODE)) {
 		printf("Error: invalid mode for opening a file\n");
 		return (uint32_t) 0;
 	}
 
-	printf("%s [1.1]: filename = %s\n", __func__, filename);
 	for (struct file_list_node *node = file_list_head; node;
 	     node = node->next) {
-		printf("%s [1.2]: node->file->filename = %s\n", __func__, node->file->filename);
 		if (!strcmp(node->file->filename, filename)) {
-			printf("%s [2]\n", __func__);
 			if (node->file->opened)
 				/* error */
 				return (uint32_t) 0;
@@ -351,11 +338,9 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 	}
 
 	if (file == NULL && mode == FILE_OPEN_CREATE_MODE) {
-		printf("%s [3]: create mode\n", __func__);
 		file = (struct file *) malloc(sizeof(struct file));
 		if (!file)
 			return (uint32_t) 0;
-		printf("%s [4]\n", __func__);
 
 		strcpy(file->filename, filename);
 
@@ -371,34 +356,28 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			free(file);
 			return (uint32_t) 0;
 		}
-		printf("%s [5]\n", __func__);
 
 		add_file_to_list(file);
 	}
 
 	if (file) {
-		printf("%s [6]\n", __func__);
 		int ret = get_unused_fd();
 		if (ret < 0)
 			return (uint32_t) 0;
-		printf("%s [7]\n", __func__);
 
 		uint32_t fd = (uint32_t) ret;
 		if (fd == 0 || fd >= MAX_NUM_FD)
 			return (uint32_t) 0;
-		printf("%s [8]\n", __func__);
 		
 		/* Shouldn't happen, but let's check. */
 		if (file_array[fd])
 			return (uint32_t) 0;
-		printf("%s [9]\n", __func__);
 
 		file_array[fd] = file;
 		file->opened = true;
 
 		return fd;
 	}
-	printf("%s [10]\n", __func__);
 
 	/* error */
 	return (uint32_t) 0;
@@ -533,12 +512,9 @@ int file_system_close_file(uint32_t fd)
 int file_system_remove_file(char *filename)
 {
 	struct file *file = NULL;
-	printf("%s [1.1]: filename = %s\n", __func__, filename);
 	for (struct file_list_node *node = file_list_head; node;
 	     node = node->next) {
-		printf("%s [1.2]: node->file->filename = %s\n", __func__, node->file->filename);
 		if (!strcmp(node->file->filename, filename)) {
-			printf("%s [2]\n", __func__);
 			if (node->file->opened) {
 				printf("Error: can't remove an open file\n");
 				return ERR_INVALID;
@@ -566,13 +542,11 @@ int file_system_remove_file(char *filename)
 
 void initialize_file_system(void)
 {
-	printf("%s [1]\n", __func__);
 	/* initialize fd bitmap */
 	if (MAX_NUM_FD % 8) {
 		printf("%s: Error: MAX_NUM_FD must be divisible by 8\n", __func__);
 		_exit(-1);
 	}
-	printf("%s [2]\n", __func__);
 
 	fd_bitmap[0] = 0x00000001; /* fd 0 is error */
 	for (int i = 1; i < (MAX_NUM_FD / 8); i++)
@@ -589,10 +563,8 @@ void initialize_file_system(void)
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
-		printf("%s [3]\n", __func__);
 		/* retrieve file info */
 		uint16_t num_files = *((uint16_t *) &dir_data[4]);
-		printf("%s [4]: num_files = %d\n", __func__, num_files);
 		dir_data_ptr = 6;
 
 		for (int i = 0; i < num_files; i++) {
@@ -612,7 +584,6 @@ void initialize_file_system(void)
 				break;
 
 			strcpy(file->filename, (char *) &dir_data[dir_data_ptr]);
-			printf("%s [5]: file->filename = %s\n", __func__, file->filename);
 			dir_data_ptr = dir_data_ptr + filename_size + 1;
 
 			file->dir_data_off = dir_data_off;
@@ -624,7 +595,6 @@ void initialize_file_system(void)
 			add_file_to_list(file);
 		}
 	} else {
-		printf("%s [6]\n", __func__);
 		/* initialize signature */
 		dir_data[0] = '$';
 		dir_data[1] = '%';
