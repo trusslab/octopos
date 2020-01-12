@@ -404,6 +404,14 @@ static int close_file(uint32_t fd)
 	return (int) ret0;
 }
 
+static int remove_file(char *filename)
+{
+	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_REMOVE_FILE, filename, strlen(filename))
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
+}
+
 /* FIXME: (mostly) copied from os/mailbox.c */
 static int send_msg_to_storage(uint8_t *buf)
 {
@@ -648,6 +656,7 @@ static void load_application(char *msg)
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
 		.close_file = close_file,
+		.remove_file = remove_file,
 		.request_secure_storage = request_secure_storage,
 		.yield_secure_storage = yield_secure_storage,
 		.write_to_secure_storage = write_to_secure_storage,

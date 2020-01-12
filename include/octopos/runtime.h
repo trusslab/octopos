@@ -16,6 +16,7 @@ struct runtime_api {
 	int (*write_to_file)(uint32_t fd, uint8_t *data, int size, int offset);
 	int (*read_from_file)(uint32_t fd, uint8_t *data, int size, int offset);
 	int (*close_file)(uint32_t fd);
+	int (*remove_file)(char *filename);
 
 	/* secure storage */
 	int (*request_secure_storage)(int count, uint8_t *key);

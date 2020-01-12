@@ -36,4 +36,5 @@ void app_main(struct runtime_api *api)
 		data = 0;
 	api->write_to_file(fd, (uint8_t *) &data, 4, 0);
 	api->close_file(fd);
+	api->remove_file((char *) "test_file_1.txt");
 }

@@ -242,6 +242,21 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
+	case SYSCALL_REMOVE_FILE: {
+		uint32_t ret;
+		SYSCALL_GET_ZERO_ARGS_DATA
+		char filename[256];
+		if (data_size >= 256) {
+			printf("Error: filename is too large\n");
+			SYSCALL_SET_ONE_RET(0)
+		}
+		memcpy(filename, data, data_size);
+		/* playing it safe */
+		filename[data_size] = '\0';
+		ret = (uint32_t) file_system_remove_file(filename);
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
 	case SYSCALL_REQUEST_SECURE_STORAGE: {
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;

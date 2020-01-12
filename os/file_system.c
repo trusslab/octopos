@@ -68,6 +68,7 @@ struct file {
 	char filename[MAX_FILENAME_SIZE];
 	int start_block;
 	int num_blocks;
+	int dir_data_off;
 	bool opened;
 };
 
@@ -151,46 +152,35 @@ static int add_file_to_list(struct file *file)
 	return 0;
 }
 
-//static int remove_file_from_list(struct file *file)
-//{
-//	struct file_list_node *prev_node = NULL;
-//
-//	for (struct file_list_node *node = file_list_head; node;
-//	     node = node->next) {
-//		if (node->file == file) {
-//			if (prev_node == NULL) { /* removing head */
-//				if (node == file_list_tail) { /* last node */
-//					file_list_head = NULL;
-//					file_list_tail = NULL;
-//				} else {
-//					file_list_head = node->next;
-//				}
-//			} else {
-//				prev_node->next = node->next;
-//				if (node == file_list_tail) {
-//					file_list_tail = prev_node;
-//				}
-//			}
-//
-//			return 0;
-//		}
-//
-//		prev_node = node;
-//	}
-//
-//	return ERR_EXIST;
-//}
+static int remove_file_from_list(struct file *file)
+{
+	struct file_list_node *prev_node = NULL;
 
-//struct file *get_file(int file_id)
-//{
-//	for (struct file_list_node *node = file_list_head; node;
-//	     node = node->next) {
-//		if (node->file->id == file_id)
-//			return node->file;
-//	}
-//
-//	return NULL;
-//}
+	for (struct file_list_node *node = file_list_head; node;
+	     node = node->next) {
+		if (node->file == file) {
+			if (prev_node == NULL) { /* removing head */
+				if (node == file_list_tail) { /* last node */
+					file_list_head = NULL;
+					file_list_tail = NULL;
+				} else {
+					file_list_head = node->next;
+				}
+			} else {
+				prev_node->next = node->next;
+				if (node == file_list_tail) {
+					file_list_tail = prev_node;
+				}
+			}
+
+			return 0;
+		}
+
+		prev_node = node;
+	}
+
+	return ERR_EXIST;
+}
 
 static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
 {
@@ -222,6 +212,7 @@ static int add_file_to_directory(struct file *file)
 		return ERR_MEMORY;
 	printf("%s [3]\n", __func__);
 
+	int dir_data_off = dir_data_ptr;
 	*((uint16_t *) &dir_data[dir_data_ptr]) = filename_size;
 	dir_data_ptr += 2;
 
@@ -238,8 +229,39 @@ static int add_file_to_directory(struct file *file)
 
 	write_to_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
 
+	file->dir_data_off = dir_data_off;
+
 	return 0;
 }
+
+static int remove_file_from_directory(struct file *file)
+{
+	int filename_size = *((uint16_t *) &dir_data[file->dir_data_off]);
+	printf("%s [1]: filename_size = %d\n", __func__, filename_size);
+
+	int file_dir_info_size = filename_size + 7;
+	if ((file->dir_data_off + file_dir_info_size) > DIR_BLOCK_SIZE)
+		return ERR_FAULT;
+	printf("%s [2]\n", __func__);
+
+	memset(dir_data + file->dir_data_off, 0x0, file_dir_info_size);
+
+	if ((file->dir_data_off + file_dir_info_size) < (DIR_BLOCK_SIZE - 1)) {
+		/* need to shift */
+		printf("%s [3]\n", __func__);
+		int shift_size = DIR_BLOCK_SIZE - (file->dir_data_off + file_dir_info_size);
+		memcpy(dir_data + file->dir_data_off, dir_data + file->dir_data_off + shift_size, shift_size);
+	}
+
+	/* decrement number of files */
+	(*((uint16_t *) &dir_data[4]))--;
+
+	dir_data_ptr -= file_dir_info_size;
+	write_to_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
+
+	return 0;
+}
+
 
 /* file open modes */
 #define FILE_OPEN_MODE		0
@@ -445,6 +467,39 @@ int file_system_close_file(uint32_t fd)
 	return 0;
 }
 
+int file_system_remove_file(char *filename)
+{
+	struct file *file = NULL;
+	printf("%s [1.1]: filename = %s\n", __func__, filename);
+	for (struct file_list_node *node = file_list_head; node;
+	     node = node->next) {
+		printf("%s [1.2]: node->file->filename = %s\n", __func__, node->file->filename);
+		if (!strcmp(node->file->filename, filename)) {
+			printf("%s [2]\n", __func__);
+			if (node->file->opened) {
+				printf("Error: can't remove an open file\n");
+				return ERR_INVALID;
+			}
+
+			file = node->file;			
+		}
+	}
+
+	if (file == NULL) {
+		printf("Error: file to be removed does not exist\n");
+		return ERR_INVALID;
+	}
+
+
+	int ret = remove_file_from_directory(file);
+	if (ret)
+		return ERR_FAULT;
+
+	remove_file_from_list(file);
+
+	return 0;
+}
+
 void initialize_file_system(void)
 {
 	printf("%s [1]\n", __func__);
@@ -462,6 +517,7 @@ void initialize_file_system(void)
 	/* wipe dir */
 	//memset(dir_data, 0x0, DIR_BLOCK_SIZE);
 	//write_to_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
+	//exit(-1);
 
 	/* read the directory */
 	read_from_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
@@ -475,6 +531,7 @@ void initialize_file_system(void)
 		dir_data_ptr = 6;
 
 		for (int i = 0; i < num_files; i++) {
+			int dir_data_off = dir_data_ptr;
 			if ((dir_data_ptr + 2) > DIR_BLOCK_SIZE)
 				break;
 			int filename_size = *((uint16_t *) &dir_data[dir_data_ptr]);
@@ -493,6 +550,7 @@ void initialize_file_system(void)
 			printf("%s [5]: file->filename = %s\n", __func__, file->filename);
 			dir_data_ptr = dir_data_ptr + filename_size + 1;
 
+			file->dir_data_off = dir_data_off;
 			file->start_block = *((uint16_t *) &dir_data[dir_data_ptr]);
 			dir_data_ptr += 2;
 			file->num_blocks = *((uint16_t *) &dir_data[dir_data_ptr]);
@@ -510,6 +568,7 @@ void initialize_file_system(void)
 		/* set num files (two bytes) to 0 */
 		dir_data[4] = 0;
 		dir_data[5] = 0;
+		dir_data_ptr = 6;
 		/* update the directory in storage */
 		write_to_block(dir_data, 0, 0, DIR_BLOCK_SIZE);
 	}
