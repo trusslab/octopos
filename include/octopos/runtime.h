@@ -15,6 +15,8 @@ struct runtime_api {
 	uint32_t (*open_file)(char *filename, uint32_t mode);
 	int (*write_to_file)(uint32_t fd, uint8_t *data, int size, int offset);
 	int (*read_from_file)(uint32_t fd, uint8_t *data, int size, int offset);
+	int (*write_file_blocks)(uint32_t fd, uint8_t *data, int start_block, int num_blocks);
+	int (*read_file_blocks)(uint32_t fd, uint8_t *data, int start_block, int num_blocks);
 	int (*close_file)(uint32_t fd);
 	int (*remove_file)(char *filename);
 

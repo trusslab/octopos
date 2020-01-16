@@ -111,7 +111,7 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	send_msg_to_runtime(runtime_proc_id, buf);
 }
 
-static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response)
+static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
 {
 	uint16_t syscall_nr;
 
@@ -235,6 +235,22 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET_DATA(ret, ret_buf, ret)
 		break;
 	}
+	case SYSCALL_WRITE_FILE_BLOCKS: {
+		uint32_t ret;
+		SYSCALL_GET_THREE_ARGS
+		ret = (uint32_t) file_system_write_file_blocks(arg0, (int) arg1, (int) arg2, runtime_proc_id);
+		*late_processing = SYSCALL_WRITE_FILE_BLOCKS;
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
+	case SYSCALL_READ_FILE_BLOCKS: {
+		uint32_t ret;
+		SYSCALL_GET_THREE_ARGS
+		ret = (uint32_t) file_system_read_file_blocks(arg0, (int) arg1, (int) arg2, runtime_proc_id);
+		*late_processing = SYSCALL_READ_FILE_BLOCKS;
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
 	case SYSCALL_CLOSE_FILE: {
 		uint32_t ret;
 		SYSCALL_GET_ONE_ARG
@@ -322,13 +338,21 @@ void process_system_call(uint8_t *buf)
 	int runtime_proc_id = buf[0];
 	if (runtime_proc_id == P_RUNTIME1 || runtime_proc_id == P_RUNTIME2) {
 		bool no_response = false;
+		int late_processing = NUM_SYSCALLS;
 	
-		handle_syscall(buf[0], buf, &no_response);
+		handle_syscall(buf[0], buf, &no_response, &late_processing);
 
 		/* send response */
 		if (!no_response) {
 			send_msg_to_runtime(runtime_proc_id, buf);
 		}
+
+		/* FIXME: use async interrupt processing instead. */
+		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
+			file_system_write_file_blocks_late();
+		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
+			file_system_read_file_blocks_late();
+
 	} else {
 		printf("Error: invalid syscall caller\n");
 	}

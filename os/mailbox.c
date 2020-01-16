@@ -107,30 +107,103 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	write(fd_out, opcode, 5);
 }
 
+/* FIXME: needed? */
 int send_msg_to_storage(uint8_t *buf)
 {
 	uint8_t opcode[2], interrupt;
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_STORAGE_IN;
+	opcode[1] = Q_STORAGE_CMD_IN;
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* wait for response */
-	read(fd_intr, &interrupt, 1);
-	if (!(interrupt == Q_STORAGE_OUT)) {
-		printf("Interrupt from an unexpected queue\n");
-		_exit(-1);
-		return ERR_UNEXPECTED;
+	while (1) {
+		read(fd_intr, &interrupt, 1);
+		if (!(interrupt == Q_STORAGE_CMD_OUT) && !(interrupt == Q_STORAGE_DATA_OUT)) {
+			printf("Error (%s): Interrupt from an unexpected queue (%d)\n", __func__, interrupt);
+			_exit(-1);
+			return ERR_UNEXPECTED;
+		}
+
+		if (interrupt == Q_STORAGE_CMD_OUT)
+			break;
 	}
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = Q_STORAGE_OUT;
+	opcode[1] = Q_STORAGE_CMD_OUT;
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	return 0;
 }
+
+int send_msg_to_storage_no_response(uint8_t *buf)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_STORAGE_CMD_IN;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
+
+int get_response_from_storage(uint8_t *buf)
+{
+	uint8_t opcode[2], interrupt;
+
+	/* wait for response */
+	read(fd_intr, &interrupt, 1);
+	if (!(interrupt == Q_STORAGE_CMD_OUT)) {
+		printf("Error (%s): Interrupt from an unexpected queue (%d)\n", __func__, interrupt);
+		_exit(-1);
+		return ERR_UNEXPECTED;
+	}
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = Q_STORAGE_CMD_OUT;
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
+
+void read_from_storage_data_queue(uint8_t *buf)
+{
+	uint8_t opcode[2], interrupt;
+	printf("%s [1]\n", __func__);
+
+	/* wait for data */
+	read(fd_intr, &interrupt, 1);
+	if (!(interrupt == Q_STORAGE_DATA_OUT)) {
+		printf("Error (%s): Interrupt from an unexpected queue (%d)\n", __func__, interrupt);
+		_exit(-1);
+		return;
+	}
+	printf("%s [2]\n", __func__);
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = Q_STORAGE_DATA_OUT;
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	printf("%s [3]\n", __func__);
+}
+
+void write_to_storage_data_queue(uint8_t *buf)
+{
+	uint8_t opcode[2];
+	printf("%s [1]\n", __func__);
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_STORAGE_DATA_IN;
+	write(fd_out, opcode, 2), 
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	printf("%s [2]\n", __func__);
+}
+
+
 
 static void distribute_input(void)
 {

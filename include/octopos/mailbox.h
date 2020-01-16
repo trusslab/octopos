@@ -22,17 +22,22 @@
 #define	Q_OS			1
 #define	Q_KEYBOARD		2
 #define	Q_SERIAL_OUT		3
-#define	Q_STORAGE_IN		4
-#define	Q_STORAGE_OUT		5
-#define	Q_STORAGE_IN_2		6
-#define	Q_STORAGE_OUT_2		7
-#define Q_SENSOR		8
-#define	Q_RUNTIME1		9
-#define	Q_RUNTIME2		10
-#define NUM_QUEUES		10
+#define	Q_STORAGE_DATA_IN	4
+#define	Q_STORAGE_DATA_OUT	5
+#define	Q_STORAGE_CMD_IN	6
+#define	Q_STORAGE_CMD_OUT	7
+#define	Q_STORAGE_IN_2		8
+#define	Q_STORAGE_OUT_2		9
+#define Q_SENSOR		10
+#define	Q_RUNTIME1		11
+#define	Q_RUNTIME2		12
+#define NUM_QUEUES		12
 
-#define MAILBOX_QUEUE_SIZE	4
-#define MAILBOX_QUEUE_MSG_SIZE	64
+#define MAILBOX_QUEUE_SIZE		4
+#define MAILBOX_QUEUE_MSG_SIZE		64
+
+#define MAILBOX_QUEUE_SIZE_LARGE	8
+#define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
 
 #define FIFO_OS_OUT		"/tmp/octopos_mailbox_os_out"
 #define FIFO_OS_IN		"/tmp/octopos_mailbox_os_in"

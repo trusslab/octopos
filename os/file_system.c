@@ -17,12 +17,11 @@
 
 #define PARTITION_SIZE		1000 /* blocks */
 
-#define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
+#define STORAGE_SET_TWO_ARGS(arg0, arg1)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
 	*((uint32_t *) &buf[1]) = arg0;				\
 	*((uint32_t *) &buf[5]) = arg1;				\
-	*((uint32_t *) &buf[9]) = arg2;				\
 
 
 #define STORAGE_SET_TWO_ARGS_DATA(arg0, arg1, data, size)			\
@@ -86,7 +85,7 @@ struct file_list_node *file_list_head = NULL;
 struct file_list_node *file_list_tail = NULL;
 
 /* FIXME: too small */
-#define DIR_DATA_NUM_BLOCKS	16
+#define DIR_DATA_NUM_BLOCKS	2 //16
 #define DIR_DATA_SIZE		DIR_DATA_NUM_BLOCKS * STORAGE_BLOCK_SIZE
 uint8_t dir_data[DIR_DATA_SIZE];
 int dir_data_ptr = 0;
@@ -182,34 +181,88 @@ static int remove_file_from_list(struct file *file)
 	return ERR_EXIST;
 }
 
-static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
+	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
-	send_msg_to_storage(buf);
+	send_msg_to_storage_no_response(buf);
+	for (int i = 0; i < (int) num_blocks; i++)
+		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+	get_response_from_storage(buf);
+
 	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
+static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
+{
+	printf("%s [1]\n", __func__);
+	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
+	buf[0] = STORAGE_OP_READ;
+	send_msg_to_storage_no_response(buf);
+	for (int i = 0; i < (int) num_blocks; i++)
+		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+	get_response_from_storage(buf);
+
+	STORAGE_GET_ONE_RET
+	printf("%s [2]: ret0 = %d\n", __func__, ret0);
 	return (int) ret0;
 }
 
 static int read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
 {
-	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
-	buf[0] = STORAGE_OP_READ;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET_DATA(data)
-	return (int) ret0;
+	uint8_t buf[STORAGE_BLOCK_SIZE];
+	printf("%s [1]\n", __func__);
+
+	if (block_offset + read_size > STORAGE_BLOCK_SIZE)
+		return 0;
+	printf("%s [2]\n", __func__);
+
+	int ret = read_blocks(buf, block_num, 1);
+	printf("%s [3]: ret = %d\n", __func__, ret);
+	if (ret != STORAGE_BLOCK_SIZE)
+		return 0;
+	printf("%s [4]\n", __func__);
+
+	memcpy(data, buf + block_offset, read_size);
+
+	return (int) read_size;
+}
+
+static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+{
+	uint8_t buf[STORAGE_BLOCK_SIZE];
+	printf("%s [1]\n", __func__);
+
+	if (block_offset + write_size > STORAGE_BLOCK_SIZE)
+		return 0;
+	printf("%s [2]\n", __func__);
+
+	/* partial block write */
+	if (!(block_offset == 0 && write_size == STORAGE_BLOCK_SIZE)) {
+		printf("%s [3]\n", __func__);
+		int read_ret = read_blocks(buf, block_num, 1);
+		printf("%s [3.1]: read_ret = %d\n", __func__, read_ret);
+		if (read_ret != STORAGE_BLOCK_SIZE)
+			return 0;
+	}
+	printf("%s [4]\n", __func__);
+
+	memcpy(buf + block_offset, data, write_size);
+
+	int ret = write_blocks(buf, block_num, 1);
+
+	return (int) ret;
 }
 
 static void flush_dir_data_to_storage(void)
 {
-	for (int i = 0; i < DIR_DATA_NUM_BLOCKS; i++)
-		write_to_block(dir_data + (i * STORAGE_BLOCK_SIZE), i, 0, STORAGE_BLOCK_SIZE);
+	write_blocks(dir_data, 0, DIR_DATA_NUM_BLOCKS);
 }
 
 static void read_dir_data_from_storage(void)
 {
-	for (int i = 0; i < DIR_DATA_NUM_BLOCKS; i++)
-		read_from_block(dir_data + (i * STORAGE_BLOCK_SIZE), i, 0, STORAGE_BLOCK_SIZE);
+	read_blocks(dir_data, 0, DIR_DATA_NUM_BLOCKS);
 }
 
 static int add_file_to_directory(struct file *file)
@@ -303,6 +356,13 @@ static int alloc_blocks_for_file(struct file *file)
 	if (found) {
 		file->start_block = start_block;
 		file->num_blocks = num_blocks;
+		/* zero them out */
+		/* FIXME: use one command to zero out all blocks */
+		uint8_t zero_buf[STORAGE_BLOCK_SIZE];
+		memset(zero_buf, 0x0, STORAGE_BLOCK_SIZE);
+		for (int i = 0; i < num_blocks; i++) {
+			write_blocks(zero_buf, start_block + i, 1);
+		}
 		return 0;
 	} else {
 		return ERR_FOUND;
@@ -484,6 +544,108 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	return read_size;
 }
 
+uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
+{
+	if (fd == 0 || fd >= MAX_NUM_FD) { 
+		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		return 0;
+	}
+
+	struct file *file = file_array[fd];
+	if (!file) {
+		printf("%s: Error: invalid fd\n", __func__);
+		return 0;
+	}
+
+	if (!file->opened) {
+		printf("%s: Error: file not opened!\n", __func__);
+		return 0;
+	}
+
+	if ((start_block + num_blocks) > file->num_blocks) {
+		printf("%s: Error: invalid args\n", __func__);
+		return 0;
+	}
+
+	/* FIXME: this is needed for now since count is uint8_t. */
+	if (num_blocks > 255) {
+		printf("%s: Error: num_blocks is too large\n", __func__);
+		return 0;
+	}
+
+	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
+							runtime_proc_id, (uint8_t) num_blocks);
+
+	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
+	buf[0] = STORAGE_OP_WRITE;
+	send_msg_to_storage_no_response(buf);
+
+	return Q_STORAGE_DATA_IN;
+}
+
+void file_system_write_file_blocks_late(void)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	get_response_from_storage(buf);
+
+	STORAGE_GET_ONE_RET
+	printf("%s [1]: ret0 = %d\n", __func__, ret0);
+
+	/* FIXME: the mailbox should automatically do this. */
+	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, P_OS, 0);
+}
+
+uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
+{
+	if (fd == 0 || fd >= MAX_NUM_FD) { 
+		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		return 0;
+	}
+
+	struct file *file = file_array[fd];
+	if (!file) {
+		printf("%s: Error: invalid fd\n", __func__);
+		return 0;
+	}
+
+	if (!file->opened) {
+		printf("%s: Error: file not opened!\n", __func__);
+		return 0;
+	}
+
+	if ((start_block + num_blocks) > file->num_blocks) {
+		printf("%s: Error: invalid args\n", __func__);
+		return 0;
+	}
+
+	/* FIXME: this is needed for now since count is uint8_t. */
+	if (num_blocks > 255) {
+		printf("%s: Error: num_blocks is too large\n", __func__);
+		return 0;
+	}
+
+	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
+							runtime_proc_id, (uint8_t) num_blocks);
+
+	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
+	buf[0] = STORAGE_OP_READ;
+	send_msg_to_storage_no_response(buf);
+
+	return Q_STORAGE_DATA_OUT;
+}
+
+void file_system_read_file_blocks_late(void)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	get_response_from_storage(buf);
+
+	STORAGE_GET_ONE_RET
+	printf("%s [1]: ret0 = %d\n", __func__, ret0);
+
+	/* FIXME: the mailbox should automatically do this. */
+	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, P_OS, 0);
+}
+
 int file_system_close_file(uint32_t fd)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) { 
@@ -552,9 +714,15 @@ void initialize_file_system(void)
 	for (int i = 1; i < (MAX_NUM_FD / 8); i++)
 		fd_bitmap[i] = 0;
 
+
+	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
+		printf("Error (file system): storage data queue msg size must be equal to storage block size\n");
+		exit(-1);
+	}
+
 	/* wipe dir */
-	//memset(dir_data, 0x0, DIR_DATA_SIZE);
-	//flush_dir_data_to_storage();
+	memset(dir_data, 0x0, DIR_DATA_SIZE);
+	flush_dir_data_to_storage();
 	//exit(-1);
 
 	/* read the directory */
