@@ -78,10 +78,8 @@ void app_main(struct runtime_api *api)
 
 	block[10] = 14;
 	api->write_file_blocks(fd1, block, 5, 1);
-	sleep(1);
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 	api->read_file_blocks(fd1, block, 5, 1);
-	sleep(1);
 	insecure_printf("block[10] = %d\n", (int) block[10]);
 	if (block[10] != 14) {
 		insecure_printf("Test 2 failed\n");
