@@ -24,6 +24,11 @@
 		buf[4] = 0;					\
 	}
 
+#define STORAGE_GET_TWO_ARGS		\
+	uint32_t arg0, arg1;		\
+	arg0 = *((uint32_t *) &buf[1]); \
+	arg1 = *((uint32_t *) &buf[5]); \
+
 #define STORAGE_GET_THREE_ARGS		\
 	uint32_t arg0, arg1, arg2;	\
 	arg0 = *((uint32_t *) &buf[1]); \
@@ -156,7 +161,6 @@ static int remove_partition_key(int partition_id)
 
 static int unlock_partition(uint8_t *data, int partition_id)
 {
-	printf("%s [1]\n", __func__);
 	uint8_t key[STORAGE_KEY_SIZE];
 	FILE *filep = fopen(partitions[partition_id].lock_name, "r");
 	if (!filep) {
@@ -173,7 +177,6 @@ static int unlock_partition(uint8_t *data, int partition_id)
 	}
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
-		printf("%s [2]: key[i] = %d, data[i] = %d\n", __func__, (int) key[i], (int) data[i]);
 		if (key[i] != data[i])
 			return ERR_INVALID;
 	}
@@ -203,57 +206,145 @@ static void send_response(uint8_t *buf, uint8_t queue_id)
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
-//static void process_request_partition_1(uint8_t *buf)
-//{
-//	FILE *filep = NULL;
-//
-//	/* write */
-//	if (buf[0] == 0) {
-//		filep = fopen("octopos_disk", "r+");
-//		if (!filep) {
-//			printf("Error: couldn't open octopos_disk\n");
-//			STORAGE_SET_ONE_RET(0)
-//			return;
-//		}
-//		STORAGE_GET_TWO_ARGS_DATA
-//		if (arg0 > PARTITION_ONE_SIZE) {
-//			printf("Error: invalid partition number\n");
-//			STORAGE_SET_ONE_RET(0)
-//			fclose(filep);
-//			return;
-//		}
-//		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
-//		fseek(filep, seek_off, SEEK_SET);
-//		uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), data_size, filep);
-//		STORAGE_SET_ONE_RET(size);
-//		fclose(filep);
-//	} else if (buf[0] == 1) { /* read */
-//		filep = fopen("octopos_disk", "r");
-//		if (!filep) {
-//			printf("Error: couldn't open octopos_disk\n");
-//			STORAGE_SET_ONE_RET(0)
-//			return;
-//		}
-//		STORAGE_GET_THREE_ARGS
-//		if (arg0 > PARTITION_ONE_SIZE) {
-//			printf("Error: invalid partition number\n");
-//			STORAGE_SET_ONE_RET(0)
-//			fclose(filep);
-//			return;
-//		}
-//		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
-//		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
-//		fseek(filep, seek_off, SEEK_SET);
-//		uint32_t size = (uint32_t) fread(ret_buf, sizeof(uint8_t), arg2, filep);
-//		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);
-//		fclose(filep);
-//	} else {
-//		STORAGE_SET_ONE_RET(0)
-//		return;
-//	}
-//}
+static void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
+{
+	uint8_t opcode[2], interrupt;
+
+	read(fd_intr, &interrupt, 1);
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = queue_id;
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
+static void write_data_to_queue(uint8_t *buf, uint8_t queue_id)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = queue_id;
+	write(fd_out, opcode, 2), 
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
 
 static void process_request(uint8_t *buf, int partition_id)
+{
+	FILE *filep = NULL;
+
+	/* write */
+	if (buf[0] == STORAGE_OP_WRITE) {
+		if (partitions[partition_id].is_locked) {
+			printf("%s: Error: partition is locked\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+		filep = fopen(partitions[partition_id].data_name, "r+");
+		if (!filep) {
+			printf("%s: Error: couldn't open %s for write\n", __func__, partitions[partition_id].data_name);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+		STORAGE_GET_TWO_ARGS
+		int start_block = (int) arg0;
+		int num_blocks = (int) arg1;
+		if (start_block + num_blocks >= partitions[partition_id].size) {
+			printf("%s: Error: invalid args\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			fclose(filep);
+			return;
+		}
+		int seek_off = start_block * STORAGE_BLOCK_SIZE;
+		fseek(filep, seek_off, SEEK_SET);
+		uint8_t data_buf[STORAGE_BLOCK_SIZE];
+		uint32_t size = 0;
+		for (int i = 0; i < num_blocks; i++) {
+			read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
+			size += (uint32_t) fwrite(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
+		}
+		STORAGE_SET_ONE_RET(size);
+		fclose(filep);
+	} else if (buf[0] == STORAGE_OP_READ) { /* read */
+		if (partitions[partition_id].is_locked) {
+			printf("%s: Error: partition is locked\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+		filep = fopen(partitions[partition_id].data_name, "r");
+		if (!filep) {
+			printf("%s: Error: couldn't open %s for read\n", __func__, partitions[partition_id].data_name);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+		STORAGE_GET_TWO_ARGS
+		int start_block = (int) arg0;
+		int num_blocks = (int) arg1;
+		if (start_block + num_blocks >= partitions[partition_id].size) {
+			printf("%s: Error: invalid args\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			fclose(filep);
+			return;
+		}
+		int seek_off = start_block * STORAGE_BLOCK_SIZE;
+		fseek(filep, seek_off, SEEK_SET);
+		uint8_t data_buf[STORAGE_BLOCK_SIZE];
+		uint32_t size = 0;
+		for (int i = 0; i < num_blocks; i++) {
+			size += (uint32_t) fread(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
+			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
+		}
+		STORAGE_SET_ONE_RET(size);
+		fclose(filep);
+	} else if (buf[0] == STORAGE_OP_SET_KEY) {
+		if (partitions[partition_id].is_locked) {
+			printf("%s: Error: can't set the key for a locked partition\n", __func__);
+			STORAGE_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+
+		STORAGE_GET_ZERO_ARGS_DATA
+		if (data_size != STORAGE_KEY_SIZE) {
+			printf("%s: Error: incorrect key size\n", __func__);
+			STORAGE_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+
+		uint32_t ret = (uint32_t) set_partition_key(data, partition_id);
+		STORAGE_SET_ONE_RET(ret)
+	} else if (buf[0] == STORAGE_OP_REMOVE_KEY) {
+		if (partitions[partition_id].is_locked) {
+			printf("%s: Error: can't remove the key for a locked partition\n", __func__);
+			STORAGE_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+
+		uint32_t ret = (uint32_t) remove_partition_key(partition_id);
+		STORAGE_SET_ONE_RET(ret)
+	} else if (buf[0] == STORAGE_OP_UNLOCK) {
+		if (!partitions[partition_id].is_locked) {
+			STORAGE_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+
+		STORAGE_GET_ZERO_ARGS_DATA
+		if (data_size != STORAGE_KEY_SIZE) {
+			printf("%s: Error: incorrect key size (sent for unlocking)\n", __func__);
+			STORAGE_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+
+		uint32_t ret = (uint32_t) unlock_partition(data, partition_id);
+		STORAGE_SET_ONE_RET(ret)
+	} else if (buf[0] == STORAGE_OP_WIPE) {
+		uint32_t ret = (uint32_t) wipe_partition(partition_id);
+		STORAGE_SET_ONE_RET(ret)
+	} else {
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+}
+
+/* FIXME: there's duplicate code between process_request and this function */
+static void process_secure_request(uint8_t *buf, int partition_id)
 {
 	FILE *filep = NULL;
 
@@ -361,6 +452,11 @@ int main(int argc, char **argv)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t interrupt, opcode[2];
 
+	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
+		printf("Error: storage data queue msg size must be equal to storage block size\n");
+		return -1;
+	}
+
 	initialize_storage_space();
 
 	mkfifo(FIFO_STORAGE_OUT, 0666);
@@ -376,17 +472,17 @@ int main(int argc, char **argv)
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		read(fd_intr, &interrupt, 1);
-		if (interrupt == Q_STORAGE_IN) {
-			opcode[1] = Q_STORAGE_IN;
+		if (interrupt == Q_STORAGE_CMD_IN) {
+			opcode[1] = Q_STORAGE_CMD_IN;
 			write(fd_out, opcode, 2), 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 			process_request(buf, 0);
-			send_response(buf, Q_STORAGE_OUT);
+			send_response(buf, Q_STORAGE_CMD_OUT);
 		} else if (interrupt == Q_STORAGE_IN_2) {
 			opcode[1] = Q_STORAGE_IN_2;
 			write(fd_out, opcode, 2), 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			process_request(buf, 1);
+			process_secure_request(buf, 1);
 			send_response(buf, Q_STORAGE_OUT_2);
 		}
 	}
@@ -395,7 +491,7 @@ int main(int argc, char **argv)
 	close(fd_in);
 	close(fd_intr);
 
-	remove(FIFO_SERIAL_OUT_OUT);
-	remove(FIFO_SERIAL_OUT_IN);
-	remove(FIFO_SERIAL_OUT_INTR);
+	remove(FIFO_STORAGE_OUT);
+	remove(FIFO_STORAGE_IN);
+	remove(FIFO_STORAGE_INTR);
 }

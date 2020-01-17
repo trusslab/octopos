@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <octopos/mailbox.h>
@@ -19,7 +20,9 @@ struct processor {
 
 struct queue {
 	uint8_t queue_id;
-	uint8_t messages[MAILBOX_QUEUE_SIZE][MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t **messages;
+	int queue_size;
+	int msg_size;
 	int head;
 	int tail;
 	int counter;
@@ -32,9 +35,6 @@ struct queue {
 
 struct processor processors[NUM_PROCESSORS];
 struct queue queues[NUM_QUEUES];
-
-//#define OUTPUT_CHANNEL_MSG_SIZE	256
-//#define INPUT_CHANNEL_MSG_SIZE	1
 
 static void send_interrupt(struct processor *proc, uint8_t queue_id)
 {
@@ -178,9 +178,9 @@ static void close_processors(void)
 	remove(FIFO_STORAGE_INTR);
 }
 
-int write_queue(struct queue *queue, uint8_t *buf)
+static int write_queue(struct queue *queue, int out_handle)
 {
-	if (queue->counter == MAILBOX_QUEUE_SIZE) {
+	if (queue->counter >= (queue->queue_size - 1)) {
 		/* FIXME: we should communicate that back to the sender processor */
 		printf("Error: queue is full\n");
 		_exit(-1);
@@ -188,15 +188,18 @@ int write_queue(struct queue *queue, uint8_t *buf)
 	}
 
 	queue->counter++;
-	memcpy(queue->messages[queue->head], buf, MAILBOX_QUEUE_MSG_SIZE);
-	queue->head = (queue->head + 1) % MAILBOX_QUEUE_SIZE;
+	read(out_handle, queue->messages[queue->tail], queue->msg_size);
+	queue->tail = (queue->tail + 1) % queue->queue_size;
+
+	if (queue->access_count > 0)
+		queue->access_count--;
 
 	return 0;
 }
 
-int read_queue(struct queue *queue, uint8_t *buf)
+static int read_queue(struct queue *queue, int in_handle)
 {
-	if (queue->counter == 0) {
+	if (queue->counter <= 0) {
 		/* FIXME: we should communicate that back to the sender processor */
 		printf("Error: queue %d is empty\n", queue->queue_id);
 		_exit(-1);
@@ -204,13 +207,31 @@ int read_queue(struct queue *queue, uint8_t *buf)
 	}
 
 	queue->counter--;
-	memcpy(buf, queue->messages[queue->tail], MAILBOX_QUEUE_MSG_SIZE);
-	queue->tail = (queue->tail + 1) % MAILBOX_QUEUE_SIZE;
+	write(in_handle, queue->messages[queue->head], queue->msg_size);
+	queue->head = (queue->head + 1) % queue->queue_size;
 
 	if (queue->access_count > 0)
 		queue->access_count--;
 
 	return 0;
+}
+
+static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
+{
+	uint8_t **messages = (uint8_t **) malloc(queue_size * sizeof(uint8_t *));
+	if (!messages) {
+		printf("Error: couldn't allocate memory for a queue\n");
+		exit(-1);
+	}
+	for (int i = 0; i < queue_size; i++) {
+		messages[i] = (uint8_t *) malloc(msg_size);
+		if (!messages[i]) {
+			printf("Error: couldn't allocate memory for a queue\n");
+			exit(-1);
+		}
+	}
+
+	return messages;
 }
 
 static void initialize_queues(void)
@@ -223,6 +244,10 @@ static void initialize_queues(void)
 	queues[Q_OS].reader_id = P_OS;
 	queues[Q_OS].writer_id = ALL_PROCESSORS;
 	queues[Q_OS].access_count = 0; /* irrelevant for the OS queue */
+	queues[Q_OS].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_OS].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_OS].messages = 
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* keyboard queue */
 	queues[Q_KEYBOARD].queue_id = Q_KEYBOARD;
@@ -232,6 +257,10 @@ static void initialize_queues(void)
 	queues[Q_KEYBOARD].reader_id = P_OS;
 	queues[Q_KEYBOARD].writer_id = P_KEYBOARD;
 	queues[Q_KEYBOARD].access_count = 0; /* irrelevant when OS is reader */
+	queues[Q_KEYBOARD].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_KEYBOARD].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_KEYBOARD].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* serial output queue */
 	queues[Q_SERIAL_OUT].queue_id = Q_SERIAL_OUT;
@@ -241,6 +270,10 @@ static void initialize_queues(void)
 	queues[Q_SERIAL_OUT].reader_id = P_SERIAL_OUT;
 	queues[Q_SERIAL_OUT].writer_id = P_OS;
 	queues[Q_SERIAL_OUT].access_count = 0; /* irrelevant when OS is writer */
+	queues[Q_SERIAL_OUT].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_SERIAL_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_SERIAL_OUT].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* runtime1 queue */
 	queues[Q_RUNTIME1].queue_id = Q_RUNTIME1;
@@ -250,6 +283,10 @@ static void initialize_queues(void)
 	queues[Q_RUNTIME1].reader_id = P_RUNTIME1;
 	queues[Q_RUNTIME1].writer_id = P_OS;
 	queues[Q_RUNTIME1].access_count = 0; /* irrelevant for the RUNTIME1 queue */
+	queues[Q_RUNTIME1].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_RUNTIME1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_RUNTIME1].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* runtime2 queue */
 	queues[Q_RUNTIME2].queue_id = Q_RUNTIME2;
@@ -259,23 +296,59 @@ static void initialize_queues(void)
 	queues[Q_RUNTIME2].reader_id = P_RUNTIME2;
 	queues[Q_RUNTIME2].writer_id = P_OS;
 	queues[Q_RUNTIME2].access_count = 0; /* irrelevant for the RUNTIME2 queue */
+	queues[Q_RUNTIME2].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_RUNTIME2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_RUNTIME2].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* storage queues */
-	queues[Q_STORAGE_IN].queue_id = Q_STORAGE_IN;
-	queues[Q_STORAGE_IN].head = 0;
-	queues[Q_STORAGE_IN].tail = 0;
-	queues[Q_STORAGE_IN].counter = 0;
-	queues[Q_STORAGE_IN].reader_id = P_STORAGE;
-	queues[Q_STORAGE_IN].writer_id = P_OS;
-	queues[Q_STORAGE_IN].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_DATA_IN].queue_id = Q_STORAGE_DATA_IN;
+	queues[Q_STORAGE_DATA_IN].head = 0;
+	queues[Q_STORAGE_DATA_IN].tail = 0;
+	queues[Q_STORAGE_DATA_IN].counter = 0;
+	queues[Q_STORAGE_DATA_IN].reader_id = P_STORAGE;
+	queues[Q_STORAGE_DATA_IN].writer_id = P_OS;
+	queues[Q_STORAGE_DATA_IN].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
+	queues[Q_STORAGE_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
+	queues[Q_STORAGE_DATA_IN].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
-	queues[Q_STORAGE_OUT].queue_id = Q_STORAGE_OUT;
-	queues[Q_STORAGE_OUT].head = 0;
-	queues[Q_STORAGE_OUT].tail = 0;
-	queues[Q_STORAGE_OUT].counter = 0;
-	queues[Q_STORAGE_OUT].reader_id = P_OS;
-	queues[Q_STORAGE_OUT].writer_id = P_STORAGE;
-	queues[Q_STORAGE_OUT].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_DATA_OUT].queue_id = Q_STORAGE_DATA_OUT;
+	queues[Q_STORAGE_DATA_OUT].head = 0;
+	queues[Q_STORAGE_DATA_OUT].tail = 0;
+	queues[Q_STORAGE_DATA_OUT].counter = 0;
+	queues[Q_STORAGE_DATA_OUT].reader_id = P_OS;
+	queues[Q_STORAGE_DATA_OUT].writer_id = P_STORAGE;
+	queues[Q_STORAGE_DATA_OUT].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
+	queues[Q_STORAGE_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
+	queues[Q_STORAGE_DATA_OUT].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+	queues[Q_STORAGE_CMD_IN].queue_id = Q_STORAGE_CMD_IN;
+	queues[Q_STORAGE_CMD_IN].head = 0;
+	queues[Q_STORAGE_CMD_IN].tail = 0;
+	queues[Q_STORAGE_CMD_IN].counter = 0;
+	queues[Q_STORAGE_CMD_IN].reader_id = P_STORAGE;
+	queues[Q_STORAGE_CMD_IN].writer_id = P_OS;
+	queues[Q_STORAGE_CMD_IN].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_STORAGE_CMD_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_STORAGE_CMD_IN].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+
+	queues[Q_STORAGE_CMD_OUT].queue_id = Q_STORAGE_CMD_OUT;
+	queues[Q_STORAGE_CMD_OUT].head = 0;
+	queues[Q_STORAGE_CMD_OUT].tail = 0;
+	queues[Q_STORAGE_CMD_OUT].counter = 0;
+	queues[Q_STORAGE_CMD_OUT].reader_id = P_OS;
+	queues[Q_STORAGE_CMD_OUT].writer_id = P_STORAGE;
+	queues[Q_STORAGE_CMD_OUT].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_STORAGE_CMD_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_STORAGE_CMD_OUT].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	queues[Q_STORAGE_IN_2].queue_id = Q_STORAGE_IN_2;
 	queues[Q_STORAGE_IN_2].head = 0;
@@ -284,14 +357,22 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_IN_2].reader_id = P_STORAGE;
 	queues[Q_STORAGE_IN_2].writer_id = P_OS;
 	queues[Q_STORAGE_IN_2].access_count = 0; /* irrelevant when OS is writer */
+	queues[Q_STORAGE_IN_2].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_STORAGE_IN_2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_STORAGE_IN_2].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
-	queues[Q_STORAGE_OUT_2].queue_id = Q_STORAGE_OUT;
+	queues[Q_STORAGE_OUT_2].queue_id = Q_STORAGE_OUT_2;
 	queues[Q_STORAGE_OUT_2].head = 0;
 	queues[Q_STORAGE_OUT_2].tail = 0;
 	queues[Q_STORAGE_OUT_2].counter = 0;
 	queues[Q_STORAGE_OUT_2].reader_id = P_OS;
 	queues[Q_STORAGE_OUT_2].writer_id = P_STORAGE;
 	queues[Q_STORAGE_OUT_2].access_count = 0; /* irrelevant when OS is reader */
+	queues[Q_STORAGE_OUT_2].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_STORAGE_OUT_2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_STORAGE_OUT_2].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -313,11 +394,8 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
-		read_queue(&queues[(int) queue_id], buf);
-		write(processors[(int) reader_id].in_handle, buf, MAILBOX_QUEUE_MSG_SIZE);
+		read_queue(&queues[(int) queue_id], processors[(int) reader_id].in_handle);
 	} else {
 		printf("Error: processor %d can't read from queue %d\n", reader_id, queue_id);
 	}
@@ -325,12 +403,8 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
-		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-		read(processors[(int) writer_id].out_handle, buf, MAILBOX_QUEUE_MSG_SIZE);
-		write_queue(&queues[(int) queue_id], buf);
+		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
 		/* FIXME: check to make sure queues[queue_id].reader_id points to a
 		 * single processor */
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
@@ -381,6 +455,24 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 		    proc_id == P_OS &&
 		    queues[Q_STORAGE_OUT_2].access_count == 0)
 			allowed = true;
+	} else if (queue_id == Q_STORAGE_DATA_IN && access == WRITE_ACCESS) {
+		if (queues[Q_STORAGE_DATA_IN].writer_id == P_OS &&
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
+			allowed = true;
+
+		if ((queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME2) &&
+		    proc_id == P_OS && queues[Q_STORAGE_DATA_IN].access_count == 0)
+			allowed = true;
+	} else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS) {
+		if (queues[Q_STORAGE_DATA_OUT].reader_id == P_OS &&
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
+			allowed = true;
+
+		if ((queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME2) &&
+		    proc_id == P_OS &&
+		    queues[Q_STORAGE_DATA_OUT].access_count == 0)
+			allowed = true;
+
 	} else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS) {
 		if (queues[Q_RUNTIME1].writer_id == P_OS &&
 		    (proc_id == P_RUNTIME2))
@@ -415,6 +507,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 
 	queues[(int) queue_id].access_count = count;
 
+	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
 	if (queue_id == Q_RUNTIME1 || queue_id == Q_RUNTIME2)
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id + 1);
 }

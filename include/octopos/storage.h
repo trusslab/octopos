@@ -7,5 +7,5 @@
 #define STORAGE_OP_UNLOCK	4
 #define STORAGE_OP_WIPE		5
 
-#define STORAGE_BLOCK_SIZE	32  /* bytes */
+#define STORAGE_BLOCK_SIZE	512  /* bytes */
 #define STORAGE_MAIN_PARTITION_SIZE	1000  /* num blocks */

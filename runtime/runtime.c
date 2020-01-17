@@ -385,7 +385,6 @@ static int write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return (int) ret0; 
-
 }
 
 static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
@@ -394,6 +393,53 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA(data)
 	return (int) ret0; 
+}
+
+static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
+{
+	uint8_t opcode[2];
+
+	SYSCALL_SET_THREE_ARGS(SYSCALL_WRITE_FILE_BLOCKS, fd,
+			       (uint32_t) start_block, (uint32_t) num_blocks)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0 == 0)
+		return 0;
+
+	uint8_t queue_id = (uint8_t) ret0;
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = queue_id;
+
+	for (int i = 0; i < num_blocks; i++) {
+		write(fd_out, opcode, 2);
+		write(fd_out, data + (i * STORAGE_BLOCK_SIZE), MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	}
+	
+	return num_blocks;
+}
+
+static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
+{
+	uint8_t opcode[2], interrupt;
+
+	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FILE_BLOCKS, fd,
+			       (uint32_t) start_block, (uint32_t) num_blocks)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0 == 0)
+		return 0;
+
+	uint8_t queue_id = (uint8_t) ret0;
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = queue_id;
+
+	for (int i = 0; i < num_blocks; i++) {
+		read(fd_intr, &interrupt, 1);
+		write(fd_out, opcode, 2);
+		read(fd_in, data + (i * STORAGE_BLOCK_SIZE), MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	}
+
+	return num_blocks;
 }
 
 static int close_file(uint32_t fd)
@@ -655,6 +701,8 @@ static void load_application(char *msg)
 		.open_file = open_file,
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
+		.write_file_blocks = write_file_blocks,
+		.read_file_blocks = read_file_blocks,
 		.close_file = close_file,
 		.remove_file = remove_file,
 		.request_secure_storage = request_secure_storage,
@@ -694,6 +742,11 @@ int main(int argc, char **argv)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t interrupt, opcode[2];
 	int runtime_id = -1; 
+
+	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
+		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
+		exit(-1);
+	}
 
 	if (argc != 2) {
 		printf("Error: incorrect command. Use ``runtime <runtime_ID>''.\n");
