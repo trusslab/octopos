@@ -161,7 +161,6 @@ static int remove_partition_key(int partition_id)
 
 static int unlock_partition(uint8_t *data, int partition_id)
 {
-	printf("%s [1]\n", __func__);
 	uint8_t key[STORAGE_KEY_SIZE];
 	FILE *filep = fopen(partitions[partition_id].lock_name, "r");
 	if (!filep) {
@@ -178,7 +177,6 @@ static int unlock_partition(uint8_t *data, int partition_id)
 	}
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
-		printf("%s [2]: key[i] = %d, data[i] = %d\n", __func__, (int) key[i], (int) data[i]);
 		if (key[i] != data[i])
 			return ERR_INVALID;
 	}
@@ -222,13 +220,11 @@ static void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 static void write_data_to_queue(uint8_t *buf, uint8_t queue_id)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 	write(fd_out, opcode, 2), 
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	printf("%s [2]\n", __func__);
 }
 
 static void process_request(uint8_t *buf, int partition_id)
@@ -237,7 +233,6 @@ static void process_request(uint8_t *buf, int partition_id)
 
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
-		printf("[1] WRITE\n");
 		if (partitions[partition_id].is_locked) {
 			printf("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
@@ -262,8 +257,6 @@ static void process_request(uint8_t *buf, int partition_id)
 		fseek(filep, seek_off, SEEK_SET);
 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
 		uint32_t size = 0;
-		printf("[2] WRITE num_blocks = %d\n", num_blocks);
-		printf("[3] WRITE start_block = %d\n", start_block);
 		for (int i = 0; i < num_blocks; i++) {
 			read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
 			size += (uint32_t) fwrite(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
@@ -271,7 +264,6 @@ static void process_request(uint8_t *buf, int partition_id)
 		STORAGE_SET_ONE_RET(size);
 		fclose(filep);
 	} else if (buf[0] == STORAGE_OP_READ) { /* read */
-		printf("[1] READ\n");
 		if (partitions[partition_id].is_locked) {
 			printf("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
@@ -296,14 +288,10 @@ static void process_request(uint8_t *buf, int partition_id)
 		fseek(filep, seek_off, SEEK_SET);
 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
 		uint32_t size = 0;
-		printf("[2] READ num_blocks = %d\n", num_blocks);
-		printf("[3] READ start_block = %d\n", start_block);
 		for (int i = 0; i < num_blocks; i++) {
-			printf("[4] READ\n");
 			size += (uint32_t) fread(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 		}
-		printf("[5] size = %d\n", size);
 		STORAGE_SET_ONE_RET(size);
 		fclose(filep);
 	} else if (buf[0] == STORAGE_OP_SET_KEY) {
@@ -355,6 +343,7 @@ static void process_request(uint8_t *buf, int partition_id)
 	}
 }
 
+/* FIXME: there's duplicate code between process_request and this function */
 static void process_secure_request(uint8_t *buf, int partition_id)
 {
 	FILE *filep = NULL;

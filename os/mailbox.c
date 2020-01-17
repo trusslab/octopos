@@ -67,15 +67,12 @@ static int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
 	uint8_t opcode[2];
 	int is_keyboard = 0; 
-	printf("%s [1]\n", __func__);
 
 	sem_wait(&interrupts[Q_OS]);
 	*queue_id = Q_OS;
-	printf("%s [2]\n", __func__);
 
 	sem_getvalue(&interrupts[Q_KEYBOARD], &is_keyboard);
 	if (is_keyboard) {
-		printf("%s [3]\n", __func__);
 		sem_wait(&interrupts[Q_KEYBOARD]);
 		*queue_id = Q_KEYBOARD;
 	}
@@ -152,28 +149,23 @@ int get_response_from_storage(uint8_t *buf)
 void read_from_storage_data_queue(uint8_t *buf)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	sem_wait(&interrupts[Q_STORAGE_DATA_OUT]);
-	printf("%s [2]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_STORAGE_DATA_OUT;
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	printf("%s [3]\n", __func__);
 }
 
 void write_to_storage_data_queue(uint8_t *buf)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_STORAGE_DATA_IN;
 	write(fd_out, opcode, 2), 
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	printf("%s [2]\n", __func__);
 }
 
 static void distribute_input(void)
@@ -196,12 +188,9 @@ static void *handle_mailbox_interrupts(void *data)
 {
 
 	uint8_t interrupt;
-	printf("%s [0.1]\n", __func__);
 
 	while (1) {
-		printf("%s [1]\n", __func__);
 		read(fd_intr, &interrupt, 1);
-		printf("%s [2]\n", __func__);
 		if (interrupt < 1 || interrupt > NUM_QUEUES) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
@@ -209,7 +198,6 @@ static void *handle_mailbox_interrupts(void *data)
 		sem_post(&interrupts[interrupt]);
 		/* FIXME: we should use separate threads for these two */
 		if (interrupt == Q_KEYBOARD) {
-			printf("%s [3]\n", __func__);
 			sem_post(&interrupts[Q_OS]);
 		}
 	}

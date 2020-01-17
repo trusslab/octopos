@@ -398,23 +398,19 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	SYSCALL_SET_THREE_ARGS(SYSCALL_WRITE_FILE_BLOCKS, fd,
 			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	printf("%s [2]: ret0 = %d\n", __func__, ret0);
 	if (ret0 == 0)
 		return 0;
-	printf("%s [3]\n", __func__);
 
 	uint8_t queue_id = (uint8_t) ret0;
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 
 	for (int i = 0; i < num_blocks; i++) {
-		printf("%s [4]\n", __func__);
 		write(fd_out, opcode, 2);
 		write(fd_out, data + (i * STORAGE_BLOCK_SIZE), MAILBOX_QUEUE_MSG_SIZE_LARGE);
 	}
@@ -425,23 +421,19 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
 {
 	uint8_t opcode[2], interrupt;
-	printf("%s [1]\n", __func__);
 
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FILE_BLOCKS, fd,
 			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	printf("%s [2]: ret0 = %d\n", __func__, ret0);
 	if (ret0 == 0)
 		return 0;
-	printf("%s [3]\n", __func__);
 
 	uint8_t queue_id = (uint8_t) ret0;
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
 
 	for (int i = 0; i < num_blocks; i++) {
-		printf("%s [4]\n", __func__);
 		read(fd_intr, &interrupt, 1);
 		write(fd_out, opcode, 2);
 		read(fd_in, data + (i * STORAGE_BLOCK_SIZE), MAILBOX_QUEUE_MSG_SIZE_LARGE);

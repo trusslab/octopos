@@ -196,7 +196,6 @@ static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks
 
 static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	printf("%s [1]\n", __func__);
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
@@ -205,24 +204,19 @@ static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 	get_response_from_storage(buf);
 
 	STORAGE_GET_ONE_RET
-	printf("%s [2]: ret0 = %d\n", __func__, ret0);
 	return (int) ret0;
 }
 
 static int read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
 {
 	uint8_t buf[STORAGE_BLOCK_SIZE];
-	printf("%s [1]\n", __func__);
 
 	if (block_offset + read_size > STORAGE_BLOCK_SIZE)
 		return 0;
-	printf("%s [2]\n", __func__);
 
 	int ret = read_blocks(buf, block_num, 1);
-	printf("%s [3]: ret = %d\n", __func__, ret);
 	if (ret != STORAGE_BLOCK_SIZE)
 		return 0;
-	printf("%s [4]\n", __func__);
 
 	memcpy(data, buf + block_offset, read_size);
 
@@ -232,21 +226,16 @@ static int read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_off
 static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
 {
 	uint8_t buf[STORAGE_BLOCK_SIZE];
-	printf("%s [1]\n", __func__);
 
 	if (block_offset + write_size > STORAGE_BLOCK_SIZE)
 		return 0;
-	printf("%s [2]\n", __func__);
 
 	/* partial block write */
 	if (!(block_offset == 0 && write_size == STORAGE_BLOCK_SIZE)) {
-		printf("%s [3]\n", __func__);
 		int read_ret = read_blocks(buf, block_num, 1);
-		printf("%s [3.1]: read_ret = %d\n", __func__, read_ret);
 		if (read_ret != STORAGE_BLOCK_SIZE)
 			return 0;
 	}
-	printf("%s [4]\n", __func__);
 
 	memcpy(buf + block_offset, data, write_size);
 
@@ -586,10 +575,8 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 void file_system_write_file_blocks_late(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	/* FIXME: we don't check the response */
 	get_response_from_storage(buf);
-
-	STORAGE_GET_ONE_RET
-	printf("%s [1]: ret0 = %d\n", __func__, ret0);
 
 	/* FIXME: the mailbox should automatically do this. */
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, P_OS, 0);
@@ -637,10 +624,8 @@ uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_block
 void file_system_read_file_blocks_late(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	/* FIXME: we don't check the response */
 	get_response_from_storage(buf);
-
-	STORAGE_GET_ONE_RET
-	printf("%s [1]: ret0 = %d\n", __func__, ret0);
 
 	/* FIXME: the mailbox should automatically do this. */
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, P_OS, 0);

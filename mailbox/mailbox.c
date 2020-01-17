@@ -403,9 +403,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
-		printf("%s [2]\n", __func__);
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
 		/* FIXME: check to make sure queues[queue_id].reader_id points to a
 		 * single processor */
@@ -509,6 +507,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 
 	queues[(int) queue_id].access_count = count;
 
+	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
 	if (queue_id == Q_RUNTIME1 || queue_id == Q_RUNTIME2)
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id + 1);
 }
