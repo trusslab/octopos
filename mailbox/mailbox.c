@@ -48,7 +48,13 @@ static void sensor_send_interrupt(uint8_t queue_id)
 
 static void os_send_interrupt(uint8_t queue_id)
 {
+	printf("%s [1]: queue_id = %d\n", __func__, queue_id);
 	send_interrupt(&processors[P_OS], queue_id);
+}
+
+/* dummy */
+static void keyboard_send_interrupt(uint8_t queue_id)
+{
 }
 
 static void serial_out_send_interrupt(uint8_t queue_id)
@@ -102,7 +108,7 @@ static void initialize_processors(void)
 
 	/* keyboard processor */
 	processors[P_KEYBOARD].processor_id = P_KEYBOARD;
-	processors[P_KEYBOARD].send_interrupt = NULL; /* not needed */
+	processors[P_KEYBOARD].send_interrupt = keyboard_send_interrupt; /* dummy */
 	processors[P_KEYBOARD].out_handle = open(FIFO_KEYBOARD, O_RDWR);
 	processors[P_KEYBOARD].in_handle = -1; /* not needed */
 
@@ -180,9 +186,11 @@ static void close_processors(void)
 
 static int write_queue(struct queue *queue, int out_handle)
 {
-	if (queue->counter >= (queue->queue_size - 1)) {
+	if (queue->counter >= queue->queue_size) {
 		/* FIXME: we should communicate that back to the sender processor */
-		printf("Error: queue is full\n");
+		printf("Error: queue (%d) is full\n", queue->queue_id);
+		/* FIXME: remove */
+		sleep(10);
 		_exit(-1);
 		return -1;
 	}
@@ -202,6 +210,8 @@ static int read_queue(struct queue *queue, int in_handle)
 	if (queue->counter <= 0) {
 		/* FIXME: we should communicate that back to the sender processor */
 		printf("Error: queue %d is empty\n", queue->queue_id);
+		/* FIXME: remove */
+		sleep(10);
 		_exit(-1);
 		return -1;
 	}
@@ -394,8 +404,15 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
+	printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		read_queue(&queues[(int) queue_id], processors[(int) reader_id].in_handle);
+		printf("%s [2]: writer_id = %d\n", __func__, queues[queue_id].writer_id);
+		/* FIXME: this queue has multiple writers. Use one Q_OS per runtime. */
+		if (queue_id != Q_OS)
+			processors[(int) queues[(int) queue_id].writer_id].send_interrupt(queue_id);
+		else
+			processors[P_RUNTIME1].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't read from queue %d\n", reader_id, queue_id);
 	}
@@ -509,7 +526,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 
 	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
 	if (queue_id == Q_RUNTIME1 || queue_id == Q_RUNTIME2)
-		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id + 1);
+		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id + NUM_QUEUES);
 }
 
 static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t requesting_proc_id)

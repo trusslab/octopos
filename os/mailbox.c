@@ -55,6 +55,7 @@ int send_output(uint8_t *buf)
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_SERIAL_OUT;
+	sem_wait(&interrupts[Q_SERIAL_OUT]);
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -67,15 +68,18 @@ static int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
 	uint8_t opcode[2];
 	int is_keyboard = 0; 
+	printf("%s [1]\n", __func__);
 
 	sem_wait(&interrupts[Q_OS]);
 	*queue_id = Q_OS;
 
 	sem_getvalue(&interrupts[Q_KEYBOARD], &is_keyboard);
 	if (is_keyboard) {
+		printf("%s [2]\n", __func__);
 		sem_wait(&interrupts[Q_KEYBOARD]);
 		*queue_id = Q_KEYBOARD;
 	}
+	printf("%s [3]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = *queue_id;
@@ -102,6 +106,7 @@ int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 		printf("Error (%s): unexpected runtime_proc_id (%d).\n", __func__, runtime_proc_id);
 		return -1;
 	}
+	sem_wait(&interrupts[opcode[1]]);
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -126,6 +131,7 @@ int send_msg_to_storage_no_response(uint8_t *buf)
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_STORAGE_CMD_IN;
+	sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -136,10 +142,9 @@ int get_response_from_storage(uint8_t *buf)
 {
 	uint8_t opcode[2];
 
-	sem_wait(&interrupts[Q_STORAGE_CMD_OUT]);
-
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_STORAGE_CMD_OUT;
+	sem_wait(&interrupts[Q_STORAGE_CMD_OUT]);
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -150,10 +155,9 @@ void read_from_storage_data_queue(uint8_t *buf)
 {
 	uint8_t opcode[2];
 
-	sem_wait(&interrupts[Q_STORAGE_DATA_OUT]);
-
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_STORAGE_DATA_OUT;
+	sem_wait(&interrupts[Q_STORAGE_DATA_OUT]);
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
@@ -164,6 +168,9 @@ void write_to_storage_data_queue(uint8_t *buf)
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_STORAGE_DATA_IN;
+	printf("%s [1]\n", __func__);
+	sem_wait(&interrupts[Q_STORAGE_DATA_IN]);
+	printf("%s [2]\n", __func__);
 	write(fd_out, opcode, 2), 
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
@@ -172,6 +179,7 @@ static void distribute_input(void)
 {
 	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t queue_id;
+	printf("%s [1]\n", __func__);
 
 	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	/* FIXME: we should use separate threads for these two */
@@ -188,6 +196,7 @@ static void *handle_mailbox_interrupts(void *data)
 {
 
 	uint8_t interrupt;
+	printf("%s [1]\n", __func__);
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
@@ -197,29 +206,44 @@ static void *handle_mailbox_interrupts(void *data)
 		}
 		sem_post(&interrupts[interrupt]);
 		/* FIXME: we should use separate threads for these two */
-		if (interrupt == Q_KEYBOARD) {
+		if (interrupt == Q_KEYBOARD)
 			sem_post(&interrupts[Q_OS]);
-		}
 	}
 }
 
 int main()
 {
 	pthread_t mailbox_thread;
-	for (int i = 0; i <= NUM_QUEUES; i++)
-		sem_init(&interrupts[i], 0, 0);
+
+	intialize_channels();
+	
+	sem_init(&interrupts[Q_OS], 0, 0);
+	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
+	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
+	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
+	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
+	sem_init(&interrupts[Q_SENSOR], 0, 0);
+	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
+
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
-		exit(-1);
+		return -1;
 	}
+	printf("%s [1]\n", __func__);
 
-	intialize_channels();
 	initialize_shell();
 	initialize_file_system();
 	initialize_scheduler();
+	printf("%s [2]\n", __func__);
 
 	while (1) {
+		printf("%s [3]\n", __func__);
 		distribute_input();
 		sched_next_app();
 	}
@@ -227,5 +251,6 @@ int main()
 	pthread_join(mailbox_thread, NULL);
 
 	close_channels();
+	
 	return 0;
 }

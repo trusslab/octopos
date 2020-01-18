@@ -21,77 +21,93 @@ extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
 	uint32_t data = 0;
+	int index = 0;
 
 	insecure_printf("fs_test starting.\n");
 
-	/* test 1 */
-	//uint32_t fd = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
-	//if (fd == 0) {
-	//	insecure_printf("Couldn't open file (fd = %d)\n", fd);
-	//	return;
-	//}
-	//api->read_from_file(fd, (uint8_t *) &data, 4, 0);
-	//insecure_printf("data = %d\n", data);
-	//data++;
-	//if (data > 10)
-	//	data = 0;
-	//api->write_to_file(fd, (uint8_t *) &data, 4, 0);
-	//api->close_file(fd);
-	//api->remove_file((char *) "test_file_1.txt");
-
-	/* test 2 */
 	insecure_printf("Test 1\n");
+	printf("%s [1]\n", __func__);
 	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
 	if (fd1 == 0) {
 		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
 		return;
 	}
+	printf("%s [2]\n", __func__);
 	uint32_t fd2 = api->open_file((char *) "test_file_2.txt", FILE_OPEN_CREATE_MODE);
 	if (fd1 == 0) {
 		api->close_file(fd1);
 		insecure_printf("Couldn't open second file (fd2 = %d)\n", fd2);
 		return;
 	}
+	printf("%s [3]\n", __func__);
 
 	data = 13;
 	api->write_to_file(fd1, (uint8_t *) &data, 4, 10);
+	printf("%s [4]\n", __func__);
 	data = 15;
 	api->write_to_file(fd2, (uint8_t *) &data, 4, 10);
+	printf("%s [5]\n", __func__);
 
 	api->read_from_file(fd1, (uint8_t *) &data, 4, 10);
+	printf("%s [6]\n", __func__);
 	insecure_printf("data (first file) = %d\n", data);
 	if (data != 13) {
 		insecure_printf("Test 1 (1) failed\n");
 		goto out;
 	}
+	printf("%s [7]\n", __func__);
 	api->read_from_file(fd2, (uint8_t *) &data, 4, 10);
+	printf("%s [8]\n", __func__);
 	insecure_printf("data (first file) = %d\n", data);
 	if (data != 15) {
 		insecure_printf("Test 1 (2) failed\n");
 		goto out;
 	}
+	printf("%s [9]\n", __func__);
 
 	insecure_printf("Test 1 passed.\n");
 	insecure_printf("Test 2\n");
-	uint8_t block[STORAGE_BLOCK_SIZE];
+	uint8_t block[STORAGE_BLOCK_SIZE * 100];
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 
 	block[10] = 14;
+	printf("%s [10]\n", __func__);
 	api->write_file_blocks(fd1, block, 5, 1);
+	printf("%s [11]\n", __func__);
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
+	printf("%s [12]\n", __func__);
 	api->read_file_blocks(fd1, block, 5, 1);
+	printf("%s [13]\n", __func__);
 	insecure_printf("block[10] = %d\n", (int) block[10]);
 	if (block[10] != 14) {
 		insecure_printf("Test 2 failed\n");
 		goto out;
 	}
+	printf("%s [14]\n", __func__);
 	insecure_printf("Test 2 passed.\n");
+
+	insecure_printf("Test 3\n");
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
+
+	index = (99 * STORAGE_BLOCK_SIZE) + 10;
+	block[index] = 12;
+	printf("%s [15]\n", __func__);
+	api->write_file_blocks(fd1, block, 0, 100);
+	printf("%s [16]\n", __func__);
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
+	printf("%s [17]\n", __func__);
+	api->read_file_blocks(fd1, block, 0, 100);
+	insecure_printf("block[index] = %d\n", (int) block[index]);
+	if (block[index] != 12) {
+		insecure_printf("Test 3 failed\n");
+		goto out;
+	}
+	printf("%s [18]\n", __func__);
+	insecure_printf("Test 3 passed.\n");
 
 out:
 	api->close_file(fd1);
 	api->remove_file((char *) "test_file_1.txt");
 	api->close_file(fd2);
 	api->remove_file((char *) "test_file_2.txt");
-
-
 }

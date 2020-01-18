@@ -321,7 +321,7 @@ static int remove_file_from_directory(struct file *file)
 static int alloc_blocks_for_file(struct file *file)
 {
 	int start_block = DIR_DATA_NUM_BLOCKS;
-	int num_blocks = 10; /* fixed for now */
+	int num_blocks = 100; /* fixed for now */
 	bool found = false;
 
 	while ((start_block + num_blocks) <= STORAGE_MAIN_PARTITION_SIZE) {
@@ -434,6 +434,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 {
+	printf("%s [1]\n", __func__);
 	if (fd == 0 || fd >= MAX_NUM_FD) { 
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
@@ -478,6 +479,7 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 		else
 			next_write_size = (size - written_size);
 	}
+	printf("%s [2]\n", __func__);
 	
 	return written_size;
 }

@@ -36,7 +36,7 @@
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64
 
-#define MAILBOX_QUEUE_SIZE_LARGE	8
+#define MAILBOX_QUEUE_SIZE_LARGE	1
 #define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
 
 #define FIFO_OS_OUT		"/tmp/octopos_mailbox_os_out"

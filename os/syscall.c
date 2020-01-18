@@ -239,7 +239,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		uint32_t ret;
 		SYSCALL_GET_THREE_ARGS
 		ret = (uint32_t) file_system_write_file_blocks(arg0, (int) arg1, (int) arg2, runtime_proc_id);
-		*late_processing = SYSCALL_WRITE_FILE_BLOCKS;
+		if (ret)
+			*late_processing = SYSCALL_WRITE_FILE_BLOCKS;
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
@@ -247,7 +248,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		uint32_t ret;
 		SYSCALL_GET_THREE_ARGS
 		ret = (uint32_t) file_system_read_file_blocks(arg0, (int) arg1, (int) arg2, runtime_proc_id);
-		*late_processing = SYSCALL_READ_FILE_BLOCKS;
+		if (ret)
+			*late_processing = SYSCALL_READ_FILE_BLOCKS;
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}

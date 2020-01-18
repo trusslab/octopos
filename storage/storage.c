@@ -4,6 +4,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <semaphore.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
@@ -82,6 +85,9 @@ struct partition {
 struct partition partitions[NUM_PARTITIONS];
 
 int fd_out, fd_in, fd_intr;
+
+/* Not all will be used */
+sem_t interrupts[NUM_QUEUES + 1];
 
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 static void initialize_storage_space(void)
@@ -199,6 +205,10 @@ static int wipe_partition(int partition_id)
 static void send_response(uint8_t *buf, uint8_t queue_id)
 {
 	uint8_t opcode[2];
+	printf("%s [1]\n", __func__);
+
+	sem_wait(&interrupts[queue_id]);
+	printf("%s [2]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
@@ -208,9 +218,12 @@ static void send_response(uint8_t *buf, uint8_t queue_id)
 
 static void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 {
-	uint8_t opcode[2], interrupt;
+	uint8_t opcode[2];
+	printf("%s [1]\n", __func__);
 
-	read(fd_intr, &interrupt, 1);
+	sem_wait(&interrupts[queue_id]);
+	printf("%s [2]\n", __func__);
+
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
 	write(fd_out, opcode, 2), 
@@ -220,6 +233,10 @@ static void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 static void write_data_to_queue(uint8_t *buf, uint8_t queue_id)
 {
 	uint8_t opcode[2];
+	printf("%s [1]\n", __func__);
+
+	sem_wait(&interrupts[queue_id]);
+	printf("%s [2]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
@@ -447,15 +464,42 @@ static void process_secure_request(uint8_t *buf, int partition_id)
 	}
 }
 
+static void *handle_mailbox_interrupts(void *data)
+{
+
+	uint8_t interrupt;
+	printf("%s [1]\n", __func__);
+
+	while (1) {
+		read(fd_intr, &interrupt, 1);
+		if (interrupt < 1 || interrupt > NUM_QUEUES) {
+			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
+			exit(-1);
+		}
+		sem_post(&interrupts[interrupt]);
+		if (interrupt == Q_STORAGE_IN_2)
+			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t interrupt, opcode[2];
+	uint8_t opcode[2];
+	pthread_t mailbox_thread;
+	int is_secure_queue = 0;
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error: storage data queue msg size must be equal to storage block size\n");
 		return -1;
 	}
+
+	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, 0);
+	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
+	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_STORAGE_IN_2], 0, 0);
+	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, MAILBOX_QUEUE_SIZE);
 
 	initialize_storage_space();
 
@@ -466,19 +510,27 @@ int main(int argc, char **argv)
 	fd_out = open(FIFO_STORAGE_OUT, O_WRONLY);
 	fd_in = open(FIFO_STORAGE_IN, O_RDONLY);
 	fd_intr = open(FIFO_STORAGE_INTR, O_RDONLY);
-		
+
+	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	if (ret) {
+		printf("Error: couldn't launch the mailbox thread\n");
+		return -1;
+	}
+
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-		read(fd_intr, &interrupt, 1);
-		if (interrupt == Q_STORAGE_CMD_IN) {
+		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
+		sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
+		if (!is_secure_queue) {
 			opcode[1] = Q_STORAGE_CMD_IN;
 			write(fd_out, opcode, 2), 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 			process_request(buf, 0);
 			send_response(buf, Q_STORAGE_CMD_OUT);
-		} else if (interrupt == Q_STORAGE_IN_2) {
+		} else {
+			sem_wait(&interrupts[Q_STORAGE_IN_2]);
 			opcode[1] = Q_STORAGE_IN_2;
 			write(fd_out, opcode, 2), 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
@@ -487,6 +539,8 @@ int main(int argc, char **argv)
 		}
 	}
 	
+	pthread_join(mailbox_thread, NULL);
+
 	close(fd_out);
 	close(fd_in);
 	close(fd_intr);
