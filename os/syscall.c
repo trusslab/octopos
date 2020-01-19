@@ -36,71 +36,71 @@
 
 #define SYSCALL_GET_ONE_ARG		\
 	uint32_t arg0;			\
-	arg0 = *((uint32_t *) &buf[3]); \
+	arg0 = *((uint32_t *) &buf[2]); \
 
 #define SYSCALL_GET_TWO_ARGS		\
 	uint32_t arg0, arg1;		\
-	arg0 = *((uint32_t *) &buf[3]); \
-	arg1 = *((uint32_t *) &buf[7]); \
+	arg0 = *((uint32_t *) &buf[2]); \
+	arg1 = *((uint32_t *) &buf[6]); \
 
 #define SYSCALL_GET_THREE_ARGS		\
 	uint32_t arg0, arg1, arg2;	\
-	arg0 = *((uint32_t *) &buf[3]); \
-	arg1 = *((uint32_t *) &buf[7]); \
-	arg2 = *((uint32_t *) &buf[11]);\
+	arg0 = *((uint32_t *) &buf[2]); \
+	arg1 = *((uint32_t *) &buf[6]); \
+	arg2 = *((uint32_t *) &buf[10]);\
 
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
 	uint8_t data_size, *data;				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 4;		\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 3;		\
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		break;						\
 	}							\
-	data_size = buf[3];					\
+	data_size = buf[2];					\
 	if (data_size > max_size) {				\
 		printf("Error: size not supported\n");		\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		break;						\
 	}							\
-	data = &buf[4];						\
+	data = &buf[3];						\
 
 #define SYSCALL_GET_ONE_ARG_DATA				\
 	uint32_t arg0;						\
 	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[3]);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 8;		\
+	arg0 = *((uint32_t *) &buf[2]);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;		\
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		break;						\
 	}							\
-	data_size = buf[7];					\
+	data_size = buf[6];					\
 	if (data_size > max_size) {				\
 		printf("Error: size not supported\n");		\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		break;						\
 	}							\
-	data = &buf[8];						\
+	data = &buf[7];						\
 
 #define SYSCALL_GET_TWO_ARGS_DATA				\
 	uint32_t arg0, arg1;					\
 	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[3]);				\
-	arg1 = *((uint32_t *) &buf[7]);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 12;		\
+	arg0 = *((uint32_t *) &buf[2]);				\
+	arg1 = *((uint32_t *) &buf[6]);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 11;		\
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		break;						\
 	}							\
-	data_size = buf[11];					\
+	data_size = buf[10];					\
 	if (data_size > max_size) {				\
 		printf("Error: size not supported\n");		\
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		break;						\
 	}							\
-	data = &buf[12];					\
+	data = &buf[11];					\
 
 /* response for async syscalls */
 void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size)
@@ -115,7 +115,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 {
 	uint16_t syscall_nr;
 
-	syscall_nr = *((uint16_t *) &buf[1]);
+	syscall_nr = *((uint16_t *) &buf[0]);
 	*no_response = false;
 
 	switch (syscall_nr) {
@@ -332,17 +332,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 }
 
-void process_system_call(uint8_t *buf)
+void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 {
-	/* only allow syscalls from RUNTIME, for now */
-	/* FIXME: we can't rely on the other processor declaring who it is.
-	 * Must be set automatically in the mailbox */
-	int runtime_proc_id = buf[0];
 	if (runtime_proc_id == P_RUNTIME1 || runtime_proc_id == P_RUNTIME2) {
 		bool no_response = false;
 		int late_processing = NUM_SYSCALLS;
 	
-		handle_syscall(buf[0], buf, &no_response, &late_processing);
+		handle_syscall(runtime_proc_id, buf, &no_response, &late_processing);
 
 		/* send response */
 		if (!no_response) {
@@ -356,6 +352,6 @@ void process_system_call(uint8_t *buf)
 			file_system_read_file_blocks_late();
 
 	} else {
-		printf("Error: invalid syscall caller\n");
+		printf("Error: invalid syscall caller (%d)\n", runtime_proc_id);
 	}
 }

@@ -19,19 +19,20 @@
 #define NUM_RUNTIME_PROCS	2
 
 /* queue IDs */
-#define	Q_OS			1
-#define	Q_KEYBOARD		2
-#define	Q_SERIAL_OUT		3
-#define	Q_STORAGE_DATA_IN	4
-#define	Q_STORAGE_DATA_OUT	5
-#define	Q_STORAGE_CMD_IN	6
-#define	Q_STORAGE_CMD_OUT	7
-#define	Q_STORAGE_IN_2		8
-#define	Q_STORAGE_OUT_2		9
-#define Q_SENSOR		10
-#define	Q_RUNTIME1		11
-#define	Q_RUNTIME2		12
-#define NUM_QUEUES		12
+#define	Q_OS1			1
+#define	Q_OS2			2
+#define	Q_KEYBOARD		3
+#define	Q_SERIAL_OUT		4
+#define	Q_STORAGE_DATA_IN	5
+#define	Q_STORAGE_DATA_OUT	6
+#define	Q_STORAGE_CMD_IN	7
+#define	Q_STORAGE_CMD_OUT	8
+#define	Q_STORAGE_IN_2		9
+#define	Q_STORAGE_OUT_2		10
+#define Q_SENSOR		11
+#define	Q_RUNTIME1		12
+#define	Q_RUNTIME2		13
+#define NUM_QUEUES		13
 
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64

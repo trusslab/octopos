@@ -18,6 +18,7 @@
 
 int p_runtime = 0;
 int q_runtime = 0;
+int q_os = 0;
 char fifo_runtime_out[64];
 char fifo_runtime_in[64];
 char fifo_runtime_intr[64];
@@ -25,33 +26,33 @@ char fifo_runtime_intr[64];
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[1]) = syscall_nr;		\
+	*((uint16_t *) &buf[0]) = syscall_nr;		\
 
 #define SYSCALL_SET_ONE_ARG(syscall_nr, arg0)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[1]) = syscall_nr;		\
-	*((uint32_t *) &buf[3]) = arg0;			\
+	*((uint16_t *) &buf[0]) = syscall_nr;		\
+	*((uint32_t *) &buf[2]) = arg0;			\
 
 #define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[1]) = syscall_nr;		\
-	*((uint32_t *) &buf[3]) = arg0;			\
-	*((uint32_t *) &buf[7]) = arg1;			\
+	*((uint16_t *) &buf[0]) = syscall_nr;		\
+	*((uint32_t *) &buf[2]) = arg0;			\
+	*((uint32_t *) &buf[6]) = arg1;			\
 
 #define SYSCALL_SET_THREE_ARGS(syscall_nr, arg0, arg1, arg2)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint16_t *) &buf[1]) = syscall_nr;			\
-	*((uint32_t *) &buf[3]) = arg0;				\
-	*((uint32_t *) &buf[7]) = arg1;				\
-	*((uint32_t *) &buf[11]) = arg2;			\
+	*((uint16_t *) &buf[0]) = syscall_nr;			\
+	*((uint32_t *) &buf[2]) = arg0;				\
+	*((uint32_t *) &buf[6]) = arg1;				\
+	*((uint32_t *) &buf[10]) = arg2;			\
 
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 4;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 3;				\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
@@ -60,14 +61,14 @@ char fifo_runtime_intr[64];
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[1]) = syscall_nr;					\
-	buf[3] = size;								\
-	memcpy(&buf[4], (uint8_t *) data, size);				\
+	*((uint16_t *) &buf[0]) = syscall_nr;					\
+	buf[2] = size;								\
+	memcpy(&buf[3], (uint8_t *) data, size);				\
 
 #define SYSCALL_SET_ONE_ARG_DATA(syscall_nr, arg0, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 8;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;				\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
@@ -76,15 +77,15 @@ char fifo_runtime_intr[64];
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[1]) = syscall_nr;					\
-	*((uint32_t *) &buf[3]) = arg0;						\
-	buf[7] = size;								\
-	memcpy(&buf[8], (uint8_t *) data, size);				\
+	*((uint16_t *) &buf[0]) = syscall_nr;					\
+	*((uint32_t *) &buf[2]) = arg0;						\
+	buf[6] = size;								\
+	memcpy(&buf[7], (uint8_t *) data, size);				\
 
 #define SYSCALL_SET_TWO_ARGS_DATA(syscall_nr, arg0, arg1, data, size)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 12;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 11;				\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
@@ -93,11 +94,11 @@ char fifo_runtime_intr[64];
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[1]) = syscall_nr;					\
-	*((uint32_t *) &buf[3]) = arg0;						\
-	*((uint32_t *) &buf[7]) = arg1;						\
-	buf[11] = size;								\
-	memcpy(&buf[12], (uint8_t *) data, size);				\
+	*((uint16_t *) &buf[0]) = syscall_nr;					\
+	*((uint32_t *) &buf[2]) = arg0;						\
+	*((uint32_t *) &buf[6]) = arg1;						\
+	buf[10] = size;								\
+	memcpy(&buf[11], (uint8_t *) data, size);				\
 
 #define SYSCALL_GET_ONE_RET				\
 	uint32_t ret0;					\
@@ -218,11 +219,10 @@ static void issue_syscall(uint8_t *buf)
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_OS;
+	opcode[1] = q_os;
 	printf("%s [1]\n", __func__);
-	sem_wait(&interrupts[Q_OS]);
+	sem_wait(&interrupts[q_os]);
 	write(fd_out, opcode, 2);
-	buf[0] = p_runtime; /* FIXME: can't be set by RUNTIME itself */
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	printf("%s [2]\n", __func__);
@@ -243,10 +243,9 @@ static void issue_syscall_noresponse(uint8_t *buf, bool *no_response)
 	int is_change = 0;
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_OS;
-	sem_wait(&interrupts[Q_OS]);
+	opcode[1] = q_os;
+	sem_wait(&interrupts[q_os]);
 	write(fd_out, opcode, 2);
-	buf[0] = p_runtime; /* FIXME: can't be set by RUNTIME itself */
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* wait for response */
@@ -813,6 +812,7 @@ int main(int argc, char **argv)
 	case 1:
 		p_runtime = P_RUNTIME1;
 		q_runtime = Q_RUNTIME1;
+		q_os = Q_OS1;
 		strcpy(fifo_runtime_out, FIFO_RUNTIME1_OUT);
 		strcpy(fifo_runtime_in, FIFO_RUNTIME1_IN);
 		strcpy(fifo_runtime_intr, FIFO_RUNTIME1_INTR);
@@ -820,6 +820,7 @@ int main(int argc, char **argv)
 	case 2:
 		p_runtime = P_RUNTIME2;
 		q_runtime = Q_RUNTIME2;
+		q_os = Q_OS2;
 		strcpy(fifo_runtime_out, FIFO_RUNTIME2_OUT);
 		strcpy(fifo_runtime_in, FIFO_RUNTIME2_IN);
 		strcpy(fifo_runtime_intr, FIFO_RUNTIME2_INTR);
@@ -837,7 +838,7 @@ int main(int argc, char **argv)
 	fd_in = open(fifo_runtime_in, O_RDONLY);
 	fd_intr = open(fifo_runtime_intr, O_RDONLY);
 
-	sem_init(&interrupts[Q_OS], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);

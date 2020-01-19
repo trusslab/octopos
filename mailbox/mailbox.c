@@ -246,17 +246,30 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 
 static void initialize_queues(void)
 {
-	/* OS queue */
-	queues[Q_OS].queue_id = Q_OS;
-	queues[Q_OS].head = 0;
-	queues[Q_OS].tail = 0;
-	queues[Q_OS].counter = 0;
-	queues[Q_OS].reader_id = P_OS;
-	queues[Q_OS].writer_id = ALL_PROCESSORS;
-	queues[Q_OS].access_count = 0; /* irrelevant for the OS queue */
-	queues[Q_OS].queue_size = MAILBOX_QUEUE_SIZE;
-	queues[Q_OS].msg_size = MAILBOX_QUEUE_MSG_SIZE;
-	queues[Q_OS].messages = 
+	/* OS queue for runtime1 */
+	queues[Q_OS1].queue_id = Q_OS1;
+	queues[Q_OS1].head = 0;
+	queues[Q_OS1].tail = 0;
+	queues[Q_OS1].counter = 0;
+	queues[Q_OS1].reader_id = P_OS;
+	queues[Q_OS1].writer_id = P_RUNTIME1;
+	queues[Q_OS1].access_count = 0; /* irrelevant for the OS queue */
+	queues[Q_OS1].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_OS1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_OS1].messages = 
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+
+	/* OS queue for runtime1 */
+	queues[Q_OS2].queue_id = Q_OS2;
+	queues[Q_OS2].head = 0;
+	queues[Q_OS2].tail = 0;
+	queues[Q_OS2].counter = 0;
+	queues[Q_OS2].reader_id = P_OS;
+	queues[Q_OS2].writer_id = P_RUNTIME2;
+	queues[Q_OS2].access_count = 0; /* irrelevant for the OS queue */
+	queues[Q_OS2].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_OS2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_OS2].messages = 
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* keyboard queue */
@@ -408,11 +421,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		read_queue(&queues[(int) queue_id], processors[(int) reader_id].in_handle);
 		printf("%s [2]: writer_id = %d\n", __func__, queues[queue_id].writer_id);
-		/* FIXME: this queue has multiple writers. Use one Q_OS per runtime. */
-		if (queue_id != Q_OS)
-			processors[(int) queues[(int) queue_id].writer_id].send_interrupt(queue_id);
-		else
-			processors[P_RUNTIME1].send_interrupt(queue_id);
+		processors[(int) queues[(int) queue_id].writer_id].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't read from queue %d\n", reader_id, queue_id);
 	}
@@ -420,10 +429,10 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
+	printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
-		/* FIXME: check to make sure queues[queue_id].reader_id points to a
-		 * single processor */
+		printf("%s [2]: reader_id = %d\n", __func__, queues[queue_id].reader_id);
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't write to queue %d\n", writer_id, queue_id);

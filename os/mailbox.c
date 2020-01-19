@@ -24,6 +24,7 @@ int fd_in;
 int fd_intr;
 
 sem_t interrupts[NUM_QUEUES + 1];
+sem_t interrupt_input;
 
 static int intialize_channels(void)
 {
@@ -62,22 +63,46 @@ int send_output(uint8_t *buf)
 	return 0;
 }
 
-/* reads from Q_OS and Q_KEYBOARD */
-/* FIXME: we should use separate threads for these two */
+/* reads from Q_OS's and Q_KEYBOARD */
+/* FIXME: we should use separate threads for keyboard and syscalls */
+/* FIXME: not scalable to more than two runtimes */
 static int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
 	uint8_t opcode[2];
-	int is_keyboard = 0; 
+	int is_keyboard = 0, is_os1 = 0, is_os2 = 0; 
 	printf("%s [1]\n", __func__);
+	static uint8_t turn = Q_OS1;
 
-	sem_wait(&interrupts[Q_OS]);
-	*queue_id = Q_OS;
+	sem_wait(&interrupt_input);
 
 	sem_getvalue(&interrupts[Q_KEYBOARD], &is_keyboard);
+	sem_getvalue(&interrupts[Q_OS1], &is_os1);
+	sem_getvalue(&interrupts[Q_OS2], &is_os2);
 	if (is_keyboard) {
 		printf("%s [2]\n", __func__);
 		sem_wait(&interrupts[Q_KEYBOARD]);
 		*queue_id = Q_KEYBOARD;
+	} else {
+		if (is_os1 && !is_os2) {
+			printf("%s [3]\n", __func__);
+			sem_wait(&interrupts[Q_OS1]);
+			*queue_id = Q_OS1;
+			turn = Q_OS2;
+		} else if (is_os2 && !is_os1) {
+			printf("%s [4]\n", __func__);
+			sem_wait(&interrupts[Q_OS2]);
+			*queue_id = Q_OS2;
+			turn = Q_OS1;
+		} else { /* is_os1 && is_os2 */
+			printf("%s [5]\n", __func__);
+			sem_wait(&interrupts[turn]);
+			*queue_id = turn;
+			if (turn == Q_OS1)
+				turn = Q_OS2;
+			else
+				turn = Q_OS1;
+		}
+
 	}
 	printf("%s [3]\n", __func__);
 
@@ -184,12 +209,17 @@ static void distribute_input(void)
 	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	/* FIXME: we should use separate threads for these two */
 	recv_input(input_buf, &queue_id);
-	if (queue_id == Q_KEYBOARD)
+	printf("%s [2]: queue_id = %d\n", __func__, queue_id);
+	if (queue_id == Q_KEYBOARD) {
 		shell_process_input((char) input_buf[0]);
-	else if (queue_id == Q_OS)
-		process_system_call(input_buf);
-	else
-		printf("Error: Interrupt received from an invalid queue\n");
+	} else if (queue_id == Q_OS1) {
+		process_system_call(input_buf, P_RUNTIME1);
+	} else if (queue_id == Q_OS2) {
+		process_system_call(input_buf, P_RUNTIME2);
+	} else {
+		printf("Error (%s): invalid queue_id (%d)\n", __func__, queue_id);
+		exit(-1);
+	}
 }
 
 static void *handle_mailbox_interrupts(void *data)
@@ -206,8 +236,8 @@ static void *handle_mailbox_interrupts(void *data)
 		}
 		sem_post(&interrupts[interrupt]);
 		/* FIXME: we should use separate threads for these two */
-		if (interrupt == Q_KEYBOARD)
-			sem_post(&interrupts[Q_OS]);
+		if (interrupt == Q_KEYBOARD || interrupt == Q_OS1 || interrupt == Q_OS2)
+			sem_post(&interrupt_input);
 	}
 }
 
@@ -217,7 +247,8 @@ int main()
 
 	intialize_channels();
 	
-	sem_init(&interrupts[Q_OS], 0, 0);
+	sem_init(&interrupts[Q_OS1], 0, 0);
+	sem_init(&interrupts[Q_OS2], 0, 0);
 	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
 	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
