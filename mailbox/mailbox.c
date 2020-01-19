@@ -52,9 +52,9 @@ static void os_send_interrupt(uint8_t queue_id)
 	send_interrupt(&processors[P_OS], queue_id);
 }
 
-/* dummy */
 static void keyboard_send_interrupt(uint8_t queue_id)
 {
+	send_interrupt(&processors[P_KEYBOARD], queue_id);
 }
 
 static void serial_out_send_interrupt(uint8_t queue_id)
@@ -83,7 +83,8 @@ static void initialize_processors(void)
 	mkfifo(FIFO_OS_OUT, 0666);
 	mkfifo(FIFO_OS_IN, 0666);
 	mkfifo(FIFO_OS_INTR, 0666);
-	mkfifo(FIFO_KEYBOARD, 0666);
+	mkfifo(FIFO_KEYBOARD_OUT, 0666);
+	mkfifo(FIFO_KEYBOARD_INTR, 0666);
 	mkfifo(FIFO_SENSOR, 0666);
 	mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
 	mkfifo(FIFO_SERIAL_OUT_IN, 0666);
@@ -108,9 +109,10 @@ static void initialize_processors(void)
 
 	/* keyboard processor */
 	processors[P_KEYBOARD].processor_id = P_KEYBOARD;
-	processors[P_KEYBOARD].send_interrupt = keyboard_send_interrupt; /* dummy */
-	processors[P_KEYBOARD].out_handle = open(FIFO_KEYBOARD, O_RDWR);
+	processors[P_KEYBOARD].send_interrupt = keyboard_send_interrupt;
+	processors[P_KEYBOARD].out_handle = open(FIFO_KEYBOARD_OUT, O_RDWR);
 	processors[P_KEYBOARD].in_handle = -1; /* not needed */
+	processors[P_KEYBOARD].intr_handle = open(FIFO_KEYBOARD_INTR, O_RDWR);
 
 	/* sensor processor */
 	processors[P_SENSOR].processor_id = P_SENSOR;
@@ -169,7 +171,8 @@ static void close_processors(void)
 	remove(FIFO_OS_OUT);
 	remove(FIFO_OS_IN);
 	remove(FIFO_OS_INTR);
-	remove(FIFO_KEYBOARD);
+	remove(FIFO_KEYBOARD_OUT);
+	remove(FIFO_KEYBOARD_INTR);
 	remove(FIFO_SERIAL_OUT_OUT);
 	remove(FIFO_SERIAL_OUT_IN);
 	remove(FIFO_SERIAL_OUT_INTR);
