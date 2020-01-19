@@ -54,7 +54,7 @@ char output_buf[MAILBOX_QUEUE_MSG_SIZE];
  * So if 'command' returns a file descriptor, the next 'command' has this
  * descriptor as its 'input'.
  */
-static int command(int input, int first, int last, int double_pipe)
+static int command(int input, int first, int last, int double_pipe, int bg)
 {
 	/* FIXME: add support for passing args to apps */
 
@@ -75,79 +75,14 @@ static int command(int input, int first, int last, int double_pipe)
 			sched_run_app(input);
 		}
 		sched_run_app(app_id);
-		foreground_app = get_app(app_id);
-		shell_status = SHELL_STATE_RUNNING_APP;
+		if (!bg) {
+			foreground_app = get_app(app_id);
+			shell_status = SHELL_STATE_RUNNING_APP;
+		} else {
+			output_printf("octopos$> ");
+		}
 		return app_id;
 	}
- 
-	/*************** simple ******************/
-	//if (strcmp(args[0], "run") == 0) {
-	//	/* octopos run command */
-	//	send_msg_to_runtime((uint8_t *) args[1]);
-	//	shell_status = SHELL_STATE_RUNNING_APP;
-	//	return 0;
-	//} else {
-	//	output_printf("Unsupported command\n");
-	//	return 0;
-	//}
-
-	/*************** original ******************/
-	//int pipettes[2];
-
-	///* Invoke pipe */
-	//pipe( pipettes );	
-	//pid = fork();
- 
-	///*
-	// SCHEME:
-	// 	STDIN --> O --> O --> O --> STDOUT
-	//*/
- 
-	//if (pid == 0) {
-	//	if (first == 1 && last == 0 && input == 0) {
-	//		// First command
-	//		dup2( pipettes[WRITE], STDOUT_FILENO );
-	//	} else if (first == 0 && last == 0 && input != 0) {
-	//		// Middle command
-	//		dup2(input, STDIN_FILENO);
-	//		dup2(pipettes[WRITE], STDOUT_FILENO);
-	//	} else {
-	//		// Last command
-	//		dup2( input, STDIN_FILENO );
-	//		//Ardalan
-	//		dup2(pipettes[WRITE], STDOUT_FILENO);
-	//	}
- 
-	//	if (execvp( args[0], args) == -1) {
-	//		//Ardalan start
-	//		/* FIXME: we should not use the output_buf here. */
-	//		sprintf(output_buf, "Error: Failed to execute %s\n", args[0]);
-	//		write(pipettes[WRITE], output_buf, MAILBOX_QUEUE_MSG_SIZE); 
-	//		//Ardalan end
-	//		_exit(EXIT_FAILURE); // If child fails
-	//	}
-	//}
-
-	////Ardalan start
-	//if (pid > 0 && last == 1) {
-	//	memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-	//	read(pipettes[READ], output_buf, MAILBOX_QUEUE_MSG_SIZE);
-	//	send_output((uint8_t *) output_buf);
-	//}
-	////Ardalan end
-
-	//if (input != 0) 
-	//	close(input);
- 
-	//// Nothing more needs to be written
-	//close(pipettes[WRITE]);
- 
-	//// If it's the last command, nothing more needs to be read
-	//if (last == 1) {
-	//	close(pipettes[READ]);
-	//}
- 
-	//return pipettes[READ];
 }
  
 /* Final cleanup, 'wait' for processes to terminate.
@@ -160,7 +95,7 @@ static void cleanup(int n)
 		wait(NULL); 
 }
  
-static int run(char* cmd, int input, int first, int last, int double_pipe);
+static int run(char* cmd, int input, int first, int last, int double_pipe, int bg);
 static int n = 0; /* number of calls to 'command' */
 
 /* Process a command line */
@@ -168,6 +103,8 @@ static void process_input_line(char *line)
 {
 	int input = 0;
 	int first = 1;
+	int single = 1;
+	int bg = 0;
 
 	/* detect double pipe */
 	char* cmd = line;
@@ -176,11 +113,11 @@ static void process_input_line(char *line)
 	if (next != NULL) {
 		/* 'next' points to '%' */
 		*next = '\0';
-		input = run(cmd, input, first, 0, 1);
+		input = run(cmd, input, first, 0, 1, 0);
 
 		cmd = next + 1;
 		first = 0;
-		input = run(cmd, input, first, 1, 1);
+		input = run(cmd, input, first, 1, 1, 0);
 		cleanup(n);
 		n = 0;
 		return;
@@ -192,15 +129,32 @@ static void process_input_line(char *line)
 	next = strchr(cmd, '|'); /* Find first '|' */
 
 	while (next != NULL) {
+		single = 0;
 		/* 'next' points to '|' */
 		*next = '\0';
-		input = run(cmd, input, first, 0, 0);
+		input = run(cmd, input, first, 0, 0, 0);
 
 		cmd = next + 1;
 		next = strchr(cmd, '|'); /* Find next '|' */
 		first = 0;
 	}
-	input = run(cmd, input, first, 1, 0);
+
+	if (!single) {
+		input = run(cmd, input, first, 1, 0, 0);
+		cleanup(n);
+		n = 0;
+		return;
+	}
+
+	/* see if it's a background command (cmd &) */
+	next = strchr(cmd, '&');
+	if (next != NULL) {
+		bg = 1;
+		/* 'next' points to '&' */
+		*next = '\0';
+	}
+
+	input = run(cmd, input, first, 1, 0, bg);
 	cleanup(n);
 	n = 0;
 }
@@ -255,7 +209,7 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 int app_write_to_shell(struct app *app, uint8_t *data, int size)
 {
 	if (app != foreground_app) {
-		printf("%s: Error: only the foreground app can read from shell\n", __func__);
+		/* only the foreground app can write to shell */
 		return -ERR_INVALID;
 	}
 
@@ -280,7 +234,7 @@ int app_write_to_shell(struct app *app, uint8_t *data, int size)
 int app_read_from_shell(struct app *app)
 {
 	if (app != foreground_app) {
-		printf("%s: Error: only the foreground app can read from shell\n", __func__);
+		/* only the foreground app can read from shell */
 		return -ERR_INVALID;
 	}
 
@@ -298,15 +252,16 @@ void initialize_shell(void)
  
 static void split(char* cmd);
  
-static int run(char* cmd, int input, int first, int last, int double_pipe)
+static int run(char* cmd, int input, int first, int last, int double_pipe, int bg)
 {
 	split(cmd);
 	if (args[0] != NULL) {
 		if (strcmp(args[0], "exit") == 0) 
 			exit(0);
 		n += 1;
-		return command(input, first, last, double_pipe);
+		return command(input, first, last, double_pipe, bg);
 	}
+	printf("%s [5]\n", __func__);
 	return 0;
 }
  
