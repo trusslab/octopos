@@ -546,9 +546,9 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 
 	queues[(int) queue_id].access_count = count;
 
+	printf("%s [1]: proc_id = %d, queue_id = %d\n", __func__, proc_id, queue_id);
 	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
-	if (queue_id == Q_RUNTIME1 || queue_id == Q_RUNTIME2)
-		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id + NUM_QUEUES);
+	processors[proc_id].send_interrupt(queue_id + NUM_QUEUES);
 }
 
 static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t requesting_proc_id)
@@ -601,6 +601,9 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	/* FIXME: interrupt proc_id so that it knows it has access now? */
 
 	queues[(int) queue_id].access_count = 0; /* irrelevant in this case */
+
+	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
+	processors[proc_id].send_interrupt(queue_id + NUM_QUEUES);
 }
 
 static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count, uint8_t requesting_proc_id)

@@ -213,6 +213,7 @@ int fd_out, fd_in, fd_intr;
 /* Not all will be used */
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t interrupt_change;
+int change_queue = 0;
 
 static void issue_syscall(uint8_t *buf)
 {
@@ -248,6 +249,7 @@ static void issue_syscall_noresponse(uint8_t *buf, bool *no_response)
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
+	/* FIXME: the name of this funciton has noresponse in it! */
 	/* wait for response */
 	sem_wait(&interrupts[q_runtime]);
 	sem_getvalue(&interrupt_change, &is_change);
@@ -636,7 +638,7 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 	bool no_response;
 	sem_init(&interrupts[target_runtime_queue_id], 0, MAILBOX_QUEUE_SIZE);
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_IPC, target_runtime_queue_id, count)
-	/* FIXME: the OS might need to return an error */
+	change_queue = target_runtime_queue_id;
 	issue_syscall_noresponse(buf, &no_response);
 	if (!no_response) {
 		/* error */
@@ -792,7 +794,9 @@ static void *handle_mailbox_interrupts(void *data)
 			exit(-1);
 		}
 		if (interrupt > NUM_QUEUES) {
-			if ((interrupt - NUM_QUEUES) == q_runtime) {
+			printf("%s [2]\n", __func__);
+			if ((interrupt - NUM_QUEUES) == change_queue) {
+				printf("%s [3]\n", __func__);
 				sem_post(&interrupt_change);
 				sem_post(&interrupts[q_runtime]);
 			}

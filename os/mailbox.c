@@ -243,9 +243,40 @@ static void *handle_mailbox_interrupts(void *data)
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
-		if (interrupt < 1 || interrupt > NUM_QUEUES) {
+		if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
+		}
+		if (interrupt > NUM_QUEUES) {
+			switch ((interrupt - NUM_QUEUES)) {
+			case Q_KEYBOARD:
+				printf("[2] resetting KEYBOARD semaphore\n");
+				sem_init(&interrupts[Q_KEYBOARD], 0, 0);
+				break;
+			case Q_SERIAL_OUT:
+				printf("[3] resetting SERIAL_OUT semaphore\n");
+				sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
+				break;
+			case Q_STORAGE_IN_2:
+				printf("[4] resetting STORAGE_IN_2 semaphore\n");
+				sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
+				break;
+			case Q_STORAGE_OUT_2:
+				printf("[5] resetting STORAGE_OUT_2 semaphore\n");
+				sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
+				break;
+			case Q_STORAGE_DATA_IN:
+				printf("[6] resetting STORAGE_DATA_IN semaphore\n");
+				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+				break;
+			case Q_STORAGE_DATA_OUT:
+				printf("[7] resetting STORAGE_DATA_OUT semaphore\n");
+				sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
+				break;
+			}
+
+			/* ignore the rest */
+			continue;
 		}
 		sem_post(&interrupts[interrupt]);
 		/* FIXME: we should use separate threads for these two */
