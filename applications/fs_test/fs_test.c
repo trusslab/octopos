@@ -21,25 +21,10 @@ extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
 	uint32_t data = 0;
+	int index = 0;
 
 	insecure_printf("fs_test starting.\n");
 
-	/* test 1 */
-	//uint32_t fd = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
-	//if (fd == 0) {
-	//	insecure_printf("Couldn't open file (fd = %d)\n", fd);
-	//	return;
-	//}
-	//api->read_from_file(fd, (uint8_t *) &data, 4, 0);
-	//insecure_printf("data = %d\n", data);
-	//data++;
-	//if (data > 10)
-	//	data = 0;
-	//api->write_to_file(fd, (uint8_t *) &data, 4, 0);
-	//api->close_file(fd);
-	//api->remove_file((char *) "test_file_1.txt");
-
-	/* test 2 */
 	insecure_printf("Test 1\n");
 	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
 	if (fd1 == 0) {
@@ -73,7 +58,7 @@ void app_main(struct runtime_api *api)
 
 	insecure_printf("Test 1 passed.\n");
 	insecure_printf("Test 2\n");
-	uint8_t block[STORAGE_BLOCK_SIZE];
+	uint8_t block[STORAGE_BLOCK_SIZE * 100];
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 
 	block[10] = 14;
@@ -87,11 +72,24 @@ void app_main(struct runtime_api *api)
 	}
 	insecure_printf("Test 2 passed.\n");
 
+	insecure_printf("Test 3\n");
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
+
+	index = (99 * STORAGE_BLOCK_SIZE) + 10;
+	block[index] = 12;
+	api->write_file_blocks(fd1, block, 0, 100);
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
+	api->read_file_blocks(fd1, block, 0, 100);
+	insecure_printf("block[index] = %d\n", (int) block[index]);
+	if (block[index] != 12) {
+		insecure_printf("Test 3 failed\n");
+		goto out;
+	}
+	insecure_printf("Test 3 passed.\n");
+
 out:
 	api->close_file(fd1);
 	api->remove_file((char *) "test_file_1.txt");
 	api->close_file(fd2);
 	api->remove_file((char *) "test_file_2.txt");
-
-
 }

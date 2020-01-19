@@ -321,7 +321,7 @@ static int remove_file_from_directory(struct file *file)
 static int alloc_blocks_for_file(struct file *file)
 {
 	int start_block = DIR_DATA_NUM_BLOCKS;
-	int num_blocks = 10; /* fixed for now */
+	int num_blocks = 100; /* fixed for now */
 	bool found = false;
 
 	while ((start_block + num_blocks) <= STORAGE_MAIN_PARTITION_SIZE) {
@@ -561,6 +561,8 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 		printf("%s: Error: num_blocks is too large\n", __func__);
 		return 0;
 	}
+
+	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);

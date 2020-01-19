@@ -51,6 +51,11 @@ static void os_send_interrupt(uint8_t queue_id)
 	send_interrupt(&processors[P_OS], queue_id);
 }
 
+static void keyboard_send_interrupt(uint8_t queue_id)
+{
+	send_interrupt(&processors[P_KEYBOARD], queue_id);
+}
+
 static void serial_out_send_interrupt(uint8_t queue_id)
 {
 	send_interrupt(&processors[P_SERIAL_OUT], queue_id);
@@ -77,7 +82,8 @@ static void initialize_processors(void)
 	mkfifo(FIFO_OS_OUT, 0666);
 	mkfifo(FIFO_OS_IN, 0666);
 	mkfifo(FIFO_OS_INTR, 0666);
-	mkfifo(FIFO_KEYBOARD, 0666);
+	mkfifo(FIFO_KEYBOARD_OUT, 0666);
+	mkfifo(FIFO_KEYBOARD_INTR, 0666);
 	mkfifo(FIFO_SENSOR, 0666);
 	mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
 	mkfifo(FIFO_SERIAL_OUT_IN, 0666);
@@ -102,9 +108,10 @@ static void initialize_processors(void)
 
 	/* keyboard processor */
 	processors[P_KEYBOARD].processor_id = P_KEYBOARD;
-	processors[P_KEYBOARD].send_interrupt = NULL; /* not needed */
-	processors[P_KEYBOARD].out_handle = open(FIFO_KEYBOARD, O_RDWR);
+	processors[P_KEYBOARD].send_interrupt = keyboard_send_interrupt;
+	processors[P_KEYBOARD].out_handle = open(FIFO_KEYBOARD_OUT, O_RDWR);
 	processors[P_KEYBOARD].in_handle = -1; /* not needed */
+	processors[P_KEYBOARD].intr_handle = open(FIFO_KEYBOARD_INTR, O_RDWR);
 
 	/* sensor processor */
 	processors[P_SENSOR].processor_id = P_SENSOR;
@@ -163,7 +170,8 @@ static void close_processors(void)
 	remove(FIFO_OS_OUT);
 	remove(FIFO_OS_IN);
 	remove(FIFO_OS_INTR);
-	remove(FIFO_KEYBOARD);
+	remove(FIFO_KEYBOARD_OUT);
+	remove(FIFO_KEYBOARD_INTR);
 	remove(FIFO_SERIAL_OUT_OUT);
 	remove(FIFO_SERIAL_OUT_IN);
 	remove(FIFO_SERIAL_OUT_INTR);
@@ -180,9 +188,11 @@ static void close_processors(void)
 
 static int write_queue(struct queue *queue, int out_handle)
 {
-	if (queue->counter >= (queue->queue_size - 1)) {
+	if (queue->counter >= queue->queue_size) {
 		/* FIXME: we should communicate that back to the sender processor */
-		printf("Error: queue is full\n");
+		printf("Error: queue (%d) is full\n", queue->queue_id);
+		/* FIXME: remove */
+		sleep(10);
 		_exit(-1);
 		return -1;
 	}
@@ -202,6 +212,8 @@ static int read_queue(struct queue *queue, int in_handle)
 	if (queue->counter <= 0) {
 		/* FIXME: we should communicate that back to the sender processor */
 		printf("Error: queue %d is empty\n", queue->queue_id);
+		/* FIXME: remove */
+		sleep(10);
 		_exit(-1);
 		return -1;
 	}
@@ -236,17 +248,30 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 
 static void initialize_queues(void)
 {
-	/* OS queue */
-	queues[Q_OS].queue_id = Q_OS;
-	queues[Q_OS].head = 0;
-	queues[Q_OS].tail = 0;
-	queues[Q_OS].counter = 0;
-	queues[Q_OS].reader_id = P_OS;
-	queues[Q_OS].writer_id = ALL_PROCESSORS;
-	queues[Q_OS].access_count = 0; /* irrelevant for the OS queue */
-	queues[Q_OS].queue_size = MAILBOX_QUEUE_SIZE;
-	queues[Q_OS].msg_size = MAILBOX_QUEUE_MSG_SIZE;
-	queues[Q_OS].messages = 
+	/* OS queue for runtime1 */
+	queues[Q_OS1].queue_id = Q_OS1;
+	queues[Q_OS1].head = 0;
+	queues[Q_OS1].tail = 0;
+	queues[Q_OS1].counter = 0;
+	queues[Q_OS1].reader_id = P_OS;
+	queues[Q_OS1].writer_id = P_RUNTIME1;
+	queues[Q_OS1].access_count = 0; /* irrelevant for the OS queue */
+	queues[Q_OS1].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_OS1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_OS1].messages = 
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+
+	/* OS queue for runtime1 */
+	queues[Q_OS2].queue_id = Q_OS2;
+	queues[Q_OS2].head = 0;
+	queues[Q_OS2].tail = 0;
+	queues[Q_OS2].counter = 0;
+	queues[Q_OS2].reader_id = P_OS;
+	queues[Q_OS2].writer_id = P_RUNTIME2;
+	queues[Q_OS2].access_count = 0; /* irrelevant for the OS queue */
+	queues[Q_OS2].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_OS2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_OS2].messages = 
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	/* keyboard queue */
@@ -396,6 +421,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		read_queue(&queues[(int) queue_id], processors[(int) reader_id].in_handle);
+		processors[(int) queues[(int) queue_id].writer_id].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't read from queue %d\n", reader_id, queue_id);
 	}
@@ -405,12 +431,20 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
-		/* FIXME: check to make sure queues[queue_id].reader_id points to a
-		 * single processor */
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't write to queue %d\n", writer_id, queue_id);
 	}
+}
+
+static void reset_queue(uint8_t queue_id)
+{
+	for (int i = 0; i < queues[(int) queue_id].queue_size; i++)
+		memset(queues[(int) queue_id].messages[i], 0x0, queues[(int) queue_id].msg_size);
+
+	queues[(int) queue_id].head = 0;
+	queues[(int) queue_id].tail = 0;
+	queues[(int) queue_id].counter = 0;
 }
 
 /* FIXME: we also have a copy of these definitions in syscall.h */
@@ -498,7 +532,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 		return;
 	}
 
-	/* FIXME: do we need to zero out the queue? */
+	reset_queue(queue_id);	
 
 	if (access == READ_ACCESS)
 		queues[(int) queue_id].reader_id = proc_id;
@@ -508,8 +542,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 	queues[(int) queue_id].access_count = count;
 
 	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
-	if (queue_id == Q_RUNTIME1 || queue_id == Q_RUNTIME2)
-		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id + 1);
+	processors[proc_id].send_interrupt(queue_id + NUM_QUEUES);
 }
 
 static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t requesting_proc_id)
@@ -552,7 +585,7 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 		return;
 	}
 
-	/* FIXME: do we need to zero out the queue? */
+	reset_queue(queue_id);	
 
 	if (access == READ_ACCESS)
 		queues[(int) queue_id].reader_id = proc_id;
@@ -562,6 +595,9 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	/* FIXME: interrupt proc_id so that it knows it has access now? */
 
 	queues[(int) queue_id].access_count = 0; /* irrelevant in this case */
+
+	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
+	processors[proc_id].send_interrupt(queue_id + NUM_QUEUES);
 }
 
 static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count, uint8_t requesting_proc_id)
