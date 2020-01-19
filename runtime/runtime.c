@@ -221,15 +221,12 @@ static void issue_syscall(uint8_t *buf)
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = q_os;
-	printf("%s [1]\n", __func__);
 	sem_wait(&interrupts[q_os]);
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
-	printf("%s [2]\n", __func__);
 	/* wait for response */
 	sem_wait(&interrupts[q_runtime]);
-	printf("%s [3]\n", __func__);
 	/* FIXME: check that it's the right interrupt */
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = q_runtime;
@@ -433,17 +430,14 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_WRITE_FILE_BLOCKS, fd,
 			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	printf("%s [2]\n", __func__);
 	if (ret0 == 0)
 		return 0;
-	printf("%s [3]\n", __func__);
 
 	uint8_t queue_id = (uint8_t) ret0;
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
@@ -461,17 +455,14 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FILE_BLOCKS, fd,
 			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	printf("%s [2]\n", __func__);
 	if (ret0 == 0)
 		return 0;
-	printf("%s [3]\n", __func__);
 
 	uint8_t queue_id = (uint8_t) ret0;
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
@@ -785,7 +776,6 @@ static void *handle_mailbox_interrupts(void *data)
 {
 
 	uint8_t interrupt;
-	printf("%s [1]\n", __func__);
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
@@ -794,9 +784,7 @@ static void *handle_mailbox_interrupts(void *data)
 			exit(-1);
 		}
 		if (interrupt > NUM_QUEUES) {
-			printf("%s [2]\n", __func__);
 			if ((interrupt - NUM_QUEUES) == change_queue) {
-				printf("%s [3]\n", __func__);
 				sem_post(&interrupt_change);
 				sem_post(&interrupts[q_runtime]);
 			}

@@ -205,10 +205,8 @@ static int wipe_partition(int partition_id)
 static void send_response(uint8_t *buf, uint8_t queue_id)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	sem_wait(&interrupts[queue_id]);
-	printf("%s [2]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
@@ -219,10 +217,8 @@ static void send_response(uint8_t *buf, uint8_t queue_id)
 static void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	sem_wait(&interrupts[queue_id]);
-	printf("%s [2]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
@@ -233,10 +229,8 @@ static void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 static void write_data_to_queue(uint8_t *buf, uint8_t queue_id)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	sem_wait(&interrupts[queue_id]);
-	printf("%s [2]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
@@ -468,7 +462,6 @@ static void *handle_mailbox_interrupts(void *data)
 {
 
 	uint8_t interrupt;
-	printf("%s [1]\n", __func__);
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);

@@ -48,7 +48,6 @@ static void sensor_send_interrupt(uint8_t queue_id)
 
 static void os_send_interrupt(uint8_t queue_id)
 {
-	printf("%s [1]: queue_id = %d\n", __func__, queue_id);
 	send_interrupt(&processors[P_OS], queue_id);
 }
 
@@ -420,10 +419,8 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		read_queue(&queues[(int) queue_id], processors[(int) reader_id].in_handle);
-		printf("%s [2]: writer_id = %d\n", __func__, queues[queue_id].writer_id);
 		processors[(int) queues[(int) queue_id].writer_id].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't read from queue %d\n", reader_id, queue_id);
@@ -432,10 +429,8 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
-		printf("%s [2]: reader_id = %d\n", __func__, queues[queue_id].reader_id);
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't write to queue %d\n", writer_id, queue_id);
@@ -546,7 +541,6 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 
 	queues[(int) queue_id].access_count = count;
 
-	printf("%s [1]: proc_id = %d, queue_id = %d\n", __func__, proc_id, queue_id);
 	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
 	processors[proc_id].send_interrupt(queue_id + NUM_QUEUES);
 }

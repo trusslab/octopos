@@ -434,7 +434,6 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 {
-	printf("%s [1]\n", __func__);
 	if (fd == 0 || fd >= MAX_NUM_FD) { 
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
@@ -479,7 +478,6 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 		else
 			next_write_size = (size - written_size);
 	}
-	printf("%s [2]\n", __func__);
 	
 	return written_size;
 }

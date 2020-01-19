@@ -70,7 +70,6 @@ static int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
 	uint8_t opcode[2];
 	int is_keyboard = 0, is_os1 = 0, is_os2 = 0; 
-	printf("%s [1]\n", __func__);
 	static uint8_t turn = Q_OS1;
 
 	sem_wait(&interrupt_input);
@@ -79,22 +78,18 @@ static int recv_input(uint8_t *buf, uint8_t *queue_id)
 	sem_getvalue(&interrupts[Q_OS1], &is_os1);
 	sem_getvalue(&interrupts[Q_OS2], &is_os2);
 	if (is_keyboard) {
-		printf("%s [2]\n", __func__);
 		sem_wait(&interrupts[Q_KEYBOARD]);
 		*queue_id = Q_KEYBOARD;
 	} else {
 		if (is_os1 && !is_os2) {
-			printf("%s [3]\n", __func__);
 			sem_wait(&interrupts[Q_OS1]);
 			*queue_id = Q_OS1;
 			turn = Q_OS2;
 		} else if (is_os2 && !is_os1) {
-			printf("%s [4]\n", __func__);
 			sem_wait(&interrupts[Q_OS2]);
 			*queue_id = Q_OS2;
 			turn = Q_OS1;
 		} else { /* is_os1 && is_os2 */
-			printf("%s [5]\n", __func__);
 			sem_wait(&interrupts[turn]);
 			*queue_id = turn;
 			if (turn == Q_OS1)
@@ -104,7 +99,6 @@ static int recv_input(uint8_t *buf, uint8_t *queue_id)
 		}
 
 	}
-	printf("%s [3]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = *queue_id;
@@ -206,9 +200,7 @@ void write_to_storage_data_queue(uint8_t *buf)
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_STORAGE_DATA_IN;
-	printf("%s [1]\n", __func__);
 	sem_wait(&interrupts[Q_STORAGE_DATA_IN]);
-	printf("%s [2]\n", __func__);
 	write(fd_out, opcode, 2), 
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
@@ -217,12 +209,10 @@ static void distribute_input(void)
 {
 	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t queue_id;
-	printf("%s [1]\n", __func__);
 
 	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	/* FIXME: we should use separate threads for these two */
 	recv_input(input_buf, &queue_id);
-	printf("%s [2]: queue_id = %d\n", __func__, queue_id);
 	if (queue_id == Q_KEYBOARD) {
 		shell_process_input((char) input_buf[0]);
 	} else if (queue_id == Q_OS1) {
@@ -239,7 +229,6 @@ static void *handle_mailbox_interrupts(void *data)
 {
 
 	uint8_t interrupt;
-	printf("%s [1]\n", __func__);
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
@@ -250,27 +239,21 @@ static void *handle_mailbox_interrupts(void *data)
 		if (interrupt > NUM_QUEUES) {
 			switch ((interrupt - NUM_QUEUES)) {
 			case Q_KEYBOARD:
-				printf("[2] resetting KEYBOARD semaphore\n");
 				sem_init(&interrupts[Q_KEYBOARD], 0, 0);
 				break;
 			case Q_SERIAL_OUT:
-				printf("[3] resetting SERIAL_OUT semaphore\n");
 				sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 				break;
 			case Q_STORAGE_IN_2:
-				printf("[4] resetting STORAGE_IN_2 semaphore\n");
 				sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 				break;
 			case Q_STORAGE_OUT_2:
-				printf("[5] resetting STORAGE_OUT_2 semaphore\n");
 				sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
 				break;
 			case Q_STORAGE_DATA_IN:
-				printf("[6] resetting STORAGE_DATA_IN semaphore\n");
 				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 				break;
 			case Q_STORAGE_DATA_OUT:
-				printf("[7] resetting STORAGE_DATA_OUT semaphore\n");
 				sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 				break;
 			}
@@ -310,15 +293,12 @@ int main()
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
 	}
-	printf("%s [1]\n", __func__);
 
 	initialize_shell();
 	initialize_file_system();
 	initialize_scheduler();
-	printf("%s [2]\n", __func__);
 
 	while (1) {
-		printf("%s [3]\n", __func__);
 		distribute_input();
 		sched_next_app();
 	}

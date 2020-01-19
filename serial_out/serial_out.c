@@ -17,7 +17,6 @@ static void *handle_mailbox_interrupts(void *data)
 {
 
 	uint8_t interrupt;
-	printf("%s [1]\n", __func__);
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
