@@ -71,6 +71,7 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 	/* FIXME: need a critical section here. */
 
 	if (target_runtime_proc->pending_secure_ipc_request == runtime_queue_id) {
+		/* FIXME: do we need to wait for these queues to be empty using wait_until_empty()? */
 		mailbox_change_queue_access(target_runtime_queue_id, WRITE_ACCESS,
 							runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(runtime_queue_id, WRITE_ACCESS,

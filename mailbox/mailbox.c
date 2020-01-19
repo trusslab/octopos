@@ -442,6 +442,16 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 	}
 }
 
+static void reset_queue(uint8_t queue_id)
+{
+	for (int i = 0; i < queues[(int) queue_id].queue_size; i++)
+		memset(queues[(int) queue_id].messages[i], 0x0, queues[(int) queue_id].msg_size);
+
+	queues[(int) queue_id].head = 0;
+	queues[(int) queue_id].tail = 0;
+	queues[(int) queue_id].counter = 0;
+}
+
 /* FIXME: we also have a copy of these definitions in syscall.h */
 /* access modes */
 #define ACCESS_UNLIMITED_REVOCABLE	0
@@ -527,7 +537,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 		return;
 	}
 
-	/* FIXME: do we need to zero out the queue? */
+	reset_queue(queue_id);	
 
 	if (access == READ_ACCESS)
 		queues[(int) queue_id].reader_id = proc_id;
@@ -581,7 +591,7 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 		return;
 	}
 
-	/* FIXME: do we need to zero out the queue? */
+	reset_queue(queue_id);	
 
 	if (access == READ_ACCESS)
 		queues[(int) queue_id].reader_id = proc_id;

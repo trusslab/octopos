@@ -564,6 +564,8 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 		return 0;
 	}
 
+	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);
 

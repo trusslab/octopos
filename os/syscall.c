@@ -131,6 +131,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		/* FIXME: Check to make sure secure serial_out is available */
 
+		wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
+
 		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -286,6 +288,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 
 		/* FIXME: Check to make sure secure storage is available */
+
+		wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
 		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);

@@ -138,6 +138,19 @@ int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 	return 0;
 }
 
+/* Only to be used for queues that OS writes to */
+/* FIXME: busy-waiting */
+void wait_until_empty(uint8_t queue_id, int queue_size)
+{
+	int left;
+	
+	while (1) {
+		sem_getvalue(&interrupts[queue_id], &left);
+		if (left == queue_size)
+			break;
+	}
+}
+
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count)
 {
 	uint8_t opcode[5];

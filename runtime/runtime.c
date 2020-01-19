@@ -287,6 +287,19 @@ static int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t
 	return (int) ret; 
 }
 
+/* Only to be used for queues that runtime writes to */
+/* FIXME: busy-waiting */
+static void wait_until_empty(uint8_t queue_id, int queue_size)
+{
+	int left;
+	
+	while (1) {
+		sem_getvalue(&interrupts[queue_id], &left);
+		if (left == queue_size)
+			break;
+	}
+}
+
 static int request_secure_keyboard(int count)
 {
 	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
@@ -335,6 +348,8 @@ static int request_secure_serial_out(int count)
 
 static int yield_secure_serial_out(void)
 {
+	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
+
 	mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, P_OS);
 	return 0;
 }
@@ -588,6 +603,8 @@ static int yield_secure_storage(void)
 	if (!ret)
 		remove_secure_storage_key();
 
+	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+
 	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
 	return 0;
@@ -654,6 +671,9 @@ static int yield_secure_ipc(void)
 	uint8_t qid = secure_ipc_target_queue;
 	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
+
+	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
+
 	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(q_runtime, WRITE_ACCESS, P_OS);
 	return 0;
