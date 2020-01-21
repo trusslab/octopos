@@ -183,6 +183,11 @@ static int remove_file_from_list(struct file *file)
 
 static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
+	int ret = is_queue_available(Q_STORAGE_DATA_IN);
+	if (!ret) {
+		wait_for_queue_availability(Q_STORAGE_DATA_IN);	
+	}
+
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage_no_response(buf);
@@ -196,6 +201,11 @@ static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks
 
 static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
+	int ret = is_queue_available(Q_STORAGE_DATA_OUT);
+	if (!ret) {
+		wait_for_queue_availability(Q_STORAGE_DATA_OUT);	
+	}
+
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
@@ -562,7 +572,14 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 		return 0;
 	}
 
+	int ret = is_queue_available(Q_STORAGE_DATA_IN);
+	if (!ret) {
+		wait_for_queue_availability(Q_STORAGE_DATA_IN);	
+	}
+
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+
+	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);
@@ -577,11 +594,8 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 void file_system_write_file_blocks_late(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	/* FIXME: we don't check the response */
+	/* FIXME: pretty inefficient. Why wait if we don't check the response? */
 	get_response_from_storage(buf);
-
-	/* FIXME: the mailbox should automatically do this. */
-	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, P_OS, 0);
 }
 
 uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
@@ -613,6 +627,13 @@ uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_block
 		return 0;
 	}
 
+	int ret = is_queue_available(Q_STORAGE_DATA_OUT);
+	if (!ret) {
+		wait_for_queue_availability(Q_STORAGE_DATA_OUT);	
+	}
+
+	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
+
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);
 
@@ -626,11 +647,8 @@ uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_block
 void file_system_read_file_blocks_late(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	/* FIXME: we don't check the response */
+	/* FIXME: pretty inefficient. Why wait if we don't check the response? */
 	get_response_from_storage(buf);
-
-	/* FIXME: the mailbox should automatically do this. */
-	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, P_OS, 0);
 }
 
 int file_system_close_file(uint32_t fd)

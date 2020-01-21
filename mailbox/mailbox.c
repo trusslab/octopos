@@ -20,6 +20,9 @@ struct processor {
 
 struct queue {
 	uint8_t queue_id;
+	uint8_t queue_type;
+#define QUEUE_TYPE_FIXED_READER		0
+#define QUEUE_TYPE_FIXED_WRITER		1
 	uint8_t **messages;
 	int queue_size;
 	int msg_size;
@@ -31,6 +34,7 @@ struct queue {
 	uint8_t writer_id;
 	/* FIXME: too small */
 	uint8_t access_count;
+	uint8_t prev_owner;
 };
 
 struct processor processors[NUM_PROCESSORS];
@@ -191,8 +195,6 @@ static int write_queue(struct queue *queue, int out_handle)
 	if (queue->counter >= queue->queue_size) {
 		/* FIXME: we should communicate that back to the sender processor */
 		printf("Error: queue (%d) is full\n", queue->queue_id);
-		/* FIXME: remove */
-		sleep(10);
 		_exit(-1);
 		return -1;
 	}
@@ -201,8 +203,25 @@ static int write_queue(struct queue *queue, int out_handle)
 	read(out_handle, queue->messages[queue->tail], queue->msg_size);
 	queue->tail = (queue->tail + 1) % queue->queue_size;
 
-	if (queue->access_count > 0)
-		queue->access_count--;
+	return 0;
+}
+
+static int change_back_queue_access(struct queue *queue)
+{
+	if (queue->prev_owner == 0) {
+		printf("Error (%s): invalid call\n", __func__);
+		return -1;
+	}
+
+	if (queue->queue_type == QUEUE_TYPE_FIXED_READER) {
+		queue->writer_id = queue->prev_owner;
+		queue->prev_owner = 0;
+		processors[(int) queue->writer_id].send_interrupt(queue->queue_id + NUM_QUEUES);
+	} else { /* QUEUE_TYPE_FIXED_WRITER */
+		queue->reader_id = queue->prev_owner;
+		queue->prev_owner = 0;
+		processors[(int) queue->reader_id].send_interrupt(queue->queue_id + NUM_QUEUES);
+	}
 
 	return 0;
 }
@@ -212,8 +231,6 @@ static int read_queue(struct queue *queue, int in_handle)
 	if (queue->counter <= 0) {
 		/* FIXME: we should communicate that back to the sender processor */
 		printf("Error: queue %d is empty\n", queue->queue_id);
-		/* FIXME: remove */
-		sleep(10);
 		_exit(-1);
 		return -1;
 	}
@@ -221,9 +238,6 @@ static int read_queue(struct queue *queue, int in_handle)
 	queue->counter--;
 	write(in_handle, queue->messages[queue->head], queue->msg_size);
 	queue->head = (queue->head + 1) % queue->queue_size;
-
-	if (queue->access_count > 0)
-		queue->access_count--;
 
 	return 0;
 }
@@ -250,12 +264,14 @@ static void initialize_queues(void)
 {
 	/* OS queue for runtime1 */
 	queues[Q_OS1].queue_id = Q_OS1;
+	queues[Q_OS1].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_OS1].head = 0;
 	queues[Q_OS1].tail = 0;
 	queues[Q_OS1].counter = 0;
 	queues[Q_OS1].reader_id = P_OS;
 	queues[Q_OS1].writer_id = P_RUNTIME1;
 	queues[Q_OS1].access_count = 0; /* irrelevant for the OS queue */
+	queues[Q_OS1].prev_owner = 0;
 	queues[Q_OS1].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_OS1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_OS1].messages = 
@@ -263,12 +279,14 @@ static void initialize_queues(void)
 
 	/* OS queue for runtime1 */
 	queues[Q_OS2].queue_id = Q_OS2;
+	queues[Q_OS2].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_OS2].head = 0;
 	queues[Q_OS2].tail = 0;
 	queues[Q_OS2].counter = 0;
 	queues[Q_OS2].reader_id = P_OS;
 	queues[Q_OS2].writer_id = P_RUNTIME2;
 	queues[Q_OS2].access_count = 0; /* irrelevant for the OS queue */
+	queues[Q_OS2].prev_owner = 0;
 	queues[Q_OS2].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_OS2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_OS2].messages = 
@@ -276,12 +294,14 @@ static void initialize_queues(void)
 
 	/* keyboard queue */
 	queues[Q_KEYBOARD].queue_id = Q_KEYBOARD;
+	queues[Q_KEYBOARD].queue_type = QUEUE_TYPE_FIXED_WRITER;
 	queues[Q_KEYBOARD].head = 0;
 	queues[Q_KEYBOARD].tail = 0;
 	queues[Q_KEYBOARD].counter = 0;
 	queues[Q_KEYBOARD].reader_id = P_OS;
 	queues[Q_KEYBOARD].writer_id = P_KEYBOARD;
 	queues[Q_KEYBOARD].access_count = 0; /* irrelevant when OS is reader */
+	queues[Q_KEYBOARD].prev_owner = 0;
 	queues[Q_KEYBOARD].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_KEYBOARD].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_KEYBOARD].messages =
@@ -289,12 +309,14 @@ static void initialize_queues(void)
 
 	/* serial output queue */
 	queues[Q_SERIAL_OUT].queue_id = Q_SERIAL_OUT;
+	queues[Q_SERIAL_OUT].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_SERIAL_OUT].head = 0;
 	queues[Q_SERIAL_OUT].tail = 0;
 	queues[Q_SERIAL_OUT].counter = 0;
 	queues[Q_SERIAL_OUT].reader_id = P_SERIAL_OUT;
 	queues[Q_SERIAL_OUT].writer_id = P_OS;
 	queues[Q_SERIAL_OUT].access_count = 0; /* irrelevant when OS is writer */
+	queues[Q_SERIAL_OUT].prev_owner = 0;
 	queues[Q_SERIAL_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_SERIAL_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_SERIAL_OUT].messages =
@@ -302,12 +324,14 @@ static void initialize_queues(void)
 
 	/* runtime1 queue */
 	queues[Q_RUNTIME1].queue_id = Q_RUNTIME1;
+	queues[Q_RUNTIME1].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_RUNTIME1].head = 0;
 	queues[Q_RUNTIME1].tail = 0;
 	queues[Q_RUNTIME1].counter = 0;
 	queues[Q_RUNTIME1].reader_id = P_RUNTIME1;
 	queues[Q_RUNTIME1].writer_id = P_OS;
 	queues[Q_RUNTIME1].access_count = 0; /* irrelevant for the RUNTIME1 queue */
+	queues[Q_RUNTIME1].prev_owner = 0;
 	queues[Q_RUNTIME1].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_RUNTIME1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_RUNTIME1].messages =
@@ -315,12 +339,14 @@ static void initialize_queues(void)
 
 	/* runtime2 queue */
 	queues[Q_RUNTIME2].queue_id = Q_RUNTIME2;
+	queues[Q_RUNTIME2].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_RUNTIME2].head = 0;
 	queues[Q_RUNTIME2].tail = 0;
 	queues[Q_RUNTIME2].counter = 0;
 	queues[Q_RUNTIME2].reader_id = P_RUNTIME2;
 	queues[Q_RUNTIME2].writer_id = P_OS;
 	queues[Q_RUNTIME2].access_count = 0; /* irrelevant for the RUNTIME2 queue */
+	queues[Q_RUNTIME2].prev_owner = 0;
 	queues[Q_RUNTIME2].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_RUNTIME2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_RUNTIME2].messages =
@@ -328,72 +354,84 @@ static void initialize_queues(void)
 
 	/* storage queues */
 	queues[Q_STORAGE_DATA_IN].queue_id = Q_STORAGE_DATA_IN;
+	queues[Q_STORAGE_DATA_IN].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_STORAGE_DATA_IN].head = 0;
 	queues[Q_STORAGE_DATA_IN].tail = 0;
 	queues[Q_STORAGE_DATA_IN].counter = 0;
 	queues[Q_STORAGE_DATA_IN].reader_id = P_STORAGE;
 	queues[Q_STORAGE_DATA_IN].writer_id = P_OS;
 	queues[Q_STORAGE_DATA_IN].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_DATA_IN].prev_owner = 0;
 	queues[Q_STORAGE_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_IN].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
 	queues[Q_STORAGE_DATA_OUT].queue_id = Q_STORAGE_DATA_OUT;
+	queues[Q_STORAGE_DATA_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
 	queues[Q_STORAGE_DATA_OUT].head = 0;
 	queues[Q_STORAGE_DATA_OUT].tail = 0;
 	queues[Q_STORAGE_DATA_OUT].counter = 0;
 	queues[Q_STORAGE_DATA_OUT].reader_id = P_OS;
 	queues[Q_STORAGE_DATA_OUT].writer_id = P_STORAGE;
 	queues[Q_STORAGE_DATA_OUT].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_DATA_OUT].prev_owner = 0;
 	queues[Q_STORAGE_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_OUT].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
 	queues[Q_STORAGE_CMD_IN].queue_id = Q_STORAGE_CMD_IN;
+	queues[Q_STORAGE_CMD_IN].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_STORAGE_CMD_IN].head = 0;
 	queues[Q_STORAGE_CMD_IN].tail = 0;
 	queues[Q_STORAGE_CMD_IN].counter = 0;
 	queues[Q_STORAGE_CMD_IN].reader_id = P_STORAGE;
 	queues[Q_STORAGE_CMD_IN].writer_id = P_OS;
 	queues[Q_STORAGE_CMD_IN].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_CMD_IN].prev_owner = 0;
 	queues[Q_STORAGE_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_STORAGE_CMD_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_STORAGE_CMD_IN].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	queues[Q_STORAGE_CMD_OUT].queue_id = Q_STORAGE_CMD_OUT;
+	queues[Q_STORAGE_CMD_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
 	queues[Q_STORAGE_CMD_OUT].head = 0;
 	queues[Q_STORAGE_CMD_OUT].tail = 0;
 	queues[Q_STORAGE_CMD_OUT].counter = 0;
 	queues[Q_STORAGE_CMD_OUT].reader_id = P_OS;
 	queues[Q_STORAGE_CMD_OUT].writer_id = P_STORAGE;
 	queues[Q_STORAGE_CMD_OUT].access_count = 0; /* irrelevant for main STORAGE queues */
+	queues[Q_STORAGE_CMD_OUT].prev_owner = 0;
 	queues[Q_STORAGE_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_STORAGE_CMD_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_STORAGE_CMD_OUT].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	queues[Q_STORAGE_IN_2].queue_id = Q_STORAGE_IN_2;
+	queues[Q_STORAGE_IN_2].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_STORAGE_IN_2].head = 0;
 	queues[Q_STORAGE_IN_2].tail = 0;
 	queues[Q_STORAGE_IN_2].counter = 0;
 	queues[Q_STORAGE_IN_2].reader_id = P_STORAGE;
 	queues[Q_STORAGE_IN_2].writer_id = P_OS;
 	queues[Q_STORAGE_IN_2].access_count = 0; /* irrelevant when OS is writer */
+	queues[Q_STORAGE_IN_2].prev_owner = 0;
 	queues[Q_STORAGE_IN_2].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_STORAGE_IN_2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_STORAGE_IN_2].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
 	queues[Q_STORAGE_OUT_2].queue_id = Q_STORAGE_OUT_2;
+	queues[Q_STORAGE_OUT_2].queue_type = QUEUE_TYPE_FIXED_WRITER;
 	queues[Q_STORAGE_OUT_2].head = 0;
 	queues[Q_STORAGE_OUT_2].tail = 0;
 	queues[Q_STORAGE_OUT_2].counter = 0;
 	queues[Q_STORAGE_OUT_2].reader_id = P_OS;
 	queues[Q_STORAGE_OUT_2].writer_id = P_STORAGE;
 	queues[Q_STORAGE_OUT_2].access_count = 0; /* irrelevant when OS is reader */
+	queues[Q_STORAGE_OUT_2].prev_owner = 0;
 	queues[Q_STORAGE_OUT_2].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_STORAGE_OUT_2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_STORAGE_OUT_2].messages =
@@ -420,8 +458,14 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
-		read_queue(&queues[(int) queue_id], processors[(int) reader_id].in_handle);
-		processors[(int) queues[(int) queue_id].writer_id].send_interrupt(queue_id);
+		struct queue *queue = &queues[(int) queue_id];
+		read_queue(queue, processors[(int) reader_id].in_handle);
+		processors[queue->writer_id].send_interrupt(queue_id);
+		if (queue->access_count > 0) {
+			queue->access_count--;
+			if (queue->access_count == 0)
+				change_back_queue_access(queue);
+		}
 	} else {
 		printf("Error: processor %d can't read from queue %d\n", reader_id, queue_id);
 	}
@@ -534,10 +578,13 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 
 	reset_queue(queue_id);	
 
-	if (access == READ_ACCESS)
+	if (access == READ_ACCESS) {
+		queues[(int) queue_id].prev_owner = queues[(int) queue_id].reader_id;
 		queues[(int) queue_id].reader_id = proc_id;
-	else /* access == WRITER_ACCESS */
+	} else { /* access == WRITER_ACCESS */
+		queues[(int) queue_id].prev_owner = queues[(int) queue_id].writer_id;
 		queues[(int) queue_id].writer_id = proc_id;
+	}
 
 	queues[(int) queue_id].access_count = count;
 
@@ -587,10 +634,13 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 
 	reset_queue(queue_id);	
 
-	if (access == READ_ACCESS)
+	if (access == READ_ACCESS) {
+		queues[(int) queue_id].prev_owner = queues[(int) queue_id].reader_id;
 		queues[(int) queue_id].reader_id = proc_id;
-	else /* access == WRITER_ACCESS */
+	} else { /* access == WRITER_ACCESS */
+		queues[(int) queue_id].prev_owner = queues[(int) queue_id].writer_id;
 		queues[(int) queue_id].writer_id = proc_id;
+	}
 
 	/* FIXME: interrupt proc_id so that it knows it has access now? */
 

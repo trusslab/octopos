@@ -108,7 +108,7 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	SYSCALL_SET_ONE_RET_DATA(0, line, size)
 	/* FIXME: we need to send msg to runtime proc that issues the syscall */
-	send_msg_to_runtime(runtime_proc_id, buf);
+	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
@@ -129,9 +129,16 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		/* FIXME: Check to make sure secure serial_out is available */
+		int ret = is_queue_available(Q_SERIAL_OUT);
+		/* Or should we make this blocking? */
+		if (!ret) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
+			break;
+		}
 
 		wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
+
+		mark_queue_unavailable(Q_SERIAL_OUT);
 
 		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
@@ -147,7 +154,14 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		/* FIXME: Check to make sure secure keyboard is available */
+		int ret = is_queue_available(Q_KEYBOARD);
+		/* Or should we make this blocking? */
+		if (!ret) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
+			break;
+		}
+
+		mark_queue_unavailable(Q_KEYBOARD);
 
 		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
@@ -287,9 +301,18 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		/* FIXME: Check to make sure secure storage is available */
+		int ret_in = is_queue_available(Q_STORAGE_IN_2);
+		int ret_out = is_queue_available(Q_STORAGE_OUT_2);
+		/* Or should we make this blocking? */
+		if (!ret_in || !ret_out) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
+			break;
+		}
 
 		wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+
+		mark_queue_unavailable(Q_STORAGE_IN_2);
+		mark_queue_unavailable(Q_STORAGE_OUT_2);
 
 		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
@@ -316,6 +339,14 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		runtime_queue_id = get_runtime_queue_id(runtime_proc_id);
 		if (!runtime_queue_id) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			break;
+		}
+
+		int ret1 = is_queue_available(target_runtime_queue_id);
+		int ret2 = is_queue_available(runtime_queue_id);
+		/* Or should we make this blocking? */
+		if (!ret1 || !ret2) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
 
@@ -346,7 +377,7 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 
 		/* send response */
 		if (!no_response) {
-			send_msg_to_runtime(runtime_proc_id, buf);
+			check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 		}
 
 		/* FIXME: use async interrupt processing instead. */

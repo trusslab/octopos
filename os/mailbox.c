@@ -25,6 +25,7 @@ int fd_intr;
 
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t interrupt_input;
+sem_t availables[NUM_QUEUES + 1];
 
 static int intialize_channels(void)
 {
@@ -50,9 +51,31 @@ static void close_channels(void)
 	remove(FIFO_OS_INTR);
 }
 
+int is_queue_available(uint8_t queue_id)
+{
+	int available;
+
+	sem_getvalue(&availables[queue_id], &available);
+	return available;
+}
+
+void wait_for_queue_availability(uint8_t queue_id)
+{
+	sem_wait(&availables[queue_id]);
+}
+
+void mark_queue_unavailable(uint8_t queue_id)
+{
+	sem_init(&availables[queue_id], 0, 0);
+}
+
 int send_output(uint8_t *buf)
 {
 	uint8_t opcode[2];
+
+	int ret = is_queue_available(Q_SERIAL_OUT);
+	if (!ret)
+		sem_wait(&availables[Q_SERIAL_OUT]);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_SERIAL_OUT;
@@ -108,26 +131,32 @@ static int recv_input(uint8_t *buf, uint8_t *queue_id)
 	return 0;
 }
 
-int send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
+static int send_msg_to_runtime_queue(uint8_t runtime_queue_id, uint8_t *buf)
 {
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	/* FIXME: use get_runtime_queue_id() */
-	switch(runtime_proc_id) {
-	case P_RUNTIME1:
-		opcode[1] = Q_RUNTIME1;
-		break;
-	case P_RUNTIME2:
-		opcode[1] = Q_RUNTIME2;
-		break;
-	default:
-		printf("Error (%s): unexpected runtime_proc_id (%d).\n", __func__, runtime_proc_id);
-		return -1;
-	}
+	opcode[1] = runtime_queue_id;
+
 	sem_wait(&interrupts[opcode[1]]);
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
+
+int check_avail_and_send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
+{
+	uint8_t runtime_queue_id = get_runtime_queue_id(runtime_proc_id);
+	if (!runtime_queue_id) {
+		return ERR_INVALID;
+	}
+
+	int ret = is_queue_available(runtime_queue_id);
+	if (!ret)
+		return ERR_AVAILABLE;
+
+	send_msg_to_runtime_queue(runtime_queue_id, buf);
 
 	return 0;
 }
@@ -240,21 +269,39 @@ static void *handle_mailbox_interrupts(void *data)
 			switch ((interrupt - NUM_QUEUES)) {
 			case Q_KEYBOARD:
 				sem_init(&interrupts[Q_KEYBOARD], 0, 0);
+				sem_post(&availables[Q_KEYBOARD]);
 				break;
 			case Q_SERIAL_OUT:
 				sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_SERIAL_OUT]);
 				break;
 			case Q_STORAGE_IN_2:
 				sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_STORAGE_IN_2]);
 				break;
 			case Q_STORAGE_OUT_2:
 				sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
+				sem_post(&availables[Q_STORAGE_OUT_2]);
 				break;
 			case Q_STORAGE_DATA_IN:
 				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+				sem_post(&availables[Q_STORAGE_DATA_IN]);
 				break;
 			case Q_STORAGE_DATA_OUT:
 				sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
+				sem_post(&availables[Q_STORAGE_DATA_OUT]);
+				break;
+			case Q_SENSOR:
+				sem_init(&interrupts[Q_SENSOR], 0, 0);
+				sem_post(&availables[Q_SENSOR]);
+				break;
+			case Q_RUNTIME1:
+				sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_RUNTIME1]);
+				break;
+			case Q_RUNTIME2:
+				sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_RUNTIME2]);
 				break;
 			}
 
@@ -287,6 +334,18 @@ int main()
 	sem_init(&interrupts[Q_SENSOR], 0, 0);
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
+
+	sem_init(&availables[Q_KEYBOARD], 0, 1);
+	sem_init(&availables[Q_SERIAL_OUT], 0, 1);
+	sem_init(&availables[Q_STORAGE_DATA_IN], 0, 1);
+	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 1);
+	sem_init(&availables[Q_STORAGE_CMD_IN], 0, 1);
+	sem_init(&availables[Q_STORAGE_CMD_OUT], 0, 1);
+	sem_init(&availables[Q_STORAGE_IN_2], 0, 1);
+	sem_init(&availables[Q_STORAGE_OUT_2], 0, 1);
+	sem_init(&availables[Q_SENSOR], 0, 1);
+	sem_init(&availables[Q_RUNTIME1], 0, 1);
+	sem_init(&availables[Q_RUNTIME2], 0, 1);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {

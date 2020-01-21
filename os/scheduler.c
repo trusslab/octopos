@@ -78,7 +78,7 @@ static void try_running_app(struct app *app)
 		return;
 
 	/* FIXME: send_msg_to_runtime doesn't check for ret from runtime. It assumes success. */
-	int ret = send_msg_to_runtime(runtime_proc->id, (uint8_t *) app->name);
+	int ret = check_avail_and_send_msg_to_runtime(runtime_proc->id, (uint8_t *) app->name);
 	if (ret) {
 		printf("%s: Error: couldn't run app %s\n", __func__, app->name);
 		runtime_proc->state = RUNTIME_PROC_IDLE;
