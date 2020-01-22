@@ -37,6 +37,7 @@ int sched_create_app(char *app_name);
 int sched_connect_apps(int input_app_id, int output_app_id, int two_way);
 int sched_run_app(int app_id);
 void sched_clean_up_app(uint8_t runtime_proc_id);
+void sched_pause_app(uint8_t runtime_proc_id);
 struct runtime_proc *get_runtime_proc(int id);
 struct app *get_app(int app_id);
 uint8_t get_runtime_queue_id(uint8_t runtime_proc_id);

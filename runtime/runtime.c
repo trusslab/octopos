@@ -385,6 +385,14 @@ static int inform_os_of_termination(void)
 	return (int) ret0; 
 }
 
+static int inform_os_of_pause(void)
+{
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_PAUSE)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
+}
+
 static int write_to_shell(char *data, int size)
 {
 	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_WRITE_TO_SHELL, data, size)
@@ -717,6 +725,35 @@ static uint8_t get_runtime_queue_id(void)
 	return (uint8_t) q_runtime;
 }
 
+bool context_switch = false;
+
+static bool is_context_switch_needed(void)
+{
+	uint8_t opcode[2];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+
+	int any_msg = 0;
+	sem_getvalue(&interrupts[q_runtime], &any_msg);
+	printf("%s [1]: any_msg = %d\n", __func__, any_msg);
+	if (!any_msg)
+		return false;
+	printf("%s [2]\n", __func__);
+
+	/* we have a context switch request */
+	sem_wait(&interrupts[q_runtime]);
+	/* FIXME: check that it's the right interrupt */
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = q_runtime;
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	/* save context */
+
+	context_switch = true;
+
+	return true;
+}
+
 typedef void (*app_main_proc)(struct runtime_api *);
 
 static void load_application(char *msg)
@@ -750,6 +787,7 @@ static void load_application(char *msg)
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
+		.is_context_switch_needed = is_context_switch_needed,
 	};
 
 	strcat(path, msg);
@@ -868,7 +906,10 @@ int main(int argc, char **argv)
 		write(fd_out, opcode, 2), 
 		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 		load_application((char *) buf);
-		inform_os_of_termination();
+		if (context_switch)
+			inform_os_of_pause();
+		else
+			inform_os_of_termination();
 	}
 	
 	pthread_join(mailbox_thread, NULL);

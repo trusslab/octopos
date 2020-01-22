@@ -73,9 +73,11 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 static void try_running_app(struct app *app)
 {
 	struct runtime_proc *runtime_proc = get_idle_runtime_proc();
+	printf("%s [1]\n", __func__);
 
 	if (!runtime_proc)
 		return;
+	printf("%s [2]\n", __func__);
 
 	/* FIXME: send_msg_to_runtime doesn't check for ret from runtime. It assumes success. */
 	int ret = check_avail_and_send_msg_to_runtime(runtime_proc->id, (uint8_t *) app->name);
@@ -303,6 +305,19 @@ void sched_next_app(void)
 {
 	struct app *app = get_ready_app();
 
+	/* FIXME start: temp */
+	static int counter = 0;
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+
+	if (app && app->id == 3) {
+		if (counter == 5) {
+			printf("%s [1]: sending a context switch message\n", __func__);
+			check_avail_and_send_msg_to_runtime(P_RUNTIME1, buf);
+		}
+		counter++;
+	}
+	/* FIXME end: temp */
+
 	if (app)
 		try_running_app(app);
 }
@@ -332,6 +347,32 @@ void sched_clean_up_app(uint8_t runtime_proc_id)
 	mark_app_id_as_unused(app->id);
 	remove_app_from_list(app);
 	free(app);
+}
+
+void sched_pause_app(uint8_t runtime_proc_id)
+{
+	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+	if (!runtime_proc) {
+		printf("%s: Error: invalid runtime proc id %d\n", __func__, runtime_proc_id);
+		return;
+	}
+
+	if (runtime_proc->state != RUNTIME_PROC_RUNNING_APP) {
+		printf("%s: Error: invalid runtime proc state\n", __func__);
+		return;
+	}
+
+	struct app *app = runtime_proc->app;
+	if (!app) {
+		printf("%s: Error: app struct is NULL\n", __func__);
+		return;
+	}
+
+	/* FIXME */
+	//app->state = SCHED_READY;
+	app->state = SCHED_NOT_STARTED;
+
+	runtime_proc->state = RUNTIME_PROC_IDLE;	
 }
 
 void initialize_scheduler(void)

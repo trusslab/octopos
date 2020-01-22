@@ -68,17 +68,22 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 		sched_run_app(input);
 		return app_id;
 	} else {
+		printf("%s [1]\n", __func__);
 		// Last command
 		int app_id = sched_create_app(args[0]);
 		if (input) {
 			sched_connect_apps(app_id, input, double_pipe);
 			sched_run_app(input);
 		}
+		printf("%s [2]\n", __func__);
 		sched_run_app(app_id);
+		printf("%s [3]\n", __func__);
 		if (!bg) {
+			printf("%s [4]\n", __func__);
 			foreground_app = get_app(app_id);
 			shell_status = SHELL_STATE_RUNNING_APP;
 		} else {
+			printf("%s [5]\n", __func__);
 			output_printf("octopos$> ");
 		}
 		return app_id;
@@ -205,6 +210,21 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 	sched_clean_up_app(runtime_proc_id);
 }
 
+void inform_shell_of_pause(uint8_t runtime_proc_id)
+{
+	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+	if (!runtime_proc || !runtime_proc->app) {
+		printf("%s: Error: NULL runtime_proc or app\n", __func__);
+		return;
+	}
+
+	if (runtime_proc->app == foreground_app) {
+		shell_status = SHELL_STATE_WAITING_FOR_CMD;
+		foreground_app = NULL;
+		output_printf("octopos$> ");
+	}
+	sched_pause_app(runtime_proc_id);
+}
 
 int app_write_to_shell(struct app *app, uint8_t *data, int size)
 {

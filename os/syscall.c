@@ -172,6 +172,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
+	case SYSCALL_INFORM_OS_OF_PAUSE: {
+		inform_shell_of_pause(runtime_proc_id);
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
 	case SYSCALL_WRITE_TO_SHELL: {
 		int ret;
 		SYSCALL_GET_ZERO_ARGS_DATA
