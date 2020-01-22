@@ -1,4 +1,4 @@
-DIRS := applications arch keyboard os runtime serial_out storage	   
+DIRS := umode
 
 .PHONY: umode
 

@@ -9,9 +9,9 @@
 #include <sys/select.h>
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
-#include "scheduler.h"
-#include "syscall.h"
-#include "mailbox.h"
+#include <os/scheduler.h>
+#include <os/syscall.h>
+#include <arch/mailbox_os.h>
 
 int ipc_send_data(struct app *sender, uint8_t *data, int data_size)
 {

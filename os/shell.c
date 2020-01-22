@@ -16,9 +16,9 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
-#include "scheduler.h" 
-#include "syscall.h" 
-#include "mailbox.h" 
+#include <os/scheduler.h>
+#include <os/syscall.h>
+#include <arch/mailbox_os.h>
 
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];

@@ -13,11 +13,11 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/error.h>
-#include "scheduler.h"
-#include "ipc.h"
-#include "mailbox.h"
-#include "shell.h"
-#include "file_system.h"
+#include <os/scheduler.h>
+#include <os/ipc.h>
+#include <os/shell.h>
+#include <os/file_system.h>
+#include <arch/mailbox_os.h>
 
 #define SYSCALL_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \

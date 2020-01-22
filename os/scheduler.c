@@ -8,8 +8,8 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <octopos/error.h>
-#include "scheduler.h"
-#include "mailbox.h"
+#include <os/scheduler.h>
+#include <arch/mailbox_os.h>
 
 #define MAX_NUM_APPS	64 /* must be divisible by 8 */
 uint8_t app_id_bitmap[MAX_NUM_APPS / 8];

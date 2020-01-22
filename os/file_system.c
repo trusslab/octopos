@@ -13,7 +13,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
-#include "mailbox.h"
+#include <arch/mailbox_os.h>
 
 #define PARTITION_SIZE		1000 /* blocks */
 

@@ -1,4 +1,4 @@
-/* OctopOS mailbox frontend */
+/* OctopOS OS mailbox interface */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,14 +14,13 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
-#include "scheduler.h"
-#include "shell.h"
-#include "file_system.h"
-#include "syscall.h"
+#include <os/scheduler.h>
+#include <os/shell.h>
+#include <os/file_system.h>
+#include <os/syscall.h>
 
-int fd_out;
-int fd_in;
-int fd_intr;
+int fd_out, fd_in, fd_intr;
+pthread_t mailbox_thread;
 
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t interrupt_input;
@@ -89,7 +88,7 @@ int send_output(uint8_t *buf)
 /* reads from Q_OS's and Q_KEYBOARD */
 /* FIXME: we should use separate threads for keyboard and syscalls */
 /* FIXME: not scalable to more than two runtimes */
-static int recv_input(uint8_t *buf, uint8_t *queue_id)
+int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
 	uint8_t opcode[2];
 	int is_keyboard = 0, is_os1 = 0, is_os2 = 0; 
@@ -234,26 +233,6 @@ void write_to_storage_data_queue(uint8_t *buf)
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
-static void distribute_input(void)
-{
-	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t queue_id;
-
-	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-	/* FIXME: we should use separate threads for these two */
-	recv_input(input_buf, &queue_id);
-	if (queue_id == Q_KEYBOARD) {
-		shell_process_input((char) input_buf[0]);
-	} else if (queue_id == Q_OS1) {
-		process_system_call(input_buf, P_RUNTIME1);
-	} else if (queue_id == Q_OS2) {
-		process_system_call(input_buf, P_RUNTIME2);
-	} else {
-		printf("Error (%s): invalid queue_id (%d)\n", __func__, queue_id);
-		exit(-1);
-	}
-}
-
 static void *handle_mailbox_interrupts(void *data)
 {
 
@@ -315,10 +294,8 @@ static void *handle_mailbox_interrupts(void *data)
 	}
 }
 
-int main()
+int init_os_mailbox(void)
 {
-	pthread_t mailbox_thread;
-
 	intialize_channels();
 	
 	sem_init(&interrupts[Q_OS1], 0, 0);
@@ -353,18 +330,12 @@ int main()
 		return -1;
 	}
 
-	initialize_shell();
-	initialize_file_system();
-	initialize_scheduler();
+	return 0;
+}
 
-	while (1) {
-		distribute_input();
-		sched_next_app();
-	}
-
+void close_os_mailbox(void)
+{
 	pthread_join(mailbox_thread, NULL);
 
 	close_channels();
-	
-	return 0;
-}
+}	
