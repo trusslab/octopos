@@ -35,11 +35,12 @@ struct runtime_api {
 	/* Local APIs */
 	uint8_t (*get_runtime_proc_id)(void);
 	uint8_t (*get_runtime_queue_id)(void);
-
-	/* FIXME: temporary used for context switching */
-	bool (*is_context_switch_needed)(void);
 };
 
 /* file open modes */
 #define FILE_OPEN_MODE		0
 #define FILE_OPEN_CREATE_MODE	1
+
+#define RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG	0
+#define RUNTIME_QUEUE_CONTEXT_SWITCH_TAG	1
+#define RUNTIME_QUEUE_EXEC_APP_TAG		2

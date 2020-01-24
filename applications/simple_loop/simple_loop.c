@@ -27,7 +27,5 @@ void app_main(struct runtime_api *api)
 		printf("gcounter = %d\n", gcounter);
 		sleep(1);	
 		gcounter++;
-		if (api->is_context_switch_needed())
-			return;
 	}
 }

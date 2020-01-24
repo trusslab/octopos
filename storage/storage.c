@@ -532,6 +532,7 @@ int main(int argc, char **argv)
 		}
 	}
 	
+	pthread_cancel(mailbox_thread);
 	pthread_join(mailbox_thread, NULL);
 
 	close(fd_out);

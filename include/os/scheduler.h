@@ -15,6 +15,7 @@ struct app {
 	int input_src;
 	int output_dst;
 	int state;
+	int elapsed;
 	struct runtime_proc *runtime_proc;
 	bool waiting_for_msg;
 	uint8_t msg_buf[APP_MSG_BUF_SIZE];
@@ -25,6 +26,7 @@ struct app {
 #define RUNTIME_PROC_IDLE		0
 #define RUNTIME_PROC_RUNNING_APP	1
 #define RUNTIME_PROC_RESERVED		2
+#define RUNTIME_PROC_RESETTING		3
 
 struct runtime_proc {
 	uint8_t id;
@@ -44,4 +46,5 @@ uint8_t get_runtime_queue_id(uint8_t runtime_proc_id);
 bool is_valid_runtime_queue_id(int queue_id);
 uint8_t get_runtime_proc_id(uint8_t runtime_queue_id);
 void sched_next_app(void);
+int sched_runtime_ready(uint8_t runtime_proc_id);
 void initialize_scheduler(void);

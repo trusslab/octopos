@@ -240,11 +240,14 @@ static void *handle_mailbox_interrupts(void *data)
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
-		if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
+		if (interrupt == 0) {
+			/* timer interrupt */
+			printf("%s: timer tick\n", __func__);
+			sched_next_app();
+		} else if (interrupt > (2 * NUM_QUEUES)) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
-		}
-		if (interrupt > NUM_QUEUES) {
+		} else if (interrupt > NUM_QUEUES) {
 			switch ((interrupt - NUM_QUEUES)) {
 			case Q_KEYBOARD:
 				sem_init(&interrupts[Q_KEYBOARD], 0, 0);
@@ -283,14 +286,12 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_post(&availables[Q_RUNTIME2]);
 				break;
 			}
-
-			/* ignore the rest */
-			continue;
+		} else {
+			sem_post(&interrupts[interrupt]);
+			/* FIXME: we should use separate threads for these two */
+			if (interrupt == Q_KEYBOARD || interrupt == Q_OS1 || interrupt == Q_OS2)
+				sem_post(&interrupt_input);
 		}
-		sem_post(&interrupts[interrupt]);
-		/* FIXME: we should use separate threads for these two */
-		if (interrupt == Q_KEYBOARD || interrupt == Q_OS1 || interrupt == Q_OS2)
-			sem_post(&interrupt_input);
 	}
 }
 
@@ -335,6 +336,7 @@ int init_os_mailbox(void)
 
 void close_os_mailbox(void)
 {
+	pthread_cancel(mailbox_thread);
 	pthread_join(mailbox_thread, NULL);
 
 	close_channels();

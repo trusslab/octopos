@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <octopos/mailbox.h>
@@ -457,6 +458,8 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
+	if (queue_id == Q_RUNTIME1) printf("%s [1]: queue_id = Q_RUNTIME1, reader_id = %d\n", __func__, reader_id);
+
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[(int) queue_id];
 		read_queue(queue, processors[(int) reader_id].in_handle);
@@ -473,6 +476,8 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
+	if (queue_id == Q_RUNTIME1) printf("%s [1]: queue_id = Q_RUNTIME1, writer_id = %d\n", __func__, writer_id);
+
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
@@ -489,6 +494,13 @@ static void reset_queue(uint8_t queue_id)
 	queues[(int) queue_id].head = 0;
 	queues[(int) queue_id].tail = 0;
 	queues[(int) queue_id].counter = 0;
+}
+
+static void reset_queue_full(uint8_t queue_id)
+{
+	reset_queue(queue_id);	
+	queues[(int) queue_id].access_count = 0;
+	queues[(int) queue_id].prev_owner = 0;
 }
 
 /* FIXME: we also have a copy of these definitions in syscall.h */
@@ -693,9 +705,18 @@ static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uin
 	return 0;
 }
 
+static void *run_timer(void *data)
+{
+	while (1) {
+		sleep(1);
+		processors[P_OS].send_interrupt(0);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	uint8_t opcode[2], writer_id, reader_id, queue_id;
+	pthread_t timer_thread;
 
 	initialize_processors();
 	initialize_queues();
@@ -716,6 +737,12 @@ int main(int argc, char **argv)
 		nfds = processors[P_RUNTIME2].out_handle;
 	if (processors[P_STORAGE].out_handle > nfds)
 		nfds = processors[P_STORAGE].out_handle;
+
+	int pret = pthread_create(&timer_thread, NULL, run_timer, NULL);
+	if (pret) {
+		printf("Error: couldn't launch the timer thread\n");
+		return -1;
+	}
 
 	while(1) {
 		FD_SET(processors[P_OS].out_handle, &listen_fds);
@@ -803,6 +830,25 @@ int main(int argc, char **argv)
 				read(processors[P_RUNTIME1].out_handle, opcode_rest, 2);
 				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME1);				
 				write(processors[P_RUNTIME1].in_handle, &ret, 1);
+			/* FIXME: This should be triggered by the power management unit. */
+			} else if (opcode[0] == MAILBOX_OPCODE_RESET) {
+				printf("%s [1]: resetting the queues for RUNTIME1\n", __func__);
+				close(processors[P_RUNTIME1].out_handle);
+				close(processors[P_RUNTIME1].in_handle);
+				close(processors[P_RUNTIME1].intr_handle);
+				remove(FIFO_RUNTIME1_OUT);
+				remove(FIFO_RUNTIME1_IN);
+				remove(FIFO_RUNTIME1_INTR);
+				
+				reset_queue_full(Q_RUNTIME1);
+				reset_queue_full(Q_OS1);
+
+				mkfifo(FIFO_RUNTIME1_OUT, 0666);
+				mkfifo(FIFO_RUNTIME1_IN, 0666);
+				mkfifo(FIFO_RUNTIME1_INTR, 0666);
+				processors[P_RUNTIME1].out_handle = open(FIFO_RUNTIME1_OUT, O_RDWR);
+				processors[P_RUNTIME1].in_handle = open(FIFO_RUNTIME1_IN, O_RDWR);
+				processors[P_RUNTIME1].intr_handle = open(FIFO_RUNTIME1_INTR, O_RDWR);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
@@ -832,6 +878,24 @@ int main(int argc, char **argv)
 				read(processors[P_RUNTIME2].out_handle, opcode_rest, 2);
 				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME2);				
 				write(processors[P_RUNTIME2].in_handle, &ret, 1);
+			/* FIXME: This should be triggered by the power management unit. */
+			} else if (opcode[0] == MAILBOX_OPCODE_RESET) {
+				close(processors[P_RUNTIME2].out_handle);
+				close(processors[P_RUNTIME2].in_handle);
+				close(processors[P_RUNTIME2].intr_handle);
+				remove(FIFO_RUNTIME2_OUT);
+				remove(FIFO_RUNTIME2_IN);
+				remove(FIFO_RUNTIME2_INTR);
+				
+				reset_queue_full(Q_RUNTIME2);
+				reset_queue_full(Q_OS2);
+
+				mkfifo(FIFO_RUNTIME2_OUT, 0666);
+				mkfifo(FIFO_RUNTIME2_IN, 0666);
+				mkfifo(FIFO_RUNTIME2_INTR, 0666);
+				processors[P_RUNTIME2].out_handle = open(FIFO_RUNTIME2_OUT, O_RDWR);
+				processors[P_RUNTIME2].in_handle = open(FIFO_RUNTIME2_IN, O_RDWR);
+				processors[P_RUNTIME2].intr_handle = open(FIFO_RUNTIME2_INTR, O_RDWR);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
@@ -855,6 +919,9 @@ int main(int argc, char **argv)
 			}
 		}
 	}	
+
+	pthread_cancel(timer_thread);
+	pthread_join(timer_thread, NULL);
 
 	close_processors();
 }

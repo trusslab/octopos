@@ -71,6 +71,7 @@ int init_serial_out(void)
 
 void close_serial_out(void)
 {
+	pthread_cancel(mailbox_thread);
 	pthread_join(mailbox_thread, NULL);
 
 	close(fd_out);

@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
+#include <octopos/runtime.h>
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/ipc.h>
@@ -19,19 +20,21 @@
 #include <os/file_system.h>
 #include <arch/mailbox_os.h>
 
-#define SYSCALL_SET_ONE_RET(ret0)	\
-	*((uint32_t *) &buf[0]) = ret0; \
+#define SYSCALL_SET_ONE_RET(ret0)			\
+	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
+	*((uint32_t *) &buf[1]) = ret0;			\
 
 /* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
 #define SYSCALL_SET_ONE_RET_DATA(ret0, data, size)		\
-	*((uint32_t *) &buf[0]) = ret0;				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 5;		\
+	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;		\
+	*((uint32_t *) &buf[1]) = ret0;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
 	if (max_size < 256 && size <= ((int) max_size)) {	\
-		buf[4] = (uint8_t) size;			\
-		memcpy(&buf[5], data, size);			\
+		buf[5] = (uint8_t) size;			\
+		memcpy(&buf[6], data, size);			\
 	} else {						\
 		printf("Error: invalid max_size or size\n");	\
-		buf[4] = 0;					\
+		buf[5] = 0;					\
 	}							\
 
 #define SYSCALL_GET_ONE_ARG		\
@@ -175,6 +178,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_INFORM_OS_OF_PAUSE: {
 		inform_shell_of_pause(runtime_proc_id);
 		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+	case SYSCALL_INFORM_OS_RUNTIME_READY: {
+		int ret = sched_runtime_ready(runtime_proc_id);
+		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
 	case SYSCALL_WRITE_TO_SHELL: {
