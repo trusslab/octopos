@@ -22,6 +22,24 @@ uint32_t gcounter = 0;
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
+	/* FIXME: hack */
+	if (api->get_runtime_proc_id() == 7) {
+		printf("Avoiding context\n");
+		goto avoid_context;
+	}
+
+	/* For context switch */
+	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
+	/* generate a key */
+	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
+		secure_storage_key[i] = i;
+	printf("%s [2]\n", __func__);
+
+	api->set_up_secure_storage_key(secure_storage_key);
+	api->request_secure_storage_creation(20);
+	api->set_up_context((void *) &gcounter, 4);	
+
+avoid_context:
 	while (1) {
 		insecure_printf("gcounter = %d\n", gcounter);
 		printf("gcounter = %d\n", gcounter);

@@ -242,7 +242,6 @@ static void *handle_mailbox_interrupts(void *data)
 		read(fd_intr, &interrupt, 1);
 		if (interrupt == 0) {
 			/* timer interrupt */
-			printf("%s: timer tick\n", __func__);
 			sched_next_app();
 		} else if (interrupt > (2 * NUM_QUEUES)) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);

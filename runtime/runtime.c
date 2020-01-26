@@ -114,6 +114,11 @@ sem_t load_app_sem;
 	uint32_t ret0;					\
 	ret0 = *((uint32_t *) &buf[1]);			\
 
+#define SYSCALL_GET_TWO_RETS				\
+	uint32_t ret0, ret1;				\
+	ret0 = *((uint32_t *) &buf[1]);			\
+	ret1 = *((uint32_t *) &buf[5]);			\
+
 #define SYSCALL_GET_ONE_RET_DATA(data)						\
 	uint32_t ret0;								\
 	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
@@ -299,16 +304,16 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 	}
 }
 
-static void issue_syscall_noresponse(uint8_t *buf)
-{
-	uint8_t opcode[2];
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = q_os;
-	sem_wait(&interrupts[q_os]);
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-}
+//static void issue_syscall_noresponse(uint8_t *buf)
+//{
+//	uint8_t opcode[2];
+//
+//	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+//	opcode[1] = q_os;
+//	sem_wait(&interrupts[q_os]);
+//	write(fd_out, opcode, 2);
+//	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+//}
 
 static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
@@ -437,7 +442,10 @@ static int inform_os_of_termination(void)
 static int inform_os_of_pause(void)
 {
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_PAUSE)
-	issue_syscall_noresponse(buf);
+	//issue_syscall_noresponse(buf);
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
 
 	return 0; 
 }
@@ -599,7 +607,7 @@ static int set_secure_storage_key(uint8_t *key)
 
 static int wipe_secure_storage(void)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	buf[0] = STORAGE_OP_WIPE;
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET
@@ -608,23 +616,70 @@ static int wipe_secure_storage(void)
 
 static int remove_secure_storage_key(void)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	buf[0] = STORAGE_OP_REMOVE_KEY;
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
 
-static int request_secure_storage(int count, uint8_t *key)
+uint8_t secure_storage_key[STORAGE_KEY_SIZE];
+bool secure_storage_key_set = false;
+bool secure_storage_available = false;
+
+bool context_set = false;
+void *context_addr = NULL;
+uint32_t context_size = 0;
+int sec_partition_id = -1;
+bool secure_partition_created = false;
+
+/* FIXME: do we need an int return? */
+static int set_up_secure_storage_key(uint8_t *key)
 {
+	memcpy(secure_storage_key, key, STORAGE_KEY_SIZE);
+	secure_storage_key_set = true;
+
+	return 0;
+}
+
+static int request_secure_storage_creation(int size)
+{
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_CREATION, size)
+	issue_syscall(buf);
+	SYSCALL_GET_TWO_RETS
+	if (ret0)
+		return (int) ret0;
+
+	sec_partition_id = ret1;
+	secure_partition_created = true;
+
+	return 0;
+}
+
+static int request_secure_storage_access(int count)
+{
+	if (!secure_storage_key_set) {
+		printf("%s: Error: secure storage key not set.\n", __func__);
+		return ERR_INVALID;
+	}
+
+	if (!secure_partition_created) {
+		printf("%s: Error: secure partition not created.\n", __func__);
+		return ERR_INVALID;
+	}
+
+	printf("%s [1]\n", __func__);
 	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE, count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, sec_partition_id, count)
+	printf("%s [2]\n", __func__);
 	issue_syscall(buf);
+	printf("%s [3]\n", __func__);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0; 
+	printf("%s [4]\n", __func__);
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
@@ -633,6 +688,7 @@ static int request_secure_storage(int count, uint8_t *key)
 		printf("%s: Error: failed to attest secure storage write access\n", __func__);
 		return ERR_FAULT;
 	}
+	printf("%s [5]\n", __func__);
 
 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
 					READ_ACCESS, count);
@@ -640,20 +696,51 @@ static int request_secure_storage(int count, uint8_t *key)
 		printf("%s: Error: failed to attest secure storage read access\n", __func__);
 		return ERR_FAULT;
 	}
+	printf("%s [6]\n", __func__);
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
-	int unlock_ret = unlock_secure_storage(key);
-	if (!unlock_ret)
-		return 0;
+	int unlock_ret = unlock_secure_storage(secure_storage_key);
+	if (unlock_ret)
+		return unlock_ret;
+	printf("%s [7]\n", __func__);
 
 	/* if new storage, set the key */
-	int set_key_ret = set_secure_storage_key(key);
-	return set_key_ret;
+	int set_key_ret = set_secure_storage_key(secure_storage_key);
+	printf("%s [8]\n", __func__);
+	if (set_key_ret)
+		return set_key_ret;
+
+	secure_storage_available = true;
+	return 0;
 }
 
-static int yield_secure_storage(void)
+static int yield_secure_storage_access(void)
 {
+	if (!secure_storage_available) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return ERR_INVALID;
+	}
+
+	secure_storage_available = false;
+
+	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+
+	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+
+	return 0;
+}
+
+static int delete_and_yield_secure_storage(void)
+{
+	if (!secure_storage_available) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return ERR_INVALID;
+	}
+
+	secure_storage_available = false;
+
 	/* wipe storage content */
 	int ret = wipe_secure_storage();
 
@@ -663,13 +750,26 @@ static int yield_secure_storage(void)
 
 	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
+
 	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+
+	SYSCALL_SET_ONE_ARG(SYSCALL_DELETE_SECURE_STORAGE, sec_partition_id)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int) ret0;
+
 	return 0;
 }
 
-static int write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+static uint32_t write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
 {
+	if (!secure_storage_available) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return ERR_INVALID;
+	}
+
 	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage(buf);
@@ -677,13 +777,43 @@ static int write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t b
 	return (int) ret0;
 }
 
-static int read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
+static uint32_t read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
 {
+	if (!secure_storage_available) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return ERR_INVALID;
+	}
+
 	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET_DATA(data)
 	return (int) ret0;
+}
+
+static int set_up_context(void *addr, uint32_t size)
+{
+	context_addr = addr;
+	context_size = size;
+	context_set = true;
+
+	/* Now, let's retrieve the context. */
+	/* FIXME: we need to store the context in a way to allow us to know if there is none. */
+	int ret = request_secure_storage_access(200);
+	if (ret) {
+		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
+		return ret;
+	}
+	printf("%s [1]\n", __func__);
+
+	uint32_t rret = read_from_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
+	if (rret != context_size)
+		printf("%s: No context to use.\n", __func__);
+
+	printf("%s [2] ctx val = %d, ctx size = %d\n", __func__, *((int *) context_addr), context_size);
+	yield_secure_storage_access();
+
+	return 0;
 }
 
 static bool secure_ipc_mode = false;
@@ -805,10 +935,14 @@ static void load_application(char *msg)
 		.read_file_blocks = read_file_blocks,
 		.close_file = close_file,
 		.remove_file = remove_file,
-		.request_secure_storage = request_secure_storage,
-		.yield_secure_storage = yield_secure_storage,
+		.set_up_secure_storage_key = set_up_secure_storage_key,
+		.request_secure_storage_creation = request_secure_storage_creation,
+		.request_secure_storage_access = request_secure_storage_access,
+		.yield_secure_storage_access = yield_secure_storage_access,
+		.delete_and_yield_secure_storage = delete_and_yield_secure_storage,
 		.write_to_secure_storage = write_to_secure_storage,
 		.read_from_secure_storage = read_from_secure_storage,
+		.set_up_context = set_up_context,
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
@@ -876,10 +1010,39 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
+static void *store_context(void *data)
+{
+	printf("%s [1]\n", __func__);
+	if (!secure_storage_key_set || !context_set) {
+		printf("%s: Error: either the secure storage key or context not set\n", __func__);
+		return NULL;
+	}
+
+	int ret = request_secure_storage_access(200);
+	if (ret) {
+		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
+		return NULL;
+	}
+	printf("%s [2] ctx val = %d, ctx size = %d\n", __func__, *((int *) context_addr), context_size);
+
+	uint32_t wret = write_to_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
+	if (wret != context_size)
+		printf("Error: couldn't write the context to secure storage.\n");
+
+	printf("%s [3]\n", __func__);
+	yield_secure_storage_access();
+	printf("%s [4]\n", __func__);
+	still_running = false;
+	inform_os_of_pause();
+		
+	return NULL;
+}
+
 int main(int argc, char **argv)
 {
 	int runtime_id = -1; 
-	pthread_t app_thread;
+	pthread_t app_thread, ctx_thread;
+	bool has_ctx_thread = false;
 	uint8_t interrupt;
 	printf("%s [0.1]\n", __func__);
 
@@ -984,20 +1147,25 @@ int main(int argc, char **argv)
 				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
 				sem_post(&load_app_sem);
 			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
-				printf("%s [2]: detected context switch message\n", __func__);
+				printf("%s [3.3]: detected context switch message\n", __func__);
 				//TODO
 				pthread_cancel(app_thread);
-				printf("%s [3]\n", __func__);
+				printf("%s [3.4]\n", __func__);
 				pthread_join(app_thread, NULL);
-				printf("%s [4]\n", __func__);
-				still_running = false;
-				inform_os_of_pause();
-				printf("%s [5]\n", __func__);
+				printf("%s [3.5]\n", __func__);
+				int ret = pthread_create(&ctx_thread, NULL, store_context, NULL);
+				if (ret)
+					printf("Error: couldn't launch the app thread\n");
+				has_ctx_thread = true;
+				printf("%s [3.6]\n", __func__);
 			}
 		} else {
 			sem_post(&interrupts[interrupt]);
 		}
 	}
+
+	if (has_ctx_thread)
+		pthread_join(ctx_thread, NULL);
 
 	pthread_join(app_thread, NULL);
 
