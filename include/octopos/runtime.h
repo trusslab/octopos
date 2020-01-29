@@ -22,7 +22,6 @@ struct runtime_api {
 
 	/* secure storage */
 	int (*set_up_secure_storage_key)(uint8_t *key);
-	int (*request_secure_storage_creation)(int size);
 	int (*request_secure_storage_access)(int count);
 	int (*yield_secure_storage_access)(void);
 	int (*delete_and_yield_secure_storage)(void);

@@ -119,6 +119,7 @@ sem_t load_app_sem;
 	ret0 = *((uint32_t *) &buf[1]);			\
 	ret1 = *((uint32_t *) &buf[5]);			\
 
+/* FIXME: are we sure data is big enough for the memcpy here? */
 #define SYSCALL_GET_ONE_RET_DATA(data)						\
 	uint32_t ret0;								\
 	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
@@ -596,6 +597,15 @@ static int unlock_secure_storage(uint8_t *key)
 	return (int) ret0;
 }
 
+static int lock_secure_storage(void)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	buf[0] = STORAGE_OP_LOCK;
+	send_msg_to_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
 static int set_secure_storage_key(uint8_t *key)
 {
 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
@@ -614,24 +624,14 @@ static int wipe_secure_storage(void)
 	return (int) ret0;
 }
 
-static int remove_secure_storage_key(void)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	buf[0] = STORAGE_OP_REMOVE_KEY;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
-
 uint8_t secure_storage_key[STORAGE_KEY_SIZE];
 bool secure_storage_key_set = false;
 bool secure_storage_available = false;
+bool has_access_to_secure_storage = false;
 
 bool context_set = false;
 void *context_addr = NULL;
 uint32_t context_size = 0;
-int sec_partition_id = -1;
-bool secure_partition_created = false;
 
 /* FIXME: do we need an int return? */
 static int set_up_secure_storage_key(uint8_t *key)
@@ -642,16 +642,38 @@ static int set_up_secure_storage_key(uint8_t *key)
 	return 0;
 }
 
-static int request_secure_storage_creation(int size)
+static int request_secure_storage_creation(uint8_t *returned_key)
 {
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_CREATION, size)
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE_CREATION)
 	issue_syscall(buf);
-	SYSCALL_GET_TWO_RETS
+	SYSCALL_GET_ONE_RET_DATA(buf)
 	if (ret0)
 		return (int) ret0;
 
-	sec_partition_id = ret1;
-	secure_partition_created = true;
+	if (_size != STORAGE_KEY_SIZE)
+		return ERR_INVALID;
+
+	memcpy(returned_key, buf, STORAGE_KEY_SIZE);
+
+	return 0;
+}
+
+static int yield_secure_storage_access(void)
+{
+	if (!has_access_to_secure_storage) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return ERR_INVALID;
+	}
+
+	/* FIXME: what if lock fails? */
+	lock_secure_storage();
+
+	has_access_to_secure_storage = false;
+
+	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+
+	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
 
 	return 0;
 }
@@ -663,16 +685,11 @@ static int request_secure_storage_access(int count)
 		return ERR_INVALID;
 	}
 
-	if (!secure_partition_created) {
-		printf("%s: Error: secure partition not created.\n", __func__);
-		return ERR_INVALID;
-	}
-
 	printf("%s [1]\n", __func__);
 	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
 
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, sec_partition_id, count)
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
 	printf("%s [2]\n", __func__);
 	issue_syscall(buf);
 	printf("%s [3]\n", __func__);
@@ -697,56 +714,54 @@ static int request_secure_storage_access(int count)
 		return ERR_FAULT;
 	}
 	printf("%s [6]\n", __func__);
+	has_access_to_secure_storage = true;
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
 	int unlock_ret = unlock_secure_storage(secure_storage_key);
-	if (unlock_ret)
+	if (unlock_ret == ERR_EXIST) {
+		uint8_t temp_key[STORAGE_KEY_SIZE];
+		int create_ret = request_secure_storage_creation(temp_key);
+		if (create_ret) {
+			yield_secure_storage_access();
+			return create_ret;
+		}
+		int unlock_ret_2 = unlock_secure_storage(temp_key);
+		if (unlock_ret_2) {
+			yield_secure_storage_access();
+			return create_ret;
+		}
+	} else if (unlock_ret) {
+		yield_secure_storage_access();
 		return unlock_ret;
+	}
 	printf("%s [7]\n", __func__);
 
 	/* if new storage, set the key */
 	int set_key_ret = set_secure_storage_key(secure_storage_key);
 	printf("%s [8]\n", __func__);
-	if (set_key_ret)
+	if (set_key_ret) {
+		yield_secure_storage_access();
 		return set_key_ret;
+	}
 
 	secure_storage_available = true;
 	return 0;
 }
 
-static int yield_secure_storage_access(void)
-{
-	if (!secure_storage_available) {
-		printf("%s: Error: secure storage has not been set up\n", __func__);
-		return ERR_INVALID;
-	}
-
-	secure_storage_available = false;
-
-	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
-
-	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
-
-	return 0;
-}
-
 static int delete_and_yield_secure_storage(void)
 {
-	if (!secure_storage_available) {
-		printf("%s: Error: secure storage has not been set up\n", __func__);
+	if (!secure_storage_available || !has_access_to_secure_storage) {
+		printf("%s: Error: secure storage has not been set up or there is no access\n", __func__);
 		return ERR_INVALID;
 	}
 
 	secure_storage_available = false;
 
 	/* wipe storage content */
-	int ret = wipe_secure_storage();
+	wipe_secure_storage();
 
-	/* if wipe successful, remove the key */
-	if (!ret)
-		remove_secure_storage_key();
+	has_access_to_secure_storage = false;
 
 	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
@@ -754,7 +769,7 @@ static int delete_and_yield_secure_storage(void)
 	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_DELETE_SECURE_STORAGE, sec_partition_id)
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_DELETE_SECURE_STORAGE)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
@@ -936,7 +951,6 @@ static void load_application(char *msg)
 		.close_file = close_file,
 		.remove_file = remove_file,
 		.set_up_secure_storage_key = set_up_secure_storage_key,
-		.request_secure_storage_creation = request_secure_storage_creation,
 		.request_secure_storage_access = request_secure_storage_access,
 		.yield_secure_storage_access = yield_secure_storage_access,
 		.delete_and_yield_secure_storage = delete_and_yield_secure_storage,

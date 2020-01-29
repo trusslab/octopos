@@ -84,12 +84,6 @@ void app_main(struct runtime_api *api)
 	for (i = 0; i < STORAGE_KEY_SIZE; i++)
 		secure_storage_key[i] = i;
 	api->set_up_secure_storage_key(secure_storage_key);
-	ret = api->request_secure_storage_creation(20);
-	if (ret) {
-		printf("Error: could not create secure access.\n");
-		insecure_printf("Error: could not create secure access.\n");
-		return;
-	}
 	ret = api->request_secure_storage_access(200);
 	if (ret) {
 		printf("Error: could not get secure access to storage.\n");

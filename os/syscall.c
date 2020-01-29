@@ -121,34 +121,28 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
-static int storage_create_secure_partition(int partition_id, int partition_size, int lifetime)
+static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
 {
-	STORAGE_SET_THREE_ARGS(partition_id, partition_size, lifetime) 
+	STORAGE_SET_ZERO_ARGS_DATA(temp_key, STORAGE_KEY_SIZE) 
 	buf[0] = STORAGE_OP_CREATE_SECURE_PARTITION;
 	send_msg_to_storage_no_response(buf);
 	printf("%s [4]\n", __func__);
 	get_response_from_storage(buf);
 	printf("%s [5]\n", __func__);
-	STORAGE_GET_ONE_RET
+	STORAGE_GET_TWO_RETS
+	if (ret0)
+		return (int) ret0;
 
-	return ret0;
+	*partition_id = (int) ret1;
+	printf("%s [6]: allocated partition %d\n", __func__, *partition_id);
+
+	return 0;
 }
 
 static int storage_delete_secure_partition(int partition_id)
 {
 	STORAGE_SET_ONE_ARG(partition_id) 
 	buf[0] = STORAGE_OP_DELETE_SECURE_PARTITION;
-	send_msg_to_storage_no_response(buf);
-	get_response_from_storage(buf);
-	STORAGE_GET_ONE_RET
-
-	return ret0;
-}
-
-static int storage_bind_secure_partition(int partition_id)
-{
-	STORAGE_SET_ONE_ARG(partition_id) 
-	buf[0] = STORAGE_OP_BIND_SECURE_PARTITION;
 	send_msg_to_storage_no_response(buf);
 	get_response_from_storage(buf);
 	STORAGE_GET_ONE_RET
@@ -347,40 +341,45 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_CREATION: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t size = arg0;
 		printf("%s [1]\n", __func__);
+		int sec_partition_id = 0;
 
-		/* create a secure partition */
-		/* FIXME: hard-coded */
-		/* FIXME: just return success if already exists */
-		uint32_t sec_partition_id = 1;
-		if (size != 20) {
-			SYSCALL_SET_TWO_RETS((uint32_t) ERR_INVALID, 0)
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
 			break;
 		}
-		int ret = storage_create_secure_partition(sec_partition_id, size, 1000);
+		struct app *app = runtime_proc->app;
+
+		/* temp key */
+		uint8_t temp_key[STORAGE_KEY_SIZE];
+		/* generate a key */
+		for (int i = 0; i < STORAGE_KEY_SIZE; i++)
+			/* FIXME: use a random number */
+			temp_key[i] = runtime_proc_id;
+
+		int ret = storage_create_secure_partition(temp_key, &sec_partition_id);
 		if (ret) {
-			SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
 			break;
 		}
 		printf("%s [6]\n", __func__);
 
-		SYSCALL_SET_TWO_RETS(0, sec_partition_id)
+		app->sec_partition_id = sec_partition_id;
+		app->sec_partition_created = true;
+
+		SYSCALL_SET_ONE_RET_DATA(0, temp_key, STORAGE_KEY_SIZE)
 		printf("%s [7]\n", __func__);
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_ACCESS: {
-		SYSCALL_GET_TWO_ARGS
-		uint32_t partition_id = arg0;
-		uint32_t count = arg1;
+		SYSCALL_GET_ONE_ARG
+		uint32_t count = arg0;
 		printf("%s [1]\n", __func__);
 
-		/* FIXME: hard-coded */
-		if (partition_id != 1) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
+		/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
 		/* No more than 200 block reads/writes */
 		/* FIXME: hard-coded */
@@ -399,12 +398,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 		printf("%s [3]\n", __func__);
 
-		int ret_st = storage_bind_secure_partition(partition_id);
-		if (ret_st) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-			break;
-		}
-
 		wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
 		mark_queue_unavailable(Q_STORAGE_IN_2);
@@ -418,17 +411,23 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
 	case SYSCALL_DELETE_SECURE_STORAGE: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t partition_id = arg0;
 		printf("%s [1]\n", __func__);
 
-		/* FIXME: hard-coded */
-		if (partition_id != 1) {
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			break;
+		}
+		struct app *app = runtime_proc->app;
+
+		if (!app->sec_partition_created) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
 
-		storage_delete_secure_partition(partition_id);
+		storage_delete_secure_partition(app->sec_partition_id);
+		app->sec_partition_created = false;
+		app->sec_partition_id = -1;
 
 		SYSCALL_SET_ONE_RET(0)
 		break;

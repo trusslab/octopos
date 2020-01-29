@@ -325,6 +325,8 @@ int sched_create_app(char *app_name)
 	app->input_src = 0; /* shell */
 	app->output_dst = 0; /* shell */
 	app->state = SCHED_NOT_STARTED;
+	app->sec_partition_created = false;
+	app->sec_partition_id = -1;
 
 	add_app_to_all_app_list(app);
 

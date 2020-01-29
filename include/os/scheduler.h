@@ -21,6 +21,9 @@ struct app {
 	uint8_t msg_buf[APP_MSG_BUF_SIZE];
 	int msg_size;
 	bool has_pending_msg;
+	/* secure storage */
+	bool sec_partition_created;
+	int sec_partition_id;
 };
 
 #define RUNTIME_PROC_IDLE		0
