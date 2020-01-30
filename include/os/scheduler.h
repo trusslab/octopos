@@ -15,7 +15,7 @@ struct app {
 	int input_src;
 	int output_dst;
 	int state;
-	int elapsed;
+	uint64_t start_time;
 	struct runtime_proc *runtime_proc;
 	bool waiting_for_msg;
 	uint8_t msg_buf[APP_MSG_BUF_SIZE];
@@ -38,6 +38,7 @@ struct runtime_proc {
 	uint8_t pending_secure_ipc_request;
 };
 
+void update_timer_ticks(void);
 int sched_create_app(char *app_name);
 int sched_connect_apps(int input_app_id, int output_app_id, int two_way);
 int sched_run_app(int app_id);

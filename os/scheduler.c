@@ -31,6 +31,18 @@ uint8_t RUNTIME_QUEUE_IDS[NUM_RUNTIME_PROCS] = {Q_RUNTIME1, Q_RUNTIME2};
 
 struct runtime_proc *runtime_procs = NULL;
 
+uint64_t timer_ticks = 0;
+
+void update_timer_ticks(void)
+{
+	timer_ticks++;
+}
+
+static uint64_t get_timer_ticks(void)
+{
+	return timer_ticks;
+}
+
 uint8_t get_runtime_queue_id(uint8_t runtime_proc_id)
 {
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
@@ -94,16 +106,16 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 		}
 	}
 
-	int largest_elapsed = 0;
+	uint64_t largest_elapsed = 0;
+	uint64_t current_ticks = get_timer_ticks();
 	struct runtime_proc *candidate = NULL;
 	/* Now, let' see if we can context switch any of them */
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
 		if (runtime_procs[i].state == RUNTIME_PROC_RUNNING_APP) {
-			runtime_procs[i].app->elapsed++;
-			if (runtime_procs[i].app->elapsed >= 10 && 
-			    runtime_procs[i].app->elapsed > largest_elapsed) { /* FIXME: 10 is arbitrary for now */
+			uint64_t elapsed = current_ticks - runtime_procs[i].app->start_time;
+			if (elapsed >= 10 && elapsed > largest_elapsed) { /* FIXME: 10 is arbitrary for now */
 				candidate = &runtime_procs[i];
-				largest_elapsed = runtime_procs[i].app->elapsed;
+				largest_elapsed = elapsed;
 			}
 		}
 	}
@@ -143,7 +155,7 @@ static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtim
 
 	app->state = SCHED_RUNNING;
 	app->runtime_proc = runtime_proc;
-	app->elapsed = 0;
+	app->start_time = get_timer_ticks();
 	runtime_proc->app = app;
 	runtime_proc->state = RUNTIME_PROC_RUNNING_APP;
 	printf("%s [4]\n", __func__);
@@ -374,6 +386,8 @@ int sched_run_app(int app_id)
 	app->state = SCHED_READY;
 
 	add_app_to_ready_queue(app);
+
+	sched_next_app();
 
 	return 0;
 }
