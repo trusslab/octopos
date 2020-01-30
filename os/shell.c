@@ -68,22 +68,17 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 		sched_run_app(input);
 		return app_id;
 	} else {
-		printf("%s [1]\n", __func__);
 		// Last command
 		int app_id = sched_create_app(args[0]);
 		if (input) {
 			sched_connect_apps(app_id, input, double_pipe);
 			sched_run_app(input);
 		}
-		printf("%s [2]\n", __func__);
 		sched_run_app(app_id);
-		printf("%s [3]\n", __func__);
 		if (!bg) {
-			printf("%s [4]\n", __func__);
 			foreground_app = get_app(app_id);
 			shell_status = SHELL_STATE_RUNNING_APP;
 		} else {
-			printf("%s [5]\n", __func__);
 			output_printf("octopos$> ");
 		}
 		return app_id;
@@ -281,7 +276,6 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 		n += 1;
 		return command(input, first, last, double_pipe, bg);
 	}
-	printf("%s [5]\n", __func__);
 	return 0;
 }
  

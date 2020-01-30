@@ -34,7 +34,6 @@ void app_main(struct runtime_api *api)
 		for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 			secure_storage_key[i] = i;
 	}
-	printf("%s [2]\n", __func__);
 
 	api->set_up_secure_storage_key(secure_storage_key);
 	api->set_up_context((void *) &gcounter, 4);	

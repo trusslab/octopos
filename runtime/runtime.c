@@ -685,18 +685,14 @@ static int request_secure_storage_access(int count)
 		return ERR_INVALID;
 	}
 
-	printf("%s [1]\n", __func__);
 	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
-	printf("%s [2]\n", __func__);
 	issue_syscall(buf);
-	printf("%s [3]\n", __func__);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0; 
-	printf("%s [4]\n", __func__);
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
@@ -705,7 +701,6 @@ static int request_secure_storage_access(int count)
 		printf("%s: Error: failed to attest secure storage write access\n", __func__);
 		return ERR_FAULT;
 	}
-	printf("%s [5]\n", __func__);
 
 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
 					READ_ACCESS, count);
@@ -713,7 +708,6 @@ static int request_secure_storage_access(int count)
 		printf("%s: Error: failed to attest secure storage read access\n", __func__);
 		return ERR_FAULT;
 	}
-	printf("%s [6]\n", __func__);
 	has_access_to_secure_storage = true;
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
@@ -735,11 +729,9 @@ static int request_secure_storage_access(int count)
 		yield_secure_storage_access();
 		return unlock_ret;
 	}
-	printf("%s [7]\n", __func__);
 
 	/* if new storage, set the key */
 	int set_key_ret = set_secure_storage_key(secure_storage_key);
-	printf("%s [8]\n", __func__);
 	if (set_key_ret) {
 		yield_secure_storage_access();
 		return set_key_ret;
@@ -819,13 +811,11 @@ static int set_up_context(void *addr, uint32_t size)
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
 	}
-	printf("%s [1]\n", __func__);
 
 	uint32_t rret = read_from_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
 	if (rret != context_size)
 		printf("%s: No context to use.\n", __func__);
 
-	printf("%s [2] ctx val = %d, ctx size = %d\n", __func__, *((int *) context_addr), context_size);
 	yield_secure_storage_access();
 
 	return 0;
@@ -990,7 +980,6 @@ bool still_running = true;
 
 static void *run_app(void *data)
 {
-	printf("%s [1]\n", __func__);
 	int ret = inform_os_runtime_ready();
 	if (ret) {
 		printf("Error (%s): runtime ready notification rejected by the OS\n", __func__);
@@ -1026,7 +1015,6 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 
 static void *store_context(void *data)
 {
-	printf("%s [1]\n", __func__);
 	if (!secure_storage_key_set || !context_set) {
 		printf("%s: Error: either the secure storage key or context not set\n", __func__);
 		return NULL;
@@ -1037,15 +1025,12 @@ static void *store_context(void *data)
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return NULL;
 	}
-	printf("%s [2] ctx val = %d, ctx size = %d\n", __func__, *((int *) context_addr), context_size);
 
 	uint32_t wret = write_to_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
 	if (wret != context_size)
 		printf("Error: couldn't write the context to secure storage.\n");
 
-	printf("%s [3]\n", __func__);
 	yield_secure_storage_access();
-	printf("%s [4]\n", __func__);
 	still_running = false;
 	inform_os_of_pause();
 		
@@ -1058,7 +1043,6 @@ int main(int argc, char **argv)
 	pthread_t app_thread, ctx_thread;
 	bool has_ctx_thread = false;
 	uint8_t interrupt;
-	printf("%s [0.1]\n", __func__);
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
@@ -1161,17 +1145,13 @@ int main(int argc, char **argv)
 				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
 				sem_post(&load_app_sem);
 			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
-				printf("%s [3.3]: detected context switch message\n", __func__);
 				//TODO
 				pthread_cancel(app_thread);
-				printf("%s [3.4]\n", __func__);
 				pthread_join(app_thread, NULL);
-				printf("%s [3.5]\n", __func__);
 				int ret = pthread_create(&ctx_thread, NULL, store_context, NULL);
 				if (ret)
 					printf("Error: couldn't launch the app thread\n");
 				has_ctx_thread = true;
-				printf("%s [3.6]\n", __func__);
 			}
 		} else {
 			sem_post(&interrupts[interrupt]);

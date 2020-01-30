@@ -127,10 +127,6 @@ static void initialize_storage_space(void)
 		memset(partition->lock_name, 0x0, 256);
 		sprintf(partition->lock_name, "octopos_partition_%d_lock", suffix);
 
-		printf("%s\n", partition->data_name);
-		printf("%s\n", partition->create_name);
-		printf("%s\n", partition->lock_name);
-
 		FILE *filep = fopen(partition->data_name, "r");
 		if (!filep) {
 			/* create empty file */
@@ -178,8 +174,6 @@ static void initialize_storage_space(void)
 			continue;
 		}
 
-		printf("%s [1]: reached here\n", __func__);
-
 		uint8_t key[STORAGE_KEY_SIZE];
 		fseek(filep, 0, SEEK_SET);
 		size = (uint32_t) fread(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
@@ -197,14 +191,11 @@ static void initialize_storage_space(void)
 
 static int set_secure_partition_key(uint8_t *data, int partition_id)
 {
-	printf("%s [1]\n", __func__);
 	FILE *filep = fopen(sec_partitions[partition_id].lock_name, "r+");
 	if (!filep) {
 		printf("%s: Error: couldn't open %s\n", __func__, sec_partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
-
-	//for (int i; i < STORAGE_KEY_SIZE; i++) printf("%s [2]: data[%d] = %d\n", __func__, i, (int) data[i]);
 
 	fseek(filep, 0, SEEK_SET);
 	uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
@@ -232,14 +223,12 @@ static int remove_partition_key(int partition_id)
 
 static int unlock_partition(uint8_t *data, int partition_id)
 {
-	printf("%s [1]\n", __func__);
 	uint8_t key[STORAGE_KEY_SIZE];
 	FILE *filep = fopen(sec_partitions[partition_id].lock_name, "r");
 	if (!filep) {
 		printf("%s: Error: couldn't open %s\n", __func__, sec_partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
-	printf("%s [2]\n", __func__);
 
 	fseek(filep, 0, SEEK_SET);
 	uint32_t size = (uint32_t) fread(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
@@ -248,13 +237,11 @@ static int unlock_partition(uint8_t *data, int partition_id)
 		/* TODO: if the key file is corrupted, then we might need to unlock, otherwise, we'll lose the partition. */
 		return ERR_FAULT;
 	}
-	printf("%s [3]\n", __func__);
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
 		if (key[i] != data[i])
 			return ERR_INVALID;
 	}
-	printf("%s [4]\n", __func__);
 
 	sec_partitions[partition_id].is_locked = false;
 	return 0;
@@ -463,7 +450,6 @@ static void process_request(uint8_t *buf)
 
 		STORAGE_SET_ONE_RET(0)
 	} else {
-		printf("%s [2]\n", __func__);
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
@@ -513,7 +499,6 @@ static void process_secure_request(uint8_t *buf)
 
 		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
 		fseek(filep, seek_off, SEEK_SET);
-		printf("%s [1] write: data_size = %d, *data = %d\n", __func__, data_size, *((int *) data));
 		uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), data_size, filep);
 
 		STORAGE_SET_ONE_RET(size);
@@ -558,8 +543,6 @@ static void process_secure_request(uint8_t *buf)
 		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
 		fseek(filep, seek_off, SEEK_SET);
 		uint32_t size = (uint32_t) fread(ret_buf, sizeof(uint8_t), arg2, filep);
-		printf("%s [1] read: data_size = %d, *data = %d\n", __func__, size, *((int *) ret_buf));
-		printf("%s [2] read: seek_off = %d, arg2 (size) = %d\n", __func__, seek_off, arg2);
 
 		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);
 		fclose(filep);
@@ -616,7 +599,6 @@ static void process_secure_request(uint8_t *buf)
 			return;
 		}
 
-		printf("%s [2]\n", __func__);
 		if (sec_partitions[partition_id].is_locked) {
 			STORAGE_SET_ONE_RET(ERR_FAULT)
 			return;
@@ -624,7 +606,6 @@ static void process_secure_request(uint8_t *buf)
 
 		bound_partition = partition_id;
 		is_queue_set_bound = true;
-		printf("%s [3]\n", __func__);
 
 		STORAGE_SET_ONE_RET(0)
 	} else if (buf[0] == STORAGE_OP_LOCK) {

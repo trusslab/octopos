@@ -123,7 +123,6 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	if (candidate) {
 		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 		buf[0] = RUNTIME_QUEUE_CONTEXT_SWITCH_TAG;
-		printf("%s [1]: sending a context switch message to RUNTIME%d\n", __func__, candidate->id);
 		check_avail_and_send_msg_to_runtime(candidate->id, buf);
 		waiting_for_proc = candidate;
 		wait_counter = 0;
@@ -135,15 +134,12 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtime_proc)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	printf("%s [1]\n", __func__);
 
 	if (!runtime_proc)
 		return;
-	printf("%s [2]\n", __func__);
 
 	buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
 	strcpy((char *) &buf[1], app->name);
-	printf("%s [3]\n", __func__);
 
 	/* FIXME: send_msg_to_runtime doesn't check for ret from runtime. It assumes success. */
 	int ret = check_avail_and_send_msg_to_runtime(runtime_proc->id, buf);
@@ -158,7 +154,6 @@ static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtim
 	app->start_time = get_timer_ticks();
 	runtime_proc->app = app;
 	runtime_proc->state = RUNTIME_PROC_RUNNING_APP;
-	printf("%s [4]\n", __func__);
 }
 
 static int get_unused_app_id(void)
@@ -413,8 +408,6 @@ void sched_next_app(void)
 	if (!runtime_proc)
 		return;
 
-	printf("%s [1]: runtime_proc %d is available for scheduling\n", __func__, runtime_proc->id);
-
 	struct app *app = get_app_from_ready_queue();
 	/* should not happen */
 	if (!app) {
@@ -422,10 +415,7 @@ void sched_next_app(void)
 		return;
 	}
 
-	printf("%s [1]: about to schedule app %d\n", __func__, app->id);
-
 	run_app_on_runtime_proc(app, runtime_proc);
-	printf("%s [2]\n", __func__);
 }
 
 void sched_clean_up_app(uint8_t runtime_proc_id)
@@ -457,26 +447,22 @@ void sched_clean_up_app(uint8_t runtime_proc_id)
 
 void sched_pause_app(uint8_t runtime_proc_id)
 {
-	printf("%s [1]: runtime_proc_id  = %d\n", __func__, runtime_proc_id);
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc) {
 		printf("%s: Error: invalid runtime proc id %d\n", __func__, runtime_proc_id);
 		return;
 	}
-	printf("%s [2]: runtime_proc_id  = %d\n", __func__, runtime_proc_id);
 
 	if (runtime_proc->state != RUNTIME_PROC_RUNNING_APP) {
 		printf("%s: Error: invalid runtime proc state\n", __func__);
 		return;
 	}
-	printf("%s [3]: runtime_proc_id  = %d\n", __func__, runtime_proc_id);
 
 	struct app *app = runtime_proc->app;
 	if (!app) {
 		printf("%s: Error: app struct is NULL\n", __func__);
 		return;
 	}
-	printf("%s [4]: runtime_proc_id  = %d\n", __func__, runtime_proc_id);
 
 	app->state = SCHED_READY;
 	add_app_to_ready_queue(app);
@@ -486,19 +472,16 @@ void sched_pause_app(uint8_t runtime_proc_id)
 
 int sched_runtime_ready(uint8_t runtime_proc_id)
 {
-	printf("%s [1]: runtime_proc_id  = %d\n", __func__, runtime_proc_id);
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc) {
 		printf("%s: Error: invalid runtime proc id %d\n", __func__, runtime_proc_id);
 		return ERR_INVALID;
 	}
-	printf("%s [2]: runtime_proc_id  = %d\n", __func__, runtime_proc_id);
 
 	if (runtime_proc->state != RUNTIME_PROC_RESETTING) {
 		printf("%s: Error: invalid runtime proc state\n", __func__);
 		return ERR_INVALID;
 	}
-	printf("%s [3]: runtime_proc_id  = %d\n", __func__, runtime_proc_id);
 
 	runtime_proc->state = RUNTIME_PROC_IDLE;	
 

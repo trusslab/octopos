@@ -458,8 +458,6 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	if (queue_id == Q_RUNTIME1) printf("%s [1]: queue_id = Q_RUNTIME1, reader_id = %d\n", __func__, reader_id);
-
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[(int) queue_id];
 		read_queue(queue, processors[(int) reader_id].in_handle);
@@ -476,8 +474,6 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	if (queue_id == Q_RUNTIME1) printf("%s [1]: queue_id = Q_RUNTIME1, writer_id = %d\n", __func__, writer_id);
-
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
@@ -832,7 +828,6 @@ int main(int argc, char **argv)
 				write(processors[P_RUNTIME1].in_handle, &ret, 1);
 			/* FIXME: This should be triggered by the power management unit. */
 			} else if (opcode[0] == MAILBOX_OPCODE_RESET) {
-				printf("%s [1]: resetting the queues for RUNTIME1\n", __func__);
 				close(processors[P_RUNTIME1].out_handle);
 				close(processors[P_RUNTIME1].in_handle);
 				close(processors[P_RUNTIME1].intr_handle);

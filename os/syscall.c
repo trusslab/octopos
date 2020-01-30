@@ -126,15 +126,12 @@ static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
 	STORAGE_SET_ZERO_ARGS_DATA(temp_key, STORAGE_KEY_SIZE) 
 	buf[0] = STORAGE_OP_CREATE_SECURE_PARTITION;
 	send_msg_to_storage_no_response(buf);
-	printf("%s [4]\n", __func__);
 	get_response_from_storage(buf);
-	printf("%s [5]\n", __func__);
 	STORAGE_GET_TWO_RETS
 	if (ret0)
 		return (int) ret0;
 
 	*partition_id = (int) ret1;
-	printf("%s [6]: allocated partition %d\n", __func__, *partition_id);
 
 	return 0;
 }
@@ -341,7 +338,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_CREATION: {
-		printf("%s [1]\n", __func__);
 		int sec_partition_id = 0;
 
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
@@ -365,19 +361,16 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
 			break;
 		}
-		printf("%s [6]\n", __func__);
 
 		app->sec_partition_id = sec_partition_id;
 		app->sec_partition_created = true;
 
 		SYSCALL_SET_ONE_RET_DATA(0, temp_key, STORAGE_KEY_SIZE)
-		printf("%s [7]\n", __func__);
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_ACCESS: {
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
-		printf("%s [1]\n", __func__);
 
 		/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
@@ -387,7 +380,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		printf("%s [2]\n", __func__);
 
 		int ret_in = is_queue_available(Q_STORAGE_IN_2);
 		int ret_out = is_queue_available(Q_STORAGE_OUT_2);
@@ -396,7 +388,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
-		printf("%s [3]\n", __func__);
 
 		wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
@@ -406,12 +397,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
 		SYSCALL_SET_ONE_RET(0)
-		printf("%s [7]\n", __func__);
 		break;
 	}
 	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
 	case SYSCALL_DELETE_SECURE_STORAGE: {
-		printf("%s [1]\n", __func__);
 
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc || !runtime_proc->app) {
