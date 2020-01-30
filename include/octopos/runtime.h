@@ -21,10 +21,15 @@ struct runtime_api {
 	int (*remove_file)(char *filename);
 
 	/* secure storage */
-	int (*request_secure_storage)(int count, uint8_t *key);
-	int (*yield_secure_storage)(void);
-	int (*write_to_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size);
-	int (*read_from_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
+	int (*set_up_secure_storage_key)(uint8_t *key);
+	int (*request_secure_storage_access)(int count);
+	int (*yield_secure_storage_access)(void);
+	int (*delete_and_yield_secure_storage)(void);
+	uint32_t (*write_to_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size);
+	uint32_t (*read_from_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
+
+	/* storing context in secure storage */
+	int (*set_up_context)(void *addr, uint32_t size);
 
 	/* secure IPC */
 	int (*request_secure_ipc)(uint8_t target_runtime_queue_id, int count);
@@ -40,3 +45,7 @@ struct runtime_api {
 /* file open modes */
 #define FILE_OPEN_MODE		0
 #define FILE_OPEN_CREATE_MODE	1
+
+#define RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG	0
+#define RUNTIME_QUEUE_CONTEXT_SWITCH_TAG	1
+#define RUNTIME_QUEUE_EXEC_APP_TAG		2

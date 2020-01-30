@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/select.h>
+#include <octopos/runtime.h>
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <arch/mailbox_os.h>
@@ -19,13 +20,28 @@ struct app_list_node {
 	struct app_list_node *next;
 };
 
-struct app_list_node *app_list_head = NULL;
-struct app_list_node *app_list_tail = NULL;
+struct app_list_node *all_app_list_head = NULL;
+struct app_list_node *all_app_list_tail = NULL;
+
+struct app_list_node *ready_queue_head = NULL;
+struct app_list_node *ready_queue_tail = NULL;
 
 uint8_t RUNTIME_PROC_IDS[NUM_RUNTIME_PROCS] = {P_RUNTIME1, P_RUNTIME2};
 uint8_t RUNTIME_QUEUE_IDS[NUM_RUNTIME_PROCS] = {Q_RUNTIME1, Q_RUNTIME2};
 
 struct runtime_proc *runtime_procs = NULL;
+
+uint64_t timer_ticks = 0;
+
+void update_timer_ticks(void)
+{
+	timer_ticks++;
+}
+
+static uint64_t get_timer_ticks(void)
+{
+	return timer_ticks;
+}
 
 uint8_t get_runtime_queue_id(uint8_t runtime_proc_id)
 {
@@ -57,8 +73,31 @@ uint8_t get_runtime_proc_id(uint8_t runtime_queue_id)
 	return 0;
 }
 
+
 static struct runtime_proc *get_idle_runtime_proc(void)
 {
+	static struct runtime_proc *waiting_for_proc = NULL;
+	static int wait_counter = 0;
+
+	if (waiting_for_proc) {
+		if (waiting_for_proc->state != RUNTIME_PROC_IDLE) {
+			wait_counter++;
+
+			if (wait_counter > 5) { /* FIXME: 5 is arbitrary for now */
+				printf("Error (%s): runtime_proc %d is not stopping. Need to hard reset.\n",
+				       __func__, waiting_for_proc->id);
+				/* FIXME: implement hard reset */
+			}
+
+			return NULL;
+		} else {
+			struct runtime_proc *runtime_proc = waiting_for_proc;
+			waiting_for_proc = NULL;
+			return runtime_proc;
+		}
+	}
+
+	/* Let's first see if any of the runtimes are idle */
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
 		/* FIXME: this needs to be in a critical section */
 		if (runtime_procs[i].state == RUNTIME_PROC_IDLE) {
@@ -67,18 +106,43 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 		}
 	}
 
+	uint64_t largest_elapsed = 0;
+	uint64_t current_ticks = get_timer_ticks();
+	struct runtime_proc *candidate = NULL;
+	/* Now, let' see if we can context switch any of them */
+	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
+		if (runtime_procs[i].state == RUNTIME_PROC_RUNNING_APP) {
+			uint64_t elapsed = current_ticks - runtime_procs[i].app->start_time;
+			if (elapsed >= 10 && elapsed > largest_elapsed) { /* FIXME: 10 is arbitrary for now */
+				candidate = &runtime_procs[i];
+				largest_elapsed = elapsed;
+			}
+		}
+	}
+
+	if (candidate) {
+		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+		buf[0] = RUNTIME_QUEUE_CONTEXT_SWITCH_TAG;
+		check_avail_and_send_msg_to_runtime(candidate->id, buf);
+		waiting_for_proc = candidate;
+		wait_counter = 0;
+	}
+
 	return NULL;
 }
 
-static void try_running_app(struct app *app)
+static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtime_proc)
 {
-	struct runtime_proc *runtime_proc = get_idle_runtime_proc();
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	if (!runtime_proc)
 		return;
 
+	buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+	strcpy((char *) &buf[1], app->name);
+
 	/* FIXME: send_msg_to_runtime doesn't check for ret from runtime. It assumes success. */
-	int ret = check_avail_and_send_msg_to_runtime(runtime_proc->id, (uint8_t *) app->name);
+	int ret = check_avail_and_send_msg_to_runtime(runtime_proc->id, buf);
 	if (ret) {
 		printf("%s: Error: couldn't run app %s\n", __func__, app->name);
 		runtime_proc->state = RUNTIME_PROC_IDLE;
@@ -87,6 +151,7 @@ static void try_running_app(struct app *app)
 
 	app->state = SCHED_RUNNING;
 	app->runtime_proc = runtime_proc;
+	app->start_time = get_timer_ticks();
 	runtime_proc->app = app;
 	runtime_proc->state = RUNTIME_PROC_RUNNING_APP;
 }
@@ -136,7 +201,7 @@ static bool is_app_available(char *app_name)
 	return true;
 }
 
-static int add_app_to_list(struct app *app)
+static int add_app_to_list(struct app *app, struct app_list_node **head, struct app_list_node **tail)
 {
 	struct app_list_node *node = 
 		(struct app_list_node *) malloc(sizeof(struct app_list_node));
@@ -146,36 +211,36 @@ static int add_app_to_list(struct app *app)
 	node->app = app;
 	node->next = NULL;
 
-	if (app_list_head == NULL && app_list_tail == NULL) {
+	if ((*head) == NULL && (*tail) == NULL) {
 		/* first node */
-		app_list_head = node;
-		app_list_tail = node;
+		(*head) = node;
+		(*tail) = node;
 	} else {
-		app_list_tail->next = node;
-		app_list_tail = node;
+		(*tail)->next = node;
+		(*tail) = node;
 	}
 
 	return 0;
 }
 
-static int remove_app_from_list(struct app *app)
+static int remove_app_from_list(struct app *app, struct app_list_node **head, struct app_list_node **tail)
 {
 	struct app_list_node *prev_node = NULL;
 
-	for (struct app_list_node *node = app_list_head; node;
+	for (struct app_list_node *node = (*head); node;
 	     node = node->next) {
 		if (node->app == app) {
 			if (prev_node == NULL) { /* removing head */
-				if (node == app_list_tail) { /* last node */
-					app_list_head = NULL;
-					app_list_tail = NULL;
+				if (node == (*tail)) { /* last node */
+					(*head) = NULL;
+					(*tail) = NULL;
 				} else {
-					app_list_head = node->next;
+					(*head) = node->next;
 				}
 			} else {
 				prev_node->next = node->next;
-				if (node == app_list_tail) {
-					app_list_tail = prev_node;
+				if (node == (*tail)) {
+					(*tail) = prev_node;
 				}
 			}
 
@@ -188,9 +253,19 @@ static int remove_app_from_list(struct app *app)
 	return ERR_EXIST;
 }
 
+static int add_app_to_all_app_list(struct app *app)
+{
+	return add_app_to_list(app, &all_app_list_head, &all_app_list_tail);
+}
+
+static int remove_app_from_all_app_list(struct app *app)
+{
+	return remove_app_from_list(app, &all_app_list_head, &all_app_list_tail);
+}
+
 struct app *get_app(int app_id)
 {
-	for (struct app_list_node *node = app_list_head; node;
+	for (struct app_list_node *node = all_app_list_head; node;
 	     node = node->next) {
 		if (node->app->id == app_id)
 			return node->app;
@@ -199,15 +274,34 @@ struct app *get_app(int app_id)
 	return NULL;
 }
 
-static struct app *get_ready_app(void)
+static int add_app_to_ready_queue(struct app *app)
 {
-	for (struct app_list_node *node = app_list_head; node;
-	     node = node->next) {
-		if (node->app->state == SCHED_READY)
-			return node->app;
-	}
+	return add_app_to_list(app, &ready_queue_head, &ready_queue_tail);
+}
 
-	return NULL;
+static int remove_app_from_ready_queue(struct app *app)
+{
+	return remove_app_from_list(app, &ready_queue_head, &ready_queue_tail);
+}
+
+static struct app *get_app_from_ready_queue(void)
+{
+	if (!ready_queue_head)
+		return NULL;
+
+	struct app *app = ready_queue_head->app;
+
+	remove_app_from_ready_queue(app); 
+
+	return app;
+}
+
+static bool is_any_ready_app(void)
+{
+	if (!ready_queue_head)
+		return false;
+
+	return true;
 }
 
 int sched_create_app(char *app_name)
@@ -238,8 +332,10 @@ int sched_create_app(char *app_name)
 	app->input_src = 0; /* shell */
 	app->output_dst = 0; /* shell */
 	app->state = SCHED_NOT_STARTED;
+	app->sec_partition_created = false;
+	app->sec_partition_id = -1;
 
-	add_app_to_list(app);
+	add_app_to_all_app_list(app);
 
 	return app_id;
 }
@@ -268,6 +364,7 @@ int sched_connect_apps(int input_app_id, int output_app_id, int two_way)
 	return 0;
 }
 
+/* FIXME: change func name */
 int sched_run_app(int app_id)
 {
 	struct app *app = get_app(app_id);
@@ -283,7 +380,9 @@ int sched_run_app(int app_id)
 
 	app->state = SCHED_READY;
 
-	try_running_app(app);
+	add_app_to_ready_queue(app);
+
+	sched_next_app();
 
 	return 0;
 }
@@ -301,10 +400,22 @@ struct runtime_proc *get_runtime_proc(int id)
 /* TODO: the scheduling algorithm needs to be implemented here */
 void sched_next_app(void)
 {
-	struct app *app = get_ready_app();
+	bool ret = is_any_ready_app();
+	if (!ret)
+		return;
 
-	if (app)
-		try_running_app(app);
+	struct runtime_proc *runtime_proc = get_idle_runtime_proc();
+	if (!runtime_proc)
+		return;
+
+	struct app *app = get_app_from_ready_queue();
+	/* should not happen */
+	if (!app) {
+		printf("Error (%s): app is NULL!\n", __func__);
+		return;
+	}
+
+	run_app_on_runtime_proc(app, runtime_proc);
 }
 
 void sched_clean_up_app(uint8_t runtime_proc_id)
@@ -326,12 +437,55 @@ void sched_clean_up_app(uint8_t runtime_proc_id)
 		return;
 	}
 
-	runtime_proc->state = RUNTIME_PROC_IDLE;	
+	runtime_proc->state = RUNTIME_PROC_RESETTING;	
 	runtime_proc->app = NULL;	
 
 	mark_app_id_as_unused(app->id);
-	remove_app_from_list(app);
+	remove_app_from_all_app_list(app);
 	free(app);
+}
+
+void sched_pause_app(uint8_t runtime_proc_id)
+{
+	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+	if (!runtime_proc) {
+		printf("%s: Error: invalid runtime proc id %d\n", __func__, runtime_proc_id);
+		return;
+	}
+
+	if (runtime_proc->state != RUNTIME_PROC_RUNNING_APP) {
+		printf("%s: Error: invalid runtime proc state\n", __func__);
+		return;
+	}
+
+	struct app *app = runtime_proc->app;
+	if (!app) {
+		printf("%s: Error: app struct is NULL\n", __func__);
+		return;
+	}
+
+	app->state = SCHED_READY;
+	add_app_to_ready_queue(app);
+
+	runtime_proc->state = RUNTIME_PROC_RESETTING;	
+}
+
+int sched_runtime_ready(uint8_t runtime_proc_id)
+{
+	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+	if (!runtime_proc) {
+		printf("%s: Error: invalid runtime proc id %d\n", __func__, runtime_proc_id);
+		return ERR_INVALID;
+	}
+
+	if (runtime_proc->state != RUNTIME_PROC_RESETTING) {
+		printf("%s: Error: invalid runtime proc state\n", __func__);
+		return ERR_INVALID;
+	}
+
+	runtime_proc->state = RUNTIME_PROC_IDLE;	
+
+	return 0;
 }
 
 void initialize_scheduler(void)
@@ -350,7 +504,7 @@ void initialize_scheduler(void)
 	runtime_procs = (struct runtime_proc *) calloc(sizeof(struct runtime_proc), NUM_RUNTIME_PROCS);
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
 		runtime_procs[i].id = RUNTIME_PROC_IDS[i];
-		runtime_procs[i].state = RUNTIME_PROC_IDLE;
+		runtime_procs[i].state = RUNTIME_PROC_RESETTING;
 		runtime_procs[i].app = NULL;
 		runtime_procs[i].pending_secure_ipc_request = 0;
 	}

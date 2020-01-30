@@ -23,6 +23,16 @@ char fifo_runtime_out[64];
 char fifo_runtime_in[64];
 char fifo_runtime_intr[64];
 
+uint8_t **syscall_resp_queue;
+int srq_size;
+int srq_msg_size;
+int srq_head;
+int srq_tail;
+int srq_counter;
+sem_t srq_sem;
+
+sem_t load_app_sem;
+
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
@@ -102,22 +112,28 @@ char fifo_runtime_intr[64];
 
 #define SYSCALL_GET_ONE_RET				\
 	uint32_t ret0;					\
-	ret0 = *((uint32_t *) &buf[0]);			\
+	ret0 = *((uint32_t *) &buf[1]);			\
 
+#define SYSCALL_GET_TWO_RETS				\
+	uint32_t ret0, ret1;				\
+	ret0 = *((uint32_t *) &buf[1]);			\
+	ret1 = *((uint32_t *) &buf[5]);			\
+
+/* FIXME: are we sure data is big enough for the memcpy here? */
 #define SYSCALL_GET_ONE_RET_DATA(data)						\
 	uint32_t ret0;								\
-	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 5;			\
-	ret0 = *((uint32_t *) &buf[0]);						\
+	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
+	ret0 = *((uint32_t *) &buf[1]);						\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
 	}									\
-	_size = buf[4];								\
+	_size = buf[5];								\
 	if (_size > max_size) {							\
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	memcpy(data, &buf[5], _size);						\
+	memcpy(data, &buf[6], _size);						\
 
 /* FIXME: there are a lot of repetition in these macros (also see file_system.c) */
 #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
@@ -215,6 +231,42 @@ sem_t interrupts[NUM_QUEUES + 1];
 sem_t interrupt_change;
 int change_queue = 0;
 
+/* FIXME: very similar to write_queue() in mailbox.c */
+static int write_syscall_response(uint8_t *buf)
+{
+	sem_wait(&srq_sem);
+
+	if (srq_counter >= srq_size) {
+		printf("Error: syscall response queue is full\n");
+		_exit(-1);
+		return -1;
+	}
+
+	srq_counter++;
+	memcpy(syscall_resp_queue[srq_tail], buf, srq_msg_size);
+	srq_tail = (srq_tail + 1) % srq_size;
+
+	return 0;
+}
+
+/* FIXME: very similar to read_queue() in mailbox.c */
+static int read_syscall_response(uint8_t *buf)
+{
+	if (srq_counter <= 0) {
+		printf("Error: syscall response  queue is empty\n");
+		exit(-1);
+		return -1;
+	}
+
+	srq_counter--;
+	memcpy(buf, syscall_resp_queue[srq_head], srq_msg_size);
+	srq_head = (srq_head + 1) % srq_size;
+
+	sem_post(&srq_sem);
+
+	return 0;
+}
+
 static void issue_syscall(uint8_t *buf)
 {
 	uint8_t opcode[2];
@@ -227,14 +279,10 @@ static void issue_syscall(uint8_t *buf)
 
 	/* wait for response */
 	sem_wait(&interrupts[q_runtime]);
-	/* FIXME: check that it's the right interrupt */
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = q_runtime;
-	write(fd_out, opcode, 2), 
-	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+	read_syscall_response(buf);
 }
 
-static void issue_syscall_noresponse(uint8_t *buf, bool *no_response)
+static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 {
 	uint8_t opcode[2];
 	*no_response = false;
@@ -246,20 +294,27 @@ static void issue_syscall_noresponse(uint8_t *buf, bool *no_response)
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
-	/* FIXME: the name of this funciton has noresponse in it! */
-	/* wait for response */
+	/* wait for response or a change of queue ownership */
 	sem_wait(&interrupts[q_runtime]);
 	sem_getvalue(&interrupt_change, &is_change);
 	if (!is_change) {
-		opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-		opcode[1] = q_runtime;
-		write(fd_out, opcode, 2), 
-		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+		read_syscall_response(buf);	
 	} else { 
 		sem_wait(&interrupt_change);
 		*no_response = true;
 	}
 }
+
+//static void issue_syscall_noresponse(uint8_t *buf)
+//{
+//	uint8_t opcode[2];
+//
+//	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+//	opcode[1] = q_os;
+//	sem_wait(&interrupts[q_os]);
+//	write(fd_out, opcode, 2);
+//	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+//}
 
 static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
@@ -380,6 +435,25 @@ static void read_char_from_secure_keyboard(char *buf)
 static int inform_os_of_termination(void)
 {
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_TERMINATION)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
+}
+
+static int inform_os_of_pause(void)
+{
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_PAUSE)
+	//issue_syscall_noresponse(buf);
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0; 
+
+	return 0; 
+}
+
+static int inform_os_runtime_ready(void)
+{
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_RUNTIME_READY)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return (int) ret0; 
@@ -523,6 +597,15 @@ static int unlock_secure_storage(uint8_t *key)
 	return (int) ret0;
 }
 
+static int lock_secure_storage(void)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	buf[0] = STORAGE_OP_LOCK;
+	send_msg_to_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
 static int set_secure_storage_key(uint8_t *key)
 {
 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
@@ -534,28 +617,78 @@ static int set_secure_storage_key(uint8_t *key)
 
 static int wipe_secure_storage(void)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	buf[0] = STORAGE_OP_WIPE;
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
 
-static int remove_secure_storage_key(void)
+uint8_t secure_storage_key[STORAGE_KEY_SIZE];
+bool secure_storage_key_set = false;
+bool secure_storage_available = false;
+bool has_access_to_secure_storage = false;
+
+bool context_set = false;
+void *context_addr = NULL;
+uint32_t context_size = 0;
+
+/* FIXME: do we need an int return? */
+static int set_up_secure_storage_key(uint8_t *key)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	buf[0] = STORAGE_OP_REMOVE_KEY;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
+	memcpy(secure_storage_key, key, STORAGE_KEY_SIZE);
+	secure_storage_key_set = true;
+
+	return 0;
 }
 
-static int request_secure_storage(int count, uint8_t *key)
+static int request_secure_storage_creation(uint8_t *returned_key)
 {
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE_CREATION)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET_DATA(buf)
+	if (ret0)
+		return (int) ret0;
+
+	if (_size != STORAGE_KEY_SIZE)
+		return ERR_INVALID;
+
+	memcpy(returned_key, buf, STORAGE_KEY_SIZE);
+
+	return 0;
+}
+
+static int yield_secure_storage_access(void)
+{
+	if (!has_access_to_secure_storage) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return ERR_INVALID;
+	}
+
+	/* FIXME: what if lock fails? */
+	lock_secure_storage();
+
+	has_access_to_secure_storage = false;
+
+	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+
+	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+
+	return 0;
+}
+
+static int request_secure_storage_access(int count)
+{
+	if (!secure_storage_key_set) {
+		printf("%s: Error: secure storage key not set.\n", __func__);
+		return ERR_INVALID;
+	}
+
 	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE, count)
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
@@ -575,36 +708,75 @@ static int request_secure_storage(int count, uint8_t *key)
 		printf("%s: Error: failed to attest secure storage read access\n", __func__);
 		return ERR_FAULT;
 	}
+	has_access_to_secure_storage = true;
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
-	int unlock_ret = unlock_secure_storage(key);
-	if (!unlock_ret)
-		return 0;
+	int unlock_ret = unlock_secure_storage(secure_storage_key);
+	if (unlock_ret == ERR_EXIST) {
+		uint8_t temp_key[STORAGE_KEY_SIZE];
+		int create_ret = request_secure_storage_creation(temp_key);
+		if (create_ret) {
+			yield_secure_storage_access();
+			return create_ret;
+		}
+		int unlock_ret_2 = unlock_secure_storage(temp_key);
+		if (unlock_ret_2) {
+			yield_secure_storage_access();
+			return create_ret;
+		}
+	} else if (unlock_ret) {
+		yield_secure_storage_access();
+		return unlock_ret;
+	}
 
 	/* if new storage, set the key */
-	int set_key_ret = set_secure_storage_key(key);
-	return set_key_ret;
-}
+	int set_key_ret = set_secure_storage_key(secure_storage_key);
+	if (set_key_ret) {
+		yield_secure_storage_access();
+		return set_key_ret;
+	}
 
-static int yield_secure_storage(void)
-{
-	/* wipe storage content */
-	int ret = wipe_secure_storage();
-
-	/* if wipe successful, remove the key */
-	if (!ret)
-		remove_secure_storage_key();
-
-	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
-
-	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+	secure_storage_available = true;
 	return 0;
 }
 
-static int write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+static int delete_and_yield_secure_storage(void)
 {
+	if (!secure_storage_available || !has_access_to_secure_storage) {
+		printf("%s: Error: secure storage has not been set up or there is no access\n", __func__);
+		return ERR_INVALID;
+	}
+
+	secure_storage_available = false;
+
+	/* wipe storage content */
+	wipe_secure_storage();
+
+	has_access_to_secure_storage = false;
+
+	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+
+
+	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_DELETE_SECURE_STORAGE)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int) ret0;
+
+	return 0;
+}
+
+static uint32_t write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+{
+	if (!secure_storage_available) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return ERR_INVALID;
+	}
+
 	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage(buf);
@@ -612,13 +784,41 @@ static int write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t b
 	return (int) ret0;
 }
 
-static int read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
+static uint32_t read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
 {
+	if (!secure_storage_available) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return ERR_INVALID;
+	}
+
 	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET_DATA(data)
 	return (int) ret0;
+}
+
+static int set_up_context(void *addr, uint32_t size)
+{
+	context_addr = addr;
+	context_size = size;
+	context_set = true;
+
+	/* Now, let's retrieve the context. */
+	/* FIXME: we need to store the context in a way to allow us to know if there is none. */
+	int ret = request_secure_storage_access(200);
+	if (ret) {
+		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
+		return ret;
+	}
+
+	uint32_t rret = read_from_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
+	if (rret != context_size)
+		printf("%s: No context to use.\n", __func__);
+
+	yield_secure_storage_access();
+
+	return 0;
 }
 
 static bool secure_ipc_mode = false;
@@ -630,7 +830,7 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 	sem_init(&interrupts[target_runtime_queue_id], 0, MAILBOX_QUEUE_SIZE);
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_IPC, target_runtime_queue_id, count)
 	change_queue = target_runtime_queue_id;
-	issue_syscall_noresponse(buf, &no_response);
+	issue_syscall_response_or_change(buf, &no_response);
 	if (!no_response) {
 		/* error */
 		SYSCALL_GET_ONE_RET
@@ -740,10 +940,13 @@ static void load_application(char *msg)
 		.read_file_blocks = read_file_blocks,
 		.close_file = close_file,
 		.remove_file = remove_file,
-		.request_secure_storage = request_secure_storage,
-		.yield_secure_storage = yield_secure_storage,
+		.set_up_secure_storage_key = set_up_secure_storage_key,
+		.request_secure_storage_access = request_secure_storage_access,
+		.yield_secure_storage_access = yield_secure_storage_access,
+		.delete_and_yield_secure_storage = delete_and_yield_secure_storage,
 		.write_to_secure_storage = write_to_secure_storage,
 		.read_from_secure_storage = read_from_secure_storage,
+		.set_up_context = set_up_context,
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
@@ -772,36 +975,74 @@ static void load_application(char *msg)
 	return;
 }
 
-static void *handle_mailbox_interrupts(void *data)
+uint8_t load_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
+bool still_running = true;
+
+static void *run_app(void *data)
 {
+	int ret = inform_os_runtime_ready();
+	if (ret) {
+		printf("Error (%s): runtime ready notification rejected by the OS\n", __func__);
+		still_running = false;
+		return NULL;
+	}
+	sem_wait(&load_app_sem);
+	load_application((char *) load_buf);
+	still_running = false;
+	inform_os_of_termination();
 
-	uint8_t interrupt;
+	return NULL;
+}
 
-	while (1) {
-		read(fd_intr, &interrupt, 1);
-		if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
-			printf("Error: invalid interrupt (%d)\n", interrupt);
+/* FIXME: copied from mailbox.c */
+static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
+{
+	uint8_t **messages = (uint8_t **) malloc(queue_size * sizeof(uint8_t *));
+	if (!messages) {
+		printf("Error: couldn't allocate memory for a queue\n");
+		exit(-1);
+	}
+	for (int i = 0; i < queue_size; i++) {
+		messages[i] = (uint8_t *) malloc(msg_size);
+		if (!messages[i]) {
+			printf("Error: couldn't allocate memory for a queue\n");
 			exit(-1);
 		}
-		if (interrupt > NUM_QUEUES) {
-			if ((interrupt - NUM_QUEUES) == change_queue) {
-				sem_post(&interrupt_change);
-				sem_post(&interrupts[q_runtime]);
-			}
-
-			/* ignore the rest */
-			continue;
-		}
-		sem_post(&interrupts[interrupt]);
 	}
+
+	return messages;
+}
+
+static void *store_context(void *data)
+{
+	if (!secure_storage_key_set || !context_set) {
+		printf("%s: Error: either the secure storage key or context not set\n", __func__);
+		return NULL;
+	}
+
+	int ret = request_secure_storage_access(200);
+	if (ret) {
+		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
+		return NULL;
+	}
+
+	uint32_t wret = write_to_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
+	if (wret != context_size)
+		printf("Error: couldn't write the context to secure storage.\n");
+
+	yield_secure_storage_access();
+	still_running = false;
+	inform_os_of_pause();
+		
+	return NULL;
 }
 
 int main(int argc, char **argv)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t opcode[2];
 	int runtime_id = -1; 
-	pthread_t mailbox_thread;
+	pthread_t app_thread, ctx_thread;
+	bool has_ctx_thread = false;
+	uint8_t interrupt;
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
@@ -853,25 +1094,81 @@ int main(int argc, char **argv)
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
 
-	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	/* initialize syscall response queue */
+	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+	srq_size = MAILBOX_QUEUE_SIZE;
+	srq_msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	srq_counter = 0;
+	srq_head = 0;
+	srq_tail = 0;
+	
+	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
+
+	sem_init(&load_app_sem, 0, 0);
+
+	int ret = pthread_create(&app_thread, NULL, run_app, NULL);
 	if (ret) {
-		printf("Error: couldn't launch the mailbox thread\n");
+		printf("Error: couldn't launch the app thread\n");
 		return -1;
 	}
 
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = q_runtime;
-	
-	while(1) {
-		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-		sem_wait(&interrupts[q_runtime]);
-		write(fd_out, opcode, 2), 
-		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-		load_application((char *) buf);
-		inform_os_of_termination();
+	bool keep_polling = true;
+
+	/* interrupt handling loop */
+	while (keep_polling) {
+		read(fd_intr, &interrupt, 1);
+		if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
+			printf("Error: invalid interrupt (%d)\n", interrupt);
+			exit(-1);
+		} else if (interrupt > NUM_QUEUES) {
+			if ((interrupt - NUM_QUEUES) == change_queue) {
+				sem_post(&interrupt_change);
+				sem_post(&interrupts[q_runtime]);
+			}
+
+			/* ignore the rest */
+			continue;
+		} else if (interrupt == q_runtime) {
+			uint8_t opcode[2];
+			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+
+			opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+			opcode[1] = q_runtime;
+			write(fd_out, opcode, 2);
+			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+			if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
+				write_syscall_response(buf);
+				sem_post(&interrupts[interrupt]);
+				if (!still_running)
+					keep_polling = false;
+			} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
+				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
+				sem_post(&load_app_sem);
+			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
+				//TODO
+				pthread_cancel(app_thread);
+				pthread_join(app_thread, NULL);
+				int ret = pthread_create(&ctx_thread, NULL, store_context, NULL);
+				if (ret)
+					printf("Error: couldn't launch the app thread\n");
+				has_ctx_thread = true;
+			}
+		} else {
+			sem_post(&interrupts[interrupt]);
+		}
 	}
-	
-	pthread_join(mailbox_thread, NULL);
+
+	if (has_ctx_thread)
+		pthread_join(ctx_thread, NULL);
+
+	pthread_join(app_thread, NULL);
+
+	/* FIXME: free the memory allocated for srq */
+
+	/* FIXME: resetting the mailbox needs to be done automatically. */
+	uint8_t opcode[2];
+	opcode[0] = MAILBOX_OPCODE_RESET;
+	write(fd_out, opcode, 2);
 
 	close(fd_out);
 	close(fd_in);
@@ -880,4 +1177,6 @@ int main(int argc, char **argv)
 	remove(fifo_runtime_out);
 	remove(fifo_runtime_in);
 	remove(fifo_runtime_intr);
+			
+	return 0;
 }

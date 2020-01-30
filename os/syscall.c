@@ -12,26 +12,36 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
+#include <octopos/runtime.h>
+#include <octopos/storage.h>
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/ipc.h>
 #include <os/shell.h>
 #include <os/file_system.h>
+#include <os/storage.h>
 #include <arch/mailbox_os.h>
 
-#define SYSCALL_SET_ONE_RET(ret0)	\
-	*((uint32_t *) &buf[0]) = ret0; \
+#define SYSCALL_SET_ONE_RET(ret0)			\
+	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
+	*((uint32_t *) &buf[1]) = ret0;			\
+
+#define SYSCALL_SET_TWO_RETS(ret0, ret1)		\
+	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
+	*((uint32_t *) &buf[1]) = ret0;			\
+	*((uint32_t *) &buf[5]) = ret1;			\
 
 /* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
 #define SYSCALL_SET_ONE_RET_DATA(ret0, data, size)		\
-	*((uint32_t *) &buf[0]) = ret0;				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 5;		\
+	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;		\
+	*((uint32_t *) &buf[1]) = ret0;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
 	if (max_size < 256 && size <= ((int) max_size)) {	\
-		buf[4] = (uint8_t) size;			\
-		memcpy(&buf[5], data, size);			\
+		buf[5] = (uint8_t) size;			\
+		memcpy(&buf[6], data, size);			\
 	} else {						\
 		printf("Error: invalid max_size or size\n");	\
-		buf[4] = 0;					\
+		buf[5] = 0;					\
 	}							\
 
 #define SYSCALL_GET_ONE_ARG		\
@@ -111,6 +121,32 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
+static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
+{
+	STORAGE_SET_ZERO_ARGS_DATA(temp_key, STORAGE_KEY_SIZE) 
+	buf[0] = STORAGE_OP_CREATE_SECURE_PARTITION;
+	send_msg_to_storage_no_response(buf);
+	get_response_from_storage(buf);
+	STORAGE_GET_TWO_RETS
+	if (ret0)
+		return (int) ret0;
+
+	*partition_id = (int) ret1;
+
+	return 0;
+}
+
+static int storage_delete_secure_partition(int partition_id)
+{
+	STORAGE_SET_ONE_ARG(partition_id) 
+	buf[0] = STORAGE_OP_DELETE_SECURE_PARTITION;
+	send_msg_to_storage_no_response(buf);
+	get_response_from_storage(buf);
+	STORAGE_GET_ONE_RET
+
+	return ret0;
+}
+
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
 {
 	uint16_t syscall_nr;
@@ -170,6 +206,16 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
 		inform_shell_of_termination(runtime_proc_id);
 		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+	case SYSCALL_INFORM_OS_OF_PAUSE: {
+		inform_shell_of_pause(runtime_proc_id);
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+	case SYSCALL_INFORM_OS_RUNTIME_READY: {
+		int ret = sched_runtime_ready(runtime_proc_id);
+		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
 	case SYSCALL_WRITE_TO_SHELL: {
@@ -291,11 +337,45 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
-	case SYSCALL_REQUEST_SECURE_STORAGE: {
+	case SYSCALL_REQUEST_SECURE_STORAGE_CREATION: {
+		int sec_partition_id = 0;
+
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
+			break;
+		}
+		struct app *app = runtime_proc->app;
+
+		/* temp key */
+		uint8_t temp_key[STORAGE_KEY_SIZE];
+		/* generate a key */
+		for (int i = 0; i < STORAGE_KEY_SIZE; i++)
+			/* FIXME: use a random number */
+			temp_key[i] = runtime_proc_id;
+
+		int ret = storage_create_secure_partition(temp_key, &sec_partition_id);
+		if (ret) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
+			break;
+		}
+
+		app->sec_partition_id = sec_partition_id;
+		app->sec_partition_created = true;
+
+		SYSCALL_SET_ONE_RET_DATA(0, temp_key, STORAGE_KEY_SIZE)
+		break;
+	}
+	case SYSCALL_REQUEST_SECURE_STORAGE_ACCESS: {
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
 
+		/* FIXME: should we check to see whether we have previously created a partition for this app? */
+
 		/* No more than 200 block reads/writes */
+		/* FIXME: hard-coded */
 		if (count > 200) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
@@ -316,6 +396,28 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
+	case SYSCALL_DELETE_SECURE_STORAGE: {
+
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			break;
+		}
+		struct app *app = runtime_proc->app;
+
+		if (!app->sec_partition_created) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		storage_delete_secure_partition(app->sec_partition_id);
+		app->sec_partition_created = false;
+		app->sec_partition_id = -1;
+
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}

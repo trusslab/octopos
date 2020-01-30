@@ -46,7 +46,6 @@ int main()
 
 	while (1) {
 		distribute_input();
-		sched_next_app();
 	}
 
 	close_os_mailbox();

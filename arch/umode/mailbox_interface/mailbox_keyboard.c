@@ -88,6 +88,7 @@ void close_keyboard(void)
 {
 	tcsetattr(0, TCSANOW, &orig);
 
+	pthread_cancel(mailbox_thread);
 	pthread_join(mailbox_thread, NULL);
 
 	close(fd_intr);

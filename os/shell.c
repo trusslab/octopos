@@ -205,6 +205,21 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 	sched_clean_up_app(runtime_proc_id);
 }
 
+void inform_shell_of_pause(uint8_t runtime_proc_id)
+{
+	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+	if (!runtime_proc || !runtime_proc->app) {
+		printf("%s: Error: NULL runtime_proc or app\n", __func__);
+		return;
+	}
+
+	if (runtime_proc->app == foreground_app) {
+		shell_status = SHELL_STATE_WAITING_FOR_CMD;
+		foreground_app = NULL;
+		output_printf("octopos$> ");
+	}
+	sched_pause_app(runtime_proc_id);
+}
 
 int app_write_to_shell(struct app *app, uint8_t *data, int size)
 {
@@ -261,7 +276,6 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 		n += 1;
 		return command(input, first, last, double_pipe, bg);
 	}
-	printf("%s [5]\n", __func__);
 	return 0;
 }
  
