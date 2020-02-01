@@ -11,10 +11,16 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
+/* FIXME */
+#include "network/include/sock.h"
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include "network/include/socket.h"
 
+typedef int bool;
+#define true	(int) 1
+#define false	(int) 0
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -917,6 +923,46 @@ static uint8_t get_runtime_queue_id(void)
 	return (uint8_t) q_runtime;
 }
 
+static struct socket *create_socket(int family, int type, int protocol)
+{
+	return _socket(family, type, protocol);
+}
+
+static int listen_on_socket(struct socket *sock, int backlog)
+{
+	return _listen(sock, backlog);
+}
+
+static void close_socket(struct socket *sock)
+{
+	_close(sock);
+}
+
+static int bind_socket(struct socket *sock, struct sock_addr *skaddr)
+{
+	return bind_socket(sock, skaddr);
+}
+
+static struct socket *accept_connection(struct socket *sock, struct sock_addr *skaddr)
+{
+	return _accept(sock, skaddr);
+}
+
+static int connect_socket(struct socket *sock, struct sock_addr *skaddr)
+{
+	return _connect(sock, skaddr);
+}
+
+static int read_from_socket(struct socket *sock, void *buf, int len)
+{
+	return _read(sock, buf, len);
+}
+
+static int write_to_socket(struct socket *sock, void *buf, int len)
+{
+	return _write(sock, buf, len);
+}
+
 typedef void (*app_main_proc)(struct runtime_api *);
 
 static void load_application(char *msg)
@@ -953,6 +999,14 @@ static void load_application(char *msg)
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
+		.create_socket = create_socket,
+		.listen_on_socket = listen_on_socket,
+		.close_socket = close_socket,
+		.bind_socket = bind_socket,
+		.accept_connection = accept_connection,
+		.connect_socket = connect_socket,
+		.read_from_socket = read_from_socket,
+		.write_to_socket = write_to_socket,
 	};
 
 	strcat(path, msg);
@@ -1037,6 +1091,11 @@ static void *store_context(void *data)
 	return NULL;
 }
 
+/* FIXME: use header file */
+void net_stack_exit(void);
+void net_stack_run(void);
+void net_stack_init(void);
+
 int main(int argc, char **argv)
 {
 	int runtime_id = -1; 
@@ -1090,6 +1149,9 @@ int main(int argc, char **argv)
 	fd_out = open(fifo_runtime_out, O_WRONLY);
 	fd_in = open(fifo_runtime_in, O_RDONLY);
 	fd_intr = open(fifo_runtime_intr, O_RDONLY);
+
+	net_stack_init();
+	net_stack_run();
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
@@ -1169,6 +1231,9 @@ int main(int argc, char **argv)
 	uint8_t opcode[2];
 	opcode[0] = MAILBOX_OPCODE_RESET;
 	write(fd_out, opcode, 2);
+
+	/* FIXME: this segfaults */
+	net_stack_exit();
 
 	close(fd_out);
 	close(fd_in);
