@@ -235,7 +235,6 @@ void write_to_storage_data_queue(uint8_t *buf)
 
 static void *handle_mailbox_interrupts(void *data)
 {
-
 	uint8_t interrupt;
 
 	while (1) {

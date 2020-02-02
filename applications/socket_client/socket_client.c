@@ -7,9 +7,8 @@
 #include <sys/stat.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
-/* FIXME */
-#include "../../runtime/network/include/sock.h"
-#include "../../runtime/network/include/socket.h"
+#include <network/sock.h>
+#include <network/socket.h>
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];

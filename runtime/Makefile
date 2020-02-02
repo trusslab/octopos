@@ -10,7 +10,7 @@ CONFIG_TOPLOGY = 2
 
 LD = ld
 CC = gcc
-CFLAGS = -Wall -Werror -I ../include/ -I network/include/
+CFLAGS = -Wall -Werror -I ../include/ -I ../include/network/ -I ../../include/network/ -I ../../../include/ -I ../../../include/network/
 LFLAGS = -ldl -lpthread -lrt
 export LD CC CFLAGS
 
@@ -45,39 +45,24 @@ else
 endif
 
 RUNTIME_OBJS =  runtime.o 			\
-		network/shell/shell_obj.o   	\
-		network/net/net_obj.o   	\
-		network/arp/arp_obj.o		\
-		network/ip/ip_obj.o		\
 		network/socket/socket_obj.o	\
 		network/udp/udp_obj.o		\
 		network/tcp/tcp_obj.o		\
-		network/app/app_obj.o		\
-		network/lib/lib_obj.o
+		../util/network/lib_obj.o
 
 umode:runtime
 
 runtime:$(RUNTIME_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LFLAGS)
 
-network/shell/shell_obj.o:network/shell/*.c
-	@make -C network/shell/
-network/net/net_obj.o:network/net/*.c
-	@make -C network/net/
-network/arp/arp_obj.o:network/arp/*.c
-	@make -C network/arp/
-network/ip/ip_obj.o:network/ip/*.c
-	@make -C network/ip/
 network/udp/udp_obj.o:network/udp/*.c
 	@make -C network/udp/
 network/tcp/tcp_obj.o:network/tcp/*.c
 	@make -C network/tcp/
-network/lib/lib_obj.o:network/lib/*.c
-	@make -C network/lib/
 network/socket/socket_obj.o:network/socket/*.c
 	@make -C network/socket/
-network/app/app_obj.o:network/app/*.c
-	@make -C network/app/
+../util/network/lib_obj.o:../util/network/*.c
+	@make -C ../util/network/
 
 clean:
 	find . -name *.o | xargs rm -f

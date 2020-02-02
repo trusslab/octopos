@@ -670,7 +670,6 @@ static void process_secure_request(uint8_t *buf)
 
 static void *handle_mailbox_interrupts(void *data)
 {
-
 	uint8_t interrupt;
 
 	while (1) {
@@ -728,14 +727,14 @@ int main(int argc, char **argv)
 		sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
 		if (!is_secure_queue) {
 			opcode[1] = Q_STORAGE_CMD_IN;
-			write(fd_out, opcode, 2), 
+			write(fd_out, opcode, 2); 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 			process_request(buf);
 			send_response(buf, Q_STORAGE_CMD_OUT);
 		} else {
 			sem_wait(&interrupts[Q_STORAGE_IN_2]);
 			opcode[1] = Q_STORAGE_IN_2;
-			write(fd_out, opcode, 2), 
+			write(fd_out, opcode, 2); 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 			process_secure_request(buf);
 			send_response(buf, Q_STORAGE_OUT_2);

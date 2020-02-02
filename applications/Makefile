@@ -7,3 +7,8 @@ umode:
 		$(MAKE) umode -C $$dir; \
 	done
 
+clean:
+	rm -r bin/
+	for dir in $(DIRS); do \
+		$(MAKE) clean -C $$dir; \
+	done

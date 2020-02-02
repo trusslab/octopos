@@ -9,14 +9,14 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/stat.h>
+#include <network/sock.h>
+#include <network/socket.h>
+#include <network/netif.h>
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
-/* FIXME */
-#include "network/include/sock.h"
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
-#include "network/include/socket.h"
 
 typedef int bool;
 #define true	(int) 1
@@ -236,6 +236,38 @@ int fd_out, fd_in, fd_intr;
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t interrupt_change;
 int change_queue = 0;
+
+unsigned int net_debug = 0;
+
+/* network */
+void ip_send_out(struct pkbuf *pkb)
+{
+	exit(-1);
+}
+
+int local_address(unsigned int addr)
+{
+	exit(-1);
+	return 0;
+}
+
+struct rtentry *rt_lookup(unsigned int ipaddr)
+{
+	exit(-1);
+	return NULL;
+}
+
+void icmp_send(unsigned char type, unsigned char code,
+                unsigned int data, struct pkbuf *pkb_in)
+{
+	exit(-1);
+}
+
+int rt_output(struct pkbuf *pkb)
+{
+	exit(-1);
+	return 0;
+}
 
 /* FIXME: very similar to write_queue() in mailbox.c */
 static int write_syscall_response(uint8_t *buf)
@@ -1091,11 +1123,6 @@ static void *store_context(void *data)
 	return NULL;
 }
 
-/* FIXME: use header file */
-void net_stack_exit(void);
-void net_stack_run(void);
-void net_stack_init(void);
-
 int main(int argc, char **argv)
 {
 	int runtime_id = -1; 
@@ -1149,9 +1176,6 @@ int main(int argc, char **argv)
 	fd_out = open(fifo_runtime_out, O_WRONLY);
 	fd_in = open(fifo_runtime_in, O_RDONLY);
 	fd_intr = open(fifo_runtime_intr, O_RDONLY);
-
-	net_stack_init();
-	net_stack_run();
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
@@ -1231,9 +1255,6 @@ int main(int argc, char **argv)
 	uint8_t opcode[2];
 	opcode[0] = MAILBOX_OPCODE_RESET;
 	write(fd_out, opcode, 2);
-
-	/* FIXME: this segfaults */
-	net_stack_exit();
 
 	close(fd_out);
 	close(fd_in);

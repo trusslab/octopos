@@ -7,3 +7,7 @@ umode:
 		$(MAKE) umode -C $$dir; \
 	done
 
+clean:
+	for dir in $(DIRS); do \
+		$(MAKE) clean -C $$dir; \
+	done
