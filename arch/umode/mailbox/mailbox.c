@@ -436,7 +436,8 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_DATA_IN].tail = 0;
 	queues[Q_NETWORK_DATA_IN].counter = 0;
 	queues[Q_NETWORK_DATA_IN].reader_id = P_NETWORK;
-	queues[Q_NETWORK_DATA_IN].writer_id = P_OS;
+	/* FIXME: change to P_OS */
+	queues[Q_NETWORK_DATA_IN].writer_id = P_RUNTIME1;
 	queues[Q_NETWORK_DATA_IN].access_count = 0;
 	queues[Q_NETWORK_DATA_IN].prev_owner = 0;
 	queues[Q_NETWORK_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
@@ -449,7 +450,8 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_DATA_OUT].head = 0;
 	queues[Q_NETWORK_DATA_OUT].tail = 0;
 	queues[Q_NETWORK_DATA_OUT].counter = 0;
-	queues[Q_NETWORK_DATA_OUT].reader_id = P_OS;
+	/* FIXME: change to P_OS */
+	queues[Q_NETWORK_DATA_OUT].reader_id = P_RUNTIME1;
 	queues[Q_NETWORK_DATA_OUT].writer_id = P_NETWORK;
 	queues[Q_NETWORK_DATA_OUT].access_count = 0;
 	queues[Q_NETWORK_DATA_OUT].prev_owner = 0;
@@ -537,6 +539,7 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
+	printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[(int) queue_id];
 		read_queue(queue, processors[(int) reader_id].in_handle);
@@ -553,6 +556,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
+	printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);

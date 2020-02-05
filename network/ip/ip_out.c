@@ -28,6 +28,7 @@ void ip_send_dev(struct netdev *dev, struct pkbuf *pkb)
 
 	ae = arp_lookup(ETH_P_IP, dst);
 	if (!ae) {
+		printf("%s [1]: about to make an arp request\n", __func__);
 		arpdbg("not found arp cache");
 		ae = arp_alloc();
 		if (!ae) {

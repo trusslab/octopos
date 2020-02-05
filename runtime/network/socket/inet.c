@@ -8,6 +8,8 @@
 #include "inet.h"
 #include "lib.h"
 #include "route.h"
+/* FIXME: remove */
+#include "netcfg.h"
 
 static struct inet_type inet_type_table[SOCK_MAX] = {
 	[0] = {},
@@ -158,13 +160,16 @@ static int inet_connect(struct socket *sock, struct sock_addr *skaddr)
 	if (!sk->sk_sport && sock_autobind(sk) < 0)
 		goto out;
 	/* ROUTE */
-	{
-		struct rtentry *rt = rt_lookup(skaddr->dst_addr);
-		if (!rt)
-			goto out;
-		sk->sk_dst = rt;
-		sk->sk_saddr = sk->sk_dst->rt_dev->net_ipaddr;
-	}
+	/* FIXME: start */
+	//{
+	//	struct rtentry *rt = rt_lookup(skaddr->dst_addr);
+	//	if (!rt)
+	//		goto out;
+	//	sk->sk_dst = rt;
+	//	sk->sk_saddr = sk->sk_dst->rt_dev->net_ipaddr;
+	//}
+		sk->sk_saddr = FAKE_IPADDR;
+	/* FIXME: end */
 	/* protocol must support its own connect */
 	if (sk->ops->connect)
 		err = sk->ops->connect(sk, skaddr);

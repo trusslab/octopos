@@ -54,6 +54,7 @@ void arp_recv(struct netdev *dev, struct pkbuf *pkb)
 	struct ether *ehdr = (struct ether *)pkb->pk_data;
 	struct arp *ahdr = (struct arp *)ehdr->eth_data;
 	struct arpentry *ae;
+	printf("%s [1]\n", __func__);
 
 	/* real arp process */
 	arpdbg(IPFMT " -> " IPFMT, ipfmt(ahdr->arp_sip), ipfmt(ahdr->arp_tip));
@@ -63,6 +64,7 @@ void arp_recv(struct netdev *dev, struct pkbuf *pkb)
 		arpdbg("multicast tip");
 		goto free_pkb;
 	}
+	printf("%s [2]\n", __func__);
 
 	if (ahdr->arp_tip != dev->net_ipaddr) {
 		arpdbg("not for us");
@@ -82,11 +84,13 @@ void arp_recv(struct netdev *dev, struct pkbuf *pkb)
 		/* Unsolicited ARP reply is not accepted */
 		arp_insert(dev, ahdr->arp_pro, ahdr->arp_sip, ahdr->arp_sha);
 	}
+	printf("%s [5]\n", __func__);
 
 	if (ahdr->arp_op == ARP_OP_REQUEST) {
 		arp_reply(dev, pkb);
 		return;
 	}
+	printf("%s [6]\n", __func__);
 free_pkb:
 	free_pkb(pkb);
 }
@@ -97,6 +101,7 @@ free_pkb:
  */
 void arp_in(struct netdev *dev, struct pkbuf *pkb)
 {
+	printf("%s [1]\n", __func__);
 	struct ether *ehdr = (struct ether *)pkb->pk_data;
 	struct arp *ahdr = (struct arp *)ehdr->eth_data;
 
@@ -104,11 +109,13 @@ void arp_in(struct netdev *dev, struct pkbuf *pkb)
 		arpdbg("arp(l2) packet is not for us");
 		goto err_free_pkb;
 	}
+	printf("%s [2]\n", __func__);
 
 	if (pkb->pk_len < ETH_HRD_SZ + ARP_HRD_SZ) {
 		arpdbg("arp packet is too small");
 		goto err_free_pkb;
 	}
+	printf("%s [3]\n", __func__);
 
 	/* safe check for arp cheating */
 	if (hwacmp(ahdr->arp_sha, ehdr->eth_src) != 0) {
@@ -125,12 +132,15 @@ void arp_in(struct netdev *dev, struct pkbuf *pkb)
 		goto err_free_pkb;
 	}
 #endif
+	printf("%s [4]\n", __func__);
 	if (ahdr->arp_op != ARP_OP_REQUEST && ahdr->arp_op != ARP_OP_REPLY) {
 		arpdbg("unknown arp operation");
 		goto err_free_pkb;
 	}
+	printf("%s [5]\n", __func__);
 
 	arp_recv(dev, pkb);
+	printf("%s [6]\n", __func__);
 	return;
 err_free_pkb:
 	free_pkb(pkb);

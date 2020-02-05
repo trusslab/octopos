@@ -22,8 +22,9 @@ static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 	if (tsk && tsk->sk.sk_dst) {
 		pkb->pk_rtdst = tsk->sk.sk_dst;
 	} else {
-		if (rt_output(pkb) < 0)
-			return -1;
+		/* FIXME */
+		//if (rt_output(pkb) < 0)
+		//	return -1;
 		if (tsk)
 			tsk->sk.sk_dst = pkb->pk_rtdst;
 	}
@@ -33,6 +34,7 @@ static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 
 void tcp_send_out(struct tcp_sock *tsk, struct pkbuf *pkb, struct tcp_segment *seg)
 {
+     	printf("%s [1]\n", __func__);
 	struct ip *iphdr = pkb2ip(pkb);
 	struct tcp *tcphdr = (struct tcp *)iphdr->ip_data;
 	unsigned int saddr, daddr;
@@ -51,7 +53,9 @@ void tcp_send_out(struct tcp_sock *tsk, struct pkbuf *pkb, struct tcp_segment *s
 		return;
 	}
 	tcp_set_checksum(iphdr, tcphdr);
+     	printf("%s [2]\n", __func__);
 	ip_send_out(pkb);
+     	printf("%s [3]\n", __func__);
 }
 
 /*
@@ -182,6 +186,9 @@ void tcp_send_syn(struct tcp_sock *tsk, struct tcp_segment *seg)
 	otcp->syn = 1;
 	otcp->window = _htons(tsk->rcv_wnd);
 	tcpdbg("send SYN(%u) [WIN %d] to "IPFMT":%d",
+			_ntohl(otcp->seq), _ntohs(otcp->window),
+			ipfmt(tsk->sk.sk_daddr), _ntohs(otcp->dst));
+	printf("%s [1]: send SYN(%u) [WIN %d] to "IPFMT":%d", __func__,
 			_ntohl(otcp->seq), _ntohs(otcp->window),
 			ipfmt(tsk->sk.sk_daddr), _ntohs(otcp->dst));
 	tcp_send_out(tsk, opkb, seg);

@@ -33,11 +33,13 @@ int main(int argc, char *argv[])
               sizeof(serv_addr)) < 0) 
               error("ERROR on binding");
      while (1) {
+     	printf("[1]\n");
      	listen(sockfd,5);
      	clilen = sizeof(cli_addr);
      	newsockfd = accept(sockfd, 
      	            (struct sockaddr *) &cli_addr, 
      	            &clilen);
+     	printf("[2]\n");
      	if (newsockfd < 0) 
      	     error("ERROR on accept");
      	bzero(buffer,256);

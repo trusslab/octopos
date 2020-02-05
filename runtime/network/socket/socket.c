@@ -107,7 +107,8 @@ int _connect(struct socket *sock, struct sock_addr *skaddr)
 	if (sock->ops) {
 		err = sock->ops->connect(sock, skaddr);
 	}
-	free_socket(sock);
+	/* FIXME: free */
+	//free_socket(sock);
 out:
 	return err;
 }

@@ -41,6 +41,7 @@ static struct ether *eth_init(struct netdev *dev, struct pkbuf *pkb)
 /* L2 protocol parsing */
 void net_in(struct netdev *dev, struct pkbuf *pkb)
 {
+	printf("%s [1]\n", __func__);
 	struct ether *ehdr = eth_init(dev, pkb);
 	if (!ehdr)
 		return;
@@ -54,9 +55,11 @@ void net_in(struct netdev *dev, struct pkbuf *pkb)
 //		rarp_in(dev, pkb);
 		break;
 	case ETH_P_ARP:
+		printf("%s [2]: ARP\n", __func__);
 		arp_in(dev, pkb);
 		break;
 	case ETH_P_IP:
+		printf("%s [3]: IP\n", __func__);
 		ip_in(dev, pkb);
 		break;
 	default:
@@ -64,6 +67,7 @@ void net_in(struct netdev *dev, struct pkbuf *pkb)
 		free_pkb(pkb);
 		break;
 	}
+	printf("%s [4]\n", __func__);
 }
 
 void net_timer(void)

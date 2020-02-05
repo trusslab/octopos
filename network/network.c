@@ -10,10 +10,13 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
-#include "netif.h"
-#include "route.h"
-#include "arp.h"
-#include "lib.h"
+#include <network/netif.h>
+#include <network/route.h>
+#include <network/arp.h>
+#include <network/lib.h>
+/* FIXME: remove */
+#include "ip.h"
+#include "tcp.h"
 
 #define NETWORK_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
@@ -34,52 +37,38 @@
 		buf[4] = 0;					\
 	}
 
-#define NETWORK_GET_ONE_ARG		\
-	uint32_t arg0;			\
-	arg0 = *((uint32_t *) &buf[1]); \
+/* FIXME: the first check on max size is always false */
+#define NETWORK_SET_ZERO_ARGS_DATA(data, size)					\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];				\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);				\
+	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;			\
+	if (max_size >= 65536) {						\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return;								\
+	}									\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return;								\
+	}									\
+	*((uint16_t *) &buf[0]) = size;						\
+	memcpy(&buf[2], (uint8_t *) data, size);				\
 
-#define NETWORK_GET_TWO_ARGS		\
-	uint32_t arg0, arg1;		\
-	arg0 = *((uint32_t *) &buf[1]); \
-	arg1 = *((uint32_t *) &buf[5]); \
-
-#define NETWORK_GET_THREE_ARGS		\
-	uint32_t arg0, arg1, arg2;	\
-	arg0 = *((uint32_t *) &buf[1]); \
-	arg1 = *((uint32_t *) &buf[5]); \
-	arg2 = *((uint32_t *) &buf[9]);\
-
-#define NETWORK_GET_TWO_ARGS_DATA				\
-	uint32_t arg0, arg1;					\
-	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[1]);				\
-	arg1 = *((uint32_t *) &buf[5]);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 10;		\
-	if (max_size >= 256) {					\
-		printf("Error: max_size not supported\n");	\
-		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)	\
-		return;						\
-	}							\
-	data_size = buf[9];					\
-	if (data_size > max_size) {				\
-		printf("Error: size not supported\n");		\
-		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)	\
-		return;						\
-	}							\
-	data = &buf[10];					\
 
 #define NETWORK_GET_ZERO_ARGS_DATA				\
-	uint8_t data_size, *data;				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;		\
-	if (max_size >= 256) {					\
+	uint8_t *data;						\
+	uint16_t data_size;					\
+	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;	\
+	if (max_size >= 65536) {				\
 		printf("Error: max_size not supported\n");	\
 		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		exit(-1);					\
 		return;						\
 	}							\
-	data_size = buf[1];					\
+	data_size = *((uint16_t *) &buf[0]);			\
 	if (data_size > max_size) {				\
 		printf("Error: size not supported\n");		\
 		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		exit(-1);					\
 		return;						\
 	}							\
 	data = &buf[2];
@@ -132,7 +121,9 @@ void net_stack_exit(void)
 
 static int initialize_network(void)
 {
+	printf("%s [1]\n", __func__);
 	net_stack_init();
+	printf("%s [2]\n", __func__);
 	return net_stack_run();
 }
 
@@ -141,6 +132,7 @@ static void *handle_mailbox_interrupts(void *data)
 	uint8_t interrupt;
 
 	while (1) {
+		printf("%s [1]\n", __func__);
 		read(fd_intr, &interrupt, 1);
 		if (interrupt < 1 || interrupt > NUM_QUEUES) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
@@ -150,6 +142,33 @@ static void *handle_mailbox_interrupts(void *data)
 		if (interrupt == Q_NETWORK_DATA_IN)
 			sem_post(&interrupts[Q_NETWORK_CMD_IN]);
 	}
+}
+
+static void send_packet(uint8_t *buf)
+{
+	printf("%s [1]\n", __func__);
+	NETWORK_GET_ZERO_ARGS_DATA
+	printf("%s [1.1]: data_size = %d\n", __func__, data_size);
+	struct pkbuf *pkb = (struct pkbuf *) data;
+	pkb->pk_refcnt = 1;
+	list_init(&pkb->pk_list);
+	//pkb_safe();
+	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
+		printf("%s: Error: packet size is not correct.\n", __func__);
+		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)
+		//free_pkb(pkb);
+		exit(-1);
+		return;
+	}
+	//for (int i = 0; i < data_size; i++)
+	//	printf("%d = %d\n", i, (int) data[i]);	
+
+	//struct tcp *otcp = (struct tcp *)pkb2ip(pkb)->ip_data;
+	//printf("%s [2]: otcp->dst = %d, octp->src = %d\n", __func__, _ntohs(otcp->dst), _ntohs(otcp->src));
+
+	printf("%s [3]: pkb = %p\n", __func__, pkb);
+	ip_send_out(pkb);
+	printf("%s [4]\n", __func__);
 }
 
 /* FIXME: identical copy form storage.c */
@@ -165,12 +184,39 @@ static void send_response(uint8_t *buf, uint8_t queue_id)
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
+/* FIXME: identical copy form storage.c */
+static void send_response_large(uint8_t *buf, uint8_t queue_id)
+{
+	uint8_t opcode[2];
+
+	sem_wait(&interrupts[queue_id]);
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = queue_id;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
+void tcp_in(struct pkbuf *pkb)
+{
+	printf("%s [1]: pkb->pk_len = %d\n", __func__, pkb->pk_len);
+	int size = pkb->pk_len + sizeof(*pkb);
+	printf("%s [3.1]: size = %d\n", __func__, size);
+	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
+	printf("%s [3.2]\n", __func__);
+	send_response_large(buf, Q_NETWORK_DATA_OUT);
+	printf("%s [3.3]\n", __func__);
+	//for (int i = 2; i < (size + 2); i++)
+	//	printf("%d = %d\n", i - 2, (int) buf[i]);
+}
+
 int main(int argc, char **argv)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	uint8_t opcode[2];
 	pthread_t mailbox_thread;
 	int is_data_queue = 0;
+	printf("%s [1]\n", __func__);
 
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
@@ -182,40 +228,53 @@ int main(int argc, char **argv)
 		printf("Error: couldn't initialize the network\n");
 		return -1;
 	}
+	printf("%s [2]\n", __func__);
 
 	mkfifo(FIFO_NETWORK_OUT, 0666);
 	mkfifo(FIFO_NETWORK_IN, 0666);
 	mkfifo(FIFO_NETWORK_INTR, 0666);
+	printf("%s [2.1]\n", __func__);
 
 	fd_out = open(FIFO_NETWORK_OUT, O_WRONLY);
+	printf("%s [2.2]\n", __func__);
 	fd_in = open(FIFO_NETWORK_IN, O_RDONLY);
+	printf("%s [2.3]\n", __func__);
 	fd_intr = open(FIFO_NETWORK_INTR, O_RDONLY);
+	printf("%s [2.4]\n", __func__);
 
 	ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
 	}
+	printf("%s [3]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	
 	while(1) {
-		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+		printf("%s [4]\n", __func__);
+		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
 		sem_getvalue(&interrupts[Q_NETWORK_DATA_IN], &is_data_queue);
 		if (!is_data_queue) {
+			printf("%s [5]\n", __func__);
 			opcode[1] = Q_NETWORK_CMD_IN;
 			write(fd_out, opcode, 2), 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 			//process_cmd(buf);
 			send_response(buf, Q_NETWORK_CMD_OUT);
 		} else {
+			uint8_t *dbuf = malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
+			if (!dbuf) {
+				printf("%s: Error: could not allocate memory\n", __func__);
+				continue;
+			}
+			printf("%s [6]\n", __func__);
 			sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
 			opcode[1] = Q_NETWORK_DATA_IN;
 			write(fd_out, opcode, 2); 
-			/* FIXME: where to read to? */
-			//read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			//process_data(buf);
+			read(fd_in, dbuf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+			send_packet(dbuf);
 		}
 	}
 	

@@ -167,6 +167,7 @@ static int tcp_wait_connect(struct tcp_sock *tsk)
 
 static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 {
+     	printf("%s [1]\n", __func__);
 	struct tcp_sock *tsk = tcpsk(sk);
 	int err;
 	if (tsk->state != TCP_CLOSED)
@@ -182,6 +183,7 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 		tsk->state = TCP_CLOSED;
 		return -1;
 	}
+     	printf("%s [2]\n", __func__);
 	/*
 	 * Race condition:
 	 *  If we connect to localhost, then we will send syn
@@ -193,7 +195,9 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 	 */
 	tcp_pre_wait_connect(tsk);
 	tcp_send_syn(tsk, NULL);
+     	printf("%s [3]\n", __func__);
 	err = tcp_wait_connect(tsk);
+     	printf("%s [4]\n", __func__);
 	if (err || tsk->state != TCP_ESTABLISHED) {
 		tcp_unhash(sk);
 		tcp_unbhash(tsk);
