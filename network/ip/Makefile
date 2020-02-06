@@ -1,4 +1,4 @@
-OBJS	= ip_in.o ip_out.o ip_forward.o ip_frag.o icmp.o route.o #raw.o 
+OBJS	= ip_in.o ip_out.o ip_forward.o ip_frag.o icmp.o route.o
 SUBDIR	= ip
 
 all:ip_obj.o

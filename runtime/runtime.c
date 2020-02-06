@@ -21,6 +21,7 @@
 /* FIXME: remove */
 #include "tcp.h"
 #include "ip.h"
+#include "raw.h"
 
 typedef int bool;
 #define true	(int) 1
@@ -354,7 +355,11 @@ static void *tcp_receive(void *_data)
 {
 	while (1) {
 		printf("%s [0.1]\n", __func__);
-		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+		uint8_t *buf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
+		if (!buf) {
+			printf("%s: Error: could not allocate memory for buf\n", __func__);
+			exit(-1);
+		}
 		uint8_t opcode[2];
 
 		opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
@@ -367,7 +372,7 @@ static void *tcp_receive(void *_data)
 		NETWORK_GET_ZERO_ARGS_DATA
 		printf("%s [1.1]: data_size = %d\n", __func__, data_size);
 		struct pkbuf *pkb = (struct pkbuf *) data;
-		pkb->pk_refcnt = 1;
+		pkb->pk_refcnt = 2; /* prevents the TCP code from freeing the pkb */
 		list_init(&pkb->pk_list);
 		//pkb_safe();
 		if (data_size != (pkb->pk_len + sizeof(*pkb))) {
@@ -381,8 +386,11 @@ static void *tcp_receive(void *_data)
 		//	printf("%d = %d\n", i, (int) data[i]);	
 
 		printf("%s [3]: pkb = %p\n", __func__, pkb);
+		/* FIXME: is the call to raw_in() needed? */
+		raw_in(pkb);
 		tcp_in(pkb);
 		printf("%s [4]\n", __func__);
+		free(buf);
 
 	}
 }

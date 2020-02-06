@@ -92,6 +92,7 @@ void tcp_send_reset(struct tcp_sock *tsk, struct tcp_segment *seg)
 	tcpdbg("send RESET from "IPFMT":%d to "IPFMT":%d",
 			ipfmt(seg->iphdr->ip_dst), _ntohs(otcp->src),
 			ipfmt(seg->iphdr->ip_src), _ntohs(otcp->dst));
+	printf("%s [1]: calling tcp_send_out()\n", __func__);
 	tcp_send_out(NULL, opkb, seg);
 }
 
@@ -133,6 +134,7 @@ void tcp_send_ack(struct tcp_sock *tsk, struct tcp_segment *seg)
 	tcpdbg("send ACK(%u) [WIN %d] to "IPFMT":%d",
 			_ntohl(otcp->ackn), _ntohs(otcp->window),
 			ipfmt(seg->iphdr->ip_src), _ntohs(otcp->dst));
+	printf("%s [1]: calling tcp_send_out()\n", __func__);
 	tcp_send_out(tsk, opkb, seg);
 }
 
@@ -165,6 +167,7 @@ void tcp_send_synack(struct tcp_sock *tsk, struct tcp_segment *seg)
 			_ntohl(otcp->seq), _ntohs(otcp->window),
 			_ntohl(otcp->ackn), ipfmt(seg->iphdr->ip_dst),
 			_ntohs(otcp->dst));
+	printf("%s [1]: calling tcp_send_out()\n", __func__);
 	tcp_send_out(tsk, opkb, seg);
 }
 
@@ -188,7 +191,7 @@ void tcp_send_syn(struct tcp_sock *tsk, struct tcp_segment *seg)
 	tcpdbg("send SYN(%u) [WIN %d] to "IPFMT":%d",
 			_ntohl(otcp->seq), _ntohs(otcp->window),
 			ipfmt(tsk->sk.sk_daddr), _ntohs(otcp->dst));
-	printf("%s [1]: send SYN(%u) [WIN %d] to "IPFMT":%d", __func__,
+	printf("%s [1]: calling tcp_send_out(): send SYN(%u) [WIN %d] to "IPFMT":%d", __func__,
 			_ntohl(otcp->seq), _ntohs(otcp->window),
 			ipfmt(tsk->sk.sk_daddr), _ntohs(otcp->dst));
 	tcp_send_out(tsk, opkb, seg);
@@ -219,5 +222,6 @@ void tcp_send_fin(struct tcp_sock *tsk)
 			_ntohl(otcp->seq), _ntohl(otcp->ackn),
 			_ntohs(otcp->window), ipfmt(tsk->sk.sk_daddr),
 			_ntohs(otcp->dst));
+	printf("%s [1]: calling tcp_send_out()\n", __func__);
 	tcp_send_out(tsk, opkb, NULL);
 }

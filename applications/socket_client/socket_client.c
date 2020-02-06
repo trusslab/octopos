@@ -54,10 +54,12 @@ static void send_receive(struct runtime_api *api)
 	char buf[32];
 	int len;
 
+	printf("%s [1]\n", __func__);
 	if (api->connect_socket(sock, &skaddr) < 0) {
 		printf("%s: Error: _connect\n", __func__);
 		return;
 	}
+	printf("%s [2]\n", __func__);
 
 	insecure_printf("Type your message: ");
 	int ret = api->read_from_shell(buf, &len);
@@ -65,14 +67,16 @@ static void send_receive(struct runtime_api *api)
 		printf("%s: Error: read stdin\n", __func__);
 		return;
 	}
+	printf("%s [3]\n", __func__);
 	if (api->write_to_socket(sock, buf, len) < 0) {
 		printf("%s: Error: _write\n", __func__);
 		return;
 	}
+	printf("%s [4]\n", __func__);
 	while ((len = api->read_from_socket(sock, buf, 512)) > 0) {
 		insecure_printf("%.*s\n", len, buf);
 	}
-	printf("%s: last _read() return %d\n", __func__, len);
+	//printf("%s [5]: last _read() return %d\n", __func__, len);
 }
 
 extern "C" __attribute__ ((visibility ("default")))

@@ -181,21 +181,26 @@ out:
 static int inet_read(struct socket *sock, void *buf, int len)
 {
 	struct sock *sk = sock->sk;
+     	printf("%s [1]\n", __func__);
 	int ret = -1;
 	if (sk) {
+     		printf("%s [2]\n", __func__);
 		sk->recv_wait = &sock->sleep;
 		ret = sk->ops->recv_buf(sock->sk, buf, len);
 		sk->recv_wait = NULL;
 	}
+     	printf("%s [3]: ret = %d\n", __func__, ret);
 	return ret;
 }
 
 static int inet_write(struct socket *sock, void *buf, int len)
 {
+     	printf("%s [1]\n", __func__);
 	struct sock *sk = sock->sk;
 	int ret = -1;
 	if (sk)
 		ret = sk->ops->send_buf(sock->sk, buf, len, NULL);
+     	printf("%s [2]\n", __func__);
 	return ret;
 }
 
