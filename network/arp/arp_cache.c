@@ -3,8 +3,6 @@
 #include "lib.h"
 #include "list.h"
 #include "compile.h"
-/* FIXME: remove */
-#include "tcp.h"
 
 #define arp_cache_head (&arp_cache[0])
 #define arp_cache_end (&arp_cache[ARP_CACHE_SZ])
@@ -61,10 +59,6 @@ void arp_queue_send(struct arpentry *ae)
 		pkb = list_first_entry(&ae->ae_list, struct pkbuf, pk_list);
 		list_del(ae->ae_list.next);
 		arpdbg("send pending packet");
-		/* FIXME start: remove */
-		struct tcp *otcp = (struct tcp *)pkb2ip(pkb)->ip_data;
-		printf("%s [3]: otcp->dst = %d, octp->src = %d\n", __func__, _ntohs(otcp->dst), _ntohs(otcp->src));
-		/* FIXME end */
 		netdev_tx(ae->ae_dev, pkb, pkb->pk_len - ETH_HRD_SZ,
 				pkb->pk_pro, ae->ae_hwaddr);
 	}
@@ -196,8 +190,6 @@ void arp_cache_init(void)
 	dbg("ARP CACHE INIT");
 	arp_cache_lock_init();
 	dbg("ARP CACHE SEMAPHORE INIT");
-	/* FIXME: remove */
-	arp_cache_traverse();
 }
 
 static const char *__arpstate[] = {

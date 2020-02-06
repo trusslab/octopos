@@ -22,7 +22,7 @@ static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 	if (tsk && tsk->sk.sk_dst) {
 		pkb->pk_rtdst = tsk->sk.sk_dst;
 	} else {
-		/* FIXME */
+		/* FIXME: route */
 		//if (rt_output(pkb) < 0)
 		//	return -1;
 		if (tsk)

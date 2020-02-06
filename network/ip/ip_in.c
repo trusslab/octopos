@@ -4,7 +4,6 @@
 #include "ip.h"
 //#include "raw.h"
 //#include "udp.h"
-/* FIXME: we only need this one for the definition of tcp_in */
 #include "tcp.h"
 #include "icmp.h"
 #include "route.h"
@@ -32,7 +31,7 @@ void ip_recv_local(struct pkbuf *pkb)
 	printf("%s [4]\n", __func__);
 
 	/* copy pkb to raw */
-	/* FIXME */
+	/* moved to runtime.c and call upon receiving a packet */
 	//raw_in(pkb);
 
 	/* pass to upper-level */
@@ -43,12 +42,11 @@ void ip_recv_local(struct pkbuf *pkb)
 		break;
 	case IP_P_TCP:
 		printf("%s [6]: TCP\n", __func__);
-		/* FIXME */
 		tcp_in(pkb);
 		break;
 	case IP_P_UDP:
 		printf("%s [7]: UDP\n", __func__);
-		/* FIXME */
+		/* FIXME: support UDP */
 		//udp_in(pkb);
 		break;
 	default:

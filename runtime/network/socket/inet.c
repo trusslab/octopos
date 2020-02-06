@@ -160,7 +160,7 @@ static int inet_connect(struct socket *sock, struct sock_addr *skaddr)
 	if (!sk->sk_sport && sock_autobind(sk) < 0)
 		goto out;
 	/* ROUTE */
-	/* FIXME: start */
+	/* FIXME: start: route: get info from the OS */
 	//{
 	//	struct rtentry *rt = rt_lookup(skaddr->dst_addr);
 	//	if (!rt)

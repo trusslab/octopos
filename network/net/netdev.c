@@ -83,8 +83,7 @@ void netdev_tx(struct netdev *dev, struct pkbuf *pkb, int len,
 	pkb->pk_len = len + ETH_HRD_SZ;
 	/* real transmit packet */
 	dev->net_ops->xmit(dev, pkb);
-	//FIXME: free
-	//free_pkb(pkb);
+	free_pkb(pkb);
 }
 
 int local_address(unsigned int addr)

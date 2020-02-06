@@ -95,7 +95,7 @@ int tcp_send_text(struct tcp_sock *tsk, void *buf, int len)
 {
 	struct pkbuf *pkb;
 	int slen = 0;
-	/* FIXME - start */
+	/* FIXME - start: get MTU info from the OS. */
 	//int segsize = tsk->sk.sk_dst->rt_dev->net_mtu - IP_HRD_SZ - TCP_HRD_SZ;
 	int segsize = 500 - IP_HRD_SZ - TCP_HRD_SZ;
 	/* FIXME - end */

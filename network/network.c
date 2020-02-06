@@ -14,9 +14,8 @@
 #include <network/route.h>
 #include <network/arp.h>
 #include <network/lib.h>
-/* FIXME: remove */
-#include "ip.h"
-#include "tcp.h"
+#include <network/ip.h>
+#include <network/tcp.h>
 
 #define NETWORK_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
@@ -150,7 +149,7 @@ static void send_packet(uint8_t *buf)
 	NETWORK_GET_ZERO_ARGS_DATA
 	printf("%s [1.1]: data_size = %d\n", __func__, data_size);
 	struct pkbuf *pkb = (struct pkbuf *) data;
-	pkb->pk_refcnt = 1;
+	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
 	list_init(&pkb->pk_list);
 	//pkb_safe();
 	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
