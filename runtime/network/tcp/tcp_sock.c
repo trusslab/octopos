@@ -49,39 +49,39 @@ struct sock *tcp_lookup_sock(unsigned int src, unsigned int dst,
 	return sk;
 }
 
-static _inline int __tcp_port_used(unsigned short nport, struct hlist_head *head)
-{
-	struct hlist_node *node;
-	struct tcp_sock *tsk;
-	for_each_tcp_sock(tsk, node, head)
-		if (tsk->sk.sk_sport == nport)
-			return 1;
-	return 0;
-}
-
-static _inline int tcp_port_used(unsigned short nport)
-{
-	return __tcp_port_used(nport,
-		tcp_bhash_head(_ntohs(nport) & TCP_BHASH_MASK));
-}
-
-static unsigned short tcp_get_port(void)
-{
-	static unsigned short defport = TCP_BPORT_MIN;
-	unsigned short nport = 0;
-	/* no free bind port resource */
-	if (tcp_table.bfree <= 0)
-		return 0;
-	/* assert that we can break the loop */
-	while (tcp_port_used(_htons(defport))) {
-		if (++defport > TCP_BPORT_MAX)
-			defport = TCP_BPORT_MIN;
-	}
-	nport = _htons(defport);
-	if (++defport > TCP_BPORT_MAX)
-		defport = TCP_BPORT_MIN;
-	return nport;
-}
+//static _inline int __tcp_port_used(unsigned short nport, struct hlist_head *head)
+//{
+//	struct hlist_node *node;
+//	struct tcp_sock *tsk;
+//	for_each_tcp_sock(tsk, node, head)
+//		if (tsk->sk.sk_sport == nport)
+//			return 1;
+//	return 0;
+//}
+//
+//static _inline int tcp_port_used(unsigned short nport)
+//{
+//	return __tcp_port_used(nport,
+//		tcp_bhash_head(_ntohs(nport) & TCP_BHASH_MASK));
+//}
+//
+//static unsigned short tcp_get_port(void)
+//{
+//	static unsigned short defport = TCP_BPORT_MIN;
+//	unsigned short nport = 0;
+//	/* no free bind port resource */
+//	if (tcp_table.bfree <= 0)
+//		return 0;
+//	/* assert that we can break the loop */
+//	while (tcp_port_used(_htons(defport))) {
+//		if (++defport > TCP_BPORT_MAX)
+//			defport = TCP_BPORT_MIN;
+//	}
+//	nport = _htons(defport);
+//	if (++defport > TCP_BPORT_MAX)
+//		defport = TCP_BPORT_MIN;
+//	return nport;
+//}
 
 static void tcp_bhash(struct tcp_sock *tsk)
 {
@@ -89,13 +89,28 @@ static void tcp_bhash(struct tcp_sock *tsk)
 	hlist_add_head(&tsk->bhash_list, tcp_bhash_head(tsk->bhash));
 }
 
-static int tcp_set_sport(struct sock *sk, unsigned short nport)
+int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
+		unsigned int daddr, unsigned short dport);
+
+/* Also sets the saddr */
+static int tcp_set_sport(struct sock *sk, struct sock_addr *skaddr, unsigned short nport)
 {
 	int err = -1;
+	printf("%s [1]: nport = %d\n", __func__, nport);
 
-	if ((nport && tcp_port_used(nport)) ||
-		(!nport && !(nport = tcp_get_port())))
+	//if ((nport && tcp_port_used(nport)) ||
+	//	(!nport && !(nport = tcp_get_port())))
+	//	goto out;
+	unsigned short sport = nport; 
+	unsigned int saddr;
+	int ret = syscall_allocate_tcp_socket(&saddr, &sport,
+			skaddr->dst_addr, skaddr->dst_port);
+	if (ret || (nport && nport != sport))
 		goto out;
+	nport = sport;
+	sk->sk_saddr = saddr;
+	printf("%s [2]: nport = %d\n", __func__, nport);
+	printf("%s [3]: saddr = "IPFMT"\n", __func__, ipfmt(saddr));
 	tcp_table.bfree--;
 	sk->sk_sport = nport;
 	tcpsk(sk)->bhash = _ntohs(nport) & TCP_BHASH_MASK;
@@ -167,7 +182,6 @@ static int tcp_wait_connect(struct tcp_sock *tsk)
 
 static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 {
-     	printf("%s [1]\n", __func__);
 	struct tcp_sock *tsk = tcpsk(sk);
 	int err;
 	if (tsk->state != TCP_CLOSED)
@@ -183,7 +197,6 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 		tsk->state = TCP_CLOSED;
 		return -1;
 	}
-     	printf("%s [2]\n", __func__);
 	/*
 	 * Race condition:
 	 *  If we connect to localhost, then we will send syn
@@ -195,9 +208,7 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 	 */
 	tcp_pre_wait_connect(tsk);
 	tcp_send_syn(tsk, NULL);
-     	printf("%s [3]\n", __func__);
 	err = tcp_wait_connect(tsk);
-     	printf("%s [4]\n", __func__);
 	if (err || tsk->state != TCP_ESTABLISHED) {
 		tcp_unhash(sk);
 		tcp_unbhash(tsk);
@@ -441,6 +452,10 @@ struct sock *tcp_alloc_sock(int protocol)
 	list_init(&tsk->sk.recv_queue);
 	list_init(&tsk->rcv_reass);
 	tcp_id++;
+	printf("%s [1]: tsk->sk.sk_daddr = "IPFMT"\n", __func__, ipfmt(tsk->sk.sk_daddr));
+	printf("%s [2]: tsk->sk.sk_saddr = "IPFMT"\n", __func__, ipfmt(tsk->sk.sk_saddr));
+	printf("%s [3]: tsk->sk.sk_dport = %d\n", __func__, _ntohs(tsk->sk.sk_dport));
+	printf("%s [4]: tsk->sk.sk_sport = %d\n", __func__, _ntohs(tsk->sk.sk_sport));
 	return &tsk->sk;
 }
 

@@ -149,9 +149,11 @@ static unsigned short udp_get_port(void)
 	return _htons(port);
 }
 
-static int udp_set_sport(struct sock *sk, unsigned short nport)
+static int udp_set_sport(struct sock *sk, struct sock_addr *skaddr, unsigned short nport)
 {
 	int hash, err = -1;
+	/* FIXME: update to use syscall to acquire port */
+	exit(-1);
 
 	udp_htable_lock();
 	/*
@@ -254,7 +256,7 @@ static int udp_send_buf(struct sock *sk, void *buf, int size,
 	}
 	if (!sk_addr.dst_addr || !sk_addr.dst_port)
 		return -1;
-	if (!sk->sk_sport && sock_autobind(sk) < 0)
+	if (!sk->sk_sport && sock_autobind(sk, &sk_addr) < 0)
 		return -1;
 	/* udp packet send */
 	pkb = alloc_pkb(ETH_HRD_SZ + IP_HRD_SZ + UDP_HRD_SZ + size);

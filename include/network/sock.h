@@ -26,7 +26,7 @@ struct sock_ops {
 	void (*unhash)(struct sock *);
 	int (*bind)(struct sock *, struct sock_addr *);
 	int (*connect)(struct sock *, struct sock_addr *);
-	int (*set_port)(struct sock *, unsigned short);
+	int (*set_port)(struct sock *, struct sock_addr *, unsigned short);
 	int (*close)(struct sock *);
 	int (*listen)(struct sock *, int);
 	struct sock *(*accept)(struct sock *);
@@ -81,7 +81,7 @@ extern struct sock *get_sock(struct sock *sk);
 extern void sock_recv_notify(struct sock *sk);
 extern struct pkbuf *sock_recv_pkb(struct sock *sk);
 extern int sock_close(struct sock *sk);
-extern int sock_autobind(struct sock *);
+extern int sock_autobind(struct sock *, struct sock_addr *);
 
 extern int alloc_socks;
 extern int free_socks;

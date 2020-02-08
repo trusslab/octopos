@@ -72,6 +72,13 @@
 	}							\
 	data = &buf[2];
 
+#define NETWORK_GET_FOUR_ARGS			\
+	uint32_t arg0, arg1, arg2, arg3;	\
+	arg0 = *((uint32_t *) &buf[0]);		\
+	arg1 = *((uint32_t *) &buf[4]);		\
+	arg2 = *((uint32_t *) &buf[8]);		\
+	arg3 = *((uint32_t *) &buf[12]);	\
+
 int fd_out, fd_in, fd_intr;
 
 /* Not all will be used */
@@ -131,7 +138,6 @@ static void *handle_mailbox_interrupts(void *data)
 	uint8_t interrupt;
 
 	while (1) {
-		printf("%s [1]\n", __func__);
 		read(fd_intr, &interrupt, 1);
 		if (interrupt < 1 || interrupt > NUM_QUEUES) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
@@ -143,20 +149,57 @@ static void *handle_mailbox_interrupts(void *data)
 	}
 }
 
+//int _tcp_id = 0;
+
+static int tcp_init_pkb(struct pkbuf *pkb)
+{
+	struct ip *iphdr = pkb2ip(pkb);
+	/* fill ip head */
+	iphdr->ip_hlen = IP_HRD_SZ >> 2;
+	iphdr->ip_ver = IP_VERSION_4;
+	iphdr->ip_tos = 0;
+	iphdr->ip_len = _htons(pkb->pk_len - ETH_HRD_SZ);
+	//iphdr->ip_id = _htons(_tcp_id);
+	iphdr->ip_fragoff = 0;
+	iphdr->ip_ttl = TCP_DEFAULT_TTL;
+	iphdr->ip_pro = IP_P_TCP;
+	//iphdr->ip_dst = daddr;
+	/* NOTE: tsk maybe NULL, if connect doesnt exist */
+	//if (tsk && tsk->sk.sk_dst) {
+	//	pkb->pk_rtdst = tsk->sk.sk_dst;
+	//} else {
+		if (rt_output(pkb) < 0)
+			return -1;
+		/* FIXME: route: cache it for the connection */
+		//if (tsk)
+		//	tsk->sk.sk_dst = pkb->pk_rtdst;
+	//}
+	printf("%s [2]\n", __func__);
+	//iphdr->ip_src = saddr;
+	return 0;
+}
+
+unsigned int saddr = 0, daddr = 0;
+unsigned short sport = 0, dport = 0;
+int filter_set = 0;
+
 static void send_packet(uint8_t *buf)
 {
 	printf("%s [1]\n", __func__);
+	if (!filter_set) {
+		printf("%s: Error: queue filter not set.\n", __func__);
+		return;
+	}
+
 	NETWORK_GET_ZERO_ARGS_DATA
 	printf("%s [1.1]: data_size = %d\n", __func__, data_size);
 	struct pkbuf *pkb = (struct pkbuf *) data;
 	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
 	list_init(&pkb->pk_list);
+	/* FIXME */
 	//pkb_safe();
 	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
 		printf("%s: Error: packet size is not correct.\n", __func__);
-		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)
-		//free_pkb(pkb);
-		exit(-1);
 		return;
 	}
 	//for (int i = 0; i < data_size; i++)
@@ -165,9 +208,49 @@ static void send_packet(uint8_t *buf)
 	//struct tcp *otcp = (struct tcp *)pkb2ip(pkb)->ip_data;
 	//printf("%s [2]: otcp->dst = %d, octp->src = %d\n", __func__, _ntohs(otcp->dst), _ntohs(otcp->src));
 
+	/* check the IP addresses */
+	struct ip *iphdr = pkb2ip(pkb);
+	printf("%s [2]: saddr = "IPFMT"\n", __func__, ipfmt(saddr));
+	printf("%s [3]: daddr = "IPFMT"\n", __func__, ipfmt(daddr));
+	printf("%s [4]: iphdr->ip_src = "IPFMT"\n", __func__, ipfmt(iphdr->ip_src));
+	printf("%s [5]: iphdr->ip_dst = "IPFMT"\n", __func__, ipfmt(iphdr->ip_dst));
+	if ((saddr != iphdr->ip_src) || (daddr != iphdr->ip_dst)) {
+		printf("%s: Error: invalid src or dst IP addresses.\n", __func__);
+		return;
+	}
+
+	/* check the port numbers */
+	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
+	printf("%s [6]: sport = %d\n", __func__, _ntohs(sport));
+	printf("%s [7]: dport = %d\n", __func__, _ntohs(dport));
+	printf("%s [8]: tcphdr->src = %d\n", __func__, _ntohs(tcphdr->src));
+	printf("%s [9]: tcphdr->dst = %d\n", __func__, _ntohs(tcphdr->dst));
+	if ((sport != tcphdr->src) || (dport != tcphdr->dst)) {
+		printf("%s: Error: invalid src or dst port numbers.\n", __func__);
+		return;
+	}
+
+	tcp_init_pkb(pkb);
+	/* TCP checksum */
+	tcp_set_checksum(iphdr, tcphdr);
+
 	printf("%s [3]: pkb = %p\n", __func__, pkb);
 	ip_send_out(pkb);
 	printf("%s [4]\n", __func__);
+}
+
+static void process_cmd(uint8_t *buf)
+{
+	printf("%s [1]\n", __func__);
+	NETWORK_GET_FOUR_ARGS
+	saddr = (unsigned int) arg0;
+	sport = (unsigned short) arg1;
+	daddr = (unsigned int) arg2;
+	dport = (unsigned short) arg3;
+
+	filter_set = 1;
+	NETWORK_SET_ONE_RET((unsigned int) 0)
+	printf("%s [2]\n", __func__);
 }
 
 /* FIXME: identical copy form storage.c */
@@ -211,7 +294,6 @@ void tcp_in(struct pkbuf *pkb)
 
 int main(int argc, char **argv)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	uint8_t opcode[2];
 	pthread_t mailbox_thread;
 	int is_data_queue = 0;
@@ -249,18 +331,19 @@ int main(int argc, char **argv)
 	printf("%s [3]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	
 	while(1) {
 		printf("%s [4]\n", __func__);
-		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
 		sem_getvalue(&interrupts[Q_NETWORK_DATA_IN], &is_data_queue);
 		if (!is_data_queue) {
+			memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 			printf("%s [5]\n", __func__);
 			opcode[1] = Q_NETWORK_CMD_IN;
 			write(fd_out, opcode, 2), 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			//process_cmd(buf);
+			process_cmd(buf);
 			send_response(buf, Q_NETWORK_CMD_OUT);
 		} else {
 			uint8_t *dbuf = malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);

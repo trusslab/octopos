@@ -54,9 +54,17 @@ static int inet_socket(struct socket *sock, int protocol)
 	hlist_node_init(&sk->hash_list);
 	sk->protocol = protocol;
 	sk->sock = sock;
+	printf("%s [1]: sk->sk_daddr = "IPFMT"\n", __func__, ipfmt(sk->sk_daddr));
+	printf("%s [2]: sk->sk_saddr = "IPFMT"\n", __func__, ipfmt(sk->sk_saddr));
+	printf("%s [3]: sk->sk_dport = %d\n", __func__, _ntohs(sk->sk_dport));
+	printf("%s [4]: sk->sk_sport = %d\n", __func__, _ntohs(sk->sk_sport));
 	/* only used by raw ip */
 	if (sk->hash && sk->ops->hash)
 		sk->ops->hash(sk);
+	printf("%s [5]: sk->sk_daddr = "IPFMT"\n", __func__, ipfmt(sk->sk_daddr));
+	printf("%s [6]: sk->sk_saddr = "IPFMT"\n", __func__, ipfmt(sk->sk_saddr));
+	printf("%s [7]: sk->sk_dport = %d\n", __func__, _ntohs(sk->sk_dport));
+	printf("%s [8]: sk->sk_sport = %d\n", __func__, _ntohs(sk->sk_sport));
 	return 0;
 }
 
@@ -128,7 +136,7 @@ static int inet_bind(struct socket *sock, struct sock_addr *skaddr)
 	sk->sk_saddr = skaddr->src_addr;
 	/* bind port */
 	if (sk->ops->set_port) {
-		err = sk->ops->set_port(sk, skaddr->src_port);
+		err = sk->ops->set_port(sk, skaddr, skaddr->src_port);
 		if (err < 0) {
 			/* error clear */
 			sk->sk_saddr = 0;
@@ -157,7 +165,7 @@ static int inet_connect(struct socket *sock, struct sock_addr *skaddr)
 	if (sk->sk_dport)
 		goto out;
 	/* if not bind, we try auto bind */
-	if (!sk->sk_sport && sock_autobind(sk) < 0)
+	if (!sk->sk_sport && sock_autobind(sk, skaddr) < 0)
 		goto out;
 	/* ROUTE */
 	/* FIXME: start: route: get info from the OS */
@@ -168,7 +176,6 @@ static int inet_connect(struct socket *sock, struct sock_addr *skaddr)
 	//	sk->sk_dst = rt;
 	//	sk->sk_saddr = sk->sk_dst->rt_dev->net_ipaddr;
 	//}
-		sk->sk_saddr = FAKE_IPADDR;
 	/* FIXME: end */
 	/* protocol must support its own connect */
 	if (sk->ops->connect)

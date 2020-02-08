@@ -160,6 +160,29 @@ int check_avail_and_send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 	return 0;
 }
 
+int send_cmd_to_network(uint8_t *buf)
+{
+	uint8_t opcode[2];
+	printf("%s [1]\n", __func__);
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_NETWORK_CMD_IN;
+
+	sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
+	printf("%s [2]\n", __func__);
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = Q_NETWORK_CMD_OUT;
+	sem_wait(&interrupts[Q_NETWORK_CMD_OUT]);
+	printf("%s [3]\n", __func__);
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
+
 /* Only to be used for queues that OS writes to */
 /* FIXME: busy-waiting */
 void wait_until_empty(uint8_t queue_id, int queue_size)
@@ -308,6 +331,8 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
+	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, 0);
 	sem_init(&interrupts[Q_SENSOR], 0, 0);
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
@@ -320,6 +345,8 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_STORAGE_CMD_OUT], 0, 1);
 	sem_init(&availables[Q_STORAGE_IN_2], 0, 1);
 	sem_init(&availables[Q_STORAGE_OUT_2], 0, 1);
+	sem_init(&availables[Q_NETWORK_CMD_IN], 0, 1);
+	sem_init(&availables[Q_NETWORK_CMD_OUT], 0, 1);
 	sem_init(&availables[Q_SENSOR], 0, 1);
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);

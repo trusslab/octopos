@@ -4,30 +4,30 @@
 #include "ip.h"
 #include "tcp.h"
 
+/* sets the source and dest IP addresses, but these will be checked in the network service. */
 static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 			unsigned int saddr, unsigned int daddr)
 {
 	struct ip *iphdr = pkb2ip(pkb);
-	/* fill ip head */
-	iphdr->ip_hlen = IP_HRD_SZ >> 2;
-	iphdr->ip_ver = IP_VERSION_4;
-	iphdr->ip_tos = 0;
-	iphdr->ip_len = _htons(pkb->pk_len - ETH_HRD_SZ);
+	///* fill ip head */
+	//iphdr->ip_hlen = IP_HRD_SZ >> 2;
+	//iphdr->ip_ver = IP_VERSION_4;
+	//iphdr->ip_tos = 0;
+	//iphdr->ip_len = _htons(pkb->pk_len - ETH_HRD_SZ);
 	iphdr->ip_id = _htons(tcp_id);
-	iphdr->ip_fragoff = 0;
-	iphdr->ip_ttl = TCP_DEFAULT_TTL;
-	iphdr->ip_pro = IP_P_TCP;
+	//iphdr->ip_fragoff = 0;
+	//iphdr->ip_ttl = TCP_DEFAULT_TTL;
+	//iphdr->ip_pro = IP_P_TCP;
 	iphdr->ip_dst = daddr;
-	/* NOTE: tsk maybe NULL, if connect doesnt exist */
-	if (tsk && tsk->sk.sk_dst) {
-		pkb->pk_rtdst = tsk->sk.sk_dst;
-	} else {
-		/* FIXME: route */
-		//if (rt_output(pkb) < 0)
-		//	return -1;
-		if (tsk)
-			tsk->sk.sk_dst = pkb->pk_rtdst;
-	}
+	///* NOTE: tsk maybe NULL, if connect doesnt exist */
+	//if (tsk && tsk->sk.sk_dst) {
+	//	pkb->pk_rtdst = tsk->sk.sk_dst;
+	//} else {
+	//	//if (rt_output(pkb) < 0)
+	//	//	return -1;
+	//	if (tsk)
+	//		tsk->sk.sk_dst = pkb->pk_rtdst;
+	//}
 	iphdr->ip_src = saddr;
 	return 0;
 }
@@ -35,8 +35,8 @@ static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 void tcp_send_out(struct tcp_sock *tsk, struct pkbuf *pkb, struct tcp_segment *seg)
 {
      	printf("%s [1]\n", __func__);
-	struct ip *iphdr = pkb2ip(pkb);
-	struct tcp *tcphdr = (struct tcp *)iphdr->ip_data;
+	//struct ip *iphdr = pkb2ip(pkb);
+	//struct tcp *tcphdr = (struct tcp *)iphdr->ip_data;
 	unsigned int saddr, daddr;
 
 	if (seg) {
@@ -48,14 +48,17 @@ void tcp_send_out(struct tcp_sock *tsk, struct pkbuf *pkb, struct tcp_segment *s
 	} else	/* This shouldnt happen. */
 		assert(0);
 
+	printf("%s [2]: saddr = "IPFMT"\n", __func__, ipfmt(saddr));
+	printf("%s [3]: daddr = "IPFMT"\n", __func__, ipfmt(daddr));
+
 	if (tcp_init_pkb(tsk, pkb, saddr, daddr) < 0) {
 		free_pkb(pkb);
 		return;
 	}
-	tcp_set_checksum(iphdr, tcphdr);
-     	printf("%s [2]\n", __func__);
+	//tcp_set_checksum(iphdr, tcphdr);
+     	printf("%s [4]\n", __func__);
 	ip_send_out(pkb);
-     	printf("%s [3]\n", __func__);
+     	printf("%s [5]\n", __func__);
 }
 
 /*

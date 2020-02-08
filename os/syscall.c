@@ -59,6 +59,13 @@
 	arg1 = *((uint32_t *) &buf[6]); \
 	arg2 = *((uint32_t *) &buf[10]);\
 
+#define SYSCALL_GET_FOUR_ARGS			\
+	uint32_t arg0, arg1, arg2, arg3;	\
+	arg0 = *((uint32_t *) &buf[2]);		\
+	arg1 = *((uint32_t *) &buf[6]);		\
+	arg2 = *((uint32_t *) &buf[10]);	\
+	arg3 = *((uint32_t *) &buf[14]);	\
+
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
 	uint8_t data_size, *data;				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 3;		\
@@ -112,6 +119,21 @@
 	}							\
 	data = &buf[11];					\
 
+#define NETWORK_SET_FOUR_ARGS(arg0, arg1, arg2, arg3)			\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];				\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);			\
+	*((uint32_t *) &buf[0]) = arg0;					\
+	*((uint32_t *) &buf[4]) = arg1;					\
+	*((uint32_t *) &buf[8]) = arg2;					\
+	*((uint32_t *) &buf[12]) = arg3;				\
+
+#define NETWORK_GET_ONE_RET		\
+	uint32_t ret0;			\
+	ret0 = *((uint32_t *) &buf[0]); \
+
+/* FIXME: move to a header file */
+int send_cmd_to_network(uint8_t *buf);
+
 /* response for async syscalls */
 void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size)
 {
@@ -144,7 +166,18 @@ static int storage_delete_secure_partition(int partition_id)
 	get_response_from_storage(buf);
 	STORAGE_GET_ONE_RET
 
-	return ret0;
+	return (int) ret0;
+}
+
+
+static int network_set_up_socket(uint32_t saddr, uint32_t sport,
+				 uint32_t daddr, uint32_t dport)
+{
+	NETWORK_SET_FOUR_ARGS(saddr, sport, daddr, dport)
+	send_cmd_to_network(buf);
+	NETWORK_GET_ONE_RET
+
+	return (int) ret0;
 }
 
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
@@ -460,6 +493,39 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		if (!(*no_response))
 			SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+	case SYSCALL_ALLOCATE_SOCKET: {
+		SYSCALL_GET_FOUR_ARGS
+		uint32_t protocol = arg0;
+		uint32_t requested_port = arg1;
+		uint32_t daddr = arg2;
+		uint32_t dport = arg3;
+
+		if (protocol != TCP_SOCKET) {
+			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
+			break;
+		}
+
+		/* Not supported for now as it can be a side channel */
+		if (requested_port) {
+			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
+			break;
+		}
+
+		/* FIXME: hard-coded */
+		uint32_t saddr = 0x0100000a;
+		uint32_t sport = 128;
+
+		int ret = network_set_up_socket(saddr, sport, daddr, dport);
+
+		if (ret) {
+			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
+			break;
+		}
+
+		SYSCALL_SET_TWO_RETS(saddr, sport)
+	
 		break;
 	}
 	default:

@@ -83,9 +83,9 @@ int sock_close(struct sock *sk)
 	return 0;
 }
 
-int sock_autobind(struct sock *sk)
+int sock_autobind(struct sock *sk, struct sock_addr *skaddr)
 {
 	if (sk->ops->set_port)
-		return sk->ops->set_port(sk, 0);
+		return sk->ops->set_port(sk, skaddr, 0);
 	return -1;
 }
