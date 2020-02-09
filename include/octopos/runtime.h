@@ -41,15 +41,18 @@ struct runtime_api {
 	uint8_t (*get_runtime_proc_id)(void);
 	uint8_t (*get_runtime_queue_id)(void);
 
-	/* socket */
-	struct socket *(*create_socket)(int family, int type, int protocol);
-	int (*listen_on_socket)(struct socket *sock, int backlog);
+	/* socket and network */
+	struct socket *(*create_socket)(int family, int type, int protocol,
+					struct sock_addr *skaddr);
+	//int (*listen_on_socket)(struct socket *sock, int backlog);
 	void (*close_socket)(struct socket *sock);
-	int (*bind_socket)(struct socket *sock, struct sock_addr *skaddr);
-	struct socket *(*accept_connection)(struct socket *sock, struct sock_addr *skaddr);
+	//int (*bind_socket)(struct socket *sock, struct sock_addr *skaddr);
+	//struct socket *(*accept_connection)(struct socket *sock, struct sock_addr *skaddr);
 	int (*connect_socket)(struct socket *sock, struct sock_addr *skaddr);
 	int (*read_from_socket)(struct socket *sock, void *buf, int len);
 	int (*write_to_socket)(struct socket *sock, void *buf, int len);
+	int (*request_network_access)(int count);
+	int (*yield_network_access)(void);
 };
 
 /* file open modes */

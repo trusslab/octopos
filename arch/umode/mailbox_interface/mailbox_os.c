@@ -270,6 +270,7 @@ static void *handle_mailbox_interrupts(void *data)
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
 		} else if (interrupt > NUM_QUEUES) {
+			/* FIXME: some of the cases can be merged together */
 			switch ((interrupt - NUM_QUEUES)) {
 			case Q_KEYBOARD:
 				sem_init(&interrupts[Q_KEYBOARD], 0, 0);
@@ -295,6 +296,14 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_STORAGE_DATA_OUT]);
 				break;
+			case Q_NETWORK_DATA_IN:
+				sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+				sem_post(&availables[Q_NETWORK_DATA_IN]);
+				break;
+			case Q_NETWORK_DATA_OUT:
+				sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
+				sem_post(&availables[Q_NETWORK_DATA_OUT]);
+				break;
 			case Q_SENSOR:
 				sem_init(&interrupts[Q_SENSOR], 0, 0);
 				sem_post(&availables[Q_SENSOR]);
@@ -306,6 +315,9 @@ static void *handle_mailbox_interrupts(void *data)
 			case Q_RUNTIME2:
 				sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_RUNTIME2]);
+				break;
+			default:
+				printf("%s: Error: unexpected ownership change interrupt.\n", __func__);
 				break;
 			}
 		} else {
@@ -331,6 +343,8 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
+	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, 0);
 	sem_init(&interrupts[Q_SENSOR], 0, 0);
@@ -345,6 +359,8 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_STORAGE_CMD_OUT], 0, 1);
 	sem_init(&availables[Q_STORAGE_IN_2], 0, 1);
 	sem_init(&availables[Q_STORAGE_OUT_2], 0, 1);
+	sem_init(&availables[Q_NETWORK_DATA_IN], 0, 1);
+	sem_init(&availables[Q_NETWORK_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_IN], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_OUT], 0, 1);
 	sem_init(&availables[Q_SENSOR], 0, 1);

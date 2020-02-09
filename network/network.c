@@ -267,7 +267,7 @@ static void send_response(uint8_t *buf, uint8_t queue_id)
 }
 
 /* FIXME: identical copy form storage.c */
-static void send_response_large(uint8_t *buf, uint8_t queue_id)
+static void send_received_packet(uint8_t *buf, uint8_t queue_id)
 {
 	uint8_t opcode[2];
 
@@ -281,12 +281,34 @@ static void send_response_large(uint8_t *buf, uint8_t queue_id)
 
 void tcp_in(struct pkbuf *pkb)
 {
+	/* check the IP addresses */
+	struct ip *iphdr = pkb2ip(pkb);
+	printf("%s [2]: saddr = "IPFMT"\n", __func__, ipfmt(saddr));
+	printf("%s [3]: daddr = "IPFMT"\n", __func__, ipfmt(daddr));
+	printf("%s [4]: iphdr->ip_src = "IPFMT"\n", __func__, ipfmt(iphdr->ip_src));
+	printf("%s [5]: iphdr->ip_dst = "IPFMT"\n", __func__, ipfmt(iphdr->ip_dst));
+	if ((daddr != iphdr->ip_src) || (saddr != iphdr->ip_dst)) {
+		printf("%s: Error: invalid src or dst IP addresses. Dropping the packet\n", __func__);
+		return;
+	}
+
+	/* check the port numbers */
+	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
+	printf("%s [6]: sport = %d\n", __func__, _ntohs(sport));
+	printf("%s [7]: dport = %d\n", __func__, _ntohs(dport));
+	printf("%s [8]: tcphdr->src = %d\n", __func__, _ntohs(tcphdr->src));
+	printf("%s [9]: tcphdr->dst = %d\n", __func__, _ntohs(tcphdr->dst));
+	if ((dport != tcphdr->src) || (sport != tcphdr->dst)) {
+		printf("%s: Error: invalid src or dst port numbers. Dropping the packet\n", __func__);
+		return;
+	}
+
 	printf("%s [1]: pkb->pk_len = %d\n", __func__, pkb->pk_len);
 	int size = pkb->pk_len + sizeof(*pkb);
 	printf("%s [3.1]: size = %d\n", __func__, size);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
 	printf("%s [3.2]\n", __func__);
-	send_response_large(buf, Q_NETWORK_DATA_OUT);
+	send_received_packet(buf, Q_NETWORK_DATA_OUT);
 	printf("%s [3.3]\n", __func__);
 	//for (int i = 2; i < (size + 2); i++)
 	//	printf("%d = %d\n", i - 2, (int) buf[i]);

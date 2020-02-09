@@ -436,8 +436,7 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_DATA_IN].tail = 0;
 	queues[Q_NETWORK_DATA_IN].counter = 0;
 	queues[Q_NETWORK_DATA_IN].reader_id = P_NETWORK;
-	/* FIXME: change to P_OS */
-	queues[Q_NETWORK_DATA_IN].writer_id = P_RUNTIME1;
+	queues[Q_NETWORK_DATA_IN].writer_id = P_OS;
 	queues[Q_NETWORK_DATA_IN].access_count = 0;
 	queues[Q_NETWORK_DATA_IN].prev_owner = 0;
 	queues[Q_NETWORK_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
@@ -450,8 +449,7 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_DATA_OUT].head = 0;
 	queues[Q_NETWORK_DATA_OUT].tail = 0;
 	queues[Q_NETWORK_DATA_OUT].counter = 0;
-	/* FIXME: change to P_OS */
-	queues[Q_NETWORK_DATA_OUT].reader_id = P_RUNTIME1;
+	queues[Q_NETWORK_DATA_OUT].reader_id = P_OS;
 	queues[Q_NETWORK_DATA_OUT].writer_id = P_NETWORK;
 	queues[Q_NETWORK_DATA_OUT].access_count = 0;
 	queues[Q_NETWORK_DATA_OUT].prev_owner = 0;
@@ -719,6 +717,14 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 		 (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME1 || queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME2) &&
 		 queues[Q_STORAGE_OUT_2].reader_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
+	else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS && 
+		 (queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME2) &&
+		 queues[Q_NETWORK_DATA_IN].writer_id == requesting_proc_id && proc_id == P_OS)
+			allowed = true;
+	else if (queue_id == Q_NETWORK_DATA_OUT && access == READ_ACCESS &&
+		 (queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME2) &&
+		 queues[Q_NETWORK_DATA_OUT].reader_id == requesting_proc_id && proc_id == P_OS)
+			allowed = true;
 	else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS &&
 		 (queues[Q_RUNTIME1].writer_id == P_RUNTIME1 || queues[Q_RUNTIME1].writer_id == P_RUNTIME2) &&
 		 queues[Q_RUNTIME1].writer_id == requesting_proc_id && proc_id == P_OS)
@@ -778,6 +784,18 @@ static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uin
 		else
 			return 0;
 	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS) {
+		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	} else if (queue_id == Q_NETWORK_DATA_OUT && access == READ_ACCESS) {
+		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	} else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS) {
 		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;

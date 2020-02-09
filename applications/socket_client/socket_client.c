@@ -101,13 +101,18 @@ void app_main(struct runtime_api *api)
 	printf("%s [4]\n", __func__);
 
 	/* init socket */
-	sock = api->create_socket(AF_INET, type, 0);
+	sock = api->create_socket(AF_INET, type, 0, &skaddr);
 	if (!sock) {
 		printf("%s: Error: _socket\n", __func__);
 		goto out;
 	}
 
 	printf("%s [6]\n", __func__);
+
+	if (api->request_network_access(200)) {
+		printf("%s: Error: network queue access\n", __func__);
+		return;
+	}
 
 	send_receive(api);
 	printf("%s [7]\n", __func__);
@@ -119,5 +124,6 @@ out:	/* close and out */
 		sock = NULL;
 		api->close_socket(tmp);
 	}
+	api->yield_network_access();
 	printf("%s [8]\n", __func__);
 }

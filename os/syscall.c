@@ -180,6 +180,23 @@ static int network_set_up_socket(uint32_t saddr, uint32_t sport,
 	return (int) ret0;
 }
 
+
+static int get_network_src_addr(uint32_t *saddr)
+{
+	/* FIXME: hard-coded */
+	*saddr = 0x0100000a;
+
+	return 0;
+}
+
+static int get_unused_tcp_port(uint32_t *sport)
+{
+	/* FIXME: hard-coded */
+	*sport = 128;
+
+	return 0;
+}
+
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
 {
 	uint16_t syscall_nr;
@@ -496,6 +513,15 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_ALLOCATE_SOCKET: {
+		printf("%s [1]: SYSCALL_ALLOCATE_SOCKET\n", __func__);
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
+			break;
+		}
+		printf("%s [2]\n", __func__);
+		struct app *app = runtime_proc->app;
+
 		SYSCALL_GET_FOUR_ARGS
 		uint32_t protocol = arg0;
 		uint32_t requested_port = arg1;
@@ -506,26 +532,125 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
+		printf("%s [3]\n", __func__);
 
 		/* Not supported for now as it can be a side channel */
 		if (requested_port) {
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
+		printf("%s [4]\n", __func__);
+
+		if (app->socket_created) {
+			printf("%s: Error: only support one socket per app (for now)\n", __func__);
+			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
+			break;
+		}
+		printf("%s [5]\n", __func__);
 
 		/* FIXME: hard-coded */
-		uint32_t saddr = 0x0100000a;
-		uint32_t sport = 128;
-
-		int ret = network_set_up_socket(saddr, sport, daddr, dport);
-
+		uint32_t saddr, sport;
+		int ret = get_network_src_addr(&saddr);
 		if (ret) {
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
+		printf("%s [6]\n", __func__);
+
+		ret = get_unused_tcp_port(&sport);
+		if (ret) {
+			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
+			break;
+		}
+		printf("%s [7]: end\n", __func__);
+
+		app->socket_saddr = saddr;
+		app->socket_sport = sport;
+		app->socket_daddr = daddr;
+		app->socket_dport = dport;
+		app->socket_created = true;
 
 		SYSCALL_SET_TWO_RETS(saddr, sport)
-	
+		break;
+	}
+	case SYSCALL_REQUEST_NETWORK_ACCESS: {
+		printf("%s [1]: SYSCALL_REQUEST_NETWORK_ACCESS\n", __func__);
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			break;
+		}
+		printf("%s [2]\n", __func__);
+
+		struct app *app = runtime_proc->app;
+		if (!app->socket_created) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+		printf("%s [3]\n", __func__);
+
+		SYSCALL_GET_ONE_ARG
+		uint32_t count = arg0;
+
+		/* No more than 200 block reads/writes */
+		/* FIXME: hard-coded */
+		if (count > 200) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+		printf("%s [4]\n", __func__);
+
+		int ret_in = is_queue_available(Q_NETWORK_DATA_IN);
+		int ret_out = is_queue_available(Q_NETWORK_DATA_OUT);
+		/* Or should we make this blocking? */
+		if (!ret_in || !ret_out) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
+			break;
+		}
+		printf("%s [5]\n", __func__);
+
+		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+
+		int ret = network_set_up_socket(app->socket_saddr, app->socket_sport,
+						app->socket_daddr, app->socket_dport);
+		if (ret) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			break;
+		}
+		printf("%s [6]: end\n", __func__);
+
+		mark_queue_unavailable(Q_NETWORK_DATA_IN);
+		mark_queue_unavailable(Q_NETWORK_DATA_OUT);
+
+		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+
+		SYSCALL_SET_ONE_RET((uint32_t) 0)
+		break;
+	}
+	case SYSCALL_CLOSE_SOCKET: {
+		printf("%s [1]: SYSCALL_CLOSE_SOCKET\n", __func__);
+		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		if (!runtime_proc || !runtime_proc->app) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			break;
+		}
+		printf("%s [2]\n", __func__);
+
+		struct app *app = runtime_proc->app;
+		if (!app->socket_created) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+		printf("%s [3]: end\n", __func__);
+
+		app->socket_created = false;
+		app->socket_saddr = 0;
+		app->socket_sport = 0;
+		app->socket_daddr = 0;
+		app->socket_dport = 0;
+
+		SYSCALL_SET_ONE_RET((uint32_t) 0)
 		break;
 	}
 	default:

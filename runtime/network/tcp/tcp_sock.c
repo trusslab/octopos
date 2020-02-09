@@ -89,30 +89,24 @@ static void tcp_bhash(struct tcp_sock *tsk)
 	hlist_add_head(&tsk->bhash_list, tcp_bhash_head(tsk->bhash));
 }
 
-int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
-		unsigned int daddr, unsigned short dport);
-
 /* Also sets the saddr */
 static int tcp_set_sport(struct sock *sk, struct sock_addr *skaddr, unsigned short nport)
 {
 	int err = -1;
 	printf("%s [1]: nport = %d\n", __func__, nport);
+	if (nport) {
+		printf("%s: Error: do not support suggesting a port (for now).\n", __func__);
+		goto out;
+	}
 
 	//if ((nport && tcp_port_used(nport)) ||
 	//	(!nport && !(nport = tcp_get_port())))
 	//	goto out;
-	unsigned short sport = nport; 
-	unsigned int saddr;
-	int ret = syscall_allocate_tcp_socket(&saddr, &sport,
-			skaddr->dst_addr, skaddr->dst_port);
-	if (ret || (nport && nport != sport))
-		goto out;
-	nport = sport;
-	sk->sk_saddr = saddr;
-	printf("%s [2]: nport = %d\n", __func__, nport);
-	printf("%s [3]: saddr = "IPFMT"\n", __func__, ipfmt(saddr));
+	sk->sk_saddr = skaddr->src_addr;
+	printf("%s [2]: sk->sk_sport = %d\n", __func__, _ntohs(sk->sk_sport));
+	printf("%s [3]: sk->sk_saddr = "IPFMT"\n", __func__, ipfmt(sk->sk_saddr));
 	tcp_table.bfree--;
-	sk->sk_sport = nport;
+	sk->sk_sport = skaddr->src_port;
 	tcpsk(sk)->bhash = _ntohs(nport) & TCP_BHASH_MASK;
 	tcp_bhash(tcpsk(sk));
 	err = 0;
