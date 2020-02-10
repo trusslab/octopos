@@ -54,17 +54,9 @@ static int inet_socket(struct socket *sock, int protocol)
 	hlist_node_init(&sk->hash_list);
 	sk->protocol = protocol;
 	sk->sock = sock;
-	printf("%s [1]: sk->sk_daddr = "IPFMT"\n", __func__, ipfmt(sk->sk_daddr));
-	printf("%s [2]: sk->sk_saddr = "IPFMT"\n", __func__, ipfmt(sk->sk_saddr));
-	printf("%s [3]: sk->sk_dport = %d\n", __func__, _ntohs(sk->sk_dport));
-	printf("%s [4]: sk->sk_sport = %d\n", __func__, _ntohs(sk->sk_sport));
 	/* only used by raw ip */
 	if (sk->hash && sk->ops->hash)
 		sk->ops->hash(sk);
-	printf("%s [5]: sk->sk_daddr = "IPFMT"\n", __func__, ipfmt(sk->sk_daddr));
-	printf("%s [6]: sk->sk_saddr = "IPFMT"\n", __func__, ipfmt(sk->sk_saddr));
-	printf("%s [7]: sk->sk_dport = %d\n", __func__, _ntohs(sk->sk_dport));
-	printf("%s [8]: sk->sk_sport = %d\n", __func__, _ntohs(sk->sk_sport));
 	return 0;
 }
 
@@ -188,26 +180,21 @@ out:
 static int inet_read(struct socket *sock, void *buf, int len)
 {
 	struct sock *sk = sock->sk;
-     	printf("%s [1]\n", __func__);
 	int ret = -1;
 	if (sk) {
-     		printf("%s [2]\n", __func__);
 		sk->recv_wait = &sock->sleep;
 		ret = sk->ops->recv_buf(sock->sk, buf, len);
 		sk->recv_wait = NULL;
 	}
-     	printf("%s [3]: ret = %d\n", __func__, ret);
 	return ret;
 }
 
 static int inet_write(struct socket *sock, void *buf, int len)
 {
-     	printf("%s [1]\n", __func__);
 	struct sock *sk = sock->sk;
 	int ret = -1;
 	if (sk)
 		ret = sk->ops->send_buf(sock->sk, buf, len, NULL);
-     	printf("%s [2]\n", __func__);
 	return ret;
 }
 

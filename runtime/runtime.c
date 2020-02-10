@@ -362,85 +362,44 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 	}
 }
 
-//static void issue_syscall_noresponse(uint8_t *buf)
-//{
-//	uint8_t opcode[2];
-//
-//	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-//	opcode[1] = q_os;
-//	sem_wait(&interrupts[q_os]);
-//	write(fd_out, opcode, 2);
-//	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-//}
-
-
-
 /* network */
 static int send_msg_to_network(uint8_t *buf)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_NETWORK_DATA_IN;
 	sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	printf("%s [2]\n", __func__);
-
-	//opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	//opcode[1] = Q_STORAGE_OUT_2;
-	///* wait for response */
-	//sem_wait(&interrupts[Q_STORAGE_OUT_2]);
-	//write(fd_out, opcode, 2), 
-	//read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	return 0;
 }
 
 void ip_send_out(struct pkbuf *pkb)
 {
-	printf("%s [1]: pkb->pk_len = %d\n", __func__, pkb->pk_len);
-	printf("%s [2]: ETH_HRD_SZ = %d\n", __func__, (int) ETH_HRD_SZ);
-	printf("%s [2.1]: IP_HRD_SZ = %d\n", __func__, (int) IP_HRD_SZ);
-	printf("%s [2.2]: TCP_HRD_SZ = %d\n", __func__, (int) TCP_HRD_SZ);
-	printf("%s [2.3]: sizeof(struct pkbuf) = %d\n", __func__, (int) sizeof(struct pkbuf));
-	//struct tcp *otcp = (struct tcp *)pkb2ip(pkb)->ip_data;
-	//printf("%s [3]: otcp->dst = %d, octp->src = %d\n", __func__, _ntohs(otcp->dst), _ntohs(otcp->src));
 	int size = pkb->pk_len + sizeof(*pkb);
-	printf("%s [3.1]: size = %d\n", __func__, size);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
-	printf("%s [3.2]\n", __func__);
 	send_msg_to_network(buf);
-	printf("%s [3.3]\n", __func__);
-	//for (int i = 2; i < (size + 2); i++)
-	//	printf("%d = %d\n", i - 2, (int) buf[i]);	
 }
 
 int local_address(unsigned int addr)
 {
-	printf("%s [1]\n", __func__);
+	printf("local_addr not implemented.\n");
 	exit(-1);
 	return 0;
 }
 
-//struct rtentry *rt_lookup(unsigned int ipaddr)
-//{
-//	printf("%s [1]\n", __func__);
-//	exit(-1);
-//	return NULL;
-//}
-
 void icmp_send(unsigned char type, unsigned char code,
                 unsigned int data, struct pkbuf *pkb_in)
 {
-	printf("%s [1]\n", __func__);
+	printf("icmp_send not implemented.\n");
 	exit(-1);
 }
 
 int rt_output(struct pkbuf *pkb)
 {
-	printf("%s [1]: pkb->pk_len = %d\n", __func__, pkb->pk_len);
+	printf("rt_output not implemented.\n");
 	exit(-1);
 	return 0;
 }
@@ -448,13 +407,10 @@ int rt_output(struct pkbuf *pkb)
 int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
 		unsigned int daddr, unsigned short dport)
 {
-	printf("%s [1]\n", __func__);
 	SYSCALL_SET_FOUR_ARGS(SYSCALL_ALLOCATE_SOCKET, (uint32_t) TCP_SOCKET,
 			(uint32_t) *sport, (uint32_t) daddr, (uint32_t) dport)
 	issue_syscall(buf);
 	SYSCALL_GET_TWO_RETS
-	printf("%s [2]: ret0 = %d\n", __func__, ret0);
-	printf("%s [3]: ret1 = %d\n", __func__, ret1);
 
 	if (!ret0 && !ret1)
 		return ERR_FAULT;
@@ -468,7 +424,6 @@ int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
 static void *tcp_receive(void *_data)
 {
 	while (1) {
-		printf("%s [0.1]\n", __func__);
 		uint8_t *buf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		if (!buf) {
 			printf("%s: Error: could not allocate memory for buf\n", __func__);
@@ -478,36 +433,25 @@ static void *tcp_receive(void *_data)
 
 		opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 		opcode[1] = Q_NETWORK_DATA_OUT;
-		printf("%s [0.2]\n", __func__);
 		sem_wait(&interrupts[Q_NETWORK_DATA_OUT]);
-		printf("%s [0.3]\n", __func__);
 		write(fd_out, opcode, 2);
 		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
-		printf("%s [1]\n", __func__);
 		NETWORK_GET_ZERO_ARGS_DATA
-		printf("%s [1.1]: data_size = %d\n", __func__, data_size);
 		struct pkbuf *pkb = (struct pkbuf *) data;
 		pkb->pk_refcnt = 2; /* prevents the TCP code from freeing the pkb */
 		list_init(&pkb->pk_list);
+		/* FIXME: add */
 		//pkb_safe();
 		if (data_size != (pkb->pk_len + sizeof(*pkb))) {
 			printf("%s: Error: packet size is not correct.\n", __func__);
-			//NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)
-			//free_pkb(pkb);
-			exit(-1);
 			return NULL;
 		}
-		//for (int i = 0; i < data_size; i++)
-		//	printf("%d = %d\n", i, (int) data[i]);	
 
-		printf("%s [3]: pkb = %p\n", __func__, pkb);
 		/* FIXME: is the call to raw_in() needed? */
 		raw_in(pkb);
 		tcp_in(pkb);
-		printf("%s [4]\n", __func__);
 		free(buf);
-
 	}
 }
 
@@ -1142,19 +1086,14 @@ static struct socket *create_socket(int family, int type, int protocol,
 {
 	unsigned short sport = 0; /* do not support suggesting a port for now */ 
 	unsigned int saddr;
-	printf("%s [1]: skaddr->dst_port = %d\n", __func__, _ntohs(skaddr->dst_port));
-	printf("%s [2]: skaddr->dst_addr = "IPFMT"\n", __func__, ipfmt(skaddr->dst_addr));
 
 	int ret = syscall_allocate_tcp_socket(&saddr, &sport,
 			skaddr->dst_addr, skaddr->dst_port);
-
 	if (ret)
 		return NULL;
 
 	skaddr->src_addr = saddr;
 	skaddr->src_port = sport;
-	printf("%s [1]: skaddr->src_port = %d\n", __func__, _ntohs(skaddr->src_port));
-	printf("%s [2]: skaddr->src_addr = "IPFMT"\n", __func__, ipfmt(skaddr->src_addr));
 
 	return _socket(family, type, protocol);
 }
@@ -1258,12 +1197,10 @@ static int yield_network_access(void)
 
 static int request_network_access(int count)
 {
-	printf("%s [1]\n", __func__);
 	if (has_network_access) {
 		printf("%s: Error: already has network access\n", __func__);
 		return ERR_INVALID;
 	}
-	printf("%s [2]\n", __func__);
 
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
@@ -1273,7 +1210,6 @@ static int request_network_access(int count)
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0; 
-	printf("%s [3]\n", __func__);
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN,
@@ -1282,7 +1218,6 @@ static int request_network_access(int count)
 		printf("%s: Error: failed to attest network write access\n", __func__);
 		return ERR_FAULT;
 	}
-	printf("%s [4]\n", __func__);
 
 	attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_OUT,
 					READ_ACCESS, count);
@@ -1290,7 +1225,6 @@ static int request_network_access(int count)
 		printf("%s: Error: failed to attest network read access\n", __func__);
 		return ERR_FAULT;
 	}
-	printf("%s [5]\n", __func__);
 
 	/* tcp receive */
 	/* FIXME: process received message on the main thread */

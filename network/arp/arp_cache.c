@@ -53,16 +53,13 @@ static _inline void arp_cache_unlock(void)
 void arp_queue_send(struct arpentry *ae)
 {
 	struct pkbuf *pkb;
-	printf("%s [1]\n", __func__);
 	while (!list_empty(&ae->ae_list)) {
-		printf("%s [2]: send pending packet\n", __func__);
 		pkb = list_first_entry(&ae->ae_list, struct pkbuf, pk_list);
 		list_del(ae->ae_list.next);
 		arpdbg("send pending packet");
 		netdev_tx(ae->ae_dev, pkb, pkb->pk_len - ETH_HRD_SZ,
 				pkb->pk_pro, ae->ae_hwaddr);
 	}
-	printf("%s [5]\n", __func__);
 }
 
 void arp_queue_drop(struct arpentry *ae)
@@ -113,7 +110,6 @@ struct arpentry *arp_alloc(void)
 int arp_insert(struct netdev *nd, unsigned short pro,
 		unsigned int ipaddr, unsigned char *hwaddr)
 {
-	printf("%s [1]: ipaddr: " IPFMT "\n", __func__, ipfmt(ipaddr));
 	struct arpentry *ae;
 	ae = arp_alloc();
 	if (!ae)
@@ -129,7 +125,6 @@ int arp_insert(struct netdev *nd, unsigned short pro,
 
 struct arpentry *arp_lookup(unsigned short pro, unsigned int ipaddr)
 {
-	printf("%s [1]: ipaddr: " IPFMT "\n", __func__, ipfmt(ipaddr));
 	struct arpentry *ae, *ret = NULL;
 	arp_cache_lock();
 	arpdbg("pro:%d "IPFMT, pro, ipfmt(ipaddr));
@@ -184,7 +179,6 @@ void arp_timer(int delta)
 void arp_cache_init(void)
 {
 	int i;
-	printf("%s [1]\n", __func__);
 	for (i = 0; i < ARP_CACHE_SZ; i++)
 		arp_cache[i].ae_state = ARP_FREE;
 	dbg("ARP CACHE INIT");

@@ -163,20 +163,17 @@ int check_avail_and_send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 int send_cmd_to_network(uint8_t *buf)
 {
 	uint8_t opcode[2];
-	printf("%s [1]\n", __func__);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_NETWORK_CMD_IN;
 
 	sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
-	printf("%s [2]\n", __func__);
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_NETWORK_CMD_OUT;
 	sem_wait(&interrupts[Q_NETWORK_CMD_OUT]);
-	printf("%s [3]\n", __func__);
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 

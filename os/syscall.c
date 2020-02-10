@@ -513,13 +513,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_ALLOCATE_SOCKET: {
-		printf("%s [1]: SYSCALL_ALLOCATE_SOCKET\n", __func__);
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc || !runtime_proc->app) {
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
-		printf("%s [2]\n", __func__);
 		struct app *app = runtime_proc->app;
 
 		SYSCALL_GET_FOUR_ARGS
@@ -532,21 +530,18 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
-		printf("%s [3]\n", __func__);
 
 		/* Not supported for now as it can be a side channel */
 		if (requested_port) {
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
-		printf("%s [4]\n", __func__);
 
 		if (app->socket_created) {
 			printf("%s: Error: only support one socket per app (for now)\n", __func__);
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
-		printf("%s [5]\n", __func__);
 
 		/* FIXME: hard-coded */
 		uint32_t saddr, sport;
@@ -555,14 +550,12 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
-		printf("%s [6]\n", __func__);
 
 		ret = get_unused_tcp_port(&sport);
 		if (ret) {
 			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 			break;
 		}
-		printf("%s [7]: end\n", __func__);
 
 		app->socket_saddr = saddr;
 		app->socket_sport = sport;
@@ -574,20 +567,17 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_NETWORK_ACCESS: {
-		printf("%s [1]: SYSCALL_REQUEST_NETWORK_ACCESS\n", __func__);
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc || !runtime_proc->app) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 			break;
 		}
-		printf("%s [2]\n", __func__);
 
 		struct app *app = runtime_proc->app;
 		if (!app->socket_created) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		printf("%s [3]\n", __func__);
 
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
@@ -598,7 +588,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		printf("%s [4]\n", __func__);
 
 		int ret_in = is_queue_available(Q_NETWORK_DATA_IN);
 		int ret_out = is_queue_available(Q_NETWORK_DATA_OUT);
@@ -607,7 +596,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
-		printf("%s [5]\n", __func__);
 
 		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
@@ -617,7 +605,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 			break;
 		}
-		printf("%s [6]: end\n", __func__);
 
 		mark_queue_unavailable(Q_NETWORK_DATA_IN);
 		mark_queue_unavailable(Q_NETWORK_DATA_OUT);
@@ -629,20 +616,17 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_CLOSE_SOCKET: {
-		printf("%s [1]: SYSCALL_CLOSE_SOCKET\n", __func__);
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc || !runtime_proc->app) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 			break;
 		}
-		printf("%s [2]\n", __func__);
 
 		struct app *app = runtime_proc->app;
 		if (!app->socket_created) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		printf("%s [3]: end\n", __func__);
 
 		app->socket_created = false;
 		app->socket_saddr = 0;

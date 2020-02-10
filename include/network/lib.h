@@ -38,7 +38,12 @@ extern int newthread(pfunc_t thread_func);
 #define blue(str) navyblue(str)
 
 #define ferr(fmt, args...) fprintf(stderr, fmt, ##args)
-#define dbg(fmt, args...) ferr("[%d]%s " fmt "\n", (int)gettid(), __FUNCTION__, ##args)
+//#define dbg(fmt, args...) ferr("[%d]%s " fmt "\n", (int)gettid(), __FUNCTION__, ##args)
+#define dbg(fmt, args...)\
+do {\
+	if (net_debug & NET_DEBUG_DEV)\
+		ferr("[%d]%s " fmt "\n", (int)gettid(), __FUNCTION__, ##args);\
+} while (0)
 
 #define devdbg(fmt, args...)\
 do {\

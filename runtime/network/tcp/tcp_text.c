@@ -108,7 +108,6 @@ int tcp_send_text(struct tcp_sock *tsk, void *buf, int len)
 		slen += segsize;
 		if (slen >= len)
 			pkb2tcp(pkb)->psh = 1;
-		printf("%s [1]: calling tcp_send_out()\n", __func__);
 		tcp_send_out(tsk, pkb, NULL);
 	}
 
