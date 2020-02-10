@@ -9,12 +9,23 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/stat.h>
+#include <network/sock.h>
+#include <network/socket.h>
+#include <network/netif.h>
+#include <network/tcp_timer.h>
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+/* FIXME: remove */
+#include "tcp.h"
+#include "ip.h"
+#include "raw.h"
 
+typedef int bool;
+#define true	(int) 1
+#define false	(int) 0
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -58,6 +69,15 @@ sem_t load_app_sem;
 	*((uint32_t *) &buf[2]) = arg0;				\
 	*((uint32_t *) &buf[6]) = arg1;				\
 	*((uint32_t *) &buf[10]) = arg2;			\
+
+#define SYSCALL_SET_FOUR_ARGS(syscall_nr, arg0, arg1, arg2, arg3)	\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];				\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);			\
+	*((uint16_t *) &buf[0]) = syscall_nr;				\
+	*((uint32_t *) &buf[2]) = arg0;					\
+	*((uint32_t *) &buf[6]) = arg1;					\
+	*((uint32_t *) &buf[10]) = arg2;				\
+	*((uint32_t *) &buf[14]) = arg3;				\
 
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
@@ -224,12 +244,49 @@ sem_t load_app_sem;
 	}							\
 	data = &buf[2];
 
+/* FIXME: the first check on max size is always false */
+#define NETWORK_SET_ZERO_ARGS_DATA(data, size)					\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];				\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);				\
+	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;			\
+	if (max_size >= 65536) {						\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return;								\
+	}									\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return;								\
+	}									\
+	*((uint16_t *) &buf[0]) = size;						\
+	memcpy(&buf[2], (uint8_t *) data, size);				\
+
+#define NETWORK_GET_ZERO_ARGS_DATA							\
+	uint8_t *data;									\
+	uint16_t data_size;								\
+	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;				\
+	if (max_size >= 65536) {							\
+		printf("Error (%s): max_size not supported\n", __func__);		\
+		continue;								\
+	}										\
+	data_size = *((uint16_t *) &buf[0]);						\
+	if (data_size > max_size) {							\
+		printf("Error (%s): size not supported (%d)\n", __func__, data_size);	\
+		continue;								\
+	}										\
+	data = &buf[2];
+
+
 int fd_out, fd_in, fd_intr;
 
 /* Not all will be used */
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t interrupt_change;
 int change_queue = 0;
+
+unsigned int net_debug = 0;
+pthread_t tcp_threads[2];
+/* FIXME: move to header file. */
+extern void tcp_timer(void);
 
 /* FIXME: very similar to write_queue() in mailbox.c */
 static int write_syscall_response(uint8_t *buf)
@@ -305,16 +362,120 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 	}
 }
 
-//static void issue_syscall_noresponse(uint8_t *buf)
-//{
-//	uint8_t opcode[2];
-//
-//	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-//	opcode[1] = q_os;
-//	sem_wait(&interrupts[q_os]);
-//	write(fd_out, opcode, 2);
-//	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-//}
+/* network */
+static int send_msg_to_network(uint8_t *buf)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_NETWORK_DATA_IN;
+	sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+	return 0;
+}
+
+void ip_send_out(struct pkbuf *pkb)
+{
+	int size = pkb->pk_len + sizeof(*pkb);
+	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
+	send_msg_to_network(buf);
+}
+
+int local_address(unsigned int addr)
+{
+	printf("local_addr not implemented.\n");
+	exit(-1);
+	return 0;
+}
+
+void icmp_send(unsigned char type, unsigned char code,
+                unsigned int data, struct pkbuf *pkb_in)
+{
+	printf("icmp_send not implemented.\n");
+	exit(-1);
+}
+
+int rt_output(struct pkbuf *pkb)
+{
+	printf("rt_output not implemented.\n");
+	exit(-1);
+	return 0;
+}
+
+int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
+		unsigned int daddr, unsigned short dport)
+{
+	SYSCALL_SET_FOUR_ARGS(SYSCALL_ALLOCATE_SOCKET, (uint32_t) TCP_SOCKET,
+			(uint32_t) *sport, (uint32_t) daddr, (uint32_t) dport)
+	issue_syscall(buf);
+	SYSCALL_GET_TWO_RETS
+
+	if (!ret0 && !ret1)
+		return ERR_FAULT;
+
+	*saddr = ret0;
+	*sport = ret1;
+
+	return 0;
+}
+
+static void *tcp_receive(void *_data)
+{
+	while (1) {
+		uint8_t *buf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
+		if (!buf) {
+			printf("%s: Error: could not allocate memory for buf\n", __func__);
+			exit(-1);
+		}
+		uint8_t opcode[2];
+
+		opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+		opcode[1] = Q_NETWORK_DATA_OUT;
+		sem_wait(&interrupts[Q_NETWORK_DATA_OUT]);
+		write(fd_out, opcode, 2);
+		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+		NETWORK_GET_ZERO_ARGS_DATA
+		struct pkbuf *pkb = (struct pkbuf *) data;
+		pkb->pk_refcnt = 2; /* prevents the TCP code from freeing the pkb */
+		list_init(&pkb->pk_list);
+		/* FIXME: add */
+		//pkb_safe();
+		if (data_size != (pkb->pk_len + sizeof(*pkb))) {
+			printf("%s: Error: packet size is not correct.\n", __func__);
+			return NULL;
+		}
+
+		/* FIXME: is the call to raw_in() needed? */
+		raw_in(pkb);
+		tcp_in(pkb);
+		free(buf);
+	}
+}
+
+int net_stack_init(void)
+{
+	socket_init();
+
+	/* tcp timer */
+	/* FIXME: do we need this? */
+	int ret = pthread_create(&tcp_threads[0], NULL, (pfunc_t) tcp_timer, NULL);
+	if (ret) {
+		printf("Error: couldn't launch tcp_threads[0]\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+void net_stack_exit(void)
+{
+	int ret = pthread_cancel(tcp_threads[0]);
+	if (ret)
+		printf("Error: couldn't kill tcp_threads[0]");
+}
 
 static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
@@ -917,6 +1078,171 @@ static uint8_t get_runtime_queue_id(void)
 	return (uint8_t) q_runtime;
 }
 
+bool has_network_access = false;
+int network_access_count = 0;
+
+static struct socket *create_socket(int family, int type, int protocol,
+				    struct sock_addr *skaddr)
+{
+	unsigned short sport = 0; /* do not support suggesting a port for now */ 
+	unsigned int saddr;
+
+	int ret = syscall_allocate_tcp_socket(&saddr, &sport,
+			skaddr->dst_addr, skaddr->dst_port);
+	if (ret)
+		return NULL;
+
+	skaddr->src_addr = saddr;
+	skaddr->src_port = sport;
+
+	return _socket(family, type, protocol);
+}
+
+//static int listen_on_socket(struct socket *sock, int backlog)
+//{
+//	return _listen(sock, backlog);
+//}
+
+static void close_socket(struct socket *sock)
+{
+	bool do_close = true;
+
+	/* FIXME: 5 for close is an over-approximation (it only needs 1). */
+	if (!has_network_access || (network_access_count < 5)) {
+		printf("%s: Error: has no or insufficient network access.\n", __func__);
+		do_close = false;
+	}
+
+	network_access_count -= 5;
+
+	if (do_close)
+		_close(sock);
+
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_CLOSE_SOCKET)
+	issue_syscall(buf);
+}
+
+//static int bind_socket(struct socket *sock, struct sock_addr *skaddr)
+//{
+//	return bind_socket(sock, skaddr);
+//}
+//
+//static struct socket *accept_connection(struct socket *sock, struct sock_addr *skaddr)
+//{
+//	return _accept(sock, skaddr);
+//}
+
+static int connect_socket(struct socket *sock, struct sock_addr *skaddr)
+{
+	/* FIXME: 20 packets for connect is an over-approximation. */
+	if (!has_network_access || (network_access_count < 10)) {
+		printf("%s: Error: has no or insufficient network access.\n", __func__);
+		return ERR_INVALID;
+	}
+
+	network_access_count -= 10;
+
+	return _connect(sock, skaddr);
+}
+
+static int read_from_socket(struct socket *sock, void *buf, int len)
+{
+	/* FIXME: calculate more precisely how many packets will be needed. */
+	if (!has_network_access || (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
+		printf("%s: Error: has no or insufficient network access.\n", __func__);
+		return 0;
+	}
+
+	/* FIXME: what if _read returns error and doesn't use up these messages */
+	network_access_count -= (len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1;
+
+	return _read(sock, buf, len);
+}
+
+static int write_to_socket(struct socket *sock, void *buf, int len)
+{
+	/* FIXME: calculate more precisely how many packets will be needed. */
+	if (!has_network_access || (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
+		printf("%s: Error: has no or insufficient network access.\n", __func__);
+		return 0;
+	}
+
+	/* FIXME: what if _read returns error and doesn't use up these messages */
+	network_access_count -= (len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1;
+
+	return _write(sock, buf, len);
+}
+
+static int yield_network_access(void)
+{
+	if (!has_network_access) {
+		printf("%s: Error: no network access to yield\n", __func__);
+		return ERR_INVALID;
+	}
+
+	has_network_access = false;
+	network_access_count = 0;
+
+	int ret = pthread_cancel(tcp_threads[1]);
+	if (ret)
+		printf("Error: couldn't kill tcp_threads[1]");
+
+	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+
+	mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, P_OS);
+
+	return 0;
+}
+
+static int request_network_access(int count)
+{
+	if (has_network_access) {
+		printf("%s: Error: already has network access\n", __func__);
+		return ERR_INVALID;
+	}
+
+	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
+
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_NETWORK_ACCESS, count)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int) ret0; 
+
+	/* FIXME: if any of the attetations fail, we should yield the other one */
+	int attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN,
+					WRITE_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest network write access\n", __func__);
+		return ERR_FAULT;
+	}
+
+	attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_OUT,
+					READ_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest network read access\n", __func__);
+		return ERR_FAULT;
+	}
+
+	/* tcp receive */
+	/* FIXME: process received message on the main thread */
+	int ret = pthread_create(&tcp_threads[1], NULL, (pfunc_t) tcp_receive, NULL);
+	if (ret) {
+		printf("Error: couldn't launch tcp_threads[1]\n");
+		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, P_OS);
+		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, P_OS);
+		return ERR_FAULT;
+	}
+
+	has_network_access = true;
+	network_access_count = count;
+
+	return 0;
+}
+
 typedef void (*app_main_proc)(struct runtime_api *);
 
 static void load_application(char *msg)
@@ -953,6 +1279,16 @@ static void load_application(char *msg)
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
+		.create_socket = create_socket,
+		//.listen_on_socket = listen_on_socket,
+		.close_socket = close_socket,
+		//.bind_socket = bind_socket,
+		//.accept_connection = accept_connection,
+		.connect_socket = connect_socket,
+		.read_from_socket = read_from_socket,
+		.write_to_socket = write_to_socket,
+		.request_network_access = request_network_access,
+		.yield_network_access = yield_network_access,
 	};
 
 	strcat(path, msg);
@@ -1083,6 +1419,12 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	int ret = net_stack_init();
+	if (ret) {
+		printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
+		return -1;
+	}
+
 	mkfifo(fifo_runtime_out, 0666);
 	mkfifo(fifo_runtime_in, 0666);
 	mkfifo(fifo_runtime_intr, 0666);
@@ -1106,7 +1448,7 @@ int main(int argc, char **argv)
 
 	sem_init(&load_app_sem, 0, 0);
 
-	int ret = pthread_create(&app_thread, NULL, run_app, NULL);
+	ret = pthread_create(&app_thread, NULL, run_app, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the app thread\n");
 		return -1;
@@ -1177,6 +1519,8 @@ int main(int argc, char **argv)
 	remove(fifo_runtime_out);
 	remove(fifo_runtime_in);
 	remove(fifo_runtime_intr);
+
+	net_stack_exit();
 			
 	return 0;
 }

@@ -24,6 +24,12 @@ struct app {
 	/* secure storage */
 	bool sec_partition_created;
 	int sec_partition_id;
+	/* network */
+	bool socket_created;
+	uint32_t socket_saddr;
+	uint32_t socket_sport;
+	uint32_t socket_daddr;
+	uint32_t socket_dport;
 };
 
 #define RUNTIME_PROC_IDLE		0

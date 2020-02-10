@@ -16,7 +16,6 @@ pthread_t mailbox_thread;
 
 static void *handle_mailbox_interrupts(void *data)
 {
-
 	uint8_t interrupt;
 
 	while (1) {

@@ -334,6 +334,11 @@ int sched_create_app(char *app_name)
 	app->state = SCHED_NOT_STARTED;
 	app->sec_partition_created = false;
 	app->sec_partition_id = -1;
+	app->socket_created = false;
+	app->socket_saddr = 0;
+	app->socket_sport = 0;
+	app->socket_daddr = 0;
+	app->socket_dport = 0;
 
 	add_app_to_all_app_list(app);
 
