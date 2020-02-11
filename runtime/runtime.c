@@ -18,11 +18,13 @@
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <arch/mailbox_runtime.h>
 /* FIXME: remove */
 #include "tcp.h"
 #include "ip.h"
 #include "raw.h"
 
+/* FIXME: also repeated in mailbox_runtime.c */
 typedef int bool;
 #define true	(int) 1
 #define false	(int) 0
@@ -30,9 +32,6 @@ typedef int bool;
 int p_runtime = 0;
 int q_runtime = 0;
 int q_os = 0;
-char fifo_runtime_out[64];
-char fifo_runtime_in[64];
-char fifo_runtime_intr[64];
 
 uint8_t **syscall_resp_queue;
 int srq_size;
@@ -41,8 +40,6 @@ int srq_head;
 int srq_tail;
 int srq_counter;
 sem_t srq_sem;
-
-sem_t load_app_sem;
 
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
@@ -275,12 +272,6 @@ sem_t load_app_sem;
 	}										\
 	data = &buf[2];
 
-
-int fd_out, fd_in, fd_intr;
-
-/* Not all will be used */
-sem_t interrupts[NUM_QUEUES + 1];
-sem_t interrupt_change;
 int change_queue = 0;
 
 unsigned int net_debug = 0;
@@ -289,7 +280,7 @@ pthread_t tcp_threads[2];
 extern void tcp_timer(void);
 
 /* FIXME: very similar to write_queue() in mailbox.c */
-static int write_syscall_response(uint8_t *buf)
+int write_syscall_response(uint8_t *buf)
 {
 	sem_wait(&srq_sem);
 
@@ -310,7 +301,7 @@ static int write_syscall_response(uint8_t *buf)
 static int read_syscall_response(uint8_t *buf)
 {
 	if (srq_counter <= 0) {
-		printf("Error: syscall response  queue is empty\n");
+		printf("Error: syscall response queue is empty\n");
 		exit(-1);
 		return -1;
 	}
@@ -326,38 +317,26 @@ static int read_syscall_response(uint8_t *buf)
 
 static void issue_syscall(uint8_t *buf)
 {
-	uint8_t opcode[2];
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = q_os;
-	sem_wait(&interrupts[q_os]);
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+	runtime_send_msg_on_queue(buf, q_os);
 
 	/* wait for response */
-	sem_wait(&interrupts[q_runtime]);
+	wait_on_queue(q_runtime);
 	read_syscall_response(buf);
 }
 
 static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 {
-	uint8_t opcode[2];
 	*no_response = false;
 	int is_change = 0;
 
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = q_os;
-	sem_wait(&interrupts[q_os]);
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+	runtime_send_msg_on_queue(buf, q_os);
 
 	/* wait for response or a change of queue ownership */
-	sem_wait(&interrupts[q_runtime]);
-	sem_getvalue(&interrupt_change, &is_change);
+	wait_on_queue(q_runtime);
+	is_ownership_change(&is_change);
 	if (!is_change) {
 		read_syscall_response(buf);	
 	} else { 
-		sem_wait(&interrupt_change);
 		*no_response = true;
 	}
 }
@@ -365,13 +344,7 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 /* network */
 static int send_msg_to_network(uint8_t *buf)
 {
-	uint8_t opcode[2];
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_NETWORK_DATA_IN;
-	sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	runtime_send_msg_on_queue_large(buf, Q_NETWORK_DATA_IN);
 
 	return 0;
 }
@@ -429,14 +402,8 @@ static void *tcp_receive(void *_data)
 			printf("%s: Error: could not allocate memory for buf\n", __func__);
 			exit(-1);
 		}
-		uint8_t opcode[2];
 
-		opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-		opcode[1] = Q_NETWORK_DATA_OUT;
-		sem_wait(&interrupts[Q_NETWORK_DATA_OUT]);
-		write(fd_out, opcode, 2);
-		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-
+		runtime_recv_msg_from_queue_large(buf, Q_NETWORK_DATA_OUT);
 		NETWORK_GET_ZERO_ARGS_DATA
 		struct pkbuf *pkb = (struct pkbuf *) data;
 		pkb->pk_refcnt = 2; /* prevents the TCP code from freeing the pkb */
@@ -477,31 +444,6 @@ void net_stack_exit(void)
 		printf("Error: couldn't kill tcp_threads[0]");
 }
 
-static void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
-{
-	uint8_t opcode[4];
-
-	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
-	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = proc_id;
-	write(fd_out, opcode, 4);
-}
-
-static int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
-{
-	uint8_t opcode[4], ret;
-
-	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
-	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = count;
-	write(fd_out, opcode, 4);
-	read(fd_in, &ret, 1);
-
-	return (int) ret; 
-}
-
 /* Only to be used for queues that runtime writes to */
 /* FIXME: busy-waiting */
 static void wait_until_empty(uint8_t queue_id, int queue_size)
@@ -509,7 +451,7 @@ static void wait_until_empty(uint8_t queue_id, int queue_size)
 	int left;
 	
 	while (1) {
-		sem_getvalue(&interrupts[queue_id], &left);
+		queue_sync_getval(queue_id, &left);
 		if (left == queue_size)
 			break;
 	}
@@ -517,7 +459,7 @@ static void wait_until_empty(uint8_t queue_id, int queue_size)
 
 static int request_secure_keyboard(int count)
 {
-	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
+	reset_queue_sync(Q_KEYBOARD, 0);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) count)
 	issue_syscall(buf);
@@ -543,7 +485,7 @@ static int yield_secure_keyboard(void)
 
 static int request_secure_serial_out(int count)
 {
-	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
+	reset_queue_sync(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) count)
 	issue_syscall(buf);
@@ -571,25 +513,14 @@ static int yield_secure_serial_out(void)
 
 static void write_to_secure_serial_out(char *buf)
 {
-	uint8_t opcode[2];
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_SERIAL_OUT;
-	sem_wait(&interrupts[Q_SERIAL_OUT]);
-	write(fd_out, opcode, 2);
-	write(fd_out, (uint8_t *) buf, MAILBOX_QUEUE_MSG_SIZE);
+	runtime_send_msg_on_queue((uint8_t *) buf, Q_SERIAL_OUT);
 }
 
 static void read_char_from_secure_keyboard(char *buf)
 {
 	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t opcode[2];
 
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = Q_KEYBOARD;
-	sem_wait(&interrupts[Q_KEYBOARD]);
-	write(fd_out, opcode, 2);
-	read(fd_in, input_buf, MAILBOX_QUEUE_MSG_SIZE);
+	runtime_recv_msg_from_queue(input_buf, Q_KEYBOARD);
 	*buf = (char) input_buf[0];
 }
 
@@ -664,9 +595,7 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 
 static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
 {
-	uint8_t opcode[2];
-
-	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_WRITE_FILE_BLOCKS, fd,
 			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
@@ -675,23 +604,16 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 		return 0;
 
 	uint8_t queue_id = (uint8_t) ret0;
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = queue_id;
 
-	for (int i = 0; i < num_blocks; i++) {
-		sem_wait(&interrupts[Q_STORAGE_DATA_IN]);
-		write(fd_out, opcode, 2);
-		write(fd_out, data + (i * STORAGE_BLOCK_SIZE), MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	}
+	for (int i = 0; i < num_blocks; i++)
+		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
 	
 	return num_blocks;
 }
 
 static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
 {
-	uint8_t opcode[2];
-
-	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
+	reset_queue_sync(Q_STORAGE_DATA_OUT, 0);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FILE_BLOCKS, fd,
 			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
@@ -700,14 +622,9 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num
 		return 0;
 
 	uint8_t queue_id = (uint8_t) ret0;
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = queue_id;
 
-	for (int i = 0; i < num_blocks; i++) {
-		sem_wait(&interrupts[Q_STORAGE_DATA_OUT]);
-		write(fd_out, opcode, 2);
-		read(fd_in, data + (i * STORAGE_BLOCK_SIZE), MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	}
+	for (int i = 0; i < num_blocks; i++)
+		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
 
 	return num_blocks;
 }
@@ -728,23 +645,10 @@ static int remove_file(char *filename)
 	return (int) ret0; 
 }
 
-/* FIXME: (mostly) copied from os/mailbox.c */
 static int send_msg_to_storage(uint8_t *buf)
 {
-	uint8_t opcode[2];
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_STORAGE_IN_2;
-	sem_wait(&interrupts[Q_STORAGE_IN_2]);
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = Q_STORAGE_OUT_2;
-	/* wait for response */
-	sem_wait(&interrupts[Q_STORAGE_OUT_2]);
-	write(fd_out, opcode, 2), 
-	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+	runtime_send_msg_on_queue(buf, Q_STORAGE_IN_2);
+	runtime_recv_msg_from_queue(buf, Q_STORAGE_OUT_2);
 
 	return 0;
 }
@@ -846,8 +750,8 @@ static int request_secure_storage_access(int count)
 		return ERR_INVALID;
 	}
 
-	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
-	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
+	reset_queue_sync(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+	reset_queue_sync(Q_STORAGE_OUT_2, 0);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
 	issue_syscall(buf);
@@ -982,13 +886,13 @@ static int set_up_context(void *addr, uint32_t size)
 	return 0;
 }
 
-static bool secure_ipc_mode = false;
+bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
 
 static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 {
 	bool no_response;
-	sem_init(&interrupts[target_runtime_queue_id], 0, MAILBOX_QUEUE_SIZE);
+	reset_queue_sync(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_IPC, target_runtime_queue_id, count)
 	change_queue = target_runtime_queue_id;
 	issue_syscall_response_or_change(buf, &no_response);
@@ -1035,31 +939,20 @@ static int yield_secure_ipc(void)
 
 static int send_msg_on_secure_ipc(char *msg, int size)
 {
-	uint8_t opcode[2];
 	if (!secure_ipc_mode)
 		return ERR_UNEXPECTED;
 
 	IPC_SET_ZERO_ARGS_DATA(msg, size)
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = secure_ipc_target_queue;
-	sem_wait(&interrupts[secure_ipc_target_queue]);
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-
+	runtime_send_msg_on_queue(buf, secure_ipc_target_queue);
+	
 	return 0;
 }
 
 static int recv_msg_on_secure_ipc(char *msg, int *size)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t opcode[2];
 
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = q_runtime;
-	/* wait for message */
-	sem_wait(&interrupts[q_runtime]);
-	write(fd_out, opcode, 2), 
-	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+	runtime_recv_msg_from_queue(buf, q_runtime);
 	IPC_GET_ZERO_ARGS_DATA
 
 	memcpy(msg, data, data_size);
@@ -1202,8 +1095,8 @@ static int request_network_access(int count)
 		return ERR_INVALID;
 	}
 
-	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
-	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
+	reset_queue_sync(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	reset_queue_sync(Q_NETWORK_DATA_OUT, 0);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_NETWORK_ACCESS, count)
 	issue_syscall(buf);
@@ -1243,13 +1136,8 @@ static int request_network_access(int count)
 	return 0;
 }
 
-typedef void (*app_main_proc)(struct runtime_api *);
-
 static void load_application(char *msg)
 {
-	void *app;
-	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "../applications/bin/";
-	app_main_proc app_main;
 	struct runtime_api api = {
 		.request_secure_keyboard = request_secure_keyboard,
 		.yield_secure_keyboard = yield_secure_keyboard,
@@ -1291,30 +1179,14 @@ static void load_application(char *msg)
 		.yield_network_access = yield_network_access,
 	};
 
-	strcat(path, msg);
-	strcat(path, ".so");
-	printf("opening %s\n", path);
+	load_application_arch(msg, &api);
 
-	app = dlopen(path, RTLD_LAZY);
-	if (!app) {
-		printf("Error: couldn't open app.\n");
-		return;
-	}
-	
-	app_main = (app_main_proc) dlsym(app, "app_main");
-	if (!app_main) {
-		printf("Error: couldn't find app_main symbol.\n");
-		return;
-	}
-
-	(*app_main)(&api);
 	return;
 }
 
-uint8_t load_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
 bool still_running = true;
 
-static void *run_app(void *data)
+void *run_app(void *load_buf)
 {
 	int ret = inform_os_runtime_ready();
 	if (ret) {
@@ -1322,7 +1194,7 @@ static void *run_app(void *data)
 		still_running = false;
 		return NULL;
 	}
-	sem_wait(&load_app_sem);
+	wait_for_app_load();
 	load_application((char *) load_buf);
 	still_running = false;
 	inform_os_of_termination();
@@ -1349,7 +1221,7 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
-static void *store_context(void *data)
+void *store_context(void *data)
 {
 	if (!secure_storage_key_set || !context_set) {
 		printf("%s: Error: either the secure storage key or context not set\n", __func__);
@@ -1376,9 +1248,6 @@ static void *store_context(void *data)
 int main(int argc, char **argv)
 {
 	int runtime_id = -1; 
-	pthread_t app_thread, ctx_thread;
-	bool has_ctx_thread = false;
-	uint8_t interrupt;
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
@@ -1396,45 +1265,11 @@ int main(int argc, char **argv)
 		printf("Error: invalid runtime ID.\n");
 		return -1;
 	}
-
-	switch(runtime_id) {
-	case 1:
-		p_runtime = P_RUNTIME1;
-		q_runtime = Q_RUNTIME1;
-		q_os = Q_OS1;
-		strcpy(fifo_runtime_out, FIFO_RUNTIME1_OUT);
-		strcpy(fifo_runtime_in, FIFO_RUNTIME1_IN);
-		strcpy(fifo_runtime_intr, FIFO_RUNTIME1_INTR);
-		break;
-	case 2:
-		p_runtime = P_RUNTIME2;
-		q_runtime = Q_RUNTIME2;
-		q_os = Q_OS2;
-		strcpy(fifo_runtime_out, FIFO_RUNTIME2_OUT);
-		strcpy(fifo_runtime_in, FIFO_RUNTIME2_IN);
-		strcpy(fifo_runtime_intr, FIFO_RUNTIME2_INTR);
-		break;
-	default:
-		printf("Error: unexpected runtime ID.\n");
-		return -1;
-	}
-
-	int ret = net_stack_init();
+	int ret = init_runtime(runtime_id);
 	if (ret) {
-		printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
+		printf("%s: Error: couldn't initialize the runtime\n", __func__);
 		return -1;
 	}
-
-	mkfifo(fifo_runtime_out, 0666);
-	mkfifo(fifo_runtime_in, 0666);
-	mkfifo(fifo_runtime_intr, 0666);
-
-	fd_out = open(fifo_runtime_out, O_WRONLY);
-	fd_in = open(fifo_runtime_in, O_RDONLY);
-	fd_intr = open(fifo_runtime_intr, O_RDONLY);
-
-	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
-	sem_init(&interrupts[q_runtime], 0, 0);
 
 	/* initialize syscall response queue */
 	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
@@ -1446,81 +1281,17 @@ int main(int argc, char **argv)
 	
 	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
 
-	sem_init(&load_app_sem, 0, 0);
-
-	ret = pthread_create(&app_thread, NULL, run_app, NULL);
+	ret = net_stack_init();
 	if (ret) {
-		printf("Error: couldn't launch the app thread\n");
+		printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
 		return -1;
 	}
 
-	bool keep_polling = true;
-
-	/* interrupt handling loop */
-	while (keep_polling) {
-		read(fd_intr, &interrupt, 1);
-		if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
-			printf("Error: invalid interrupt (%d)\n", interrupt);
-			exit(-1);
-		} else if (interrupt > NUM_QUEUES) {
-			if ((interrupt - NUM_QUEUES) == change_queue) {
-				sem_post(&interrupt_change);
-				sem_post(&interrupts[q_runtime]);
-			}
-
-			/* ignore the rest */
-			continue;
-		} else if (interrupt == q_runtime) {
-			uint8_t opcode[2];
-			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-
-			opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-			opcode[1] = q_runtime;
-			write(fd_out, opcode, 2);
-			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
-				write_syscall_response(buf);
-				sem_post(&interrupts[interrupt]);
-				if (!still_running)
-					keep_polling = false;
-			} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
-				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
-				sem_post(&load_app_sem);
-			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
-				//TODO
-				pthread_cancel(app_thread);
-				pthread_join(app_thread, NULL);
-				int ret = pthread_create(&ctx_thread, NULL, store_context, NULL);
-				if (ret)
-					printf("Error: couldn't launch the app thread\n");
-				has_ctx_thread = true;
-			}
-		} else {
-			sem_post(&interrupts[interrupt]);
-		}
-	}
-
-	if (has_ctx_thread)
-		pthread_join(ctx_thread, NULL);
-
-	pthread_join(app_thread, NULL);
-
-	/* FIXME: free the memory allocated for srq */
-
-	/* FIXME: resetting the mailbox needs to be done automatically. */
-	uint8_t opcode[2];
-	opcode[0] = MAILBOX_OPCODE_RESET;
-	write(fd_out, opcode, 2);
-
-	close(fd_out);
-	close(fd_in);
-	close(fd_intr);
-
-	remove(fifo_runtime_out);
-	remove(fifo_runtime_in);
-	remove(fifo_runtime_intr);
+	runtime_core();	
 
 	net_stack_exit();
+
+	close_runtime();
 			
 	return 0;
 }
