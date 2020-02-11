@@ -1,5 +1,6 @@
 /* OctopOS syscalls */
-
+#include <arch/defines.h>
+#ifdef ARCH_UMODE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -276,7 +277,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET(ERR_FAULT)
 			break;
 		}
-		
+
 		if (runtime_proc->app->output_dst)
 			ret = ipc_send_data(runtime_proc->app, data, (int) data_size);
 		else
@@ -289,7 +290,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		if (!runtime_proc || !runtime_proc->app) {
 			//FIXME: return Error
 		}
-	       
+
 		if (runtime_proc->app->input_src) {
 			ipc_receive_data(runtime_proc->app);
 			*no_response = true;
@@ -649,7 +650,7 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 	if (runtime_proc_id == P_RUNTIME1 || runtime_proc_id == P_RUNTIME2) {
 		bool no_response = false;
 		int late_processing = NUM_SYSCALLS;
-	
+
 		handle_syscall(runtime_proc_id, buf, &no_response, &late_processing);
 
 		/* send response */
@@ -667,3 +668,4 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		printf("Error: invalid syscall caller (%d)\n", runtime_proc_id);
 	}
 }
+#endif

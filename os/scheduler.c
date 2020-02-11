@@ -11,6 +11,7 @@
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <arch/mailbox_os.h>
+#include <arch/defines.h>
 
 #define MAX_NUM_APPS	64 /* must be divisible by 8 */
 uint8_t app_id_bitmap[MAX_NUM_APPS / 8];
@@ -131,6 +132,7 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	return NULL;
 }
 
+#ifdef ARCH_UMODE
 static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtime_proc)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
@@ -203,7 +205,7 @@ static bool is_app_available(char *app_name)
 
 static int add_app_to_list(struct app *app, struct app_list_node **head, struct app_list_node **tail)
 {
-	struct app_list_node *node = 
+	struct app_list_node *node =
 		(struct app_list_node *) malloc(sizeof(struct app_list_node));
 	if (!node)
 		return ERR_MEMORY;
@@ -514,3 +516,4 @@ void initialize_scheduler(void)
 		runtime_procs[i].pending_secure_ipc_request = 0;
 	}
 }
+#endif

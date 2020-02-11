@@ -19,6 +19,7 @@
 #include <os/scheduler.h>
 #include <os/syscall.h>
 #include <arch/mailbox_os.h>
+#include <arch/defines.h>
 
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];
@@ -56,6 +57,7 @@ char output_buf[MAILBOX_QUEUE_MSG_SIZE];
  */
 static int command(int input, int first, int last, int double_pipe, int bg)
 {
+#ifdef ARCH_UMODE
 	/* FIXME: add support for passing args to apps */
 
 	if (first == 1 && last == 0 && input == 0) {
@@ -83,20 +85,26 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 		}
 		return app_id;
 	}
+#else
+	return 0;
+#endif
 }
- 
+
 /* Final cleanup, 'wait' for processes to terminate.
  *  n : Number of times 'command' was invoked.
  */
 static void cleanup(int n)
 {
+#ifdef ARCH_UMODE
 	int i;
 	for (i = 0; i < n; ++i) 
 		wait(NULL); 
+#endif
 }
- 
+
 static int run(char* cmd, int input, int first, int last, int double_pipe, int bg);
 static int n = 0; /* number of calls to 'command' */
+
 
 /* Process a command line */
 static void process_input_line(char *line)
@@ -161,6 +169,7 @@ static void process_input_line(char *line)
 
 static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 {
+#ifdef ARCH_UMODE
 	if (app && app->runtime_proc)
 		syscall_read_from_shell_response(app->runtime_proc->id,
 					 line, num_chars);
@@ -168,6 +177,7 @@ static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 		printf("%s: Error: couldn't send input to app\n", __func__);
 
 	shell_status = SHELL_STATE_RUNNING_APP;
+#endif
 }
 
 #define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE
@@ -191,6 +201,7 @@ void shell_process_input(char buf)
 
 void inform_shell_of_termination(uint8_t runtime_proc_id)
 {
+#ifdef ARCH_UMODE
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 		printf("%s: Error: NULL runtime_proc or app\n", __func__);
@@ -203,6 +214,7 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		output_printf("octopos$> ");
 	}
 	sched_clean_up_app(runtime_proc_id);
+#endif
 }
 
 void inform_shell_of_pause(uint8_t runtime_proc_id)
@@ -260,7 +272,7 @@ int app_read_from_shell(struct app *app)
 
 void initialize_shell(void)
 {
-	output_printf("octopos shell: Type 'exit' or send EOF to exit.\n");
+	output_printf("octopos shell: Type 'exit' or send EOF to exit.\r\n");
 	/* Print the command prompt */
 	output_printf("octopos$> ");
 }
@@ -308,3 +320,4 @@ static void split(char* cmd)
  
 	args[i] = NULL;
 }
+

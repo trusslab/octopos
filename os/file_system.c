@@ -1,5 +1,6 @@
 /* OctopOS file system */
-
+#include <arch/defines.h>
+#ifdef ARCH_UMODE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,7 +88,7 @@ static void mark_fd_as_unused(int _fd)
 
 static int add_file_to_list(struct file *file)
 {
-	struct file_list_node *node = 
+	struct file_list_node *node =
 		(struct file_list_node *) malloc(sizeof(struct file_list_node));
 	if (!node)
 		return ERR_MEMORY;
@@ -141,7 +142,7 @@ static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks
 {
 	int ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_IN);	
+		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
@@ -159,7 +160,7 @@ static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
 	int ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_OUT);	
+		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
@@ -348,7 +349,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 				/* error */
 				return (uint32_t) 0;
 
-			file = node->file;			
+			file = node->file;
 		}
 	}
 
@@ -383,7 +384,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		uint32_t fd = (uint32_t) ret;
 		if (fd == 0 || fd >= MAX_NUM_FD)
 			return (uint32_t) 0;
-		
+
 		/* Shouldn't happen, but let's check. */
 		if (file_array[fd])
 			return (uint32_t) 0;
@@ -400,7 +401,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 {
-	if (fd == 0 || fd >= MAX_NUM_FD) { 
+	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
@@ -444,14 +445,14 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 		else
 			next_write_size = (size - written_size);
 	}
-	
+
 	return written_size;
 }
 
 
 int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 {
-	if (fd == 0 || fd >= MAX_NUM_FD) { 
+	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
@@ -495,13 +496,13 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 		else
 			next_read_size = (size - read_size);
 	}
-	
+
 	return read_size;
 }
 
 uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
 {
-	if (fd == 0 || fd >= MAX_NUM_FD) { 
+	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
@@ -530,7 +531,7 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 
 	int ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_IN);	
+		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
 
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -556,7 +557,7 @@ void file_system_write_file_blocks_late(void)
 
 uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
 {
-	if (fd == 0 || fd >= MAX_NUM_FD) { 
+	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
@@ -585,7 +586,7 @@ uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_block
 
 	int ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_OUT);	
+		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
@@ -609,7 +610,7 @@ void file_system_read_file_blocks_late(void)
 
 int file_system_close_file(uint32_t fd)
 {
-	if (fd == 0 || fd >= MAX_NUM_FD) { 
+	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return ERR_INVALID;
 	}
@@ -643,7 +644,7 @@ int file_system_remove_file(char *filename)
 				return ERR_INVALID;
 			}
 
-			file = node->file;			
+			file = node->file;
 		}
 	}
 
@@ -740,3 +741,4 @@ void initialize_file_system(void)
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
 }
+#endif

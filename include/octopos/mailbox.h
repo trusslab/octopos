@@ -1,3 +1,5 @@
+#include <arch/defines.h>
+
 /* mailbox opcodes */
 #define	MAILBOX_OPCODE_READ_QUEUE		0
 #define	MAILBOX_OPCODE_WRITE_QUEUE		1

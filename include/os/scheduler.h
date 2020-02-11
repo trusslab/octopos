@@ -1,4 +1,8 @@
 #include <octopos/mailbox.h>
+#include <arch/defines.h>
+#ifdef ARCH_SEC_HW
+#include <arch/sec_hw.h>
+#endif
 
 #define SCHED_NOT_STARTED	0
 #define SCHED_READY		1

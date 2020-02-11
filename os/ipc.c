@@ -1,4 +1,6 @@
 /* octopos IPC */
+#include <arch/defines.h>
+#ifdef ARCH_UMODE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,3 +100,4 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 	return 0;
 
 }
+#endif

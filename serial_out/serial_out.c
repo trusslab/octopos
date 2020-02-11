@@ -2,6 +2,10 @@
 #include <stdint.h>
 #include <octopos/mailbox.h>
 #include <arch/mailbox_serial_out.h>
+#include <arch/defines.h>
+#ifdef ARCH_SEC_HW
+#include <sleep.h>
+#endif
 
 static int serial_out_core(void)
 {
