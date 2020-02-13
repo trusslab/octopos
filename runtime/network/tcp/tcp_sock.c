@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 #include "socket.h"
 #include "tcp_hash.h"
 #include "tcp.h"
@@ -457,3 +458,4 @@ void tcp_init(void)
 	/* tcp ip id */
 	tcp_id = 0;
 }
+#endif

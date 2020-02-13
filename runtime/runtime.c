@@ -4,10 +4,20 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdint.h>
+
+#ifdef ARCH_UMODE
 #include <dlfcn.h>
+#endif
+
 #include <stdlib.h>
 #include <pthread.h>
+
+#ifdef ARCH_UMODE
 #include <semaphore.h>
+#else
+#include <arch/semaphore.h>
+#endif
+
 #include <sys/stat.h>
 #include <network/sock.h>
 #include <network/socket.h>
@@ -20,14 +30,18 @@
 #include <octopos/error.h>
 #include <arch/mailbox_runtime.h>
 /* FIXME: remove */
+#ifdef ARCH_UMODE
 #include "tcp.h"
 #include "ip.h"
 #include "raw.h"
+#endif
 
 /* FIXME: also repeated in mailbox_runtime.c */
+#ifdef ARCH_UMODE
 typedef int bool;
 #define true	(int) 1
 #define false	(int) 0
+#endif
 
 int p_runtime = 0;
 int q_runtime = 0;

@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 #include "netif.h"
 #include "sock.h"
 #include "list.h"
@@ -55,3 +56,4 @@ void udp_in(struct pkbuf *pkb)
 drop_pkb:
 	free_pkb(pkb);
 }
+#endif
