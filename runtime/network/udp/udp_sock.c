@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 #include "lib.h"
 #include "socket.h"
 #include "sock.h"
@@ -323,3 +324,4 @@ struct sock *udp_alloc_sock(int protocol)
 	udp_id++;
 	return &udp_sk->sk;
 }
+#endif

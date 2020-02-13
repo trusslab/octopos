@@ -5,11 +5,15 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#ifndef ARCH_SEC_HW
 #include <sys/syscall.h>
+#endif
 #include <fcntl.h>
 #include <string.h>
+#ifndef ARCH_SEC_HW
 #include <sys/ioctl.h>
 #include <poll.h>
+#endif
 #include <errno.h>
 #include <signal.h>
 #include <assert.h>

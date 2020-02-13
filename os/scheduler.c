@@ -132,7 +132,6 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	return NULL;
 }
 
-#ifdef ARCH_UMODE
 static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtime_proc)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
@@ -516,4 +515,3 @@ void initialize_scheduler(void)
 		runtime_procs[i].pending_secure_ipc_request = 0;
 	}
 }
-#endif

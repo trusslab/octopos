@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 /* fs_loop app */
 #include <stdio.h>
 #include <string.h>
@@ -76,3 +77,4 @@ out:
 		api->remove_file((char *) "test_file_loop_2.txt");
 	}
 }
+#endif

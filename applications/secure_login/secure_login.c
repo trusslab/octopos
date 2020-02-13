@@ -1,3 +1,5 @@
+#ifndef ARCH_SEC_HW
+
 /* secure_login app */
 #include <stdio.h>
 #include <string.h>
@@ -97,3 +99,4 @@ void app_main(struct runtime_api *api)
 	insecure_printf("secret (from secure storage): %s (size = %d)\n", line, size);	
 	api->delete_and_yield_secure_storage();
 }
+#endif

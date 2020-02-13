@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 #include "tcp.h"
 #include "cbuf.h"
 #include "sock.h"
@@ -80,3 +81,4 @@ void tcp_segment_reass(struct tcp_sock *tsk, struct tcp_segment *seg, struct pkb
 out:
 	return;
 }
+#endif

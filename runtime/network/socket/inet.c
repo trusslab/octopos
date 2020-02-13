@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 #include "socket.h"
 #include "sock.h"
 #include "netif.h"
@@ -239,3 +240,4 @@ void inet_init(void)
 	tcp_init();
 }
 
+#endif

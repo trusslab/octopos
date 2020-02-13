@@ -1,3 +1,5 @@
+#ifndef ARCH_SEC_HW
+
 /* simple_loop app */
 #include <stdio.h>
 #include <string.h>
@@ -45,3 +47,5 @@ void app_main(struct runtime_api *api)
 		gcounter++;
 	}
 }
+
+#endif

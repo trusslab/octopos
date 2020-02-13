@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 #include "tcp.h"
 #include "ip.h"
 #include "ether.h"
@@ -120,3 +121,4 @@ int tcp_send_text(struct tcp_sock *tsk, void *buf, int len)
 	return slen;
 }
 
+#endif
