@@ -1,33 +1,64 @@
 /* octopos application runtime */
+#include <arch/defines.h>
+
 #include <stdio.h>
 #include <string.h>
+#ifdef ARCH_UMODE
 #include <fcntl.h>
+#endif
 #include <unistd.h>
 #include <stdint.h>
+
+#ifdef ARCH_UMODE
 #include <dlfcn.h>
+#endif
+
 #include <stdlib.h>
+#ifdef ARCH_UMODE
 #include <pthread.h>
 #include <semaphore.h>
+#else
+#include <arch/semaphore.h>
+#endif
+
+#ifdef ARCH_UMODE
 #include <sys/stat.h>
 #include <network/sock.h>
 #include <network/socket.h>
 #include <network/netif.h>
 #include <network/tcp_timer.h>
+#endif
+
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <arch/mailbox_runtime.h>
+
+#ifdef ARCH_SEC_HW
+#include "xparameters.h"
+#include "arch/sec_hw.h"
+#include "xil_cache.h"
+#endif
 /* FIXME: remove */
+#ifdef ARCH_UMODE
 #include "tcp.h"
 #include "ip.h"
 #include "raw.h"
+#endif
 
 /* FIXME: also repeated in mailbox_runtime.c */
+#ifdef ARCH_UMODE
 typedef int bool;
 #define true	(int) 1
 #define false	(int) 0
+#endif
+
+volatile int i = 0xDEADBEEF;
+extern unsigned char __datacopy;
+extern unsigned char __data_start;
+extern unsigned char __data_end;
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -41,40 +72,9 @@ int srq_tail;
 int srq_counter;
 sem_t srq_sem;
 
-#define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[0]) = syscall_nr;		\
-
-#define SYSCALL_SET_ONE_ARG(syscall_nr, arg0)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[0]) = syscall_nr;		\
-	*((uint32_t *) &buf[2]) = arg0;			\
-
-#define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[0]) = syscall_nr;		\
-	*((uint32_t *) &buf[2]) = arg0;			\
-	*((uint32_t *) &buf[6]) = arg1;			\
-
-#define SYSCALL_SET_THREE_ARGS(syscall_nr, arg0, arg1, arg2)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint16_t *) &buf[0]) = syscall_nr;			\
-	*((uint32_t *) &buf[2]) = arg0;				\
-	*((uint32_t *) &buf[6]) = arg1;				\
-	*((uint32_t *) &buf[10]) = arg2;			\
-
-#define SYSCALL_SET_FOUR_ARGS(syscall_nr, arg0, arg1, arg2, arg3)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];				\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);			\
-	*((uint16_t *) &buf[0]) = syscall_nr;				\
-	*((uint32_t *) &buf[2]) = arg0;					\
-	*((uint32_t *) &buf[6]) = arg1;					\
-	*((uint32_t *) &buf[10]) = arg2;				\
-	*((uint32_t *) &buf[14]) = arg3;				\
+#ifdef ARCH_SEC_HW
+extern sem_t interrupt_change;
+#endif
 
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
@@ -332,15 +332,21 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 	runtime_send_msg_on_queue(buf, q_os);
 
 	/* wait for response or a change of queue ownership */
+#ifdef ARCH_SEC_HW
+	sem_wait(&interrupt_change);
+	*no_response = true;
+#else
 	wait_on_queue(q_runtime);
 	is_ownership_change(&is_change);
 	if (!is_change) {
-		read_syscall_response(buf);	
-	} else { 
+		read_syscall_response(buf);
+	} else {
 		*no_response = true;
 	}
+#endif
 }
 
+#ifdef ARCH_UMODE
 /* network */
 static int send_msg_to_network(uint8_t *buf)
 {
@@ -364,7 +370,7 @@ int local_address(unsigned int addr)
 }
 
 void icmp_send(unsigned char type, unsigned char code,
-                unsigned int data, struct pkbuf *pkb_in)
+				unsigned int data, struct pkbuf *pkb_in)
 {
 	printf("icmp_send not implemented.\n");
 	exit(-1);
@@ -443,13 +449,14 @@ void net_stack_exit(void)
 	if (ret)
 		printf("Error: couldn't kill tcp_threads[0]");
 }
+#endif
 
 /* Only to be used for queues that runtime writes to */
 /* FIXME: busy-waiting */
 static void wait_until_empty(uint8_t queue_id, int queue_size)
 {
 	int left;
-	
+
 	while (1) {
 		queue_sync_getval(queue_id, &left);
 		if (left == queue_size)
@@ -457,33 +464,50 @@ static void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
+#ifdef ARCH_SEC_HW
+static int request_secure_keyboard(u16 count)
+#else
 static int request_secure_keyboard(int count)
+#endif
 {
 	reset_queue_sync(Q_KEYBOARD, 0);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) count)
+
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
-		return (int) ret0; 
+		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
 					READ_ACCESS, count);
 	if (!attest_ret) {
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+#else
 		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+#endif
 		return ERR_FAULT;
 	}
 
-	return 0; 
+	return 0;
 }
 
 static int yield_secure_keyboard(void)
 {
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_KEYBOARD);
+#else
 	mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, P_OS);
+#endif
 	return 0;
 }
 
+#ifdef ARCH_SEC_HW
+static int request_secure_serial_out(u16 count)
+#else
 static int request_secure_serial_out(int count)
+#endif
 {
 	reset_queue_sync(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
@@ -491,23 +515,31 @@ static int request_secure_serial_out(int count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
-		return (int) ret0; 
+		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
 					WRITE_ACCESS, count);
 	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure serial_out access\n", __func__);
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+#else
+		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+#endif
 		return ERR_FAULT;
 	}
 
-	return 0; 
+	return 0;
 }
 
 static int yield_secure_serial_out(void)
 {
 	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
+#else
 	mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, P_OS);
+#endif
 	return 0;
 }
 
@@ -519,7 +551,6 @@ static void write_to_secure_serial_out(char *buf)
 static void read_char_from_secure_keyboard(char *buf)
 {
 	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
-
 	runtime_recv_msg_from_queue(input_buf, Q_KEYBOARD);
 	*buf = (char) input_buf[0];
 }
@@ -529,7 +560,7 @@ static int inform_os_of_termination(void)
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_TERMINATION)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int inform_os_of_pause(void)
@@ -538,9 +569,9 @@ static int inform_os_of_pause(void)
 	//issue_syscall_noresponse(buf);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 
-	return 0; 
+	return 0;
 }
 
 static int inform_os_runtime_ready(void)
@@ -548,10 +579,15 @@ static int inform_os_runtime_ready(void)
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_RUNTIME_READY)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 }
 
+#ifdef ARCH_SEC_HW
+/* Runtime needs to print critical messages to shell */
+int write_to_shell(char *data, int size)
+#else
 static int write_to_shell(char *data, int size)
+#endif
 {
 	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_WRITE_TO_SHELL, data, size)
 	issue_syscall(buf);
@@ -566,15 +602,20 @@ static int read_from_shell(char *data, int *data_size)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA(data)
 	*data_size = (int) _size;
+#ifdef ARCH_SEC_HW
+	data[*data_size - 1] = '\0';
+#endif
 	return (int) ret0;
 }
+
+#ifdef ARCH_UMODE
 
 static uint32_t open_file(char *filename, uint32_t mode)
 {
 	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return ret0; 
+	return ret0;
 }
 
 static int write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
@@ -582,7 +623,7 @@ static int write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 	SYSCALL_SET_TWO_ARGS_DATA(SYSCALL_WRITE_TO_FILE, fd, offset, data, size)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
@@ -590,14 +631,14 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FROM_FILE, fd, size, offset)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA(data)
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
 {
 	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_WRITE_FILE_BLOCKS, fd,
-			       (uint32_t) start_block, (uint32_t) num_blocks)
+				   (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
@@ -607,7 +648,7 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 
 	for (int i = 0; i < num_blocks; i++)
 		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
-	
+
 	return num_blocks;
 }
 
@@ -615,7 +656,7 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num
 {
 	reset_queue_sync(Q_STORAGE_DATA_OUT, 0);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FILE_BLOCKS, fd,
-			       (uint32_t) start_block, (uint32_t) num_blocks)
+				   (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
@@ -642,7 +683,7 @@ static int remove_file(char *filename)
 	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_REMOVE_FILE, filename, strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int send_msg_to_storage(uint8_t *buf)
@@ -737,8 +778,13 @@ static int yield_secure_storage_access(void)
 
 	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
+	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
+#else
 	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+#endif
 
 	return 0;
 }
@@ -757,7 +803,7 @@ static int request_secure_storage_access(int count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
-		return (int) ret0; 
+		return (int) ret0;
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
@@ -885,11 +931,16 @@ static int set_up_context(void *addr, uint32_t size)
 
 	return 0;
 }
+#endif
 
 bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
 
+#ifdef ARCH_SEC_HW
+static int request_secure_ipc(uint8_t target_runtime_queue_id, u16 count)
+#else
 static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
+#endif
 {
 	bool no_response;
 	reset_queue_sync(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
@@ -910,13 +961,16 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 		return ERR_FAULT;
 	}
 
-	/* FIXME
+/* ARCH_SEC_HW */
+#ifndef ARCH_SEC_HW 
+	/* FIXME: 
 	attest_ret = mailbox_attest_queue_access(q_runtime,
 					WRITE_ACCESS, count, other runtime);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure ipc recv queue access\n", __func__);
 		return ERR_FAULT;
 	}*/
+#endif
 
 	secure_ipc_mode = true;
 	secure_ipc_target_queue = target_runtime_queue_id;
@@ -930,10 +984,50 @@ static int yield_secure_ipc(void)
 	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
 
+#ifdef ARCH_SEC_HW
+	/* Before we change runtime queue access, we must
+	 * make sure the other side has done with its reading
+	 * or writing.
+	 */
+	char yield_msg[MAILBOX_QUEUE_MSG_SIZE] = "ADIOS";
+	int yield_msg_size = strlen(yield_msg) + 1;
+
+	IPC_SET_ZERO_ARGS_DATA(yield_msg, yield_msg_size)
+	runtime_send_msg_on_queue(buf, qid);
+
+	{
+		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+		runtime_recv_msg_from_queue(buf, q_runtime);
+		IPC_GET_ZERO_ARGS_DATA
+
+		int goodbye_received = memcmp(data, yield_msg, strlen(yield_msg));
+		_SEC_HW_ASSERT_NON_VOID(0 == goodbye_received)
+		_SEC_HW_DEBUG("ADIOS received from %d", qid);
+	}
+#endif
+
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(qid);
+#else
 	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
+#endif
+
+/* ARCH_SEC_HW OctopOS mailbox only allows the current owner
+ * to change/yield ownership. This is different from umode.
+ * Thus, instead of explicitly yielding it, we attest it.
+ * In case the other runtime refuses to yield, we forcefully
+ * deplete the quota by repeatedly reading the mailbox.
+ */
+#ifdef ARCH_SEC_HW
+	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
+		mailbox_force_ownership(q_runtime, P_OS);
+	}
+#else
 	mailbox_change_queue_access(q_runtime, WRITE_ACCESS, P_OS);
+#endif
+
 	return 0;
 }
 
@@ -944,7 +1038,7 @@ static int send_msg_on_secure_ipc(char *msg, int size)
 
 	IPC_SET_ZERO_ARGS_DATA(msg, size)
 	runtime_send_msg_on_queue(buf, secure_ipc_target_queue);
-	
+
 	return 0;
 }
 
@@ -963,7 +1057,7 @@ static int recv_msg_on_secure_ipc(char *msg, int *size)
 
 static uint8_t get_runtime_proc_id(void)
 {
-	return (uint8_t) p_runtime;	
+	return (uint8_t) p_runtime;
 }
 
 static uint8_t get_runtime_queue_id(void)
@@ -974,10 +1068,11 @@ static uint8_t get_runtime_queue_id(void)
 bool has_network_access = false;
 int network_access_count = 0;
 
+#ifdef ARCH_UMODE
 static struct socket *create_socket(int family, int type, int protocol,
-				    struct sock_addr *skaddr)
+					struct sock_addr *skaddr)
 {
-	unsigned short sport = 0; /* do not support suggesting a port for now */ 
+	unsigned short sport = 0; /* do not support suggesting a port for now */
 	unsigned int saddr;
 
 	int ret = syscall_allocate_tcp_socket(&saddr, &sport,
@@ -1082,9 +1177,14 @@ static int yield_network_access(void)
 
 	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
+#else
 	mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, P_OS);
-
+#endif
+	
 	return 0;
 }
 
@@ -1102,7 +1202,7 @@ static int request_network_access(int count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
-		return (int) ret0; 
+		return (int) ret0;
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN,
@@ -1136,6 +1236,8 @@ static int request_network_access(int count)
 	return 0;
 }
 
+#endif
+
 static void load_application(char *msg)
 {
 	struct runtime_api api = {
@@ -1147,6 +1249,7 @@ static void load_application(char *msg)
 		.read_char_from_secure_keyboard = read_char_from_secure_keyboard,
 		.write_to_shell = write_to_shell,
 		.read_from_shell = read_from_shell,
+#ifdef ARCH_UMODE
 		.open_file = open_file,
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
@@ -1161,12 +1264,14 @@ static void load_application(char *msg)
 		.write_to_secure_storage = write_to_secure_storage,
 		.read_from_secure_storage = read_from_secure_storage,
 		.set_up_context = set_up_context,
+#endif
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
+#ifdef ARCH_UMODE
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
 		.close_socket = close_socket,
@@ -1177,6 +1282,7 @@ static void load_application(char *msg)
 		.write_to_socket = write_to_socket,
 		.request_network_access = request_network_access,
 		.yield_network_access = yield_network_access,
+#endif
 	};
 
 	load_application_arch(msg, &api);
@@ -1195,6 +1301,7 @@ void *run_app(void *load_buf)
 		return NULL;
 	}
 	wait_for_app_load();
+	
 	load_application((char *) load_buf);
 	still_running = false;
 	inform_os_of_termination();
@@ -1221,6 +1328,7 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
+#ifdef ARCH_UMODE
 void *store_context(void *data)
 {
 	if (!secure_storage_key_set || !context_set) {
@@ -1241,31 +1349,67 @@ void *store_context(void *data)
 	yield_secure_storage_access();
 	still_running = false;
 	inform_os_of_pause();
-		
+
 	return NULL;
 }
+#endif
 
+#ifdef ARCH_UMODE
 int main(int argc, char **argv)
+#else
+int main()
+#endif
 {
-	int runtime_id = -1; 
+#ifdef ARCH_SEC_HW
+	// FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
+#if RUNTIME_ID == 1
+	Xil_ICacheEnable();
+	Xil_DCacheEnable();
+#endif /* RUNTIME_ID == 1 */
+
+#if RUNTIME_ID == 2
+//    _SEC_HW_ERROR("ENTERING MAIN");
+
+	unsigned char *dataCopyStart = &__datacopy;
+	unsigned char *dataStart = &__data_start;
+	unsigned char *dataEnd = &__data_end;
+	if (i == 0xDEADBEEF) {
+		while(dataStart < dataEnd)
+			*dataCopyStart++ = *dataStart++;
+	} else {
+		while(dataStart < dataEnd)
+			*dataStart++ = *dataCopyStart++;
+		// _mb_restarted = TRUE;
+	}
+
+	i = 0;
+#endif /* RUNTIME_ID == 2 */
+
+#endif /* ARCH_SEC_HW */
+
+	int runtime_id = -1;
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
 		exit(-1);
 	}
-
+#ifdef ARCH_UMODE
 	if (argc != 2) {
 		printf("Error: incorrect command. Use ``runtime <runtime_ID>''.\n");
 		return -1;
 	}
 
 	runtime_id = atoi(argv[1]);
+#else
+	runtime_id = RUNTIME_ID;
+#endif
 
 	if (runtime_id < 1 || runtime_id > 2) {
 		printf("Error: invalid runtime ID.\n");
 		return -1;
 	}
 	int ret = init_runtime(runtime_id);
+
 	if (ret) {
 		printf("%s: Error: couldn't initialize the runtime\n", __func__);
 		return -1;
@@ -1278,20 +1422,25 @@ int main(int argc, char **argv)
 	srq_counter = 0;
 	srq_head = 0;
 	srq_tail = 0;
-	
+
 	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
 
+#ifdef ARCH_UMODE
 	ret = net_stack_init();
 	if (ret) {
 		printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
 		return -1;
 	}
+#endif
 
-	runtime_core();	
-
+	runtime_core();
+#ifdef ARCH_UMODE
 	net_stack_exit();
+#endif
 
+#ifdef ARCH_SEC_HW
 	close_runtime();
-			
+#endif
+
 	return 0;
 }

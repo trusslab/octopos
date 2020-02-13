@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 #include "socket.h"
 #include "sock.h"
 #include "inet.h"
@@ -209,3 +210,4 @@ void socket_init(void)
 {
 	inet_init();
 }
+#endif

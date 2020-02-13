@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 #include "socket.h"
 #include "sock.h"
 #include "netif.h"
@@ -138,3 +139,4 @@ struct sock *raw_lookup_sock(unsigned int src, unsigned int dst, int proto)
 	return sk;
 }
 
+#endif

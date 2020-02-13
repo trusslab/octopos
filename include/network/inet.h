@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 #ifndef __INET_H
 #define __INET_H
 
@@ -13,3 +14,4 @@ extern struct socket_ops inet_ops;
 extern void inet_init(void);
 
 #endif	/* inet.h */
+#endif

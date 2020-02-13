@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 #include "tcp.h"
 #include "lib.h"
 
@@ -52,3 +53,4 @@ void tcp_timer(void)
 			tcp_timewait_timer(1000000);
 	}
 }
+#endif

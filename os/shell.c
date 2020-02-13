@@ -2,6 +2,10 @@
  * Forked from https://gist.github.com/966049.git
  */
 
+/*
+ * Based on https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841941/Zynq+UltraScale+MPSoC+-+IPI+Messaging+Example
+ */
+
 /* Compile with: g++ -Wall –Werror -o shell shell.c */
 
 #include <stdio.h>
@@ -21,6 +25,12 @@
 #include <arch/mailbox_os.h>
 #include <arch/defines.h>
 
+#ifdef 	ARCH_SEC_HW
+#include "xscugic.h"
+#include "xttcps.h"
+#include "xipipsu.h"
+#endif
+
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];
 pid_t pid;
@@ -32,6 +42,14 @@ int command_pipe[2];
 #define SHELL_STATE_WAITING_FOR_CMD		0
 #define SHELL_STATE_RUNNING_APP			1
 #define SHELL_STATE_APP_WAITING_FOR_INPUT	2
+
+#ifdef 	ARCH_SEC_HW_OS
+extern 	XIpiPsu 					ipi_pmu_inst;
+
+#define RESP_AND_MSG_NUM_OFFSET		0x1U
+#define IPI_HEADER_OFFSET			0x0U
+#define IPI_HEADER					0x1E0000 /* 1E - Target Module ID */
+#endif
 
 struct app *foreground_app = NULL;
 
@@ -57,7 +75,6 @@ char output_buf[MAILBOX_QUEUE_MSG_SIZE];
  */
 static int command(int input, int first, int last, int double_pipe, int bg)
 {
-#ifdef ARCH_UMODE
 	/* FIXME: add support for passing args to apps */
 
 	if (first == 1 && last == 0 && input == 0) {
@@ -85,9 +102,6 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 		}
 		return app_id;
 	}
-#else
-	return 0;
-#endif
 }
 
 /* Final cleanup, 'wait' for processes to terminate.
@@ -169,7 +183,6 @@ static void process_input_line(char *line)
 
 static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 {
-#ifdef ARCH_UMODE
 	if (app && app->runtime_proc)
 		syscall_read_from_shell_response(app->runtime_proc->id,
 					 line, num_chars);
@@ -177,7 +190,6 @@ static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 		printf("%s: Error: couldn't send input to app\n", __func__);
 
 	shell_status = SHELL_STATE_RUNNING_APP;
-#endif
 }
 
 #define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE
@@ -186,25 +198,48 @@ static int num_chars = 0;
 
 void shell_process_input(char buf)
 {
+	/* Backspace */
+	if (buf == '\b') {
+		/* Still print it, so that cursor goes back */
+		output_printf("%c", buf);
+		line[--num_chars] = '\0';
+		return;
+	}
+
 	line[num_chars] = buf;
 	output_printf("%c", buf);
 	num_chars++;
+#ifdef ARCH_SEC_HW
+	if (buf == '\r' || num_chars >= MAX_LINE_SIZE) {
+#else
 	if (buf == '\n' || num_chars >= MAX_LINE_SIZE) {
-		if (shell_status == SHELL_STATE_WAITING_FOR_CMD)
+#endif
+		if (shell_status == SHELL_STATE_WAITING_FOR_CMD) {
 			process_input_line(line);
-		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT)
+			memset(line, 0, MAX_LINE_SIZE);
+		}
+		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT) {
 			process_app_input(foreground_app, (uint8_t *) line, num_chars);
+			memset(line, 0, MAX_LINE_SIZE);
+		}
 		/* don't need to do anything if SHELL_STATE_RUNNING_APP */
 		num_chars = 0;
 	}
 }
 
+
 void inform_shell_of_termination(uint8_t runtime_proc_id)
 {
-#ifdef ARCH_UMODE
+#ifdef ARCH_SEC_HW
+	_SEC_HW_DEBUG("runtime_proc_id=%d", runtime_proc_id);
+#endif
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("NULL runtime_proc or app", __func__);
+#else
 		printf("%s: Error: NULL runtime_proc or app\n", __func__);
+#endif
 		return;
 	}
 
@@ -214,6 +249,35 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		output_printf("octopos$> ");
 	}
 	sched_clean_up_app(runtime_proc_id);
+
+#ifdef ARCH_SEC_HW
+	/* Send IPI to PMU, PMU will reset the runtime */
+	u32 pmu_ipi_status = XST_FAILURE;
+
+	static u32 MsgPtr[2] = {IPI_HEADER, 0U};
+	/* Convert from proc id to runtime number */
+	MsgPtr[RESP_AND_MSG_NUM_OFFSET] = runtime_proc_id - 6;
+	pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK,
+			MsgPtr, 2U, XIPIPSU_BUF_TYPE_MSG);
+
+	if(pmu_ipi_status != (u32)XST_SUCCESS) {
+		_SEC_HW_ERROR("RPU: IPI Write message failed");
+		return;
+	}
+
+	pmu_ipi_status = XIpiPsu_TriggerIpi(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK);
+
+	if(pmu_ipi_status != (u32)XST_SUCCESS) {
+		_SEC_HW_ERROR("RPU: IPI Trigger failed");
+		return;
+	}
+
+	pmu_ipi_status = XIpiPsu_PollForAck(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK, (~0));
+
+	if(pmu_ipi_status != (u32)XST_SUCCESS) {
+		_SEC_HW_ERROR("RPU: IPI Poll for ack failed");
+		return;
+	}
 #endif
 }
 
