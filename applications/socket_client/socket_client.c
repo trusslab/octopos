@@ -1,3 +1,5 @@
+#ifdef ARCH_UMODE
+
 /* socket_client app */
 #include <stdio.h>
 #include <string.h>
@@ -113,3 +115,4 @@ out:	/* close and out */
 	}
 	api->yield_network_access();
 }
+#endif

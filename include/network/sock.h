@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 #ifndef __SOCK_H
 #define __SOCK_H
 
@@ -87,3 +88,5 @@ extern int alloc_socks;
 extern int free_socks;
 
 #endif	/* sock.h */
+
+#endif

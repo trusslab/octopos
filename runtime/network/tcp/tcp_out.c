@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 #include "lib.h"
 #include "netif.h"
 #include "route.h"
@@ -196,3 +197,4 @@ void tcp_send_fin(struct tcp_sock *tsk)
 			_ntohs(otcp->dst));
 	tcp_send_out(tsk, opkb, NULL);
 }
+#endif

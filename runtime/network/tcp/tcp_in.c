@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 #include "lib.h"
 #include "netif.h"
 #include "tcp.h"
@@ -96,3 +97,4 @@ void tcp_in(struct pkbuf *pkb)
 drop_pkb:
 	free_pkb(pkb);
 }
+#endif

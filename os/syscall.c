@@ -1,6 +1,5 @@
 /* OctopOS syscalls */
 #include <arch/defines.h>
-#ifdef ARCH_UMODE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,50 +21,6 @@
 #include <os/file_system.h>
 #include <os/storage.h>
 #include <arch/mailbox_os.h>
-
-#define SYSCALL_SET_ONE_RET(ret0)			\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
-	*((uint32_t *) &buf[1]) = ret0;			\
-
-#define SYSCALL_SET_TWO_RETS(ret0, ret1)		\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
-	*((uint32_t *) &buf[1]) = ret0;			\
-	*((uint32_t *) &buf[5]) = ret1;			\
-
-/* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
-#define SYSCALL_SET_ONE_RET_DATA(ret0, data, size)		\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;		\
-	*((uint32_t *) &buf[1]) = ret0;				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
-	if (max_size < 256 && size <= ((int) max_size)) {	\
-		buf[5] = (uint8_t) size;			\
-		memcpy(&buf[6], data, size);			\
-	} else {						\
-		printf("Error: invalid max_size or size\n");	\
-		buf[5] = 0;					\
-	}							\
-
-#define SYSCALL_GET_ONE_ARG		\
-	uint32_t arg0;			\
-	arg0 = *((uint32_t *) &buf[2]); \
-
-#define SYSCALL_GET_TWO_ARGS		\
-	uint32_t arg0, arg1;		\
-	arg0 = *((uint32_t *) &buf[2]); \
-	arg1 = *((uint32_t *) &buf[6]); \
-
-#define SYSCALL_GET_THREE_ARGS		\
-	uint32_t arg0, arg1, arg2;	\
-	arg0 = *((uint32_t *) &buf[2]); \
-	arg1 = *((uint32_t *) &buf[6]); \
-	arg2 = *((uint32_t *) &buf[10]);\
-
-#define SYSCALL_GET_FOUR_ARGS			\
-	uint32_t arg0, arg1, arg2, arg3;	\
-	arg0 = *((uint32_t *) &buf[2]);		\
-	arg1 = *((uint32_t *) &buf[6]);		\
-	arg2 = *((uint32_t *) &buf[10]);	\
-	arg3 = *((uint32_t *) &buf[14]);	\
 
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
 	uint8_t data_size, *data;				\
@@ -144,6 +99,7 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
+#ifdef ARCH_UMODE
 static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
 {
 	STORAGE_SET_ZERO_ARGS_DATA(temp_key, STORAGE_KEY_SIZE) 
@@ -197,6 +153,7 @@ static int get_unused_tcp_port(uint32_t *sport)
 
 	return 0;
 }
+#endif
 
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
 {
@@ -204,6 +161,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 	syscall_nr = *((uint16_t *) &buf[0]);
 	*no_response = false;
+
+#ifdef ARCH_SEC_HW
+	_SEC_HW_DEBUG("syscall %d received from %d", syscall_nr, runtime_proc_id);
+#endif
 
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
@@ -216,6 +177,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+#ifdef ARCH_SEC_HW
+		_SEC_HW_DEBUG("arg0 = %d", count);
+#endif
+
 		int ret = is_queue_available(Q_SERIAL_OUT);
 		/* Or should we make this blocking? */
 		if (!ret) {
@@ -223,11 +188,20 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+		/* ARCH_SEC_HW does not check on send queue availability
+		 * because it already blocks on send. */
+#ifndef ARCH_SEC_HW
 		wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
+#endif
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
+#ifdef ARCH_SEC_HW
+		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
+#else
 		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
+#endif
+
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -235,11 +209,15 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
 
-		/* No more than 100 characters */
-		if (count > 100) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
+#ifdef ARCH_SEC_HW
+		_SEC_HW_DEBUG("arg0 = %d", count);
+#endif
+
+		 /* No more than 100 characters */
+		 if (count > 100) {
+		 	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+		 	break;
+		 }
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */
@@ -250,7 +228,12 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
+#ifdef ARCH_SEC_HW
+		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint16_t) count);
+#else
 		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+#endif
+
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -305,6 +288,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 		break;
 	}
+#ifdef ARCH_UMODE
 	case SYSCALL_OPEN_FILE: {
 		SYSCALL_GET_ONE_ARG_DATA
 		uint32_t mode = arg0;
@@ -445,8 +429,14 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mark_queue_unavailable(Q_STORAGE_IN_2);
 		mark_queue_unavailable(Q_STORAGE_OUT_2);
 
+#ifdef ARCH_SEC_HW
+		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
+		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint16_t) count);
+#else
 		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+#endif
+
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -472,6 +462,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
+#endif
 	case SYSCALL_REQUEST_SECURE_IPC: {
 		SYSCALL_GET_TWO_ARGS
 		uint8_t target_runtime_queue_id = arg0;
@@ -509,10 +500,15 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+		/* Runtime queue ownership has been transferred at this point,
+		 * So we cannot issue syscall response to the runtime anymore.
+		 * Otherwise, return the error code.
+		 */
 		if (!(*no_response))
 			SYSCALL_SET_ONE_RET(0)
 		break;
 	}
+#ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc || !runtime_proc->app) {
@@ -610,8 +606,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mark_queue_unavailable(Q_NETWORK_DATA_IN);
 		mark_queue_unavailable(Q_NETWORK_DATA_OUT);
 
+#ifdef ARCH_SEC_HW
+		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
+		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
+#else
 		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+#endif
 
 		SYSCALL_SET_ONE_RET((uint32_t) 0)
 		break;
@@ -638,8 +639,23 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET((uint32_t) 0)
 		break;
 	}
+#endif
+	case SYSCALL_DEBUG_OUTPUTS: {
+		SYSCALL_GET_ZERO_ARGS_DATA
+#ifdef ARCH_SEC_HW
+		xil_printf("RUNTIME%d: %s\r\n", runtime_proc_id, data);
+#else
+		printf("RUNTIME%d: %s\r\n", runtime_proc_id, data);
+#endif
+		*no_response = true;
+		break;
+	}
+
 	default:
 		printf("Error: invalid syscall\n");
+#ifdef ARCH_SEC_HW
+		_SEC_HW_DEBUG("invalid syscall, args: %s", buf);
+#endif
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		break;
 	}
@@ -657,15 +673,14 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (!no_response) {
 			check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 		}
-
+#ifdef ARCH_UMODE
 		/* FIXME: use async interrupt processing instead. */
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
-
+#endif
 	} else {
 		printf("Error: invalid syscall caller (%d)\n", runtime_proc_id);
 	}
 }
-#endif

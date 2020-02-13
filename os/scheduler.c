@@ -99,7 +99,7 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	}
 
 	/* Let's first see if any of the runtimes are idle */
-	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
+	for (int i = NUM_RUNTIME_PROCS - 1; i >= 0; i--) {
 		/* FIXME: this needs to be in a critical section */
 		if (runtime_procs[i].state == RUNTIME_PROC_IDLE) {
 			runtime_procs[i].state = RUNTIME_PROC_RESERVED;
@@ -132,7 +132,6 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	return NULL;
 }
 
-#ifdef ARCH_UMODE
 static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtime_proc)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
@@ -516,4 +515,3 @@ void initialize_scheduler(void)
 		runtime_procs[i].pending_secure_ipc_request = 0;
 	}
 }
-#endif
