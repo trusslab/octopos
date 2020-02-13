@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 #include "netif.h"
 #include "socket.h"
 #include "list.h"
@@ -28,3 +29,4 @@ void raw_in(struct pkbuf *pkb)
 							iphdr->ip_pro);
 	}
 }
+#endif

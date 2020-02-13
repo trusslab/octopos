@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 #include "socket.h"
 #include "sock.h"
 #include "lib.h"
@@ -89,3 +90,4 @@ int sock_autobind(struct sock *sk, struct sock_addr *skaddr)
 		return sk->ops->set_port(sk, skaddr, 0);
 	return -1;
 }
+#endif

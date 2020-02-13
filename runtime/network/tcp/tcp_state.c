@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 /*
  * TCP state machine based on RFC 793 #SEGMENT ARRIVE
  */
@@ -572,3 +573,4 @@ drop:
 	free_pkb(pkb);
 }
 
+#endif

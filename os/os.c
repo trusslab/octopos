@@ -23,12 +23,11 @@ static void distribute_input(void)
 	if (queue_id == Q_KEYBOARD) {
 		shell_process_input((char) input_buf[0]);
 	} else if (queue_id == Q_OS1) {
-#ifdef ARCH_UMODE
 		process_system_call(input_buf, P_RUNTIME1);
-#endif
 	} else if (queue_id == Q_OS2) {
-#ifdef ARCH_UMODE
 		process_system_call(input_buf, P_RUNTIME2);
+#ifdef ARCH_SEC_HW
+	} else if (queue_id == 0) {
 #endif
 	} else {
 		printf("Error (%s): invalid queue_id (%d)\n", __func__, queue_id);
@@ -45,8 +44,9 @@ int main()
 	initialize_shell();
 #ifdef ARCH_UMODE
 	initialize_file_system();
-	initialize_scheduler();
 #endif
+
+	initialize_scheduler();
 
 	while (1) {
 		distribute_input();

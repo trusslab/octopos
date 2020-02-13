@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 /* fs_test app */
 #include <stdio.h>
 #include <string.h>
@@ -93,3 +94,4 @@ out:
 	api->close_file(fd2);
 	api->remove_file((char *) "test_file_2.txt");
 }
+#endif
