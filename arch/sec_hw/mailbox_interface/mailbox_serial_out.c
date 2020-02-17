@@ -27,7 +27,7 @@ void get_chars_from_serial_out_queue(uint8_t *buf)
     uint32_t ptrbuf = 0;
 
     memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-    sem_wait_impatient_receive(&interrupt_serial_out, &Mbox, cbuf_serial_out);
+    sem_wait_impatient_receive_cbuf(&interrupt_serial_out, &Mbox, cbuf_serial_out);
     
     circular_buf_get(cbuf_serial_out, (uint32_t*) &ptrbuf);
     memcpy(buf ,(void*) ptrbuf, MAILBOX_QUEUE_MSG_SIZE);

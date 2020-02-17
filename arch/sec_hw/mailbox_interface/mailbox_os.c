@@ -147,8 +147,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
             sem_post(&availables[Q_SERIAL_OUT]);
             sem_post(&interrupts[Q_SERIAL_OUT]);
         }
-    }
-    else if (mask & XMB_IX_RTA) {
+    } else if (mask & XMB_IX_RTA) {
         _SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
         if (callback_ref == &Mbox2) {
             /* Keyboard */

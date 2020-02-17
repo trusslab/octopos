@@ -1,7 +1,9 @@
 /* octopos application runtime */
 #include <stdio.h>
 #include <string.h>
+#ifdef ARCH_UMODE
 #include <fcntl.h>
+#endif
 #include <unistd.h>
 #include <stdint.h>
 
@@ -10,19 +12,21 @@
 #endif
 
 #include <stdlib.h>
-#include <pthread.h>
-
 #ifdef ARCH_UMODE
+#include <pthread.h>
 #include <semaphore.h>
 #else
 #include <arch/semaphore.h>
 #endif
 
+#ifdef ARCH_UMODE
 #include <sys/stat.h>
 #include <network/sock.h>
 #include <network/socket.h>
 #include <network/netif.h>
 #include <network/tcp_timer.h>
+#endif
+
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
@@ -324,6 +328,7 @@ static int read_syscall_response(uint8_t *buf)
 	memcpy(buf, syscall_resp_queue[srq_head], srq_msg_size);
 	srq_head = (srq_head + 1) % srq_size;
 
+	// FIXME Q why needed?
 	sem_post(&srq_sem);
 
 	return 0;
@@ -349,12 +354,13 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 	wait_on_queue(q_runtime);
 	is_ownership_change(&is_change);
 	if (!is_change) {
-		read_syscall_response(buf);	
-	} else { 
+		read_syscall_response(buf);
+	} else {
 		*no_response = true;
 	}
 }
 
+#ifdef ARCH_UMODE
 /* network */
 static int send_msg_to_network(uint8_t *buf)
 {
@@ -457,13 +463,14 @@ void net_stack_exit(void)
 	if (ret)
 		printf("Error: couldn't kill tcp_threads[0]");
 }
+#endif
 
 /* Only to be used for queues that runtime writes to */
 /* FIXME: busy-waiting */
 static void wait_until_empty(uint8_t queue_id, int queue_size)
 {
 	int left;
-	
+
 	while (1) {
 		queue_sync_getval(queue_id, &left);
 		if (left == queue_size)
@@ -479,7 +486,7 @@ static int request_secure_keyboard(int count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
-		return (int) ret0; 
+		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
 					READ_ACCESS, count);
@@ -488,7 +495,7 @@ static int request_secure_keyboard(int count)
 		return ERR_FAULT;
 	}
 
-	return 0; 
+	return 0;
 }
 
 static int yield_secure_keyboard(void)
@@ -505,7 +512,7 @@ static int request_secure_serial_out(int count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
-		return (int) ret0; 
+		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
 					WRITE_ACCESS, count);
@@ -514,7 +521,7 @@ static int request_secure_serial_out(int count)
 		return ERR_FAULT;
 	}
 
-	return 0; 
+	return 0;
 }
 
 static int yield_secure_serial_out(void)
@@ -543,7 +550,7 @@ static int inform_os_of_termination(void)
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_TERMINATION)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int inform_os_of_pause(void)
@@ -552,9 +559,9 @@ static int inform_os_of_pause(void)
 	//issue_syscall_noresponse(buf);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 
-	return 0; 
+	return 0;
 }
 
 static int inform_os_runtime_ready(void)
@@ -562,7 +569,7 @@ static int inform_os_runtime_ready(void)
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_RUNTIME_READY)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int write_to_shell(char *data, int size)
@@ -583,12 +590,14 @@ static int read_from_shell(char *data, int *data_size)
 	return (int) ret0;
 }
 
+#ifdef ARCH_UMODE
+
 static uint32_t open_file(char *filename, uint32_t mode)
 {
 	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return ret0; 
+	return ret0;
 }
 
 static int write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
@@ -596,7 +605,7 @@ static int write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 	SYSCALL_SET_TWO_ARGS_DATA(SYSCALL_WRITE_TO_FILE, fd, offset, data, size)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
@@ -604,7 +613,7 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FROM_FILE, fd, size, offset)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA(data)
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
@@ -621,7 +630,7 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 
 	for (int i = 0; i < num_blocks; i++)
 		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
-	
+
 	return num_blocks;
 }
 
@@ -656,7 +665,7 @@ static int remove_file(char *filename)
 	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_REMOVE_FILE, filename, strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int) ret0; 
+	return (int) ret0;
 }
 
 static int send_msg_to_storage(uint8_t *buf)
@@ -771,7 +780,7 @@ static int request_secure_storage_access(int count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
-		return (int) ret0; 
+		return (int) ret0;
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
@@ -899,6 +908,7 @@ static int set_up_context(void *addr, uint32_t size)
 
 	return 0;
 }
+#endif
 
 bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
@@ -958,7 +968,7 @@ static int send_msg_on_secure_ipc(char *msg, int size)
 
 	IPC_SET_ZERO_ARGS_DATA(msg, size)
 	runtime_send_msg_on_queue(buf, secure_ipc_target_queue);
-	
+
 	return 0;
 }
 
@@ -977,7 +987,7 @@ static int recv_msg_on_secure_ipc(char *msg, int *size)
 
 static uint8_t get_runtime_proc_id(void)
 {
-	return (uint8_t) p_runtime;	
+	return (uint8_t) p_runtime;
 }
 
 static uint8_t get_runtime_queue_id(void)
@@ -988,10 +998,11 @@ static uint8_t get_runtime_queue_id(void)
 bool has_network_access = false;
 int network_access_count = 0;
 
+#ifdef ARCH_UMODE
 static struct socket *create_socket(int family, int type, int protocol,
 				    struct sock_addr *skaddr)
 {
-	unsigned short sport = 0; /* do not support suggesting a port for now */ 
+	unsigned short sport = 0; /* do not support suggesting a port for now */
 	unsigned int saddr;
 
 	int ret = syscall_allocate_tcp_socket(&saddr, &sport,
@@ -1116,7 +1127,7 @@ static int request_network_access(int count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
-		return (int) ret0; 
+		return (int) ret0;
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN,
@@ -1150,6 +1161,8 @@ static int request_network_access(int count)
 	return 0;
 }
 
+#endif
+
 static void load_application(char *msg)
 {
 	struct runtime_api api = {
@@ -1161,6 +1174,7 @@ static void load_application(char *msg)
 		.read_char_from_secure_keyboard = read_char_from_secure_keyboard,
 		.write_to_shell = write_to_shell,
 		.read_from_shell = read_from_shell,
+#ifdef ARCH_UMODE
 		.open_file = open_file,
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
@@ -1175,12 +1189,14 @@ static void load_application(char *msg)
 		.write_to_secure_storage = write_to_secure_storage,
 		.read_from_secure_storage = read_from_secure_storage,
 		.set_up_context = set_up_context,
+#endif
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
+#ifdef ARCH_UMODE
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
 		.close_socket = close_socket,
@@ -1191,6 +1207,7 @@ static void load_application(char *msg)
 		.write_to_socket = write_to_socket,
 		.request_network_access = request_network_access,
 		.yield_network_access = yield_network_access,
+#endif
 	};
 
 	load_application_arch(msg, &api);
@@ -1235,6 +1252,7 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
+#ifdef ARCH_UMODE
 void *store_context(void *data)
 {
 	if (!secure_storage_key_set || !context_set) {
@@ -1255,13 +1273,14 @@ void *store_context(void *data)
 	yield_secure_storage_access();
 	still_running = false;
 	inform_os_of_pause();
-		
+
 	return NULL;
 }
+#endif
 
 int main(int argc, char **argv)
 {
-	int runtime_id = -1; 
+	int runtime_id = -1;
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
@@ -1292,20 +1311,20 @@ int main(int argc, char **argv)
 	srq_counter = 0;
 	srq_head = 0;
 	srq_tail = 0;
-	
+
 	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
 
+#ifdef ARCH_UMODE
 	ret = net_stack_init();
 	if (ret) {
 		printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
 		return -1;
 	}
-
-	runtime_core();	
-
+	runtime_core();
 	net_stack_exit();
+#endif
 
 	close_runtime();
-			
+
 	return 0;
 }

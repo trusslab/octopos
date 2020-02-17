@@ -8,7 +8,7 @@
 void init_platform();
 void cleanup_platform();
 
-#define printf  xil_printf
+#define printf 	xil_printf
 #define true    1
 #define false   0
 #define bool    _Bool
@@ -55,7 +55,6 @@ void cleanup_platform();
     else                                                    \
         {                                                   \
         _SEC_HW_ERROR("ASSERTION EPITAPH: %s\r\n", #expr);  \
-        cleanup_platform();                                 \
         Xil_Assert(__FILE__, __LINE__);                     \
         Xil_AssertStatus = XIL_ASSERT_OCCURRED;             \
         return;                                             \
@@ -75,7 +74,6 @@ void cleanup_platform();
     else                                                    \
         {                                                   \
         _SEC_HW_ERROR("ASSERTION EPITAPH: %s\r\n", #expr);  \
-        cleanup_platform();                                 \
         Xil_Assert(__FILE__, __LINE__);                     \
         Xil_AssertStatus = XIL_ASSERT_OCCURRED;             \
         return 0;                                           \

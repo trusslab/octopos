@@ -39,7 +39,7 @@ int sem_wait(sem_t *sem)
     return 0;
 }
 
-int _sem_retrieve_mailbox_message_blocking(XMbox *InstancePtr, cbuf_handle_t cbuf)
+int _sem_retrieve_mailbox_message_blocking_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
 {
     int         status;
     uint8_t     *message_buffer;
@@ -56,6 +56,59 @@ int _sem_retrieve_mailbox_message_blocking(XMbox *InstancePtr, cbuf_handle_t cbu
     }
 
     return 0;
+}
+
+int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf)
+{
+    XMbox_ReadBlocking(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE);
+    return 0;
+}
+
+int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
+{
+    u32         bytes_read;
+    int         status;
+    uint8_t     *message_buffer;
+
+    message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+    status = XMbox_Read(InstancePtr, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+    if (status != XST_SUCCESS) {
+        free(message_buffer);
+        return 0;
+    } else {
+        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes", 
+                bytes_read, 
+                MAILBOX_QUEUE_MSG_SIZE);
+        }
+        status = circular_buf_put(cbuf, (uint32_t) message_buffer);
+        if (status != XST_SUCCESS) {
+            /* since the cpu pulls io, this should never happen */
+            _SEC_HW_ERROR("Ring buffer is full. The system may be out of sync.");
+            _SEC_HW_ASSERT_NON_VOID(FALSE);
+        }
+    }
+
+    return bytes_read;
+}
+
+int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
+{
+    u32         bytes_read;
+    int         status;
+
+    status = XMbox_Read(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+    if (status != XST_SUCCESS) {
+        return 0;
+    } else {
+        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes", 
+                bytes_read, 
+                MAILBOX_QUEUE_MSG_SIZE);
+        }
+    }
+
+    return bytes_read;
 }
 
 int _sem_deliver_mailbox_message_blocking(XMbox *InstancePtr, u32* buf)
@@ -80,10 +133,10 @@ int sem_wait_impatient_send(sem_t *sem, XMbox *InstancePtr, u32* buf)
     return 0;
 }
 
-int sem_wait_impatient_receive(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbuf)
+int sem_wait_impatient_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbuf)
 {
     if (sem->count <= 0) {
-        _sem_retrieve_mailbox_message_blocking(InstancePtr, cbuf);
+    	_sem_retrieve_mailbox_message_blocking_cbuf(InstancePtr, cbuf);
         /* There are two conditions:
         * 1. The mailbox really has nothing, someone writes to it
         *    will trigger an interrupt. We need to eat it here.
@@ -95,9 +148,57 @@ int sem_wait_impatient_receive(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbu
         }
     } else {
         sem->count -= 1;
-        _sem_retrieve_mailbox_message_blocking(InstancePtr, cbuf);
+        _sem_retrieve_mailbox_message_blocking_cbuf(InstancePtr, cbuf);
     }
     return 0;
+}
+
+int sem_wait_impatient_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
+{
+    if (sem->count <= 0) {
+        _sem_retrieve_mailbox_message_blocking_buf(InstancePtr, buf);
+        if (sem->count > 0) {
+            sem->count -= 1;
+        }
+    } else {
+        sem->count -= 1;
+        _sem_retrieve_mailbox_message_blocking_buf(InstancePtr, buf);
+    }
+    return 0;
+}
+
+int sem_wait_one_time_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbuf)
+{
+    u32 bytes_read;
+
+    if (sem->count <= 0) {
+        bytes_read = _sem_retrieve_mailbox_message_cbuf(InstancePtr, cbuf);
+        if (bytes_read != 0 && sem->count > 0) {
+            sem->count -= 1;
+        }
+        return bytes_read;
+    } else {
+        sem->count -= 1;
+        _sem_retrieve_mailbox_message_blocking_cbuf(InstancePtr, cbuf);
+        return MAILBOX_QUEUE_MSG_SIZE;
+    }    
+}
+
+int sem_wait_one_time_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
+{
+    u32 bytes_read;
+
+    if (sem->count <= 0) {
+        bytes_read = _sem_retrieve_mailbox_message_buf(InstancePtr, buf);
+        if (bytes_read != 0 && sem->count > 0) {
+            sem->count -= 1;
+        }
+        return bytes_read;
+    } else {
+        sem->count -= 1;
+        _sem_retrieve_mailbox_message_blocking_buf(InstancePtr, buf);
+        return MAILBOX_QUEUE_MSG_SIZE;
+    }
 }
 
 XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)

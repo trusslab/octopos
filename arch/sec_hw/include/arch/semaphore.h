@@ -15,7 +15,13 @@ int sem_post(sem_t *sem);
 
 int sem_wait(sem_t *sem);
 
-int sem_wait_impatient_receive(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbuf);
+int sem_wait_one_time_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbuf);
+
+int sem_wait_one_time_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf);
+
+int sem_wait_impatient_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbuf);
+
+int sem_wait_impatient_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf);
 
 int sem_wait_impatient_send(sem_t *sem, XMbox *InstancePtr, u32* buf);
 

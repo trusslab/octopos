@@ -17,7 +17,9 @@ int num_chars = 0;
 #define insecure_printf(fmt, args...) {memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args);\
 				     api->write_to_shell(output_buf, num_chars);}				 \
 
+#ifdef ARCH_UMODE
 extern "C" __attribute__ ((visibility ("default")))
+#endif
 void app_main(struct runtime_api *api)
 {
 	char line[1024];

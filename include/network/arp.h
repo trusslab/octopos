@@ -1,3 +1,4 @@
+#ifdef ARCH_UMODE
 #ifndef __ARP_H
 #define __ARP_H
 
@@ -84,4 +85,4 @@ extern void arp_request(struct arpentry *);
 extern void arp_in(struct netdev *dev, struct pkbuf *pkb);
 
 #endif	/* arp.h */
-
+#endif
