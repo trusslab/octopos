@@ -12,12 +12,15 @@
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
 #include "arch/ring_buffer.h"
+#include "arch/octopos_mbox.h"
 
+#include "octopos/error.h"
 #include "octopos/mailbox.h"
+#include "os/scheduler.h"
 
 XScuGic         irq_controller;
 
-XMbox           Mbox1, Mbox2, Mbox3, Mbox4;
+XMbox           Mbox1, Mbox2, Mbox3, Mbox4, Mbox_runtime1, Mbox_runtime2;
 
 sem_t           interrupts[NUM_QUEUES + 1];
 sem_t           interrupt_input;
@@ -25,6 +28,8 @@ sem_t           availables[NUM_QUEUES + 1];
 
 cbuf_handle_t   cbuf_keyboard;
 
+XMbox*			Mbox_regs[NUM_QUEUES + 1];
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
 int is_queue_available(uint8_t queue_id)
 {
@@ -66,8 +71,7 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
     XMbox*          InstancePtr = NULL;
 
     _SEC_HW_DEBUG("[0]");
-    // FIXME: Zephyr replace Mbox with runtime mailboxes
-    InstancePtr = sem_wait_impatient_receive_multiple(&interrupt_input, 3, &Mbox2, &Mbox2, &Mbox2);
+    InstancePtr = sem_wait_impatient_receive_multiple(&interrupt_input, 3, &Mbox2, &Mbox_runtime1, &Mbox_runtime2);
 
     _SEC_HW_DEBUG("[0.5] %p", InstancePtr);
     _SEC_HW_DEBUG("[0.6] %p", &Mbox2);
@@ -129,6 +133,62 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
     return 0;
 }
 
+static int send_msg_to_runtime_queue(uint8_t runtime_queue_id, uint8_t *buf)
+{
+    sem_wait_impatient_send(&interrupts[runtime_queue_id], Mbox_regs[runtime_queue_id], (u32*) buf);
+	return 0;
+}
+
+int check_avail_and_send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
+{
+	uint8_t runtime_queue_id = get_runtime_queue_id(runtime_proc_id);
+	if (!runtime_queue_id) {
+		return ERR_INVALID;
+	}
+
+	int ret = is_queue_available(runtime_queue_id);
+	if (!ret)
+		return ERR_AVAILABLE;
+
+	send_msg_to_runtime_queue(runtime_queue_id, buf);
+
+	return 0;
+}
+
+/* Only to be used for queues that OS writes to */
+/* FIXME: busy-waiting */
+void wait_until_empty(uint8_t queue_id, int queue_size)
+{
+	int left;
+
+	while (1) {
+		sem_getvalue(&interrupts[queue_id], &left);
+		if (left == queue_size)
+			break;
+	}
+}
+
+void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count)
+{
+	UINTPTR queue_ptr;
+
+	// FIXME replace this if else with Mbox_ctrl_regs
+	if (queue_id == Q_KEYBOARD) {
+		queue_ptr = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
+	} else if (queue_id == Q_SERIAL_OUT) {
+		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
+	} else if (queue_id == Q_RUNTIME1) {
+		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_1_BASEADDR;
+	} else if (queue_id == Q_RUNTIME2) {
+		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_2_BASEADDR;
+	} else {
+		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
+		return;
+	}
+	// FIXME add a indexed array to get correct proc_id
+	octopos_mailbox_set_owner(queue_ptr, proc_id);
+}
+
 static void handle_mailbox_interrupts(void* callback_ref) 
 {
     u32         mask;
@@ -180,7 +240,8 @@ int init_os_mailbox(void)
     int             Status;
     uint32_t        irqNo;
 
-    XMbox_Config    *ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4;
+    XMbox_Config    *ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4,
+					*ConfigPtr_runtime1, *ConfigPtr_runtime2;
 
     init_platform();
 
@@ -216,6 +277,22 @@ int init_os_mailbox(void)
         return -XST_FAILURE;
     }
 
+    ConfigPtr_runtime1 = XMbox_LookupConfig(XPAR_MBOX_2_DEVICE_ID);
+    Status = XMbox_CfgInitialize(&Mbox_runtime1, ConfigPtr_runtime1, ConfigPtr_runtime1->BaseAddress);
+    if (Status != XST_SUCCESS)
+    {
+        _SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_2_DEVICE_ID);
+        return -XST_FAILURE;
+    }
+
+    ConfigPtr_runtime2 = XMbox_LookupConfig(XPAR_MBOX_3_DEVICE_ID);
+    Status = XMbox_CfgInitialize(&Mbox_runtime2, ConfigPtr_runtime2, ConfigPtr_runtime2->BaseAddress);
+    if (Status != XST_SUCCESS)
+    {
+        _SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_3_DEVICE_ID);
+        return -XST_FAILURE;
+    }
+
 //  MJ_MAILBOX_mWriteReg(XPAR_MJ_MAILBOX_0_S00_AXI_BASEADDR, 0, 0);
 //  MJ_MAILBOX_mWriteReg(XPAR_MJ_MAILBOX_1_S00_AXI_BASEADDR, 0, 0);
 
@@ -233,6 +310,14 @@ int init_os_mailbox(void)
     XMbox_SetSendThreshold(&Mbox4, 0);
     XMbox_SetReceiveThreshold(&Mbox4, 0);
     XMbox_SetInterruptEnable(&Mbox4, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+
+    XMbox_SetSendThreshold(&Mbox_runtime1, 0);
+    XMbox_SetReceiveThreshold(&Mbox_runtime1, 0);
+    XMbox_SetInterruptEnable(&Mbox_runtime1, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+
+    XMbox_SetSendThreshold(&Mbox_runtime2, 0);
+    XMbox_SetReceiveThreshold(&Mbox_runtime2, 0);
+    XMbox_SetInterruptEnable(&Mbox_runtime2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
 
     Xil_ExceptionInit();
 
@@ -277,6 +362,26 @@ int init_os_mailbox(void)
     XScuGic_Enable(&irq_controller, irqNo);
     XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
     XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+
+    irqNo = XPAR_FABRIC_MAILBOX_2_INTERRUPT_1_INTR;
+    XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_runtime1);
+    XScuGic_Enable(&irq_controller, irqNo);
+    XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+    XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+
+    // FIXME figure out runtime2 interrupt #
+//    irqNo = XPAR_FABRIC_MAILBOX_3_INTERRUPT_1_INTR;
+//    XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_runtime2);
+//    XScuGic_Enable(&irq_controller, irqNo);
+//    XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+//    XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+
+    Mbox_regs[Q_OS1] = &Mbox3;
+    Mbox_regs[Q_OS2] = &Mbox4;
+   	Mbox_regs[Q_RUNTIME1] = &Mbox_runtime1;
+   	Mbox_regs[Q_RUNTIME2] = &Mbox_runtime2;
+   	Mbox_regs[Q_KEYBOARD] = &Mbox2;
+   	Mbox_regs[Q_SERIAL_OUT] = &Mbox1;
 
     sem_init(&interrupts[Q_OS1], 0, 0);
     sem_init(&interrupts[Q_OS2], 0, 0);

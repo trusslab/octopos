@@ -34,7 +34,7 @@ extern int 		change_queue;
 extern bool 	secure_ipc_mode;
 
 /* Not all will be used */
-sem_t 			interrupts[NUM_QUEUES + 1];
+sem_t 			interrupts[NUM_QUEUES + 1]; // FIXME Question why +1?
 sem_t 			interrupt_change;
 
 sem_t 			load_app_sem;
@@ -46,8 +46,10 @@ XMbox 			Mbox_out,
 				Mbox_sys;
 
 static XIntc 	intc;
-XMbox			*m_runtime;
 cbuf_handle_t   cbuf_keyboard, cbuf_runtime;
+
+XMbox*			Mbox_regs[NUM_QUEUES + 1];
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
 int write_syscall_response(uint8_t *buf);
 
@@ -61,30 +63,29 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
 	} else if (queue_id == q_runtime) {
 		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-	// FIXME support write to other runtime queue
+	// FIXME replace this if else with Mbox_ctrl_regs
 	//	} else if (queue_id == Q_RUNTIME1) {
 	} else {
 		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
 		return;
 	}
-	// FIXME Zephyr proc_id!=order of connection
+	// FIXME add a indexed array to get correct proc_id
 	octopos_mailbox_set_owner(queue_ptr, proc_id);
 
-	// FIXME Q Zephyr access mode read/write?
+	// FIXME Question access mode read/write? We need to enforce that.
 }
 
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
 {
 	UINTPTR queue_ptr;
 
+	// FIXME same as change_queue_access
 	if (queue_id == Q_KEYBOARD) {
 		queue_ptr = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
 	} else if (queue_id == Q_SERIAL_OUT) {
 		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
 	} else if (queue_id == q_runtime) {
 		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-	// FIXME support write to other runtime queue
-	//	} else if (queue_id == Q_RUNTIME1) {
 	} else {
 		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
 		return FALSE;
@@ -95,34 +96,12 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
 
 static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
-	XMbox* mbox;
-
-	if (queue_id == Q_KEYBOARD) {
-		mbox = &Mbox_keyboard;
-	} else if (queue_id == q_runtime) {
-		mbox = m_runtime;
-	} else {
-		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-		return;
-	}
-    sem_wait_impatient_receive_buf(&interrupts[queue_id], mbox, (u8*) buf);
+    sem_wait_impatient_receive_buf(&interrupts[queue_id], Mbox_regs[queue_id], (u8*) buf);
 }
 
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
-	XMbox* mbox;
-
-	if (queue_id == Q_SERIAL_OUT) {
-		mbox = &Mbox_out;
-	} else if (queue_id == q_os) {
-		mbox = &Mbox_sys;
-		// FIXME support write to other runtime queue
-		//	} else if (queue_id == Q_RUNTIME1) {
-	} else {
-		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-		return;
-	}
-    sem_wait_impatient_send(&interrupts[queue_id], mbox, (u32*) buf);
+    sem_wait_impatient_send(&interrupts[queue_id], Mbox_regs[queue_id], (u32*) buf);
 }
 
 void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id)
@@ -172,7 +151,7 @@ void wait_for_app_load(void)
 	sem_wait(&load_app_sem);
 }
 
-// FIXME Zephyr move it away.
+// FIXME move it away.
 void app_main(struct runtime_api *api);
 
 void load_application_arch(char *msg, struct runtime_api *api)
@@ -187,15 +166,15 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	_SEC_HW_DEBUG("Fixed timer interrupt");
 
     uint8_t* buf = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-    bytes_read = sem_wait_one_time_receive_buf(&interrupts[q_runtime], m_runtime, buf);
+    bytes_read = sem_wait_one_time_receive_buf(&interrupts[q_runtime], Mbox_regs[q_runtime], buf);
 	if (bytes_read == 0) {
 		return;
 	}
 	
 	if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
 		 write_syscall_response(buf);
-		// FIXME: Q my code use this interrupt sem to wait for ANY available message on the runtime q
-		// pay attion that it shouldnt be use anywhere else (wait for syscall response)
+		// FIXME: it use&interrupts[q_runtime] to wait for ANY available message on the runtime q
+		// pay attion that it shouldnt be use anywhere else (e.g. wait for syscall response)
   		// sem_post(&interrupts[interrupt]);
 		// if (!still_running)
 		// keep_polling = false;
@@ -203,7 +182,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
 		memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
 		sem_post(&load_app_sem);
 	} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
-		// FIXME Q Zephyr not impl. One possible way: overwrite stack to return to a new app.
+		// FIXME Zephyr not impl. One possible way: overwrite stack to return to a new app.
 	//				pthread_cancel(app_thread);
 	//				pthread_join(app_thread, NULL);
 	//				int ret = pthread_create(&ctx_thread, NULL, store_context, NULL);
@@ -211,16 +190,15 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	//					printf("Error: couldn't launch the app thread\n");
 	//				has_ctx_thread = true;
 	}
+	free(buf);
 }
-
-//FIXME Q isn't syscall processing gets delayed? depend on fixed timer interval
 
 static void handle_mailbox_interrupts(void* callback_ref)
 {
     u32         mask;
     XMbox       *mbox_inst = (XMbox *)callback_ref;
 
-    // FIXME Q why there are no availables[xx] sem?
+    // FIXME Question why there are no availables[xx] sem?
     _SEC_HW_DEBUG("Mailbox ref: %p", callback_ref);
     mask = XMbox_GetInterruptStatus(mbox_inst);
 
@@ -234,8 +212,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
         	/* Syscall request */
         	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
         	sem_post(&interrupts[q_os]);
-        	// FIXME support write to other runtime IPC queue
-//        } else if (callback_ref != m_runtime) {
+        	// FIXME: impl secure IPC (write to another runtime's queue)
+//        } else if (callback_ref != Mbox_regs[q_runtime]) {
 //        	/* IPC to other runtime */
 //        	if (callback_ref == &Mbox_Runtime1) {
 //        		sem_post(&interrupts[Q_RUNTIME1]);
@@ -253,13 +231,13 @@ static void handle_mailbox_interrupts(void* callback_ref)
             /* Keyboard */
         	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
         	sem_post(&interrupts[Q_KEYBOARD]);
-        } else if (callback_ref == m_runtime) {
+        } else if (callback_ref == Mbox_regs[q_runtime]) {
         	/* Runtime queue */
         	if (!secure_ipc_mode) {
                 sem_init(&interrupts[q_runtime], 0, 0);
                 sem_post(&interrupts[q_runtime]);
         	} else {
-        		// FIXME: impl secure IPC mode
+        		// FIXME: impl secure IPC
         	}
         } else {
         	_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
@@ -277,7 +255,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 //			printf("Error: invalid interrupt (%d)\n", interrupt);
 //			exit(-1);
 //		} else if (interrupt > NUM_QUEUES) {
-//			// FIXME: Zephyr What is change_queue? seems it is set for ipc
+//			// FIXME: Question Zephyr What is change_queue? seems it is set for ipc
 //			if ((interrupt - NUM_QUEUES) == change_queue) {
 //				sem_post(&interrupt_change);
 //				sem_post(&interrupts[q_runtime]);
@@ -295,10 +273,16 @@ static void handle_mailbox_interrupts(void* callback_ref)
 ////			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 //				...
 //		} else {
-//			// FIXME Zephyr What are these cases? all non runtime queue interrupt seems to go here.
 //			sem_post(&interrupts[interrupt]);
 //		}
 //	}
+}
+
+void *run_app(void *load_buf);
+
+void runtime_core()
+{
+	run_app(NULL);
 }
 
 /* Initializes the runtime and its mailbox */
@@ -320,13 +304,11 @@ int init_runtime(int runtime_id)
 		p_runtime = P_RUNTIME1;
 		q_runtime = Q_RUNTIME1;
 		q_os = Q_OS1;
-		m_runtime = &Mbox_Runtime1;
 		break;
 	case 2:
 		p_runtime = P_RUNTIME2;
 		q_runtime = Q_RUNTIME2;
 		q_os = Q_OS2;
-		m_runtime = &Mbox_Runtime2;
 		break;
 	default:
 		printf("Error: unexpected runtime ID.\n");
@@ -373,9 +355,9 @@ int init_runtime(int runtime_id)
 //    XMbox_SetSendThreshold(&Mbox_Runtime2, 0);
 //    XMbox_SetReceiveThreshold(&Mbox_Runtime2, 0);
 //    XMbox_SetInterruptEnable(&Mbox_Runtime2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
-    XMbox_SetSendThreshold(m_runtime, 0);
-    XMbox_SetReceiveThreshold(m_runtime, 0);
-    XMbox_SetInterruptEnable(m_runtime, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+    XMbox_SetSendThreshold(Mbox_regs[q_runtime], 0);
+    XMbox_SetReceiveThreshold(Mbox_regs[q_runtime], 0);
+    XMbox_SetInterruptEnable(Mbox_regs[q_runtime], XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
     XMbox_SetSendThreshold(&Mbox_sys, 0);
     XMbox_SetReceiveThreshold(&Mbox_sys, 0);
     XMbox_SetInterruptEnable(&Mbox_sys, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
@@ -389,6 +371,7 @@ int init_runtime(int runtime_id)
         return XST_FAILURE;
     }
 
+    // FIXME These will be per runtime configurations, unless we change the processor names in the macro
     Status = XIntc_Connect(&intc,
         XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
@@ -412,7 +395,7 @@ int init_runtime(int runtime_id)
     Status = XIntc_Connect(&intc,
         XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
-        (void*)&Mbox_Runtime2);
+        (void*)&Mbox_Runtime1);
     if (Status != XST_SUCCESS) {
         _SEC_HW_ERROR("XIntc_Connect %d failed",
         		XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR);
@@ -422,7 +405,7 @@ int init_runtime(int runtime_id)
     Status = XIntc_Connect(&intc,
         XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
-        (void*)&Mbox_Runtime1);
+        (void*)&Mbox_Runtime2);
     if (Status != XST_SUCCESS) {
         _SEC_HW_ERROR("XIntc_Connect %d failed",
         		XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR);
@@ -462,11 +445,16 @@ int init_runtime(int runtime_id)
         return XST_FAILURE;
     }
 
+    Mbox_regs[q_os] = &Mbox_sys;
+   	Mbox_regs[Q_RUNTIME1] = &Mbox_Runtime1;
+   	Mbox_regs[Q_RUNTIME2] = &Mbox_Runtime2;
+   	Mbox_regs[Q_KEYBOARD] = &Mbox_keyboard;
+   	Mbox_regs[Q_SERIAL_OUT] = &Mbox_out;
+
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
     sem_init(&interrupts[Q_KEYBOARD], 0, 0);
     sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
-    // FIXME Q For secure ipc, do we need to sem_init the other runtimes' enclave here?
 
 	sem_init(&load_app_sem, 0, 0);
 
@@ -478,7 +466,7 @@ int init_runtime(int runtime_id)
 
 void close_runtime(void)
 {
-	// FIXME Q I don't need it right?
+	// FIXME Question upon termination, there's nothing to report to OS, right?
 //	uint8_t opcode[2];
 //	opcode[0] = MAILBOX_OPCODE_RESET;
 //	write(fd_out, opcode, 2);
@@ -486,7 +474,7 @@ void close_runtime(void)
 //    circular_buf_free(cbuf_keyboard);
 //    circular_buf_free(cbuf_runtime);
 
-	// FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
+	// FIXME: rm this when microblaze doesn't use ddr for cache
 	Xil_DCacheDisable();
 	Xil_ICacheDisable();
 }

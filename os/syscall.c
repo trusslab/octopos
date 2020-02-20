@@ -1,6 +1,5 @@
 /* OctopOS syscalls */
 #include <arch/defines.h>
-#ifdef ARCH_UMODE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -144,6 +143,7 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
+#ifdef ARCH_UMODE
 static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
 {
 	STORAGE_SET_ZERO_ARGS_DATA(temp_key, STORAGE_KEY_SIZE) 
@@ -197,6 +197,7 @@ static int get_unused_tcp_port(uint32_t *sport)
 
 	return 0;
 }
+#endif
 
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
 {
@@ -278,9 +279,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+#ifdef ARCH_UMODE
 		if (runtime_proc->app->output_dst)
 			ret = ipc_send_data(runtime_proc->app, data, (int) data_size);
 		else
+#endif
 			ret = app_write_to_shell(runtime_proc->app, data, data_size);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
@@ -292,7 +295,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 
 		if (runtime_proc->app->input_src) {
+#ifdef ARCH_UMODE
 			ipc_receive_data(runtime_proc->app);
+#endif
 			*no_response = true;
 		} else {
 			int ret = app_read_from_shell(runtime_proc->app);
@@ -305,6 +310,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 		break;
 	}
+#ifdef ARCH_UMODE
 	case SYSCALL_OPEN_FILE: {
 		SYSCALL_GET_ONE_ARG_DATA
 		uint32_t mode = arg0;
@@ -638,6 +644,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET((uint32_t) 0)
 		break;
 	}
+#endif
 	default:
 		printf("Error: invalid syscall\n");
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -657,15 +664,14 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (!no_response) {
 			check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 		}
-
+#ifdef ARCH_UMODE
 		/* FIXME: use async interrupt processing instead. */
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
-
+#endif
 	} else {
 		printf("Error: invalid syscall caller (%d)\n", runtime_proc_id);
 	}
 }
-#endif

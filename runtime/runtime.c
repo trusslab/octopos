@@ -1278,7 +1278,11 @@ void *store_context(void *data)
 }
 #endif
 
+#ifdef ARCH_UMODE
 int main(int argc, char **argv)
+#else
+int main()
+#endif
 {
 	int runtime_id = -1;
 
@@ -1286,13 +1290,16 @@ int main(int argc, char **argv)
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
 		exit(-1);
 	}
-
+#ifdef ARCH_UMODE
 	if (argc != 2) {
 		printf("Error: incorrect command. Use ``runtime <runtime_ID>''.\n");
 		return -1;
 	}
 
 	runtime_id = atoi(argv[1]);
+#else
+	runtime_id = RUNTIME_ID;
+#endif
 
 	if (runtime_id < 1 || runtime_id > 2) {
 		printf("Error: invalid runtime ID.\n");
@@ -1320,7 +1327,10 @@ int main(int argc, char **argv)
 		printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
 		return -1;
 	}
+#endif
+
 	runtime_core();
+#ifdef ARCH_UMODE
 	net_stack_exit();
 #endif
 
