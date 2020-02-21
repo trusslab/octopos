@@ -245,7 +245,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
     } else if (mask & XMB_IX_ERR) {
         _SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
     } else {
-        _SEC_HW_ERROR("interrupt type unknown, mask %d, from %p", mask, callback_ref);
+        _SEC_HW_ERROR("interrupt type unknown, mask %ld, from %p", mask, callback_ref);
     }
 
 //	/* interrupt handling loop */
@@ -295,10 +295,6 @@ int init_runtime(int runtime_id)
 					*ConfigPtr_Runtime2,
 					*ConfigPtr_sys;
 
-    // FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
-    Xil_ICacheEnable();
-    Xil_DCacheEnable();
-
 	switch(runtime_id) {
 	case 1:
 		p_runtime = P_RUNTIME1;
@@ -311,40 +307,41 @@ int init_runtime(int runtime_id)
 		q_os = Q_OS2;
 		break;
 	default:
-		printf("Error: unexpected runtime ID.\n");
 		return -1;
 	}
+
+	ConfigPtr_sys = XMbox_LookupConfig(XPAR_ENCLAVE0_PS_MAILBOX_IF_1_DEVICE_ID);
+    Status = XMbox_CfgInitialize(&Mbox_sys, ConfigPtr_sys, ConfigPtr_sys->BaseAddress);
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
 
 	ConfigPtr_keyboard = XMbox_LookupConfig(XPAR_MBOX_0_DEVICE_ID);
     Status = XMbox_CfgInitialize(&Mbox_keyboard, ConfigPtr_keyboard, ConfigPtr_keyboard->BaseAddress);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_0_DEVICE_ID);
         return XST_FAILURE;
     }
 	ConfigPtr_out = XMbox_LookupConfig(XPAR_MBOX_1_DEVICE_ID);
     Status = XMbox_CfgInitialize(&Mbox_out, ConfigPtr_out, ConfigPtr_out->BaseAddress);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_1_DEVICE_ID);
         return XST_FAILURE;
     }
-	ConfigPtr_Runtime2 = XMbox_LookupConfig(XPAR_MBOX_2_DEVICE_ID);
-    Status = XMbox_CfgInitialize(&Mbox_Runtime2, ConfigPtr_Runtime2, ConfigPtr_Runtime2->BaseAddress);
-    if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_2_DEVICE_ID);
-        return XST_FAILURE;
-    }
-    ConfigPtr_Runtime1 = XMbox_LookupConfig(XPAR_MBOX_3_DEVICE_ID);
+    ConfigPtr_Runtime1 = XMbox_LookupConfig(XPAR_MBOX_2_DEVICE_ID);
     Status = XMbox_CfgInitialize(&Mbox_Runtime1, ConfigPtr_Runtime1, ConfigPtr_Runtime1->BaseAddress);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_3_DEVICE_ID);
         return XST_FAILURE;
     }
-	ConfigPtr_sys = XMbox_LookupConfig(XPAR_ENCLAVE0_PS_MAILBOX_IF_1_DEVICE_ID);
-    Status = XMbox_CfgInitialize(&Mbox_sys, ConfigPtr_sys, ConfigPtr_sys->BaseAddress);
+	ConfigPtr_Runtime2 = XMbox_LookupConfig(XPAR_MBOX_3_DEVICE_ID);
+    Status = XMbox_CfgInitialize(&Mbox_Runtime2, ConfigPtr_Runtime2, ConfigPtr_Runtime2->BaseAddress);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_ENCLAVE0_PS_MAILBOX_IF_1_DEVICE_ID);
         return XST_FAILURE;
     }
+
+    Mbox_regs[q_os] = &Mbox_sys;
+   	Mbox_regs[Q_RUNTIME1] = &Mbox_Runtime1;
+   	Mbox_regs[Q_RUNTIME2] = &Mbox_Runtime2;
+   	Mbox_regs[Q_KEYBOARD] = &Mbox_keyboard;
+   	Mbox_regs[Q_SERIAL_OUT] = &Mbox_out;
 
 //    XMbox_SetSendThreshold(&Mbox_keyboard, 0);
 //    XMbox_SetReceiveThreshold(&Mbox_keyboard, 0);
@@ -362,12 +359,13 @@ int init_runtime(int runtime_id)
     XMbox_SetReceiveThreshold(&Mbox_sys, 0);
     XMbox_SetInterruptEnable(&Mbox_sys, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
 
+
+
     Xil_ExceptionInit();
     Xil_ExceptionEnable();
 
     Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XIntc_Initialize %d failed", XPAR_INTC_SINGLE_DEVICE_ID);
         return XST_FAILURE;
     }
 
@@ -377,8 +375,6 @@ int init_runtime(int runtime_id)
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_keyboard);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XIntc_Connect %d failed",
-        		XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR);
         return XST_FAILURE;
     }
 
@@ -387,8 +383,6 @@ int init_runtime(int runtime_id)
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_out);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XIntc_Connect %d failed",
-        		XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR);
         return XST_FAILURE;
     }
 
@@ -397,8 +391,6 @@ int init_runtime(int runtime_id)
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_Runtime1);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XIntc_Connect %d failed",
-        		XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR);
         return XST_FAILURE;
     }
 
@@ -407,8 +399,6 @@ int init_runtime(int runtime_id)
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_Runtime2);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XIntc_Connect %d failed",
-        		XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR);
         return XST_FAILURE;
     }
 
@@ -417,8 +407,6 @@ int init_runtime(int runtime_id)
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_sys);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XIntc_Connect %d failed",
-        		XPAR_MICROBLAZE_2_AXI_INTC_ENCLAVE0_PS_MAILBOX_INTERRUPT_1_INTR);
         return XST_FAILURE;
     }
 
@@ -427,8 +415,6 @@ int init_runtime(int runtime_id)
         (XInterruptHandler)handle_fixed_timer_interrupts,
         0);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XIntc_Connect %d failed",
-        		XPAR_MICROBLAZE_2_AXI_INTC_FIT_TIMER_0_INTERRUPT_INTR);
         return XST_FAILURE;
     }
 
@@ -441,15 +427,8 @@ int init_runtime(int runtime_id)
 
     Status = XIntc_Start(&intc, XIN_REAL_MODE);
     if (Status != XST_SUCCESS) {
-        _SEC_HW_ERROR("XIntc_Start failed");
         return XST_FAILURE;
     }
-
-    Mbox_regs[q_os] = &Mbox_sys;
-   	Mbox_regs[Q_RUNTIME1] = &Mbox_Runtime1;
-   	Mbox_regs[Q_RUNTIME2] = &Mbox_Runtime2;
-   	Mbox_regs[Q_KEYBOARD] = &Mbox_keyboard;
-   	Mbox_regs[Q_SERIAL_OUT] = &Mbox_out;
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);

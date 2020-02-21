@@ -71,17 +71,21 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
     XMbox*          InstancePtr = NULL;
 
     _SEC_HW_DEBUG("[0]");
-    InstancePtr = sem_wait_impatient_receive_multiple(&interrupt_input, 3, &Mbox2, &Mbox_runtime1, &Mbox_runtime2);
+    InstancePtr = sem_wait_impatient_receive_multiple(&interrupt_input, 3, &Mbox2, &Mbox3, &Mbox4);
 
-    _SEC_HW_DEBUG("[0.5] %p", InstancePtr);
-    _SEC_HW_DEBUG("[0.6] %p", &Mbox2);
     if (InstancePtr) {
         _SEC_HW_DEBUG("[1]");
         if (InstancePtr == &Mbox2) {
             sem_post(&interrupts[Q_KEYBOARD]);
             is_keyboard = 1;
+        } else if (InstancePtr == &Mbox3) {
+        	_SEC_HW_DEBUG("[1.5]");
+            sem_post(&interrupts[Q_OS1]);
+            is_os1 = 1;
+        } else if (InstancePtr == &Mbox4) {
+            sem_post(&interrupts[Q_OS2]);
+            is_os2 = 1;
         }
-
     } else {
         _SEC_HW_DEBUG("[2]");
         sem_getvalue(&interrupts[Q_KEYBOARD], &is_keyboard);
@@ -95,6 +99,7 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
         *queue_id = Q_KEYBOARD;
     } else {
         if (is_os1 && !is_os2) {
+        	_SEC_HW_DEBUG("[3.5]");
             sem_wait(&interrupts[Q_OS1]);
             *queue_id = Q_OS1;
             turn = Q_OS2;
@@ -123,8 +128,21 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
         free((void*) message_buffer);
         break;
     case Q_OS1:
+    	_SEC_HW_DEBUG("[4.5]");
+        message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+        XMbox_ReadBlocking(&Mbox3, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+
+        memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
+
+        free((void*) message_buffer);
         break;
     case Q_OS2:
+        message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+        XMbox_ReadBlocking(&Mbox4, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+
+        memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
+
+        free((void*) message_buffer);
         break;
     default:
         break;

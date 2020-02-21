@@ -5,6 +5,8 @@ int init_runtime(int runtime_id);
 
 void close_runtime(void);
 
+void runtime_core(void);
+
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id);
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count);
 void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id);

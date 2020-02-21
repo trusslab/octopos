@@ -33,6 +33,11 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <arch/mailbox_runtime.h>
+
+#ifdef ARCH_SEC_HW
+#include "arch/sec_hw.h"
+#include "xil_cache.h"
+#endif
 /* FIXME: remove */
 #ifdef ARCH_UMODE
 #include "tcp.h"
@@ -572,7 +577,7 @@ static int inform_os_runtime_ready(void)
 	return (int) ret0;
 }
 
-static int write_to_shell(char *data, int size)
+int write_to_shell(char *data, int size)
 {
 	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_WRITE_TO_SHELL, data, size)
 	issue_syscall(buf);
@@ -1278,12 +1283,17 @@ void *store_context(void *data)
 }
 #endif
 
+
 #ifdef ARCH_UMODE
 int main(int argc, char **argv)
 #else
 int main()
-#endif
 {
+    // FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
+    Xil_ICacheEnable();
+    Xil_DCacheEnable();
+#endif
+
 	int runtime_id = -1;
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
@@ -1306,8 +1316,12 @@ int main()
 		return -1;
 	}
 	int ret = init_runtime(runtime_id);
+
 	if (ret) {
 		printf("%s: Error: couldn't initialize the runtime\n", __func__);
+//#ifdef ARCH_SEC_HW
+//		_SEC_HW_ERROR("%s: Error: couldn't initialize the runtime", __func__);
+//#endif
 		return -1;
 	}
 
@@ -1320,6 +1334,16 @@ int main()
 	srq_tail = 0;
 
 	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
+
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: [1]", __func__);
+//		memset(host_printf_buf, 0x0, 61);
+//		snprintf(host_printf_buf, 61, "--R%d ERR: [1]\r\n", 1);
+//		SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_WRITE_TO_SHELL, host_printf_buf, 61)
+//		runtime_send_msg_on_queue(buf, q_os);
+#endif
+
+	while(1) sleep(1);
 
 #ifdef ARCH_UMODE
 	ret = net_stack_init();

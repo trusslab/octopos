@@ -43,8 +43,9 @@ int main()
 	initialize_shell();
 #ifdef ARCH_UMODE
 	initialize_file_system();
-	initialize_scheduler();
 #endif
+
+	initialize_scheduler();
 
 	while (1) {
 		distribute_input();

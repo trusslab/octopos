@@ -20,7 +20,8 @@
 #define SYSCALL_ALLOCATE_SOCKET			18
 #define SYSCALL_REQUEST_NETWORK_ACCESS		19
 #define SYSCALL_CLOSE_SOCKET			20
-#define NUM_SYSCALLS				21
+#define SYSCALL_DEBUG_OUTPUTS		21
+#define NUM_SYSCALLS				22
 
 /* FIXME: move somewhere else */
 /* defines for SYSCALL_ALLOCATE_SOCKET_PORT */

@@ -645,6 +645,12 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 #endif
+	case SYSCALL_DEBUG_OUTPUTS: {
+		SYSCALL_GET_ZERO_ARGS_DATA
+		xil_printf("\r\nRUNTIME%d: %s\r\n", runtime_proc_id, data);
+		break;
+	}
+
 	default:
 		printf("Error: invalid syscall\n");
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -655,6 +661,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 {
 	if (runtime_proc_id == P_RUNTIME1 || runtime_proc_id == P_RUNTIME2) {
+		 _SEC_HW_DEBUG("[0]");
 		bool no_response = false;
 		int late_processing = NUM_SYSCALLS;
 
