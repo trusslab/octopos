@@ -124,9 +124,7 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	if (candidate) {
 		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 		buf[0] = RUNTIME_QUEUE_CONTEXT_SWITCH_TAG;
-#ifdef ARCH_UMODE
 		check_avail_and_send_msg_to_runtime(candidate->id, buf);
-#endif
 		waiting_for_proc = candidate;
 		wait_counter = 0;
 	}

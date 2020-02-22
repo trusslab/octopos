@@ -57,7 +57,6 @@ char output_buf[MAILBOX_QUEUE_MSG_SIZE];
  */
 static int command(int input, int first, int last, int double_pipe, int bg)
 {
-#ifdef ARCH_UMODE
 	/* FIXME: add support for passing args to apps */
 
 	if (first == 1 && last == 0 && input == 0) {
@@ -85,9 +84,6 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 		}
 		return app_id;
 	}
-#else
-	return 0;
-#endif
 }
 
 /* Final cleanup, 'wait' for processes to terminate.
@@ -169,7 +165,6 @@ static void process_input_line(char *line)
 
 static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 {
-#ifdef ARCH_UMODE
 	if (app && app->runtime_proc)
 		syscall_read_from_shell_response(app->runtime_proc->id,
 					 line, num_chars);
@@ -177,7 +172,6 @@ static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 		printf("%s: Error: couldn't send input to app\n", __func__);
 
 	shell_status = SHELL_STATE_RUNNING_APP;
-#endif
 }
 
 #define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE

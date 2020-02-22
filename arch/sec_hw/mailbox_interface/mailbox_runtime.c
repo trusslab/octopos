@@ -37,7 +37,8 @@ extern bool 	secure_ipc_mode;
 sem_t 			interrupts[NUM_QUEUES + 1]; // FIXME Question why +1?
 sem_t 			interrupt_change;
 
-sem_t 			load_app_sem;
+sem_t 			load_app_sem,
+				runtime_wakeup;
 
 XMbox 			Mbox_out,
 				Mbox_keyboard,
@@ -141,9 +142,10 @@ void queue_sync_getval(uint8_t queue_id, int *val)
 	sem_getvalue(&interrupts[queue_id], val);
 }
 
-void wait_on_queue(uint8_t queue_id)
+void wait_on_queue(uint8_t queue_id, uint8_t *buf)
 {
-	sem_wait(&interrupts[queue_id]);
+//	sem_wait(&interrupts[queue_id]);
+	sem_wait_impatient_receive_buf(&interrupts[queue_id], Mbox_regs[queue_id], buf);
 }
 
 void wait_for_app_load(void)
@@ -156,32 +158,46 @@ void app_main(struct runtime_api *api);
 
 void load_application_arch(char *msg, struct runtime_api *api)
 {
+	while(1) sleep(1);
 	app_main(api);
 }
+
+// FIXME DEBUG
+int fixed_intr_ctr = 0;
 
 static void handle_fixed_timer_interrupts(void* ignored)
 {
 	int 		bytes_read;
 
-	_SEC_HW_DEBUG("Fixed timer interrupt");
+	// FIXME DEBUG
+	fixed_intr_ctr += 1;
+	if (fixed_intr_ctr % 1000 == 0) {
+		fixed_intr_ctr = 0;
+		_SEC_HW_ERROR("Fixed timer interrupt 1000 ");
+	}
+//	_SEC_HW_DEBUG("Fixed timer interrupt");
+
+	if (q_runtime == 0) {
+		return;
+	}
 
     uint8_t* buf = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-    bytes_read = sem_wait_one_time_receive_buf(&interrupts[q_runtime], Mbox_regs[q_runtime], buf);
+    bytes_read = sem_wait_one_time_receive_buf(&runtime_wakeup, Mbox_regs[q_runtime], buf);
 	if (bytes_read == 0) {
+		free(buf);
 		return;
 	}
 	
 	if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
-		 write_syscall_response(buf);
-		// FIXME: it use&interrupts[q_runtime] to wait for ANY available message on the runtime q
-		// pay attion that it shouldnt be use anywhere else (e.g. wait for syscall response)
-  		// sem_post(&interrupts[interrupt]);
-		// if (!still_running)
-		// keep_polling = false;
+		_SEC_HW_DEBUG("RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG");
+//		 write_syscall_response(buf);
+  		 sem_post(&interrupts[q_runtime]);
 	} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
+		_SEC_HW_DEBUG("RUNTIME_QUEUE_EXEC_APP_TAG");
 		memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
 		sem_post(&load_app_sem);
 	} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
+		_SEC_HW_DEBUG("RUNTIME_QUEUE_CONTEXT_SWITCH_TAG");
 		// FIXME Zephyr not impl. One possible way: overwrite stack to return to a new app.
 	//				pthread_cancel(app_thread);
 	//				pthread_join(app_thread, NULL);
@@ -198,12 +214,11 @@ static void handle_mailbox_interrupts(void* callback_ref)
     u32         mask;
     XMbox       *mbox_inst = (XMbox *)callback_ref;
 
-    // FIXME Question why there are no availables[xx] sem?
-    _SEC_HW_DEBUG("Mailbox ref: %p", callback_ref);
+//    _SEC_HW_DEBUG("Mailbox ref: %p", callback_ref);
     mask = XMbox_GetInterruptStatus(mbox_inst);
 
     if (mask & XMB_IX_STA) {
-        _SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
+//        _SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
         if (callback_ref == &Mbox_out) {
             /* Serial Out */
         	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
@@ -226,7 +241,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
         	_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
         }
     } else if (mask & XMB_IX_RTA) {
-        _SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
+//        _SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
         if (callback_ref == &Mbox_keyboard) {
             /* Keyboard */
         	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
@@ -234,8 +249,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
         } else if (callback_ref == Mbox_regs[q_runtime]) {
         	/* Runtime queue */
         	if (!secure_ipc_mode) {
-                sem_init(&interrupts[q_runtime], 0, 0);
-                sem_post(&interrupts[q_runtime]);
+                sem_init(&runtime_wakeup, 0, 0);
+                sem_post(&runtime_wakeup);
         	} else {
         		// FIXME: impl secure IPC
         	}

@@ -20,7 +20,11 @@
 #define ALL_PROCESSORS		9
 #define INVALID_PROCESSOR	10
 
+#ifdef ARCH_SEC_HW
+#define NUM_RUNTIME_PROCS	1
+#else
 #define NUM_RUNTIME_PROCS	2
+#endif
 
 /* queue IDs */
 #define	Q_OS1			1

@@ -206,6 +206,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	syscall_nr = *((uint16_t *) &buf[0]);
 	*no_response = false;
 
+	_SEC_HW_DEBUG("syscall %d received from %d", syscall_nr, runtime_proc_id);
+
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
 		SYSCALL_GET_ONE_ARG
@@ -647,7 +649,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 #endif
 	case SYSCALL_DEBUG_OUTPUTS: {
 		SYSCALL_GET_ZERO_ARGS_DATA
-		xil_printf("\r\nRUNTIME%d: %s\r\n", runtime_proc_id, data);
+		xil_printf("RUNTIME%d: %s\r\n", runtime_proc_id, data);
+		*no_response = true;
 		break;
 	}
 

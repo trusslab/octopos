@@ -16,7 +16,8 @@ void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
 void is_ownership_change(int *is_change);
 void reset_queue_sync(uint8_t queue_id, int init_val);
 void queue_sync_getval(uint8_t queue_id, int *val);
-void wait_on_queue(uint8_t queue_id);
+//void wait_on_queue(uint8_t queue_id);
+void wait_on_queue(uint8_t queue_id, uint8_t *buf);
 void wait_for_app_load(void);
 void load_application_arch(char *msg, struct runtime_api *api);
 

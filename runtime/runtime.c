@@ -333,7 +333,6 @@ static int read_syscall_response(uint8_t *buf)
 	memcpy(buf, syscall_resp_queue[srq_head], srq_msg_size);
 	srq_head = (srq_head + 1) % srq_size;
 
-	// FIXME Q why needed?
 	sem_post(&srq_sem);
 
 	return 0;
@@ -344,8 +343,12 @@ static void issue_syscall(uint8_t *buf)
 	runtime_send_msg_on_queue(buf, q_os);
 
 	/* wait for response */
+#ifdef ARCH_SEC_HW
+	wait_on_queue(q_runtime, buf);
+#else
 	wait_on_queue(q_runtime);
 	read_syscall_response(buf);
+#endif
 }
 
 static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
@@ -356,10 +359,10 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 	runtime_send_msg_on_queue(buf, q_os);
 
 	/* wait for response or a change of queue ownership */
-	wait_on_queue(q_runtime);
+	wait_on_queue(q_runtime, buf);
 	is_ownership_change(&is_change);
 	if (!is_change) {
-		read_syscall_response(buf);
+//		read_syscall_response(buf);
 	} else {
 		*no_response = true;
 	}
@@ -1225,6 +1228,7 @@ bool still_running = true;
 void *run_app(void *load_buf)
 {
 	int ret = inform_os_runtime_ready();
+	_SEC_HW_ERROR("%s: [1] ret = %d", __FUNCTION__, ret);
 	if (ret) {
 		printf("Error (%s): runtime ready notification rejected by the OS\n", __func__);
 		still_running = false;
@@ -1334,16 +1338,6 @@ int main()
 	srq_tail = 0;
 
 	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
-
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: [1]", __func__);
-//		memset(host_printf_buf, 0x0, 61);
-//		snprintf(host_printf_buf, 61, "--R%d ERR: [1]\r\n", 1);
-//		SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_WRITE_TO_SHELL, host_printf_buf, 61)
-//		runtime_send_msg_on_queue(buf, q_os);
-#endif
-
-	while(1) sleep(1);
 
 #ifdef ARCH_UMODE
 	ret = net_stack_init();
