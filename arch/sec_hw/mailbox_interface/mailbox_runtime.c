@@ -172,7 +172,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	// FIXME DEBUG
 	fixed_intr_ctr += 1;
 	if (fixed_intr_ctr % 1000 == 0) {
-		fixed_intr_ctr = 0;
+//		fixed_intr_ctr = 0;
 		_SEC_HW_ERROR("Fixed timer interrupt 1000 ");
 	}
 //	_SEC_HW_DEBUG("Fixed timer interrupt");
@@ -181,6 +181,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
 		return;
 	}
 
+	// FIXME this calloc and free in most cases is a waste
     uint8_t* buf = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
     bytes_read = sem_wait_one_time_receive_buf(&runtime_wakeup, Mbox_regs[q_runtime], buf);
 	if (bytes_read == 0) {
@@ -263,6 +264,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
         _SEC_HW_ERROR("interrupt type unknown, mask %ld, from %p", mask, callback_ref);
     }
 
+    XMbox_ClearInterrupt(mbox_inst, mask);
 //	/* interrupt handling loop */
 //	while (keep_polling) {
 ////		read(fd_intr, &interrupt, 1);

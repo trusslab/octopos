@@ -196,8 +196,8 @@ int sem_wait_one_time_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
         return bytes_read;
     } else {
         sem->count -= 1;
-        _sem_retrieve_mailbox_message_blocking_buf(InstancePtr, buf);
-        return MAILBOX_QUEUE_MSG_SIZE;
+        bytes_read = _sem_retrieve_mailbox_message_buf(InstancePtr, buf);
+        return bytes_read;
     }
 }
 
