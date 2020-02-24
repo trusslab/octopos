@@ -5,6 +5,8 @@
 #define QUOTA_MASK (u32) 0xFF000FFF
 #define TIME_MASK  (u32) 0xFFFFF000
 
+#define MAX_OCTOPOS_MAILBOX_QUOTE 4095
+
 u32 octopos_mailbox_get_status_reg(UINTPTR base);
 
 void octopos_mailbox_set_status_reg(UINTPTR base, u32 value);

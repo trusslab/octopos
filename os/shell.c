@@ -183,7 +183,11 @@ void shell_process_input(char buf)
 	line[num_chars] = buf;
 	output_printf("%c", buf);
 	num_chars++;
+#ifdef ARCH_SEC_HW
+	if (buf == '\r' || num_chars >= MAX_LINE_SIZE) {
+#else
 	if (buf == '\n' || num_chars >= MAX_LINE_SIZE) {
+#endif
 		if (shell_status == SHELL_STATE_WAITING_FOR_CMD)
 			process_input_line(line);
 		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT)

@@ -26,29 +26,29 @@ void app_main(struct runtime_api *api)
 	int i, size;
 	int ret;
 
-	insecure_printf("This is secure_interact speaking.\n");
-	insecure_printf("Provide an insecure phrase: ");
+	insecure_printf("This is secure_interact speaking.\r\n");
+	insecure_printf("Provide an insecure phrase: \r\n");
 
 	api->read_from_shell(line, &size);
-	insecure_printf("Your insecure phrase: %s\n", line);	
+	insecure_printf("Your insecure phrase: %s\r\n", line);
 
-	insecure_printf("Switching to secure interaction mode now.\n");
+	insecure_printf("Switching to secure interaction mode now.\r\n");
 
 	ret = api->request_secure_keyboard(100);
 	if (ret) {
-		printf("Error: could not get secure access to keyboard\n");
-		insecure_printf("Failed to switch.\n");
+		printf("Error: could not get secure access to keyboard\r\n");
+		insecure_printf("Failed to switch.\r\n");
 		return;
 	}
 	ret = api->request_secure_serial_out(200);
 	if (ret) {
 		api->yield_secure_keyboard();
-		printf("Error: could not get secure access to serial_out\n");
-		insecure_printf("Failed to switch.\n");
+		printf("Error: could not get secure access to serial_out\r\n");
+		insecure_printf("Failed to switch.\r\n");
 		return;
 	}
 	
-	secure_printf("Please enter your secure phrase: ");	
+	secure_printf("Please enter your secure phrase: \r\n");
 
 	memset(line, 0x0, 1024);
 	for (i = 0; i < 1024; i++) {
@@ -57,7 +57,7 @@ void app_main(struct runtime_api *api)
 			break;
 	}
 
-	secure_printf("\nYour secure phrase is: %s\n", line);	
+	secure_printf("\nYour secure phrase is: %s\r\n", line);
 
 	api->yield_secure_keyboard();
 	api->yield_secure_serial_out();

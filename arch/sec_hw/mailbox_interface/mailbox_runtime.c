@@ -16,6 +16,7 @@
 #include "arch/semaphore.h"
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox.h"
+#include "arch/octopos_mbox_owner_map.h"
 
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
@@ -70,10 +71,8 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
 		return;
 	}
-	// FIXME add a indexed array to get correct proc_id
-	octopos_mailbox_set_owner(queue_ptr, proc_id);
 
-	// FIXME Question access mode read/write? We need to enforce that.
+	octopos_mailbox_set_owner(queue_ptr, OMboxIds[queue_id][proc_id]);
 }
 
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
@@ -158,24 +157,13 @@ void app_main(struct runtime_api *api);
 
 void load_application_arch(char *msg, struct runtime_api *api)
 {
-	while(1) sleep(1);
+//	while(1) sleep(1);
 	app_main(api);
 }
-
-// FIXME DEBUG
-int fixed_intr_ctr = 0;
 
 static void handle_fixed_timer_interrupts(void* ignored)
 {
 	int 		bytes_read;
-
-	// FIXME DEBUG
-	fixed_intr_ctr += 1;
-	if (fixed_intr_ctr % 1000 == 0) {
-//		fixed_intr_ctr = 0;
-		_SEC_HW_ERROR("Fixed timer interrupt 1000 ");
-	}
-//	_SEC_HW_DEBUG("Fixed timer interrupt");
 
 	if (q_runtime == 0) {
 		return;
@@ -456,6 +444,8 @@ int init_runtime(int runtime_id)
 
 //	cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
 //	cbuf_runtime = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
+
+	OMboxIds_init();
 
     return XST_SUCCESS;
 }

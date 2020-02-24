@@ -119,7 +119,7 @@ char host_printf_buf[64];
         }                                                   \
     else                                                    \
         {                                                   \
-        _SEC_HW_ERROR("ASSERTION EPITAPH: %s\r\n", #expr);  \
+        _SEC_HW_ERROR("ASSERT %s\r\n", #expr);  \
         Xil_Assert(__FILE__, __LINE__);                     \
         Xil_AssertStatus = XIL_ASSERT_OCCURRED;             \
         return;                                             \
@@ -138,7 +138,7 @@ char host_printf_buf[64];
         }                                                   \
     else                                                    \
         {                                                   \
-        _SEC_HW_ERROR("ASSERTION EPITAPH: %s\r\n", #expr);  \
+        _SEC_HW_ERROR("ASSERT %s\r\n", #expr);  \
         Xil_Assert(__FILE__, __LINE__);                     \
         Xil_AssertStatus = XIL_ASSERT_OCCURRED;             \
         return 0;                                           \

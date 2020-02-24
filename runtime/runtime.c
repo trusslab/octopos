@@ -345,6 +345,7 @@ static void issue_syscall(uint8_t *buf)
 	/* wait for response */
 #ifdef ARCH_SEC_HW
 	wait_on_queue(q_runtime, buf);
+	_SEC_HW_ASSERT_VOID(buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG);
 #else
 	wait_on_queue(q_runtime);
 	read_syscall_response(buf);
@@ -499,7 +500,11 @@ static int request_secure_keyboard(int count)
 	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
 					READ_ACCESS, count);
 	if (!attest_ret) {
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+#else
 		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+#endif
 		return ERR_FAULT;
 	}
 
@@ -525,7 +530,11 @@ static int request_secure_serial_out(int count)
 	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
 					WRITE_ACCESS, count);
 	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure serial_out access\n", __func__);
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+#else
+		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+#endif
 		return ERR_FAULT;
 	}
 

@@ -13,6 +13,7 @@
 #include "arch/semaphore.h"
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox.h"
+#include "arch/octopos_mbox_owner_map.h"
 
 #include "octopos/error.h"
 #include "octopos/mailbox.h"
@@ -203,8 +204,13 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
 		return;
 	}
-	// FIXME add a indexed array to get correct proc_id
-	octopos_mailbox_set_owner(queue_ptr, proc_id);
+
+	u32 reg = 0;
+	reg = octopos_mailbox_calc_owner(reg, OMboxIds[queue_id][proc_id]);
+	reg = octopos_mailbox_calc_quota_limit(reg, count);
+	reg = octopos_mailbox_calc_time_limit(reg, MAX_OCTOPOS_MAILBOX_QUOTE);
+
+	octopos_mailbox_set_status_reg(queue_ptr, reg);
 }
 
 static void handle_mailbox_interrupts(void* callback_ref) 
@@ -428,6 +434,8 @@ int init_os_mailbox(void)
     sem_init(&availables[Q_RUNTIME2], 0, 1);
 
     cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
+
+    OMboxIds_init();
 
     return XST_SUCCESS;
 }
