@@ -56,6 +56,9 @@ void app_main(struct runtime_api *api)
 		insecure_printf("Failed to switch.\n");
 		return;
 	}
+
+	insecure_printf("keyboard switched");
+
 	ret = api->request_secure_serial_out(200);
 	if (ret) {
 		api->yield_secure_keyboard();

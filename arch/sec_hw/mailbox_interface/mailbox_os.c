@@ -230,7 +230,11 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	reg = octopos_mailbox_calc_quota_limit(reg, count);
 	reg = octopos_mailbox_calc_time_limit(reg, MAX_OCTOPOS_MAILBOX_QUOTE);
 
+	_SEC_HW_DEBUG("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+
 	octopos_mailbox_set_status_reg(queue_ptr, reg);
+
+	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 }
 
 static void handle_mailbox_interrupts(void* callback_ref) 

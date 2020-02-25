@@ -254,6 +254,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mark_queue_unavailable(Q_KEYBOARD);
 
 		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -656,6 +657,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 	default:
 		printf("Error: invalid syscall\n");
+		_SEC_HW_DEBUG("\r\nsyscall args: %s", buf);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		break;
 	}

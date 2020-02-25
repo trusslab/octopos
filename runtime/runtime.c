@@ -73,7 +73,7 @@ sem_t srq_sem;
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
 	*((uint16_t *) &buf[0]) = syscall_nr;		\
-	*((uint32_t *) &buf[2]) = arg0;			\
+	buf[2] = arg0;			\
 
 #define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
