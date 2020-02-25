@@ -28,6 +28,8 @@ static void distribute_input(void)
 #ifdef ARCH_UMODE
 		process_system_call(input_buf, P_RUNTIME2);
 #endif
+	} else if (queue_id == 0) {
+		_SEC_HW_ERROR("Mbox said it has new message, but nothing is read");
 	} else {
 		printf("Error (%s): invalid queue_id (%d)\n", __func__, queue_id);
 		exit(-1);

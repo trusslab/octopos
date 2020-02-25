@@ -1237,7 +1237,7 @@ bool still_running = true;
 void *run_app(void *load_buf)
 {
 	int ret = inform_os_runtime_ready();
-	_SEC_HW_ERROR("%s: [1] ret = %d", __FUNCTION__, ret);
+	_SEC_HW_DEBUG("%s: [1] ret = %d", __FUNCTION__, ret);
 	if (ret) {
 		printf("Error (%s): runtime ready notification rejected by the OS\n", __func__);
 		still_running = false;

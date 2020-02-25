@@ -207,8 +207,6 @@ XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
     _Bool       has_new = FALSE;
     uint32_t    args_ptrs[mb_count];
 
-    if (sem->count <= 0) {
-
         va_list args;
         va_start(args, mb_count);
 
@@ -238,12 +236,6 @@ XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
         }
 
         return InstancePtr;
-    } else {
-        sem->count -= 1;
-        return NULL;
-    }
-
-    return NULL;
 }
 
 int sem_getvalue(sem_t *sem, int *value)

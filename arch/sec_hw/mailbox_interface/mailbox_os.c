@@ -68,13 +68,15 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
     int             is_keyboard = 0, is_os1 = 0, is_os2 = 0;
     static uint8_t  turn = Q_OS1;
     uint8_t          *message_buffer;
+    u32		        bytes_read;
 
     XMbox*          InstancePtr = NULL;
 
     _SEC_HW_DEBUG("[0]");
     InstancePtr = sem_wait_impatient_receive_multiple(&interrupt_input, 3, &Mbox2, &Mbox3, &Mbox4);
 
-    if (InstancePtr) {
+    _SEC_HW_ASSERT_NON_VOID(InstancePtr);
+
         _SEC_HW_DEBUG("[1]");
         if (InstancePtr == &Mbox2) {
             sem_post(&interrupts[Q_KEYBOARD]);
@@ -87,12 +89,6 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
             sem_post(&interrupts[Q_OS2]);
             is_os2 = 1;
         }
-    } else {
-        _SEC_HW_DEBUG("[2]");
-        sem_getvalue(&interrupts[Q_KEYBOARD], &is_keyboard);
-        sem_getvalue(&interrupts[Q_OS1], &is_os1);
-        sem_getvalue(&interrupts[Q_OS2], &is_os2);
-    }
 
     if (is_keyboard) {
         _SEC_HW_DEBUG("[3]");
@@ -122,7 +118,15 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
     case Q_KEYBOARD:
         _SEC_HW_DEBUG("[4]");
         message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-        XMbox_ReadBlocking(&Mbox2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+        XMbox_Read(&Mbox2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+
+        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes",
+                bytes_read,
+                MAILBOX_QUEUE_MSG_SIZE);
+            *queue_id = 0;
+            return 0;
+        }
 
         memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -131,7 +135,15 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
     case Q_OS1:
     	_SEC_HW_DEBUG("[4.5]");
         message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-        XMbox_ReadBlocking(&Mbox3, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+        XMbox_Read(&Mbox3, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+
+        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes",
+                bytes_read,
+                MAILBOX_QUEUE_MSG_SIZE);
+            *queue_id = 0;
+            return 0;
+        }
 
         memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -139,7 +151,15 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
         break;
     case Q_OS2:
         message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-        XMbox_ReadBlocking(&Mbox4, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+        XMbox_Read(&Mbox4, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+
+        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes",
+                bytes_read,
+                MAILBOX_QUEUE_MSG_SIZE);
+            *queue_id = 0;
+            return 0;
+        }
 
         memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
 

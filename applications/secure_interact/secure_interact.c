@@ -45,11 +45,10 @@ void app_main(struct runtime_api *api)
 	insecure_printf("Provide an insecure phrase: \n");
 
 	api->read_from_shell(line, &size);
+	line[size - 1] = '\0';
 	insecure_printf("Your insecure phrase: %s\n", line);
 
 	insecure_printf("Switching to secure interaction mode now.\n");
-
-	while(1) sleep(1);
 
 	ret = api->request_secure_keyboard(100);
 	if (ret) {
