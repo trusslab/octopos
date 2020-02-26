@@ -10,6 +10,11 @@
 #include "xil_assert.h"
 #include "xmbox.h"
 
+#ifdef ARCH_SEC_HW_OS
+extern XMbox Mbox2;
+extern sem_t availables[NUM_QUEUES + 1];
+#endif
+
 int sem_init(sem_t *sem, int pshared, int value) 
 {
     sem->count = value;
@@ -222,6 +227,13 @@ XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
 
         while (!has_new) {
             for (int i = 0; i < mb_count; ++i) {
+#ifdef ARCH_SEC_HW_OS
+            	if ((XMbox*) args_ptrs[i] == &Mbox2 &&
+            			availables[Q_KEYBOARD].count == 0) {
+            		_SEC_HW_DEBUG("Skip keyboard because we don't have access");
+            		continue;
+            	}
+#endif
                 if (!XMbox_IsEmpty((XMbox*) args_ptrs[i])) {
                     has_new = TRUE;
                     _SEC_HW_DEBUG("mailbox %p has new message", InstancePtr);

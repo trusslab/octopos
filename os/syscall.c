@@ -219,6 +219,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+		_SEC_HW_DEBUG("[0] count = %d", count);
+
 		int ret = is_queue_available(Q_SERIAL_OUT);
 		/* Or should we make this blocking? */
 		if (!ret) {
@@ -226,11 +228,17 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+		_SEC_HW_DEBUG("[1]");
+
 		wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
+		_SEC_HW_DEBUG("[2]");
+
 		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
+
+		_SEC_HW_DEBUG("[3]");
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
