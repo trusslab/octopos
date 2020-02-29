@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <sys/stat.h>
 
+#include "arch/sec_hw.h"
 #include "arch/defines.h"
 
 #include <octopos/runtime.h>
@@ -67,12 +68,20 @@ void app_main(struct runtime_api *api)
 		return;
 	}
 	
-	secure_printf("Please enter your secure phrase: \n");
+	secure_printf("Please enter your secure phrase: \r\n");
+
+	secure_printf("Please enter your secure phrase: \r\n");
+
+	secure_printf("Please enter your secure phrase: \r\n");
 
 	memset(line, 0x0, 1024);
+	_SEC_HW_ERROR("[1]");
 	for (i = 0; i < 1024; i++) {
+		_SEC_HW_ERROR("[2] i=%d", i);
+		sleep(1);
 		api->read_char_from_secure_keyboard(&line[i]);
-		if (line[i] == '\n')
+		_SEC_HW_ERROR("[3] %d", line[i]);
+		if (line[i] == '\r')
 			break;
 	}
 

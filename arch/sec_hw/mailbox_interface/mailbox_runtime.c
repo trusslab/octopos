@@ -91,7 +91,7 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
 		return FALSE;
 	}
 
-	_SEC_HW_ERROR("REG READ: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+//	_SEC_HW_ERROR("REG READ: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 
 	return octopos_mailbox_attest_quota_limit(queue_ptr, count);
 }

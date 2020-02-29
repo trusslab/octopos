@@ -65,8 +65,37 @@ int _sem_retrieve_mailbox_message_blocking_cbuf(XMbox *InstancePtr, cbuf_handle_
 
 int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf)
 {
+//	_SEC_HW_ERROR("%p, %p", InstancePtr, buf);
+//#ifndef ARCH_SEC_HW_RUNTIME
     XMbox_ReadBlocking(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE);
     return 0;
+//#else
+//    if (InstancePtr != Mbox_regs[Q_KEYBOARD]) {
+//    	XMbox_ReadBlocking(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE);
+//    	return 0;
+//    }
+//	u32 NumBytes = 0;
+//
+////	    XMbox_SetSendThreshold(InstancePtr, 0);
+////	    _SEC_HW_ERROR("[m0.1]");
+////	    XMbox_SetReceiveThreshold(InstancePtr, 0);
+////	    _SEC_HW_ERROR("[m0.2]");
+////	    XMbox_SetInterruptEnable(InstancePtr, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+////	    _SEC_HW_ERROR("[m0.3]");
+//
+//	do {
+//		_SEC_HW_ERROR("[m1]");
+//		//while(1) sleep(1);
+//		while(XMbox_IsEmptyHw(InstancePtr->Config.BaseAddress));
+//		_SEC_HW_ERROR("[m2]");
+//		*(u32*) buf++ =
+//			XMbox_ReadMBox(InstancePtr->Config.BaseAddress);
+//		_SEC_HW_ERROR("[m3]");
+//		NumBytes += 4;
+//	} while (NumBytes != MAILBOX_QUEUE_MSG_SIZE);
+//	_SEC_HW_ERROR("[m4]%d",buf[0]);
+//    return 0;
+//#endif
 }
 
 int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
@@ -230,7 +259,7 @@ XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
 #ifdef ARCH_SEC_HW_OS
             	if ((XMbox*) args_ptrs[i] == &Mbox2 &&
             			availables[Q_KEYBOARD].count == 0) {
-            		_SEC_HW_DEBUG("Skip keyboard because we don't have access");
+//            		_SEC_HW_DEBUG("Skip keyboard because we don't have access");
             		continue;
             	}
 #endif

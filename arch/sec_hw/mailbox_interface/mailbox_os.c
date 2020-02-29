@@ -59,6 +59,7 @@ int send_output(uint8_t *buf)
 
     sem_wait_impatient_send(&interrupts[Q_SERIAL_OUT], &Mbox1, (u32*) buf);
 
+    _SEC_HW_DEBUG("Q_SERIAL_OUT = %d", interrupts[Q_SERIAL_OUT].count);
     return 0;
 }
 
@@ -254,6 +255,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
             sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
             sem_post(&availables[Q_SERIAL_OUT]);
             sem_post(&interrupts[Q_SERIAL_OUT]);
+            _SEC_HW_DEBUG("Q_SERIAL_OUT = %d", interrupts[Q_SERIAL_OUT].count);
         }
     } else if (mask & XMB_IX_RTA) {
         _SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
@@ -272,7 +274,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
     XMbox_ClearInterrupt(mbox_inst, mask);
 
-    _SEC_HW_DEBUG("handle_mailbox_interrupts: interrupt cleared");
+    _SEC_HW_DEBUG("interrupt cleared");
 //  _SEC_HW_DEBUG("STATE register: (in decimal) %d",
 //          Xil_In32((mbox_inst->Config.BaseAddress) + (0x10)));
 //  _SEC_HW_DEBUG("IS register: (in decimal) %d",

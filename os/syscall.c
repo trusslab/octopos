@@ -230,7 +230,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		_SEC_HW_DEBUG("[1]");
 
+		// SEC_HW does not check on send queue availability
+		// because it blocks on send.
+#ifndef ARCH_SEC_HW
 		wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
+#endif
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
