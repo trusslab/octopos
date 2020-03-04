@@ -75,7 +75,7 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	octopos_mailbox_set_owner(queue_ptr, OMboxIds[queue_id][proc_id]);
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count)
 {
 	UINTPTR queue_ptr;
 

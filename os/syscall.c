@@ -213,11 +213,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
 
-		/* No more than 200 characters */
-		if (count > 200) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
+//		/* No more than 200 characters */
+//		if (count > 200) {
+//			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+//			break;
+//		}
 
 		_SEC_HW_DEBUG("[0] count = %d", count);
 
@@ -228,8 +228,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		_SEC_HW_DEBUG("[1]");
-
 		// SEC_HW does not check on send queue availability
 		// because it blocks on send.
 #ifndef ARCH_SEC_HW
@@ -238,11 +236,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
-		_SEC_HW_DEBUG("[2]");
+		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 
-		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-
-		_SEC_HW_DEBUG("[3]");
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -250,11 +245,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
 
-		/* No more than 100 characters */
-		if (count > 100) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
+		_SEC_HW_DEBUG("[0] count = %d", count);
+
+		// /* No more than 100 characters */
+		// if (count > 100) {
+		// 	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+		// 	break;
+		// }
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */
@@ -265,7 +262,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
-		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -466,8 +463,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mark_queue_unavailable(Q_STORAGE_IN_2);
 		mark_queue_unavailable(Q_STORAGE_OUT_2);
 
-		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
+		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -631,8 +628,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mark_queue_unavailable(Q_NETWORK_DATA_IN);
 		mark_queue_unavailable(Q_NETWORK_DATA_OUT);
 
-		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
+		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 
 		SYSCALL_SET_ONE_RET((uint32_t) 0)
 		break;

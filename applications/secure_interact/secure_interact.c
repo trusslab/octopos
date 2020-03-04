@@ -51,7 +51,7 @@ void app_main(struct runtime_api *api)
 
 	insecure_printf("Switching to secure interaction mode now.\n");
 
-	ret = api->request_secure_keyboard(100);
+	ret = api->request_secure_keyboard(4093);
 	if (ret) {
 		printf("Error: could not get secure access to keyboard\n");
 		insecure_printf("Failed to switch.\n");
@@ -60,7 +60,7 @@ void app_main(struct runtime_api *api)
 
 	insecure_printf("keyboard switched");
 
-	ret = api->request_secure_serial_out(200);
+	ret = api->request_secure_serial_out(4094);
 	if (ret) {
 		api->yield_secure_keyboard();
 		printf("Error: could not get secure access to serial_out\n");
@@ -69,20 +69,20 @@ void app_main(struct runtime_api *api)
 	}
 	
 	secure_printf("Please enter your secure phrase: \r\n");
-
 	secure_printf("Please enter your secure phrase: \r\n");
-
 	secure_printf("Please enter your secure phrase: \r\n");
 
 	memset(line, 0x0, 1024);
 	_SEC_HW_ERROR("[1]");
 	for (i = 0; i < 1024; i++) {
 		_SEC_HW_ERROR("[2] i=%d", i);
-		sleep(1);
 		api->read_char_from_secure_keyboard(&line[i]);
-		_SEC_HW_ERROR("[3] %d", line[i]);
-		if (line[i] == '\r')
+//		secure_printf("%c", line[i]);
+		if (line[i] == '\r') {
+			line[i] = '\0';
 			break;
+		}
+
 	}
 
 	secure_printf("\nYour secure phrase is: %s\n", line);
