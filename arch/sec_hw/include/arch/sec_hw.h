@@ -33,6 +33,16 @@ void cleanup_platform();
 #define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING     \
     (MAILBOX_MAX_COMMAND_SIZE-MAILBOX_QUEUE_MSG_SIZE+1)
 
+#define TO_BIG_ENDIAN_16(i)                     \
+     ((((u16) i>>8) & 0x00FF) |                 \
+     (((u16) i<<8) & 0xFF00))
+
+#define TO_BIG_ENDIAN_32(i)                     \
+     ((((u32) i>>24) & 0x000000FF) |            \
+     (((u32) i>>8) & 0x0000FF00) |              \
+     (((u32) i<<8) & 0x00FF0000) |              \
+     (((u32) i<<24) & 0xFF000000))
+
 #define SEC_HW_PS_LOCAL_DISABLE_INTERRUPT()                 \
     do {Xil_ExceptionDisable();} while (0)
 

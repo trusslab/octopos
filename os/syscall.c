@@ -206,7 +206,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	syscall_nr = *((uint16_t *) &buf[0]);
 	*no_response = false;
 
+#ifdef ARCH_SEC_HW
 	_SEC_HW_DEBUG("syscall %d received from %d", syscall_nr, runtime_proc_id);
+#endif
 
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
@@ -219,7 +221,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 //			break;
 //		}
 
-		_SEC_HW_DEBUG("[0] count = %d", count);
+#ifdef ARCH_SEC_HW
+		_SEC_HW_DEBUG("arg0 = %d", count);
+#endif
 
 		int ret = is_queue_available(Q_SERIAL_OUT);
 		/* Or should we make this blocking? */
@@ -228,15 +232,19 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		// SEC_HW does not check on send queue availability
-		// because it blocks on send.
+		/* ARCH_SEC_HW does not check on send queue availability
+		 * because it already blocks on send. */
 #ifndef ARCH_SEC_HW
 		wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 #endif
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
+#ifdef ARCH_SEC_HW
 		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
+#else
+		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
+#endif
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -245,7 +253,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
 
-		_SEC_HW_DEBUG("[0] count = %d", count);
+#ifdef ARCH_SEC_HW
+		_SEC_HW_DEBUG("arg0 = %d", count);
+#endif
 
 		// /* No more than 100 characters */
 		// if (count > 100) {
@@ -262,7 +272,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
+#ifdef ARCH_SEC_HW
 		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint16_t) count);
+#else
+		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+#endif
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -463,8 +477,14 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mark_queue_unavailable(Q_STORAGE_IN_2);
 		mark_queue_unavailable(Q_STORAGE_OUT_2);
 
+#ifdef ARCH_SEC_HW
 		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint16_t) count);
+#else
+		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+#endif
+
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -628,8 +648,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mark_queue_unavailable(Q_NETWORK_DATA_IN);
 		mark_queue_unavailable(Q_NETWORK_DATA_OUT);
 
+#ifdef ARCH_SEC_HW
 		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
+#else
+		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
+		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+#endif
 
 		SYSCALL_SET_ONE_RET((uint32_t) 0)
 		break;
@@ -666,7 +691,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 	default:
 		printf("Error: invalid syscall\n");
-		_SEC_HW_DEBUG("\r\nsyscall args: %s", buf);
+#ifdef ARCH_SEC_HW
+		_SEC_HW_DEBUG("invalid syscall, args: %s", buf);
+#endif
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		break;
 	}
@@ -675,7 +702,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 {
 	if (runtime_proc_id == P_RUNTIME1 || runtime_proc_id == P_RUNTIME2) {
-		 _SEC_HW_DEBUG("[0]");
 		bool no_response = false;
 		int late_processing = NUM_SYSCALLS;
 

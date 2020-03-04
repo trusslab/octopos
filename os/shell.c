@@ -217,7 +217,6 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 
 void inform_shell_of_pause(uint8_t runtime_proc_id)
 {
-#ifdef ARCH_UMODE
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 		printf("%s: Error: NULL runtime_proc or app\n", __func__);
@@ -230,7 +229,6 @@ void inform_shell_of_pause(uint8_t runtime_proc_id)
 		output_printf("octopos$> ");
 	}
 	sched_pause_app(runtime_proc_id);
-#endif
 }
 
 int app_write_to_shell(struct app *app, uint8_t *data, int size)

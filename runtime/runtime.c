@@ -64,16 +64,6 @@ int srq_tail;
 int srq_counter;
 sem_t srq_sem;
 
-//#define TO_BIG_ENDIAN_16(i)						\
-//		((((u16) i>>8) & 0x00FF) | 				\
-//		(((u16) i<<8) & 0xFF00))
-//
-//#define TO_BIG_ENDIAN_32(i)						\
-//		((((u32) i>>24) & 0x000000FF) | 				\
-//		(((u32) i>>8) & 0x0000FF00) | 				\
-//		(((u32) i<<8) & 0x00FF0000) | 				\
-//		(((u32) i<<24) & 0xFF000000))
-
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
@@ -86,8 +76,6 @@ sem_t srq_sem;
 	u32 tmp_arg0 = (u32) arg0; 					\
 	memcpy(&buf[0], (u16*) &tmp_syscall_nr, 2);		\
 	memcpy(&buf[2], (u32*) &tmp_arg0, 4);		\
-//	*(&buf[0]) = (u16) syscall_nr;					\
-//	*(&buf[2]) = (u32) arg0;						\
 
 #define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
@@ -374,10 +362,16 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 	runtime_send_msg_on_queue(buf, q_os);
 
 	/* wait for response or a change of queue ownership */
+#ifdef ARCH_SEC_HW
 	wait_on_queue(q_runtime, buf);
+#else
+	wait_on_queue(q_runtime);
+#endif
 	is_ownership_change(&is_change);
 	if (!is_change) {
-//		read_syscall_response(buf);
+#ifdef ARCH_UMODE
+		read_syscall_response(buf);
+#endif
 	} else {
 		*no_response = true;
 	}
@@ -501,13 +495,20 @@ static void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
+#ifdef ARCH_SEC_HW
 static int request_secure_keyboard(u16 count)
+#else
+static int request_secure_keyboard(int count)
+#endif
 {
 	reset_queue_sync(Q_KEYBOARD, 0);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) count)
-	// DEBUG
-	_SEC_HW_ERROR("%d %02x%02x%02x%02x%02x%02x%02x%02x", count, buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7]);
+
+	// FIXME: rm when the mailbox quota problem is fixed.
+	_SEC_HW_ERROR("%d %02x%02x%02x%02x%02x%02x%02x%02x",
+		count, buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7]);
+
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
@@ -533,7 +534,11 @@ static int yield_secure_keyboard(void)
 	return 0;
 }
 
+#ifdef ARCH_SEC_HW
 static int request_secure_serial_out(u16 count)
+#else
+static int request_secure_serial_out(int count)
+#endif
 {
 	reset_queue_sync(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
@@ -565,6 +570,7 @@ static int yield_secure_serial_out(void)
 	return 0;
 }
 
+// FIXME: rm when the mailbox quota problem is fixed.
 u32 octopos_mailbox_get_quota_limit(UINTPTR base);
 u32 octopos_mailbox_get_time_limit(UINTPTR base);
 extern XMbox Mbox_keyboard;
@@ -572,9 +578,16 @@ extern XMbox Mbox_out;
 
 static void write_to_secure_serial_out(char *buf)
 {
-	_SEC_HW_ERROR("serial out before: quota %d, time %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR), octopos_mailbox_get_time_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR));
+	_SEC_HW_ERROR("serial out before: quota %d, time %d",
+	 	octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR),
+	  	octopos_mailbox_get_time_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR));
+
 	XMbox_IsEmpty(&Mbox_out);
-	_SEC_HW_ERROR("serial out after: quota %d, time %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR), octopos_mailbox_get_time_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR));
+
+	_SEC_HW_ERROR("serial out after: quota %d, time %d",
+	 	octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR),
+	  	octopos_mailbox_get_time_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR));
+
 	runtime_send_msg_on_queue((uint8_t *) buf, Q_SERIAL_OUT);
 }
 
@@ -582,30 +595,28 @@ static void write_to_secure_serial_out(char *buf)
 
 static void read_char_from_secure_keyboard(char *buf)
 {
+// FIXME: switch back to normal keyboard read when the 
+// mailbox quota problem is fixed.
+
 //	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
-//
 //	runtime_recv_msg_from_queue(input_buf, Q_KEYBOARD);
+//	*buf = (char) input_buf[0];
 
     uint8_t          *message_buffer;
     u32		        bytes_read;
 
-        message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-        _SEC_HW_ERROR("keyboard before emty chk: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
+	message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+	_SEC_HW_ERROR("keyboard before emty chk: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
 
-		if (!XMbox_IsEmpty(&Mbox_keyboard)) {
-			_SEC_HW_ERROR("keyboard before read: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
-	        XMbox_Read(&Mbox_keyboard, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
-		}
+	if (!XMbox_IsEmpty(&Mbox_keyboard)) {
+		_SEC_HW_ERROR("keyboard before read: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
+	    XMbox_Read(&Mbox_keyboard, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+	}
 
-		_SEC_HW_ERROR("keyboard done: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
-//        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
-//            _SEC_HW_ERROR("WRONG SIZE");
-//        }
+	_SEC_HW_ERROR("keyboard done: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
 
 	*buf = (char) message_buffer[0];
 	free((void*) message_buffer);
-
-//	*buf = (char) input_buf[0];
 }
 
 static int inform_os_of_termination(void)
@@ -635,7 +646,7 @@ static int inform_os_runtime_ready(void)
 	return (int) ret0;
 }
 
-int write_to_shell(char *data, int size)
+static int write_to_shell(char *data, int size)
 {
 	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_WRITE_TO_SHELL, data, size)
 	issue_syscall(buf);
@@ -976,7 +987,11 @@ static int set_up_context(void *addr, uint32_t size)
 bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
 
+#ifdef ARCH_SEC_HW
 static int request_secure_ipc(uint8_t target_runtime_queue_id, u16 count)
+#else
+static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
+#endif
 {
 	bool no_response;
 	reset_queue_sync(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
@@ -1283,7 +1298,6 @@ bool still_running = true;
 void *run_app(void *load_buf)
 {
 	int ret = inform_os_runtime_ready();
-	_SEC_HW_DEBUG("%s: [1] ret = %d", __FUNCTION__, ret);
 	if (ret) {
 		printf("Error (%s): runtime ready notification rejected by the OS\n", __func__);
 		still_running = false;
@@ -1378,9 +1392,6 @@ int main()
 
 	if (ret) {
 		printf("%s: Error: couldn't initialize the runtime\n", __func__);
-//#ifdef ARCH_SEC_HW
-//		_SEC_HW_ERROR("%s: Error: couldn't initialize the runtime", __func__);
-//#endif
 		return -1;
 	}
 

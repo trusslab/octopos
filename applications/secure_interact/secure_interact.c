@@ -6,8 +6,10 @@
 #include <stdint.h>
 #include <sys/stat.h>
 
+#ifdef ARCH_SEC_HW
 #include "arch/sec_hw.h"
 #include "arch/defines.h"
+#endif
 
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
@@ -73,22 +75,25 @@ void app_main(struct runtime_api *api)
 	secure_printf("Please enter your secure phrase: \r\n");
 
 	memset(line, 0x0, 1024);
-	_SEC_HW_ERROR("[1]");
 	for (i = 0; i < 1024; i++) {
-		_SEC_HW_ERROR("[2] i=%d", i);
 		api->read_char_from_secure_keyboard(&line[i]);
-//		secure_printf("%c", line[i]);
+#ifdef ARCH_SEC_HW
 		if (line[i] == '\r') {
-//			line[i] = '\0';
+#else
+		if (line[i] == '\n') {
+#endif
 			break;
 		}
+#ifdef ARCH_SEC_HW
 		if (line[i] == '\0') {
 			i -= 1; // This is to compensate the empty read
 		}
-
+#endif
 	}
 
+#ifdef ARCH_SEC_HW
 	_SEC_HW_ERROR("[3] %s", line);
+#endif
 	secure_printf("\nYour secure phrase is: %s\n", line);
 
 	api->yield_secure_keyboard();
