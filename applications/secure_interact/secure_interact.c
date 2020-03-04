@@ -79,12 +79,16 @@ void app_main(struct runtime_api *api)
 		api->read_char_from_secure_keyboard(&line[i]);
 //		secure_printf("%c", line[i]);
 		if (line[i] == '\r') {
-			line[i] = '\0';
+//			line[i] = '\0';
 			break;
+		}
+		if (line[i] == '\0') {
+			i -= 1; // This is to compensate the empty read
 		}
 
 	}
 
+	_SEC_HW_ERROR("[3] %s", line);
 	secure_printf("\nYour secure phrase is: %s\n", line);
 
 	api->yield_secure_keyboard();
