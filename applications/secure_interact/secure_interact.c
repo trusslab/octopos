@@ -6,9 +6,9 @@
 #include <stdint.h>
 #include <sys/stat.h>
 
+#include "arch/defines.h"
 #ifdef ARCH_SEC_HW
 #include "arch/sec_hw.h"
-#include "arch/defines.h"
 #endif
 
 #include <octopos/runtime.h>

@@ -51,7 +51,6 @@ void cleanup_platform();
 
 #ifdef ARCH_SEC_HW_RUNTIME
 
-int write_to_shell(char *data, int size);
 char host_printf_buf[64];
 
 #define _SEC_HW_ERROR(fmt, ...)                                      		\
