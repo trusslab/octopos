@@ -64,43 +64,6 @@ int srq_tail;
 int srq_counter;
 sem_t srq_sem;
 
-#define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[0]) = syscall_nr;		\
-
-#define SYSCALL_SET_ONE_ARG(syscall_nr, arg0)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	u16 tmp_syscall_nr = (u16) syscall_nr; 		\
-	u32 tmp_arg0 = (u32) arg0; 					\
-	memcpy(&buf[0], (u16*) &tmp_syscall_nr, 2);		\
-	memcpy(&buf[2], (u32*) &tmp_arg0, 4);		\
-
-#define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[0]) = syscall_nr;		\
-	*((uint32_t *) &buf[2]) = arg0;			\
-	*((uint32_t *) &buf[6]) = arg1;			\
-
-#define SYSCALL_SET_THREE_ARGS(syscall_nr, arg0, arg1, arg2)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint16_t *) &buf[0]) = syscall_nr;			\
-	*((uint32_t *) &buf[2]) = arg0;				\
-	*((uint32_t *) &buf[6]) = arg1;				\
-	*((uint32_t *) &buf[10]) = arg2;			\
-
-#define SYSCALL_SET_FOUR_ARGS(syscall_nr, arg0, arg1, arg2, arg3)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];				\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);			\
-	*((uint16_t *) &buf[0]) = syscall_nr;				\
-	*((uint32_t *) &buf[2]) = arg0;					\
-	*((uint32_t *) &buf[6]) = arg1;					\
-	*((uint32_t *) &buf[10]) = arg2;				\
-	*((uint32_t *) &buf[14]) = arg3;				\
-
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\

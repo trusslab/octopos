@@ -22,50 +22,6 @@
 #include <os/storage.h>
 #include <arch/mailbox_os.h>
 
-#define SYSCALL_SET_ONE_RET(ret0)			\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
-	*((uint32_t *) &buf[1]) = ret0;			\
-
-#define SYSCALL_SET_TWO_RETS(ret0, ret1)		\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
-	*((uint32_t *) &buf[1]) = ret0;			\
-	*((uint32_t *) &buf[5]) = ret1;			\
-
-/* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
-#define SYSCALL_SET_ONE_RET_DATA(ret0, data, size)		\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;		\
-	*((uint32_t *) &buf[1]) = ret0;				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
-	if (max_size < 256 && size <= ((int) max_size)) {	\
-		buf[5] = (uint8_t) size;			\
-		memcpy(&buf[6], data, size);			\
-	} else {						\
-		printf("Error: invalid max_size or size\n");	\
-		buf[5] = 0;					\
-	}							\
-
-#define SYSCALL_GET_ONE_ARG		\
-	uint32_t arg0;			\
-	arg0 = *((uint32_t *) &buf[2]); \
-
-#define SYSCALL_GET_TWO_ARGS		\
-	uint32_t arg0, arg1;		\
-	arg0 = *((uint32_t *) &buf[2]); \
-	arg1 = *((uint32_t *) &buf[6]); \
-
-#define SYSCALL_GET_THREE_ARGS		\
-	uint32_t arg0, arg1, arg2;	\
-	arg0 = *((uint32_t *) &buf[2]); \
-	arg1 = *((uint32_t *) &buf[6]); \
-	arg2 = *((uint32_t *) &buf[10]);\
-
-#define SYSCALL_GET_FOUR_ARGS			\
-	uint32_t arg0, arg1, arg2, arg3;	\
-	arg0 = *((uint32_t *) &buf[2]);		\
-	arg1 = *((uint32_t *) &buf[6]);		\
-	arg2 = *((uint32_t *) &buf[10]);	\
-	arg3 = *((uint32_t *) &buf[14]);	\
-
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
 	uint8_t data_size, *data;				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 3;		\
