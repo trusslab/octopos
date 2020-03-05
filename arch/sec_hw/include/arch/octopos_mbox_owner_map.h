@@ -1,0 +1,25 @@
+#ifndef __ARCH_OCTOPOS_MBOX_OWNERSHIP_MAP_H_
+#define __ARCH_OCTOPOS_MBOX_OWNERSHIP_MAP_H_
+
+#include "octopos/mailbox.h"
+
+u8 OMboxIds[NUM_QUEUES][NUM_PROCESSORS] = {0};
+
+void OMboxIds_init() {
+	OMboxIds[Q_SERIAL_OUT][P_OS] = 0;
+	OMboxIds[Q_SERIAL_OUT][P_RUNTIME1] = 1;
+	OMboxIds[Q_SERIAL_OUT][P_RUNTIME2] = 2;
+
+	OMboxIds[Q_KEYBOARD][P_OS] = 0;
+	OMboxIds[Q_KEYBOARD][P_RUNTIME1] = 1;
+	OMboxIds[Q_KEYBOARD][P_RUNTIME2] = 2;
+
+	OMboxIds[Q_RUNTIME1][P_OS] = 0;
+	OMboxIds[Q_RUNTIME1][P_RUNTIME2] = 1;
+
+	OMboxIds[Q_RUNTIME2][P_OS] = 0;
+	OMboxIds[Q_RUNTIME2][P_RUNTIME1] = 1;
+}
+
+
+#endif /* __ARCH_OCTOPOS_MBOX_OWNERSHIP_MAP_H_ */
