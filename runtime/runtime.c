@@ -468,10 +468,6 @@ static int request_secure_keyboard(int count)
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) count)
 
-	// FIXME: rm when the mailbox quota problem is fixed.
-	_SEC_HW_ERROR("%d %02x%02x%02x%02x%02x%02x%02x%02x",
-		count, buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7]);
-
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
@@ -541,16 +537,6 @@ extern XMbox Mbox_out;
 
 static void write_to_secure_serial_out(char *buf)
 {
-	_SEC_HW_ERROR("serial out before: quota %d, time %d",
-	 	octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR),
-	  	octopos_mailbox_get_time_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR));
-
-	XMbox_IsEmpty(&Mbox_out);
-
-	_SEC_HW_ERROR("serial out after: quota %d, time %d",
-	 	octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR),
-	  	octopos_mailbox_get_time_limit(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR));
-
 	runtime_send_msg_on_queue((uint8_t *) buf, Q_SERIAL_OUT);
 }
 
@@ -558,28 +544,9 @@ static void write_to_secure_serial_out(char *buf)
 
 static void read_char_from_secure_keyboard(char *buf)
 {
-// FIXME: switch back to normal keyboard read when the 
-// mailbox quota problem is fixed.
-
-//	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
-//	runtime_recv_msg_from_queue(input_buf, Q_KEYBOARD);
-//	*buf = (char) input_buf[0];
-
-    uint8_t          *message_buffer;
-    u32		        bytes_read;
-
-	message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-	_SEC_HW_ERROR("keyboard before emty chk: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
-
-	if (!XMbox_IsEmpty(&Mbox_keyboard)) {
-		_SEC_HW_ERROR("keyboard before read: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
-	    XMbox_Read(&Mbox_keyboard, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
-	}
-
-	_SEC_HW_ERROR("keyboard done: quota %d", octopos_mailbox_get_quota_limit(XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR));
-
-	*buf = (char) message_buffer[0];
-	free((void*) message_buffer);
+	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
+	runtime_recv_msg_from_queue(input_buf, Q_KEYBOARD);
+	*buf = (char) input_buf[0];
 }
 
 static int inform_os_of_termination(void)

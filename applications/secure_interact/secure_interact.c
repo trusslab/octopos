@@ -71,8 +71,6 @@ void app_main(struct runtime_api *api)
 	}
 	
 	secure_printf("Please enter your secure phrase: \r\n");
-	secure_printf("Please enter your secure phrase: \r\n");
-	secure_printf("Please enter your secure phrase: \r\n");
 
 	memset(line, 0x0, 1024);
 	for (i = 0; i < 1024; i++) {
@@ -91,9 +89,6 @@ void app_main(struct runtime_api *api)
 #endif
 	}
 
-#ifdef ARCH_SEC_HW
-	_SEC_HW_ERROR("[3] %s", line);
-#endif
 	secure_printf("\nYour secure phrase is: %s\n", line);
 
 	api->yield_secure_keyboard();
