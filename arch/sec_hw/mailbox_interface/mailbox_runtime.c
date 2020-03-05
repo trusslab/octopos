@@ -34,8 +34,7 @@ extern int 		change_queue;
 
 extern bool 	secure_ipc_mode;
 
-/* Not all will be used */
-sem_t 			interrupts[NUM_QUEUES + 1]; // FIXME Question why +1?
+sem_t 			interrupts[NUM_QUEUES + 1];
 sem_t 			interrupt_change;
 
 sem_t 			load_app_sem,
@@ -53,47 +52,62 @@ cbuf_handle_t   cbuf_keyboard, cbuf_runtime;
 XMbox*			Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
+_Bool           runtime_inited = FALSE;
+
 int write_syscall_response(uint8_t *buf);
+void app_main(struct runtime_api *api);
 
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
-	UINTPTR queue_ptr;
+    _SEC_HW_ASSERT_VOID(queue_id != q_runtime)
+    _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
-	if (queue_id == Q_KEYBOARD) {
-		queue_ptr = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
-	} else if (queue_id == Q_SERIAL_OUT) {
-		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
-	} else if (queue_id == q_runtime) {
-		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-	// FIXME replace this if else with Mbox_ctrl_regs
-	//	} else if (queue_id == Q_RUNTIME1) {
-	} else {
-		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-		return;
-	}
+	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
 	octopos_mailbox_set_owner(queue_ptr, OMboxIds[queue_id][proc_id]);
 }
 
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count)
 {
-	UINTPTR queue_ptr;
+    _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
-	// FIXME same as change_queue_access
-	if (queue_id == Q_KEYBOARD) {
-		queue_ptr = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
-	} else if (queue_id == Q_SERIAL_OUT) {
-		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
-	} else if (queue_id == q_runtime) {
-		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-	} else {
-		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-		return FALSE;
-	}
+	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
-//	_SEC_HW_ERROR("REG READ: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+	if (octopos_mailbox_attest_quota_limit(queue_ptr, count)) {
+        /* threshold regs will need to be inited everytime it switches */
+        switch (queue_id) {
+            case Q_KEYBOARD:
+                XMbox_SetSendThreshold(&Mbox_keyboard, 0);
+                XMbox_SetReceiveThreshold(&Mbox_keyboard, 0);
+                XMbox_SetInterruptEnable(&Mbox_keyboard, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+                break;
 
-	return octopos_mailbox_attest_quota_limit(queue_ptr, count);
+            case Q_SERIAL_OUT:
+                XMbox_SetSendThreshold(&Mbox_out, 0);
+                XMbox_SetReceiveThreshold(&Mbox_out, 0);
+                XMbox_SetInterruptEnable(&Mbox_out, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+                break;
+
+            case Q_RUNTIME1:
+                XMbox_SetSendThreshold(&Mbox_Runtime1, 0);
+                XMbox_SetReceiveThreshold(&Mbox_Runtime1, 0);
+                XMbox_SetInterruptEnable(&Mbox_Runtime1, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+                break;
+
+            case Q_RUNTIME2:
+                XMbox_SetSendThreshold(&Mbox_Runtime2, 0);
+                XMbox_SetReceiveThreshold(&Mbox_Runtime2, 0);
+                XMbox_SetInterruptEnable(&Mbox_Runtime2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+                break;
+
+            default:
+                _SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
+        }
+
+        return TRUE;
+    } else {
+        return FALSE;
+    }
 }
 
 static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -145,7 +159,6 @@ void queue_sync_getval(uint8_t queue_id, int *val)
 
 void wait_on_queue(uint8_t queue_id, uint8_t *buf)
 {
-//	sem_wait(&interrupts[queue_id]);
 	sem_wait_impatient_receive_buf(&interrupts[queue_id], Mbox_regs[queue_id], buf);
 }
 
@@ -154,12 +167,8 @@ void wait_for_app_load(void)
 	sem_wait(&load_app_sem);
 }
 
-// FIXME move it away.
-void app_main(struct runtime_api *api);
-
 void load_application_arch(char *msg, struct runtime_api *api)
 {
-//	while(1) sleep(1);
 	app_main(api);
 }
 
@@ -167,7 +176,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
 {
 	int 		bytes_read;
 
-	if (q_runtime == 0) {
+	if (q_runtime == 0 || !runtime_inited) {
 		return;
 	}
 
@@ -180,6 +189,9 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	}
 	
 	if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
+        // FIXME syscall are blocking wait on resp, this intr isn't in use.
+        // There is a small chance that the OS sends something other than
+        // syscall resp.
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG");
 //		 write_syscall_response(buf);
   		 sem_post(&interrupts[q_runtime]);
@@ -190,12 +202,6 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_CONTEXT_SWITCH_TAG");
 		// FIXME Zephyr not impl. One possible way: overwrite stack to return to a new app.
-	//				pthread_cancel(app_thread);
-	//				pthread_join(app_thread, NULL);
-	//				int ret = pthread_create(&ctx_thread, NULL, store_context, NULL);
-	//				if (ret)
-	//					printf("Error: couldn't launch the app thread\n");
-	//				has_ctx_thread = true;
 	}
 	free(buf);
 }
@@ -205,11 +211,9 @@ static void handle_mailbox_interrupts(void* callback_ref)
     u32         mask;
     XMbox       *mbox_inst = (XMbox *)callback_ref;
 
-//    _SEC_HW_DEBUG("Mailbox ref: %p", callback_ref);
     mask = XMbox_GetInterruptStatus(mbox_inst);
 
     if (mask & XMB_IX_STA) {
-//        _SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
         if (callback_ref == &Mbox_out) {
             /* Serial Out */
         	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
@@ -232,7 +236,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
         	_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
         }
     } else if (mask & XMB_IX_RTA) {
-//        _SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
         if (callback_ref == &Mbox_keyboard) {
             /* Keyboard */
         	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
@@ -255,34 +258,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
     }
 
     XMbox_ClearInterrupt(mbox_inst, mask);
-//	/* interrupt handling loop */
-//	while (keep_polling) {
-////		read(fd_intr, &interrupt, 1);
-//		if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
-//			printf("Error: invalid interrupt (%d)\n", interrupt);
-//			exit(-1);
-//		} else if (interrupt > NUM_QUEUES) {
-//			// FIXME: Question Zephyr What is change_queue? seems it is set for ipc
-//			if ((interrupt - NUM_QUEUES) == change_queue) {
-//				sem_post(&interrupt_change);
-//				sem_post(&interrupts[q_runtime]);
-//			}
-//
-//			/* ignore the rest */
-//			continue;
-//		} else if (interrupt == q_runtime && !secure_ipc_mode) {
-//			uint8_t opcode[2];
-//			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-//
-//			opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-//			opcode[1] = q_runtime;
-////			write(fd_out, opcode, 2);
-////			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-//				...
-//		} else {
-//			sem_post(&interrupts[interrupt]);
-//		}
-//	}
 }
 
 void *run_app(void *load_buf);
@@ -350,23 +325,17 @@ int init_runtime(int runtime_id)
    	Mbox_regs[Q_KEYBOARD] = &Mbox_keyboard;
    	Mbox_regs[Q_SERIAL_OUT] = &Mbox_out;
 
-//    XMbox_SetSendThreshold(&Mbox_keyboard, 0);
-//    XMbox_SetReceiveThreshold(&Mbox_keyboard, 0);
-//    XMbox_SetInterruptEnable(&Mbox_keyboard, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
-//    XMbox_SetSendThreshold(&Mbox_out, 0);
-//    XMbox_SetReceiveThreshold(&Mbox_out, 0);
-//    XMbox_SetInterruptEnable(&Mbox_out, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
-//    XMbox_SetSendThreshold(&Mbox_Runtime2, 0);
-//    XMbox_SetReceiveThreshold(&Mbox_Runtime2, 0);
-//    XMbox_SetInterruptEnable(&Mbox_Runtime2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+    Mbox_ctrl_regs[Q_KEYBOARD] = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
+    Mbox_ctrl_regs[Q_SERIAL_OUT] = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
+    Mbox_ctrl_regs[Q_RUNTIME1] = XPAR_OCTOPOS_MAILBOX_3WRI_2_BASEADDR;
+    Mbox_ctrl_regs[Q_RUNTIME2] = XPAR_OCTOPOS_MAILBOX_3WRI_1_BASEADDR;
+
     XMbox_SetSendThreshold(Mbox_regs[q_runtime], 0);
     XMbox_SetReceiveThreshold(Mbox_regs[q_runtime], 0);
     XMbox_SetInterruptEnable(Mbox_regs[q_runtime], XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
     XMbox_SetSendThreshold(&Mbox_sys, 0);
     XMbox_SetReceiveThreshold(&Mbox_sys, 0);
     XMbox_SetInterruptEnable(&Mbox_sys, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
-
-
 
     Xil_ExceptionInit();
     Xil_ExceptionEnable();
@@ -449,23 +418,16 @@ int init_runtime(int runtime_id)
 
 	OMboxIds_init();
 
+    runtime_inited = TRUE;
+
     return XST_SUCCESS;
 }
 
 void close_runtime(void)
 {
-	// FIXME Question upon termination, there's nothing to report to OS, right?
-//	uint8_t opcode[2];
-//	opcode[0] = MAILBOX_OPCODE_RESET;
-//	write(fd_out, opcode, 2);
-
-//    circular_buf_free(cbuf_keyboard);
-//    circular_buf_free(cbuf_runtime);
-
 	// FIXME: rm this when microblaze doesn't use ddr for cache
 	Xil_DCacheDisable();
 	Xil_ICacheDisable();
 }
-
 
 #endif
