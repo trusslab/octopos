@@ -11,7 +11,7 @@
 #include "xmbox.h"
 
 #ifdef ARCH_SEC_HW_OS
-extern XMbox Mbox2;
+extern XMbox Mbox_keyboard;
 extern sem_t availables[NUM_QUEUES + 1];
 #endif
 
@@ -228,7 +228,7 @@ XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
         while (!has_new) {
             for (int i = 0; i < mb_count; ++i) {
 #ifdef ARCH_SEC_HW_OS
-            	if ((XMbox*) args_ptrs[i] == &Mbox2 &&
+            	if ((XMbox*) args_ptrs[i] == &Mbox_keyboard &&
             			availables[Q_KEYBOARD].count == 0) {
             		continue;
             	}
