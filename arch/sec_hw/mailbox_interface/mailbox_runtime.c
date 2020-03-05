@@ -71,9 +71,10 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count
 {
     _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
+	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
-	if (octopos_mailbox_attest_quota_limit(queue_ptr, count)) {
+	if (octopos_mailbox_attest_quota_limit(queue_ptr, count * factor)) {
         /* threshold regs will need to be inited everytime it switches */
         switch (queue_id) {
             case Q_KEYBOARD:

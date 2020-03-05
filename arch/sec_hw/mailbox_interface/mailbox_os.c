@@ -208,25 +208,14 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint16_t count)
 {
-	UINTPTR queue_ptr;
+    _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
-	// FIXME replace this if else with Mbox_ctrl_regs
-	if (queue_id == Q_KEYBOARD) {
-		queue_ptr = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
-	} else if (queue_id == Q_SERIAL_OUT) {
-		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
-	} else if (queue_id == Q_RUNTIME1) {
-		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_1_BASEADDR;
-	} else if (queue_id == Q_RUNTIME2) {
-		queue_ptr = XPAR_OCTOPOS_MAILBOX_3WRI_2_BASEADDR;
-	} else {
-		_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
-		return;
-	}
-
+	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
 	u32 reg = 0;
+	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
+
 	reg = octopos_mailbox_calc_owner(reg, OMboxIds[queue_id][proc_id]);
-	reg = octopos_mailbox_calc_quota_limit(reg, count);
+	reg = octopos_mailbox_calc_quota_limit(reg, count * factor);
 	reg = octopos_mailbox_calc_time_limit(reg, MAX_OCTOPOS_MAILBOX_QUOTE);
 
 	_SEC_HW_DEBUG("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
@@ -453,6 +442,11 @@ int init_os_mailbox(void)
    	Mbox_regs[Q_RUNTIME2] = &Mbox_runtime2;
    	Mbox_regs[Q_KEYBOARD] = &Mbox_keyboard;
    	Mbox_regs[Q_SERIAL_OUT] = &Mbox_output;
+
+    Mbox_ctrl_regs[Q_KEYBOARD] = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
+    Mbox_ctrl_regs[Q_SERIAL_OUT] = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
+    Mbox_ctrl_regs[Q_RUNTIME1] = XPAR_OCTOPOS_MAILBOX_3WRI_2_BASEADDR;
+    Mbox_ctrl_regs[Q_RUNTIME2] = XPAR_OCTOPOS_MAILBOX_3WRI_1_BASEADDR;
 
     sem_init(&interrupts[Q_OS1], 0, 0);
     sem_init(&interrupts[Q_OS2], 0, 0);

@@ -171,11 +171,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
 
-//		/* No more than 200 characters */
-//		if (count > 200) {
-//			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-//			break;
-//		}
+		/* No more than 200 characters */
+		if (count > 200) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
 
 #ifdef ARCH_SEC_HW
 		_SEC_HW_DEBUG("arg0 = %d", count);
@@ -213,11 +213,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		_SEC_HW_DEBUG("arg0 = %d", count);
 #endif
 
-		// /* No more than 100 characters */
-		// if (count > 100) {
-		// 	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-		// 	break;
-		// }
+		 /* No more than 100 characters */
+		 if (count > 100) {
+		 	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+		 	break;
+		 }
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */
