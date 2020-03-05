@@ -35,7 +35,7 @@
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[0]) = syscall_nr;		\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
 
 #define SYSCALL_SET_ONE_ARG(syscall_nr, arg0)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
@@ -46,41 +46,40 @@
 #define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
-	*((uint16_t *) &buf[0]) = syscall_nr;		\
-	*((uint32_t *) &buf[2]) = arg0;			\
-	*((uint32_t *) &buf[6]) = arg1;			\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SERIALIZE_32(arg0, &buf[2])					\
+	SERIALIZE_32(arg1, &buf[6])					\
 
 #define SYSCALL_SET_THREE_ARGS(syscall_nr, arg0, arg1, arg2)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint16_t *) &buf[0]) = syscall_nr;			\
-	*((uint32_t *) &buf[2]) = arg0;				\
-	*((uint32_t *) &buf[6]) = arg1;				\
-	*((uint32_t *) &buf[10]) = arg2;			\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SERIALIZE_32(arg0, &buf[2])					\
+	SERIALIZE_32(arg1, &buf[6])					\
+	SERIALIZE_32(arg2, &buf[10])				\
 
 #define SYSCALL_SET_FOUR_ARGS(syscall_nr, arg0, arg1, arg2, arg3)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];				\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);			\
-	*((uint16_t *) &buf[0]) = syscall_nr;				\
-	*((uint32_t *) &buf[2]) = arg0;					\
-	*((uint32_t *) &buf[6]) = arg1;					\
-	*((uint32_t *) &buf[10]) = arg2;				\
-	*((uint32_t *) &buf[14]) = arg3;				\
-
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SERIALIZE_32(arg0, &buf[2])					\
+	SERIALIZE_32(arg1, &buf[6])					\
+	SERIALIZE_32(arg2, &buf[10])				\
+	SERIALIZE_32(arg3, &buf[14])				\
 
 #define SYSCALL_SET_ONE_RET(ret0)			\
 	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
-	*((uint32_t *) &buf[1]) = ret0;			\
+	SERIALIZE_32(ret0, &buf[1])					\
 
 #define SYSCALL_SET_TWO_RETS(ret0, ret1)		\
 	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
-	*((uint32_t *) &buf[1]) = ret0;			\
-	*((uint32_t *) &buf[5]) = ret1;			\
+	SERIALIZE_32(ret0, &buf[1])					\
+	SERIALIZE_32(ret1, &buf[5])					\
 
 /* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
 #define SYSCALL_SET_ONE_RET_DATA(ret0, data, size)		\
 	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;		\
-	*((uint32_t *) &buf[1]) = ret0;				\
+	SERIALIZE_32(ret0, &buf[1])							\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
 	if (max_size < 256 && size <= ((int) max_size)) {	\
 		buf[5] = (uint8_t) size;			\
