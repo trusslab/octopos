@@ -261,11 +261,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-#ifdef ARCH_UMODE
 		if (runtime_proc->app->output_dst)
 			ret = ipc_send_data(runtime_proc->app, data, (int) data_size);
 		else
-#endif
 			ret = app_write_to_shell(runtime_proc->app, data, data_size);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
@@ -277,9 +275,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 
 		if (runtime_proc->app->input_src) {
-#ifdef ARCH_UMODE
 			ipc_receive_data(runtime_proc->app);
-#endif
 			*no_response = true;
 		} else {
 			int ret = app_read_from_shell(runtime_proc->app);
@@ -466,6 +462,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
+#endif
 	case SYSCALL_REQUEST_SECURE_IPC: {
 		SYSCALL_GET_TWO_ARGS
 		uint8_t target_runtime_queue_id = arg0;
@@ -507,6 +504,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET(0)
 		break;
 	}
+#ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc || !runtime_proc->app) {
