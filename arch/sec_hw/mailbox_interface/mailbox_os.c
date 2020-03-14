@@ -429,12 +429,11 @@ int init_os_mailbox(void)
     XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
     XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
-    // FIXME figure out runtime2 interrupt #
-//    irqNo = XPAR_FABRIC_MAILBOX_3_INTERRUPT_1_INTR;
-//    XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_runtime2);
-//    XScuGic_Enable(&irq_controller, irqNo);
-//    XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-//    XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+    irqNo = XPAR_FABRIC_MAILBOX_3_INTERRUPT_1_INTR;
+    XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_runtime2);
+    XScuGic_Enable(&irq_controller, irqNo);
+    XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+    XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
     Mbox_regs[Q_OS1] = &Mbox_OS1;
     Mbox_regs[Q_OS2] = &Mbox_OS2;

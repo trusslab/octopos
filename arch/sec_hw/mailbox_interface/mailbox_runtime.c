@@ -23,6 +23,24 @@
 #include <octopos/runtime.h>
 #include <octopos/error.h>
 
+#if RUNTIME_ID == 1
+	#define XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR XPAR_MICROBLAZE_2_AXI_INTC_FIT_TIMER_0_INTERRUPT_INTR
+	#define XPAR_COMMON_AXI_INTC_ENCLAVE_MAILBOX_INTERRUPT_INTR XPAR_MICROBLAZE_2_AXI_INTC_ENCLAVE0_PS_MAILBOX_INTERRUPT_1_INTR
+	#define XPAR_COMMON_ENCLAVE_PS_MAILBOX_DEVICE_ID XPAR_ENCLAVE0_PS_MAILBOX_IF_1_DEVICE_ID
+	#define XPAR_COMMON_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR
+	#define XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR
+	#define XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR
+	#define XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR
+#elif RUNTIME_ID == 2
+	#define XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR XPAR_MICROBLAZE_3_AXI_INTC_FIT_TIMER_1_INTERRUPT_INTR
+	#define XPAR_COMMON_AXI_INTC_ENCLAVE_MAILBOX_INTERRUPT_INTR XPAR_MICROBLAZE_3_AXI_INTC_ENCLAVE1_PS_MAILBOX_INTERRUPT_1_INTR
+	#define XPAR_COMMON_ENCLAVE_PS_MAILBOX_DEVICE_ID XPAR_ENCLAVE1_PS_MAILBOX_IF_1_DEVICE_ID
+	#define XPAR_COMMON_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR
+	#define XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR
+	#define XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR
+	#define XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR
+#endif
+
 extern int p_runtime;
 extern int q_runtime;
 extern int q_os;
@@ -293,7 +311,7 @@ int init_runtime(int runtime_id)
 		return -1;
 	}
 
-	ConfigPtr_sys = XMbox_LookupConfig(XPAR_ENCLAVE0_PS_MAILBOX_IF_1_DEVICE_ID);
+	ConfigPtr_sys = XMbox_LookupConfig(XPAR_COMMON_ENCLAVE_PS_MAILBOX_DEVICE_ID);
     Status = XMbox_CfgInitialize(&Mbox_sys, ConfigPtr_sys, ConfigPtr_sys->BaseAddress);
     if (Status != XST_SUCCESS) {
         return XST_FAILURE;
@@ -348,7 +366,7 @@ int init_runtime(int runtime_id)
 
     // FIXME These will be per runtime configurations, unless we change the processor names in the macro
     Status = XIntc_Connect(&intc,
-        XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR,
+    	XPAR_COMMON_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_keyboard);
     if (Status != XST_SUCCESS) {
@@ -356,7 +374,7 @@ int init_runtime(int runtime_id)
     }
 
     Status = XIntc_Connect(&intc,
-        XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR,
+    	XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_out);
     if (Status != XST_SUCCESS) {
@@ -364,7 +382,7 @@ int init_runtime(int runtime_id)
     }
 
     Status = XIntc_Connect(&intc,
-        XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR,
+    	XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_Runtime1);
     if (Status != XST_SUCCESS) {
@@ -372,7 +390,7 @@ int init_runtime(int runtime_id)
     }
 
     Status = XIntc_Connect(&intc,
-        XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR,
+    	XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_Runtime2);
     if (Status != XST_SUCCESS) {
@@ -380,7 +398,7 @@ int init_runtime(int runtime_id)
     }
 
     Status = XIntc_Connect(&intc,
-    	XPAR_MICROBLAZE_2_AXI_INTC_ENCLAVE0_PS_MAILBOX_INTERRUPT_1_INTR,
+    	XPAR_COMMON_AXI_INTC_ENCLAVE_MAILBOX_INTERRUPT_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
         (void*)&Mbox_sys);
     if (Status != XST_SUCCESS) {
@@ -388,19 +406,19 @@ int init_runtime(int runtime_id)
     }
 
     Status = XIntc_Connect(&intc,
-    	XPAR_MICROBLAZE_2_AXI_INTC_FIT_TIMER_0_INTERRUPT_INTR,
+    	XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR,
         (XInterruptHandler)handle_fixed_timer_interrupts,
         0);
     if (Status != XST_SUCCESS) {
         return XST_FAILURE;
     }
 
-    XIntc_Enable(&intc, XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR);
-    XIntc_Enable(&intc, XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR);
-    XIntc_Enable(&intc, XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR);
-    XIntc_Enable(&intc, XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR);
-    XIntc_Enable(&intc, XPAR_MICROBLAZE_2_AXI_INTC_ENCLAVE0_PS_MAILBOX_INTERRUPT_1_INTR);
-    XIntc_Enable(&intc, XPAR_MICROBLAZE_2_AXI_INTC_FIT_TIMER_0_INTERRUPT_INTR);
+    XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR);
+    XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR);
+    XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR);
+    XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR);
+    XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_ENCLAVE_MAILBOX_INTERRUPT_INTR);
+    XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
 
     Status = XIntc_Start(&intc, XIN_REAL_MODE);
     if (Status != XST_SUCCESS) {

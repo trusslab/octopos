@@ -1234,6 +1234,9 @@ void *run_app(void *load_buf)
 		return NULL;
 	}
 	wait_for_app_load();
+	
+	_SEC_HW_ERROR("%s: [0] app=%s\r\n", __func__, load_buf);
+
 	load_application((char *) load_buf);
 	still_running = false;
 	inform_os_of_termination();
@@ -1293,8 +1296,11 @@ int main(int argc, char **argv)
 int main()
 {
     // FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
+#if RUNTIME == 1
     Xil_ICacheEnable();
     Xil_DCacheEnable();
+#endif
+
 #endif
 
 	int runtime_id = -1;
@@ -1348,7 +1354,9 @@ int main()
 	net_stack_exit();
 #endif
 
+#if RUNTIME == 1
 	close_runtime();
+#endif
 
 	return 0;
 }
