@@ -134,15 +134,19 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
         break;
     case Q_OS1:
         message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-        XMbox_Read(&Mbox_OS1, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+//        XMbox_Read(&Mbox_OS1, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+        XMbox_ReadBlocking(&Mbox_OS1, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 
-        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
-            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes",
-                bytes_read,
-                MAILBOX_QUEUE_MSG_SIZE);
-            *queue_id = 0;
-            return 0;
-        }
+//        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+//            _SEC_HW_ERROR("Q_OS1 read only %d bytes, should be %d bytes",
+//                bytes_read,
+//                MAILBOX_QUEUE_MSG_SIZE);
+////            // DEBUG
+////            for (int i = 0; i < MAILBOX_QUEUE_MSG_SIZE; i++)
+////            	_SEC_HW_ERROR("%c (%02X)", message_buffer[i], message_buffer[i]);
+//            *queue_id = 0;
+//            return 0;
+//        }
 
         memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
 
@@ -150,15 +154,16 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
         break;
     case Q_OS2:
         message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-        XMbox_Read(&Mbox_OS2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+//        XMbox_Read(&Mbox_OS2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+        XMbox_ReadBlocking(&Mbox_OS2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 
-        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
-            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes",
-                bytes_read,
-                MAILBOX_QUEUE_MSG_SIZE);
-            *queue_id = 0;
-            return 0;
-        }
+//        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+//            _SEC_HW_ERROR("Q_OS2 read only %d bytes, should be %d bytes",
+//                bytes_read,
+//                MAILBOX_QUEUE_MSG_SIZE);
+//            *queue_id = 0;
+//            return 0;
+//        }
 
         memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
 

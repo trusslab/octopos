@@ -7,6 +7,11 @@
 #include <sys/stat.h>
 #include <octopos/runtime.h>
 
+#include "arch/defines.h"
+#ifdef ARCH_SEC_HW
+#include "arch/sec_hw.h"
+#endif
+
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
 int num_chars = 0;
@@ -38,15 +43,22 @@ void app_main(struct runtime_api *api)
 	uint8_t target_qid = 0;
 	uint8_t own_qid = api->get_runtime_queue_id();
 
+	_SEC_HW_ERROR("own_qid = %d", own_qid);
+
 	/* receive message */
 	int ret = api->read_from_shell(line, &size);
 	if (ret || size == 0) {
+#ifdef ARCH_UMODE
 		printf("Didn't receive a valid response\n");
+#else
+		_SEC_HW_ERROR("Didn't receive a valid response\n");
+#endif
 		return;
 	}
 
 	target_qid = line[0];
 	printf("Received response: target_qid = %d (size = %d)\n", target_qid, size);
+	_SEC_HW_ERROR("target_qid = %d (size = %d)\n", target_qid, size);
 
 	/* send response */
 	insecure_printf("%c", own_qid);

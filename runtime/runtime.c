@@ -1235,8 +1235,6 @@ void *run_app(void *load_buf)
 	}
 	wait_for_app_load();
 	
-	_SEC_HW_ERROR("%s: [0] app=%s\r\n", __func__, load_buf);
-
 	load_application((char *) load_buf);
 	still_running = false;
 	inform_os_of_termination();
