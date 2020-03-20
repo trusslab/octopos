@@ -250,16 +250,17 @@ static void handle_mailbox_interrupts(void* callback_ref)
         	/* Syscall request */
         	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
         	sem_post(&interrupts[q_os]);
-        	// FIXME: impl secure IPC (write to another runtime's queue)
-//        } else if (callback_ref != Mbox_regs[q_runtime]) {
-//        	/* IPC to other runtime */
-//        	if (callback_ref == &Mbox_Runtime1) {
-//        		sem_post(&interrupts[Q_RUNTIME1]);
-//        	} else if (callback_ref == &Mbox_Runtime2) {
-//        		sem_post(&interrupts[Q_RUNTIME2]);
-//        	} else {
-//        		_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
-//        	}
+        } else if (callback_ref != Mbox_regs[q_runtime]) {
+        	/* IPC to other runtime */
+        	if (callback_ref == &Mbox_Runtime1) {
+        		sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
+        		sem_post(&interrupts[Q_RUNTIME1]);
+        	} else if (callback_ref == &Mbox_Runtime2) {
+        		sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
+        		sem_post(&interrupts[Q_RUNTIME2]);
+        	} else {
+        		_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
+        	}
         } else {
         	_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
         }
@@ -273,8 +274,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
         	if (!secure_ipc_mode) {
                 sem_init(&runtime_wakeup, 0, 0);
                 sem_post(&runtime_wakeup);
-        	} else {
-        		// FIXME: impl secure IPC
         	}
         } else {
         	_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);

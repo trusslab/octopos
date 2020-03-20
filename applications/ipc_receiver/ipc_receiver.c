@@ -74,7 +74,12 @@ void app_main(struct runtime_api *api)
 	int secure_msg_size;
 
 	api->recv_msg_on_secure_ipc(secure_msg, &secure_msg_size);
+
+#ifdef ARCH_UMODE
 	printf("Received secure msg: %s (size = %d)\n", secure_msg, secure_msg_size);
+#else
+	_SEC_HW_ERROR("msg: %s (size = %d)", secure_msg, secure_msg_size);
+#endif
 
 	strcpy(secure_msg, "secure msg 2");
 	secure_msg_size = sizeof("secure msg 2");
@@ -82,3 +87,4 @@ void app_main(struct runtime_api *api)
 
 	api->yield_secure_ipc();
 }
+

@@ -64,6 +64,10 @@ int srq_tail;
 int srq_counter;
 sem_t srq_sem;
 
+#ifdef ARCH_SEC_HW
+extern sem_t interrupt_change;
+#endif
+
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
@@ -326,18 +330,21 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 
 	/* wait for response or a change of queue ownership */
 #ifdef ARCH_SEC_HW
-	wait_on_queue(q_runtime, buf);
+//	wait_on_queue(q_runtime, buf);
+	// FIXME potential errors are ignored FOR DEBUG ONLY
+	// FIXME question: why don't return 0 on success,
+	//	so we don't have to be speculative whether or not syscall will return something?
+	sem_wait(&interrupt_change);
+	*no_response = true;
 #else
 	wait_on_queue(q_runtime);
-#endif
 	is_ownership_change(&is_change);
 	if (!is_change) {
-#ifdef ARCH_UMODE
 		read_syscall_response(buf);
-#endif
 	} else {
 		*no_response = true;
 	}
+#endif
 }
 
 #ifdef ARCH_UMODE
@@ -539,8 +546,6 @@ static void write_to_secure_serial_out(char *buf)
 {
 	runtime_send_msg_on_queue((uint8_t *) buf, Q_SERIAL_OUT);
 }
-
-
 
 static void read_char_from_secure_keyboard(char *buf)
 {
