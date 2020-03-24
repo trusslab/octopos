@@ -33,6 +33,13 @@ void cleanup_platform();
 #define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING     \
     (MAILBOX_MAX_COMMAND_SIZE-MAILBOX_QUEUE_MSG_SIZE+1)
 
+/* Defines the value written to the mailbox receive
+ * threshold register. The MAILBOX_DEFAULT_RX_THRESHOLDth
+ * writes (of 4 bytes messages) will trigger the raising edge
+ * of the receive interrupt.
+ */
+#define MAILBOX_DEFAULT_RX_THRESHOLD			MAILBOX_MAX_COMMAND_SIZE/4 - 1
+
 #define TO_BIG_ENDIAN_16(i)                     \
      ((((u16) i>>8) & 0x00FF) |                 \
      (((u16) i<<8) & 0xFF00))

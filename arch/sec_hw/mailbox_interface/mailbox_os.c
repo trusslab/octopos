@@ -362,27 +362,22 @@ int init_os_mailbox(void)
     }
 
     XMbox_SetSendThreshold(&Mbox_output, 0);
-    XMbox_SetReceiveThreshold(&Mbox_output, 0);
-    XMbox_SetInterruptEnable(&Mbox_output, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+    XMbox_SetInterruptEnable(&Mbox_output, XMB_IX_STA | XMB_IX_ERR);
 
-    XMbox_SetReceiveThreshold(&Mbox_keyboard, 0);
+    XMbox_SetReceiveThreshold(&Mbox_keyboard, MAILBOX_DEFAULT_RX_THRESHOLD);
     XMbox_SetInterruptEnable(&Mbox_keyboard, XMB_IX_RTA | XMB_IX_ERR);
 
-    XMbox_SetSendThreshold(&Mbox_OS1, 0);
-    XMbox_SetReceiveThreshold(&Mbox_OS1, 0);
-    XMbox_SetInterruptEnable(&Mbox_OS1, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+    XMbox_SetReceiveThreshold(&Mbox_OS1, MAILBOX_DEFAULT_RX_THRESHOLD);
+    XMbox_SetInterruptEnable(&Mbox_OS1, XMB_IX_RTA | XMB_IX_ERR);
 
-    XMbox_SetSendThreshold(&Mbox_OS2, 0);
-    XMbox_SetReceiveThreshold(&Mbox_OS2, 0);
-    XMbox_SetInterruptEnable(&Mbox_OS2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+    XMbox_SetReceiveThreshold(&Mbox_OS2, MAILBOX_DEFAULT_RX_THRESHOLD);
+    XMbox_SetInterruptEnable(&Mbox_OS2, XMB_IX_RTA | XMB_IX_ERR);
 
     XMbox_SetSendThreshold(&Mbox_runtime1, 0);
-    XMbox_SetReceiveThreshold(&Mbox_runtime1, 0);
-    XMbox_SetInterruptEnable(&Mbox_runtime1, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+    XMbox_SetInterruptEnable(&Mbox_runtime1, XMB_IX_STA | XMB_IX_ERR);
 
     XMbox_SetSendThreshold(&Mbox_runtime2, 0);
-    XMbox_SetReceiveThreshold(&Mbox_runtime2, 0);
-    XMbox_SetInterruptEnable(&Mbox_runtime2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+    XMbox_SetInterruptEnable(&Mbox_runtime2, XMB_IX_STA | XMB_IX_ERR);
 
     Xil_ExceptionInit();
 

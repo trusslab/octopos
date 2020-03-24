@@ -76,8 +76,7 @@ int init_keyboard(void)
     }
 
     XMbox_SetSendThreshold(&Mbox, 0);
-    XMbox_SetReceiveThreshold(&Mbox, 0);
-    XMbox_SetInterruptEnable(&Mbox, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+    XMbox_SetInterruptEnable(&Mbox, XMB_IX_STA | XMB_IX_ERR);
 
     Xil_ExceptionInit();
     Xil_ExceptionEnable();
