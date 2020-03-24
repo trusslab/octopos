@@ -199,18 +199,26 @@ void shell_process_input(char buf)
 
 void inform_shell_of_termination(uint8_t runtime_proc_id)
 {
+	_SEC_HW_ERROR("[0] runtime_proc_id=%d", runtime_proc_id);
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("NULL runtime_proc or app", __func__);
+#else
 		printf("%s: Error: NULL runtime_proc or app\n", __func__);
+#endif
 		return;
 	}
-
+	_SEC_HW_ERROR("[1]");
 	if (runtime_proc->app == foreground_app) {
+		_SEC_HW_ERROR("[1.5]");
 		shell_status = SHELL_STATE_WAITING_FOR_CMD;
 		foreground_app = NULL;
 		output_printf("octopos$> ");
 	}
+	_SEC_HW_ERROR("[2]");
 	sched_clean_up_app(runtime_proc_id);
+	_SEC_HW_ERROR("[3]");
 }
 
 void inform_shell_of_pause(uint8_t runtime_proc_id)

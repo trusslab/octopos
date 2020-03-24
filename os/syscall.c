@@ -469,26 +469,22 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		uint32_t count = arg1;
 		uint32_t runtime_queue_id = 0;
 
-		_SEC_HW_ERROR("[0]");
 		/* No more than 200 block reads/writes */
 		if (count > 200) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		_SEC_HW_ERROR("[1]");
 
 		if (!is_valid_runtime_queue_id(target_runtime_queue_id)) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		_SEC_HW_ERROR("[2]");
 
 		runtime_queue_id = get_runtime_queue_id(runtime_proc_id);
 		if (!runtime_queue_id) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 			break;
 		}
-		_SEC_HW_ERROR("[3]");
 
 		int ret1 = is_queue_available(target_runtime_queue_id);
 		int ret2 = is_queue_available(runtime_queue_id);
@@ -497,15 +493,17 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
-		_SEC_HW_ERROR("[4]");
 
 		int ret = set_up_secure_ipc(target_runtime_queue_id, runtime_queue_id, runtime_proc_id, count, no_response);
 		if (ret) {
 			SYSCALL_SET_ONE_RET((uint32_t) ret)
 			break;
 		}
-		_SEC_HW_ERROR("[5] *no_response = %d", *no_response);
 
+		/* Runtime queue ownership has been transferred at this point,
+		 * So we cannot issue syscall response to the runtime anymore.
+		 * Otherwise, return the error code.
+		 */
 		if (!(*no_response))
 			SYSCALL_SET_ONE_RET(0)
 		break;

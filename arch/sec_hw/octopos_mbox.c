@@ -6,6 +6,8 @@
 #include "arch/sec_hw.h"
 #include "arch/octopos_mbox.h"
 
+#define OCTOPOS_MAILBOX_INTR_OFFSET 4
+
 u32 octopos_mailbox_get_status_reg(UINTPTR base)
 {
 	Xil_AssertNonvoid(base != 0);
@@ -32,6 +34,20 @@ void octopos_mailbox_set_owner(UINTPTR base, u8 owner)
 	Xil_AssertVoid(base != 0);
 
 	u32 reg = octopos_mailbox_get_status_reg(base);
+	reg = (OWNER_MASK & reg) | owner << 24;
+
+	octopos_mailbox_set_status_reg(base, reg);
+}
+
+/* Temporary owner of the mailbox cannot delegate full quota to another
+ * owner (or switch back to the OS). So we must take one off from the
+ * read limit and time limit quotas.
+ */
+void octopos_mailbox_deduct_and_set_owner(UINTPTR base, u8 owner)
+{
+	Xil_AssertVoid(base != 0);
+
+	u32 reg = octopos_mailbox_get_status_reg(base) - 0x1001;
 	reg = (OWNER_MASK & reg) | owner << 24;
 
 	octopos_mailbox_set_status_reg(base, reg);
@@ -110,4 +126,11 @@ _Bool octopos_mailbox_attest_time_limit(UINTPTR base, u16 limit)
 	Xil_AssertNonvoid(base != 0);
 
 	return limit == (u16) (octopos_mailbox_get_status_reg(base) & 0xfff);
+}
+
+void octopos_mailbox_clear_interrupt(UINTPTR base)
+{
+	Xil_AssertVoid(base != 0);
+
+	Xil_Out32(base + OCTOPOS_MAILBOX_INTR_OFFSET, 1);
 }

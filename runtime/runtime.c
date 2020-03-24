@@ -947,7 +947,7 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 		return ERR_FAULT;
 	}
 
-	/* FIXME
+	/* FIXME: attest this
 	attest_ret = mailbox_attest_queue_access(q_runtime,
 					WRITE_ACCESS, count, other runtime);
 	if (!attest_ret) {
@@ -967,10 +967,12 @@ static int yield_secure_ipc(void)
 	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
 
-	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
+	// FIXME re-enable once sem count is correct again
+	////wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
 	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(q_runtime, WRITE_ACCESS, P_OS);
+
 	return 0;
 }
 

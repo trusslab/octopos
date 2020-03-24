@@ -35,4 +35,8 @@ _Bool octopos_mailbox_attest_quota_limit(UINTPTR base, u16 limit);
 
 _Bool octopos_mailbox_attest_time_limit(UINTPTR base, u16 limit);
 
+void octopos_mailbox_clear_interrupt(UINTPTR base);
+
+void octopos_mailbox_deduct_and_set_owner(UINTPTR base, u8 owner);
+
 #endif /* __ARCH_OCTOPOS_MBOX_H_ */

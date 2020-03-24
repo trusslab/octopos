@@ -31,7 +31,6 @@
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR
-	#define XPAR_COMMON_AXI_INTC_OCTOPOS_MAILBOX_RUNTIME_INTERRUPT_CTRL_FIXED_INTR XPAR_MICROBLAZE_2_AXI_INTC_OCTOPOS_MAILBOX_3WRI_2_INTERRUPT_CTRL_FIXED_INTR
 #elif RUNTIME_ID == 2
 	#define XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR XPAR_MICROBLAZE_3_AXI_INTC_FIT_TIMER_1_INTERRUPT_INTR
 	#define XPAR_COMMON_AXI_INTC_ENCLAVE_MAILBOX_INTERRUPT_INTR XPAR_MICROBLAZE_3_AXI_INTC_ENCLAVE1_PS_MAILBOX_INTERRUPT_1_INTR
@@ -40,12 +39,11 @@
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR
-	#define XPAR_COMMON_AXI_INTC_OCTOPOS_MAILBOX_RUNTIME_INTERRUPT_CTRL_FIXED_INTR XPAR_MICROBLAZE_3_AXI_INTC_OCTOPOS_MAILBOX_3WRI_1_INTERRUPT_CTRL_FIXED_INTR
 #endif
 
-extern int p_runtime;
-extern int q_runtime;
-extern int q_os;
+extern int 		p_runtime;
+extern int 		q_runtime;
+extern int		q_os;
 
 uint8_t 		load_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
 extern bool 	still_running;
@@ -79,12 +77,14 @@ void app_main(struct runtime_api *api);
 
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
-    _SEC_HW_ASSERT_VOID(queue_id != q_runtime)
     _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
-	octopos_mailbox_set_owner(queue_ptr, OMboxIds[queue_id][proc_id]);
+	_SEC_HW_ERROR("[0] queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+	octopos_mailbox_deduct_and_set_owner(queue_ptr, OMboxIds[queue_id][proc_id]);
+
+	_SEC_HW_ERROR("[1] queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
 }
 
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count)
@@ -227,11 +227,16 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	free(buf);
 }
 
-static void handle_octopos_mailbox_interrupts(void* ignored)
+static void handle_octopos_mailbox_interrupts(void* callback_ref)
 {
-    _SEC_HW_ERROR("interrupt_change");
-	sem_post(&interrupt_change);
-	// FIXME clear interrupt
+	uint8_t queue_id = (int) callback_ref;
+//    _SEC_HW_ERROR("interrupt_change");
+	octopos_mailbox_clear_interrupt(OMboxCtrlIntrs[p_runtime][queue_id]);
+
+	if (queue_id == change_queue) {
+		_SEC_HW_ERROR("interrupt_change");
+		sem_post(&interrupt_change);
+	}
 }
 
 static void handle_mailbox_interrupts(void* callback_ref)
@@ -357,6 +362,9 @@ int init_runtime(int runtime_id)
     Mbox_ctrl_regs[Q_RUNTIME1] = XPAR_OCTOPOS_MAILBOX_3WRI_2_BASEADDR;
     Mbox_ctrl_regs[Q_RUNTIME2] = XPAR_OCTOPOS_MAILBOX_3WRI_1_BASEADDR;
 
+    /* OctopOS mailbox maps must be initialized before setting up interrupts. */
+	OMboxIds_init();
+
     XMbox_SetSendThreshold(Mbox_regs[q_runtime], 0);
     XMbox_SetReceiveThreshold(Mbox_regs[q_runtime], 0);
     XMbox_SetInterruptEnable(Mbox_regs[q_runtime], XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
@@ -372,7 +380,6 @@ int init_runtime(int runtime_id)
         return XST_FAILURE;
     }
 
-    // FIXME These will be per runtime configurations, unless we change the processor names in the macro
     Status = XIntc_Connect(&intc,
     	XPAR_COMMON_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR,
         (XInterruptHandler)handle_mailbox_interrupts,
@@ -421,10 +428,19 @@ int init_runtime(int runtime_id)
         return XST_FAILURE;
     }
 
+    /* Connect the OctopOS mailbox interrupts */
     Status = XIntc_Connect(&intc,
-    	XPAR_COMMON_AXI_INTC_OCTOPOS_MAILBOX_RUNTIME_INTERRUPT_CTRL_FIXED_INTR,
+    	OMboxCtrlIntrs[p_runtime][Q_RUNTIME1],
         (XInterruptHandler)handle_octopos_mailbox_interrupts,
-        0);
+		(void*) Q_RUNTIME1);
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+
+    Status = XIntc_Connect(&intc,
+    	OMboxCtrlIntrs[p_runtime][Q_RUNTIME2],
+        (XInterruptHandler)handle_octopos_mailbox_interrupts,
+		(void*) Q_RUNTIME2);
     if (Status != XST_SUCCESS) {
         return XST_FAILURE;
     }
@@ -435,7 +451,8 @@ int init_runtime(int runtime_id)
     XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR);
     XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_ENCLAVE_MAILBOX_INTERRUPT_INTR);
     XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
-    XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_OCTOPOS_MAILBOX_RUNTIME_INTERRUPT_CTRL_FIXED_INTR);
+    XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_RUNTIME1]);
+    XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_RUNTIME2]);
 
     Status = XIntc_Start(&intc, XIN_REAL_MODE);
     if (Status != XST_SUCCESS) {
@@ -452,7 +469,7 @@ int init_runtime(int runtime_id)
 //	cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
 //	cbuf_runtime = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
 
-	OMboxIds_init();
+
 
     runtime_inited = TRUE;
 
