@@ -971,7 +971,18 @@ static int yield_secure_ipc(void)
 	////wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
 	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
+
+/* ARCH_SEC_HW OctopOS mailbox only allows the current owner
+ * to change/yield ownership. This is different from umode.
+ * Thus, instead of explicitly yielding it, we attest it.
+ * In case the other runtime refuses to yield, we forcefully
+ * deplete the quota by repeatedly reading the mailbox.
+ */
+#ifdef ARCH_SEC_HW
+	// FIXME impl
+#else
 	mailbox_change_queue_access(q_runtime, WRITE_ACCESS, P_OS);
+#endif
 
 	return 0;
 }

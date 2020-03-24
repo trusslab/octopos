@@ -37,6 +37,14 @@ void OMboxIds_init() {
 	OMboxCtrlIntrs[P_RUNTIME2][Q_RUNTIME1] = XPAR_MICROBLAZE_3_AXI_INTC_OCTOPOS_MAILBOX_3WRI_2_INTERRUPT_CTRL1_INTR;
 	OMboxCtrlIntrs[P_RUNTIME2][Q_RUNTIME2] = XPAR_MICROBLAZE_3_AXI_INTC_OCTOPOS_MAILBOX_3WRI_1_INTERRUPT_CTRL_FIXED_INTR;
 #endif
+
+#ifdef ARCH_SEC_HW_OS
+	/* These numbers are hardware specific */
+	OMboxCtrlIntrs[P_OS][Q_KEYBOARD] = 126U;
+	OMboxCtrlIntrs[P_OS][Q_SERIAL_OUT] = 125U;
+	OMboxCtrlIntrs[P_OS][Q_RUNTIME1] = 136U;
+	OMboxCtrlIntrs[P_OS][Q_RUNTIME2] = 128U;
+#endif
 }
 
 

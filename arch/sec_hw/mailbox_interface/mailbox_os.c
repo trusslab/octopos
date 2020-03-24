@@ -230,6 +230,40 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 }
 
+void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
+{
+    /* Threshold registers will need to be reinitialized
+     * every time it switches ownership
+     */
+    switch (queue_id) {
+        case Q_KEYBOARD:
+            XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD);
+            XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
+            break;
+
+        case Q_SERIAL_OUT:
+        case Q_RUNTIME1:
+        case Q_RUNTIME2:
+            XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
+            XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_STA | XMB_IX_ERR);
+            break;
+
+        default:
+            _SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
+    }
+}
+
+/* When the queue ownerships are switched back to the OS, we
+ * need to initialize the interrupts.
+ */
+static void handle_change_queue_interrupts(void* callback_ref)
+{
+	uint8_t queue_id = (int) callback_ref;
+
+	mailbox_change_queue_access_bottom_half(queue_id);
+	octopos_mailbox_clear_interrupt(OMboxCtrlIntrs[P_OS][queue_id]);
+}
+
 static void handle_mailbox_interrupts(void* callback_ref) 
 {
     u32         mask;
@@ -361,6 +395,9 @@ int init_os_mailbox(void)
         return -XST_FAILURE;
     }
 
+    /* OctopOS mailbox maps must be initialized before setting up interrupts. */
+	OMboxIds_init();
+
     XMbox_SetSendThreshold(&Mbox_output, 0);
     XMbox_SetInterruptEnable(&Mbox_output, XMB_IX_STA | XMB_IX_ERR);
 
@@ -435,6 +472,30 @@ int init_os_mailbox(void)
     XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
     XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
+    irqNo = OMboxCtrlIntrs[P_OS][Q_RUNTIME1];
+    XScuGic_Connect(&irq_controller, irqNo, handle_change_queue_interrupts, (void *)Q_RUNTIME1);
+    XScuGic_Enable(&irq_controller, irqNo);
+    XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+    XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+
+    irqNo = OMboxCtrlIntrs[P_OS][Q_RUNTIME2];
+    XScuGic_Connect(&irq_controller, irqNo, handle_change_queue_interrupts, (void *)Q_RUNTIME2);
+    XScuGic_Enable(&irq_controller, irqNo);
+    XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+    XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+
+    irqNo = OMboxCtrlIntrs[P_OS][Q_SERIAL_OUT];
+    XScuGic_Connect(&irq_controller, irqNo, handle_change_queue_interrupts, (void *)Q_SERIAL_OUT);
+    XScuGic_Enable(&irq_controller, irqNo);
+    XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+    XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+
+    irqNo = OMboxCtrlIntrs[P_OS][Q_KEYBOARD];
+    XScuGic_Connect(&irq_controller, irqNo, handle_change_queue_interrupts, (void *)Q_KEYBOARD);
+    XScuGic_Enable(&irq_controller, irqNo);
+    XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+    XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+
     Mbox_regs[Q_OS1] = &Mbox_OS1;
     Mbox_regs[Q_OS2] = &Mbox_OS2;
    	Mbox_regs[Q_RUNTIME1] = &Mbox_runtime1;
@@ -474,8 +535,6 @@ int init_os_mailbox(void)
     sem_init(&availables[Q_RUNTIME2], 0, 1);
 
     cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
-
-    OMboxIds_init();
 
     return XST_SUCCESS;
 }
