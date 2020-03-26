@@ -69,6 +69,14 @@ int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf)
     return 0;
 }
 
+static uint8_t *sketch_buffer = NULL;
+static u32 sketch_buffer_offset = 0;
+static XMbox *sketch_xmbox_instance = NULL;
+
+/* The calling function must provide a cbuf handle for the message to be written to.
+ * InstancePtr must be a valid XMbox base address. The function will return either
+ * zero (in case no message is available), otherwise the number of bytes received.
+ */
 int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
 {
     u32         bytes_read;
@@ -76,27 +84,67 @@ int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
     uint8_t     *message_buffer;
 
     message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+
     status = XMbox_Read(InstancePtr, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
     if (status != XST_SUCCESS) {
         free(message_buffer);
         return 0;
-    } else {
-        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
-            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes", 
-                bytes_read, 
-                MAILBOX_QUEUE_MSG_SIZE);
+    } else if (bytes_read == 0) {
+    	free(message_buffer);
+    	return 0;
+    } else if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+        _SEC_HW_DEBUG("MBox read only %d bytes, should be %d bytes",
+            bytes_read, 
+            MAILBOX_QUEUE_MSG_SIZE);
+        if (!sketch_buffer) {
+            sketch_xmbox_instance = InstancePtr;
+            sketch_buffer_offset = bytes_read;
+            memcpy(sketch_buffer, message_buffer, bytes_read);
+            return 0;
+        } else {
+        	/* There is already a incomplete message on the sketch_buffer */
+        	if (bytes_read + sketch_buffer_offset > MAILBOX_QUEUE_MSG_SIZE) {
+        		_SEC_HW_ERROR("mailbox corrupted: buffer overflow");
+        		_SEC_HW_ASSERT_NON_VOID(FALSE)
+        	}
+        	if (sketch_xmbox_instance == InstancePtr) {
+        		_SEC_HW_ERROR("mailbox corrupted: inconsistent id");
+        		_SEC_HW_ASSERT_NON_VOID(FALSE)
+        	}
+
+    		memcpy(sketch_buffer + sketch_buffer_offset, message_buffer, bytes_read);
+        	if (bytes_read + sketch_buffer_offset == MAILBOX_QUEUE_MSG_SIZE) {
+        		/* This read completes the message */
+        		status = circular_buf_put(cbuf, (uint32_t) sketch_buffer);
+                if (status != XST_SUCCESS) {
+                    free(message_buffer);
+                    _SEC_HW_ERROR("Ring buffer is full. The system may be out of sync.");
+                    _SEC_HW_ASSERT_NON_VOID(FALSE);
+                }
+        		free(sketch_buffer);
+        		return MAILBOX_QUEUE_MSG_SIZE;
+        	} else {
+        		/* The message is still incomplete after this read */
+        		return 0;
+        	}
         }
+        
+    } else {
         status = circular_buf_put(cbuf, (uint32_t) message_buffer);
         if (status != XST_SUCCESS) {
-            /* since the cpu pulls io, this should never happen */
+            free(message_buffer);
             _SEC_HW_ERROR("Ring buffer is full. The system may be out of sync.");
             _SEC_HW_ASSERT_NON_VOID(FALSE);
         }
     }
-
     return bytes_read;
+
 }
 
+/* The calling function must provide a buffer for the message to be written to.
+ * InstancePtr must be a valid XMbox base address. The function will return either
+ * zero (in case no message is available), otherwise the number of bytes received.
+ */
 int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
 {
     u32         bytes_read;
@@ -105,11 +153,44 @@ int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
     status = XMbox_Read(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
     if (status != XST_SUCCESS) {
         return 0;
-    } else {
-        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
-            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes", 
-                bytes_read, 
-                MAILBOX_QUEUE_MSG_SIZE);
+    } else if (bytes_read == 0) {
+    	return 0;
+    } else if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+        /* Hardware mailbox messages (4 Bytes) are free of sync issue. However, we
+         * are merging many 4 Bytes messages into one MAILBOX_QUEUE_MSG_SIZE message.
+         * We must consider the sync issue when the writer and reader use the queue
+         * at the same time. The reader may read incomplete messages.
+         */
+        _SEC_HW_DEBUG("MBox read only %d bytes, should be %d bytes",
+            bytes_read, 
+            MAILBOX_QUEUE_MSG_SIZE);
+        if (!sketch_buffer) {
+            sketch_xmbox_instance = InstancePtr;
+            sketch_buffer_offset = bytes_read;
+            memcpy(sketch_buffer, buf, bytes_read);
+            return 0;
+        } else {
+        	/* There is already a incomplete message on the sketch_buffer */
+        	if (bytes_read + sketch_buffer_offset > MAILBOX_QUEUE_MSG_SIZE) {
+        		_SEC_HW_ERROR("mailbox corrupted: buffer overflow");
+        		_SEC_HW_ASSERT_NON_VOID(FALSE)
+        	}
+        	if (sketch_xmbox_instance == InstancePtr) {
+        		_SEC_HW_ERROR("mailbox corrupted: inconsistent id");
+        		_SEC_HW_ASSERT_NON_VOID(FALSE)
+        	}
+
+    		memcpy(sketch_buffer + sketch_buffer_offset, buf, bytes_read);
+        	if (bytes_read + sketch_buffer_offset == MAILBOX_QUEUE_MSG_SIZE) {
+        		/* This read completes the message */
+        		memcpy(buf, sketch_buffer, MAILBOX_QUEUE_MSG_SIZE);
+        		free(sketch_buffer);
+        		return MAILBOX_QUEUE_MSG_SIZE;
+        	} else {
+        		/* The message is still incomplete after this read */
+        		return 0;
+        	}
+
         }
     }
 

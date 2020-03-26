@@ -28,6 +28,13 @@ void cleanup_platform();
 #define false   0
 #define bool    _Bool
 
+/* The hardware mailbox has a sync issue. While the sender
+ * writes, the receiver may read incomplete messages. This
+ * flag enables blocking read, i.e. waits until the full
+ * MAILBOX_MAX_COMMAND_SIZE message to be delivered.
+ */
+#define HW_MAILBOX_BLOCKING
+
 /* Defines the maximum length of a single command line */
 #define MAILBOX_MAX_COMMAND_SIZE                64
 #define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING     \
