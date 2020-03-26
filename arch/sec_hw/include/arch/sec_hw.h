@@ -33,7 +33,7 @@ void cleanup_platform();
  * flag enables blocking read, i.e. waits until the full
  * MAILBOX_MAX_COMMAND_SIZE message to be delivered.
  */
-#define HW_MAILBOX_BLOCKING
+// #define HW_MAILBOX_BLOCKING
 
 /* Defines the maximum length of a single command line */
 #define MAILBOX_MAX_COMMAND_SIZE                64

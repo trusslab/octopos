@@ -149,9 +149,6 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
            _SEC_HW_ERROR("Q_OS1 read only %d bytes, should be %d bytes",
                bytes_read,
                MAILBOX_QUEUE_MSG_SIZE);
-//            // DEBUG
-//            for (int i = 0; i < MAILBOX_QUEUE_MSG_SIZE; i++)
-//            	_SEC_HW_ERROR("%c (%02X)", message_buffer[i], message_buffer[i]);
            *queue_id = 0;
            return 0;
        }
