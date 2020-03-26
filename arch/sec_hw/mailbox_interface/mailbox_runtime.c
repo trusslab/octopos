@@ -71,6 +71,7 @@ XMbox*			Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
 _Bool           runtime_inited = FALSE;
+_Bool			force_take_ownership_mode = FALSE;
 
 int write_syscall_response(uint8_t *buf);
 void app_main(struct runtime_api *api);
@@ -89,13 +90,52 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count)
 {
-    _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
+    _SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
 
 	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
 	return octopos_mailbox_attest_quota_limit(queue_ptr, count * factor);
 }
+
+int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
+{
+	_SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
+
+	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
+
+	return octopos_mailbox_attest_owner(queue_ptr, OMboxIds[queue_id][owner]);
+}
+
+/* In case the other runtime refuses to yield, we forcefully
+ * deplete the quota by repeatedly reading the mailbox.
+ */
+void mailbox_force_ownership(uint8_t queue_id, uint8_t owner)
+{
+	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
+
+	u32 bytes_read;
+
+	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
+    u16 quota_left = octopos_mailbox_get_quota_limit(queue_ptr);
+    uint8_t *message_buffer = calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+
+    force_take_ownership_mode = TRUE;
+    for (u16 i = 0; i < quota_left; ++i)
+    	XMbox_Read(Mbox_regs[queue_id],
+    			(u32*)(message_buffer),
+    	        MAILBOX_QUEUE_MSG_SIZE,
+    			&bytes_read);
+
+    force_take_ownership_mode = FALSE;
+    free(message_buffer);
+
+    if (!mailbox_attest_queue_owner(queue_id, owner)) {
+    	_SEC_HW_ERROR("fail to force an ownership change");
+    	_SEC_HW_ASSERT_VOID(FALSE)
+    }
+}
+
 
 void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 {
@@ -285,7 +325,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
         	_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
         }
     } else if (mask & XMB_IX_ERR) {
-        _SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
+    	if (!force_take_ownership_mode)
+    		_SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
     } else {
         _SEC_HW_ERROR("interrupt type unknown, mask %ld, from %p", mask, callback_ref);
     }

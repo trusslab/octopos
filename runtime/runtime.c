@@ -979,7 +979,9 @@ static int yield_secure_ipc(void)
  * deplete the quota by repeatedly reading the mailbox.
  */
 #ifdef ARCH_SEC_HW
-	// FIXME impl
+	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
+		mailbox_force_ownership(q_runtime, P_OS);
+	}
 #else
 	mailbox_change_queue_access(q_runtime, WRITE_ACCESS, P_OS);
 #endif
