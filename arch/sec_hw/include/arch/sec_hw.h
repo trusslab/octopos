@@ -28,10 +28,8 @@ void cleanup_platform();
 #define false   0
 #define bool    _Bool
 
-/* The hardware mailbox has a sync issue. While the sender
- * writes, the receiver may read incomplete messages. This
- * flag enables blocking read, i.e. waits until the full
- * MAILBOX_MAX_COMMAND_SIZE message to be delivered.
+/* This symbol is for debug only. It forces all mailbox to
+ * wait on the queue until all expected bytes are delivered.
  */
 // #define HW_MAILBOX_BLOCKING
 
@@ -122,6 +120,10 @@ char host_printf_buf[64];
 #define _SEC_HW_INFO(fmt, ...)                                      \
     do {xil_printf("--INFO: %-20.20s: " fmt "\r\n", __FUNCTION__,   \
             ##__VA_ARGS__);} while (0)
+
+#define _SEC_HW_DEBUG1(fmt, ...)                                     \
+    do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n", \
+            __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
 
 //#define _SEC_HW_DEBUG(fmt, ...)                                     \
 //    do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n", \

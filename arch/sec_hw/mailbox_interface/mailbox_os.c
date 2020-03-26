@@ -68,6 +68,50 @@ int send_output(uint8_t *buf)
     return 0;
 }
 
+static uint8_t *sketch_buffer[NUM_QUEUES + 1];
+static u32 sketch_buffer_offset[NUM_QUEUES + 1];
+
+_Bool handle_partial_message(uint8_t *message_buffer, uint8_t *queue_id, u32 bytes_read) 
+{
+    /* Same handling logic as in semaphore.c
+     * If the message is incomplete due to sync issues, try to collect
+     * the rest of the message in the next read.
+     */
+	_SEC_HW_DEBUG1("queue %d read only %d bytes, should be %d bytes",
+        *queue_id, bytes_read, MAILBOX_QUEUE_MSG_SIZE);
+    if (!sketch_buffer[*queue_id]) {
+    	_SEC_HW_DEBUG1("new sktech_buffer", *queue_id);
+        sketch_buffer_offset[*queue_id] = bytes_read;
+        sketch_buffer[*queue_id] = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+        memcpy(sketch_buffer[*queue_id], message_buffer, bytes_read);
+        *queue_id = 0;
+        return FALSE;
+    } else {
+        /* There is already a incomplete message on the sketch_buffer */
+    	if (bytes_read + sketch_buffer_offset[*queue_id] > MAILBOX_QUEUE_MSG_SIZE) {
+            _SEC_HW_ERROR("mailbox corrupted: buffer overflow");
+            _SEC_HW_ASSERT_NON_VOID(FALSE)
+        }
+
+        memcpy(sketch_buffer[*queue_id] + sketch_buffer_offset[*queue_id],
+                message_buffer, bytes_read);
+        if (bytes_read + sketch_buffer_offset[*queue_id] == MAILBOX_QUEUE_MSG_SIZE) {
+            /* This read completes the message */
+        	_SEC_HW_DEBUG1("complete sketch_buffer");
+            memcpy(message_buffer, sketch_buffer[*queue_id], MAILBOX_QUEUE_MSG_SIZE);
+            free(sketch_buffer[*queue_id]);
+            sketch_buffer[*queue_id] = NULL;
+            return TRUE;
+        } else {
+            /* The message is still incomplete after this read */
+        	_SEC_HW_DEBUG1("partially full sketch_buffer");
+            *queue_id = 0;
+            return FALSE;
+        }
+
+    }
+}
+
 /* reads from Q_OS's and Q_KEYBOARD */
 int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
@@ -122,36 +166,46 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 #ifdef HW_MAILBOX_BLOCKING
         XMbox_ReadBlocking(&Mbox_keyboard, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 #else
-        XMbox_Read(&Mbox_keyboard, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+        if (sketch_buffer[*queue_id])
+        	XMbox_Read(&Mbox_keyboard,
+        			(u32*)(message_buffer),
+        			MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset[*queue_id],
+					&bytes_read);
+        else
+        	XMbox_Read(&Mbox_keyboard,
+        			(u32*)(message_buffer),
+        			MAILBOX_QUEUE_MSG_SIZE,
+					&bytes_read);
 
-        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
-            _SEC_HW_ERROR("MBox read only %d bytes, should be %d bytes",
-                bytes_read,
-                MAILBOX_QUEUE_MSG_SIZE);
-            *queue_id = 0;
-            return 0;
-        }
+        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE && 
+            !handle_partial_message(message_buffer, queue_id, bytes_read))
+                return 0;
 #endif
 
         memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
-
         free((void*) message_buffer);
         break;
+
     case Q_OS1:
         message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 
 #ifdef HW_MAILBOX_BLOCKING
         XMbox_ReadBlocking(&Mbox_OS1, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 #else
-        XMbox_Read(&Mbox_OS1, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+        if (sketch_buffer[*queue_id])
+        	XMbox_Read(&Mbox_OS1,
+        			(u32*)(message_buffer),
+					MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset[*queue_id],
+					&bytes_read);
+        else
+        	XMbox_Read(&Mbox_OS1,
+        			(u32*)(message_buffer),
+					MAILBOX_QUEUE_MSG_SIZE,
+					&bytes_read);
 
-       if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
-           _SEC_HW_ERROR("Q_OS1 read only %d bytes, should be %d bytes",
-               bytes_read,
-               MAILBOX_QUEUE_MSG_SIZE);
-           *queue_id = 0;
-           return 0;
-       }
+        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE && 
+            !handle_partial_message(message_buffer, queue_id, bytes_read))
+                return 0;
 #endif
 
         memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
@@ -164,15 +218,20 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 #ifdef HW_MAILBOX_BLOCKING
         XMbox_ReadBlocking(&Mbox_OS2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 #else
-        XMbox_Read(&Mbox_OS2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+        if (sketch_buffer[*queue_id])
+        	XMbox_Read(&Mbox_OS2,
+        			(u32*)(message_buffer),
+					MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset[*queue_id],
+					&bytes_read);
+        else
+        	XMbox_Read(&Mbox_OS2,
+        			(u32*)(message_buffer),
+					MAILBOX_QUEUE_MSG_SIZE,
+					&bytes_read);
 
-        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
-           _SEC_HW_ERROR("Q_OS2 read only %d bytes, should be %d bytes",
-               bytes_read,
-               MAILBOX_QUEUE_MSG_SIZE);
-           *queue_id = 0;
-           return 0;
-        }
+        if (bytes_read != MAILBOX_QUEUE_MSG_SIZE && 
+            !handle_partial_message(message_buffer, queue_id, bytes_read))
+                return 0;
 #endif
 
         memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);

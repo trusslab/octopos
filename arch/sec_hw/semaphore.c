@@ -85,7 +85,17 @@ int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
 
     message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 
-    status = XMbox_Read(InstancePtr, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+    if (sketch_buffer)
+    	status = XMbox_Read(InstancePtr,
+    			(u32*)(message_buffer),
+				MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset,
+				&bytes_read);
+    else
+    	status = XMbox_Read(InstancePtr,
+    			(u32*)(message_buffer),
+				MAILBOX_QUEUE_MSG_SIZE,
+				&bytes_read);
+
     if (status != XST_SUCCESS) {
         free(message_buffer);
         return 0;
@@ -99,6 +109,7 @@ int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
         if (!sketch_buffer) {
             sketch_xmbox_instance = InstancePtr;
             sketch_buffer_offset = bytes_read;
+            sketch_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
             memcpy(sketch_buffer, message_buffer, bytes_read);
             return 0;
         } else {
@@ -122,6 +133,7 @@ int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
                     _SEC_HW_ASSERT_NON_VOID(FALSE);
                 }
         		free(sketch_buffer);
+        		sketch_buffer = NULL;
         		return MAILBOX_QUEUE_MSG_SIZE;
         	} else {
         		/* The message is still incomplete after this read */
@@ -150,7 +162,17 @@ int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
     u32         bytes_read;
     int         status;
 
-    status = XMbox_Read(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE, &bytes_read);
+    if (sketch_buffer)
+    	status = XMbox_Read(InstancePtr,
+    			(u32*)(buf),
+				MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset,
+				&bytes_read);
+    else
+    	status = XMbox_Read(InstancePtr,
+    			(u32*)(buf),
+				MAILBOX_QUEUE_MSG_SIZE,
+				&bytes_read);
+
     if (status != XST_SUCCESS) {
         return 0;
     } else if (bytes_read == 0) {
@@ -167,6 +189,7 @@ int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
         if (!sketch_buffer) {
             sketch_xmbox_instance = InstancePtr;
             sketch_buffer_offset = bytes_read;
+            sketch_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
             memcpy(sketch_buffer, buf, bytes_read);
             return 0;
         } else {
@@ -185,6 +208,7 @@ int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
         		/* This read completes the message */
         		memcpy(buf, sketch_buffer, MAILBOX_QUEUE_MSG_SIZE);
         		free(sketch_buffer);
+        		sketch_buffer = NULL;
         		return MAILBOX_QUEUE_MSG_SIZE;
         	} else {
         		/* The message is still incomplete after this read */
