@@ -56,7 +56,8 @@ sem_t 			interrupts[NUM_QUEUES + 1];
 sem_t 			interrupt_change;
 
 sem_t 			load_app_sem,
-				runtime_wakeup;
+				runtime_wakeup,
+                secure_ipc_receive_sem;
 
 XMbox 			Mbox_out,
 				Mbox_keyboard,
@@ -254,7 +255,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
         // syscall resp.
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG");
 //		 write_syscall_response(buf);
-  		 sem_post(&interrupts[q_runtime]);
+  		 // sem_post(&interrupts[q_runtime]);
 	} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_EXEC_APP_TAG");
 		memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
@@ -287,6 +288,10 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
     mask = XMbox_GetInterruptStatus(mbox_inst);
 
+    /* the hardware mailbox will not deliver an interrupt unless the queue
+     * is free of stale messages. Therefore, we sem_init the count to default
+     * when receive an interrupt.
+     */
     if (mask & XMB_IX_STA) {
         if (callback_ref == &Mbox_out) {
             /* Serial Out */
@@ -299,10 +304,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
         } else if (callback_ref != Mbox_regs[q_runtime]) {
         	/* IPC to other runtime */
         	if (callback_ref == &Mbox_Runtime1) {
-        		sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
         		sem_post(&interrupts[Q_RUNTIME1]);
         	} else if (callback_ref == &Mbox_Runtime2) {
-        		sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
         		sem_post(&interrupts[Q_RUNTIME2]);
         	} else {
         		_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
@@ -320,7 +323,10 @@ static void handle_mailbox_interrupts(void* callback_ref)
         	if (!secure_ipc_mode) {
                 sem_init(&runtime_wakeup, 0, 0);
                 sem_post(&runtime_wakeup);
-        	}
+        	} else {
+                sem_init(&secure_ipc_receive_sem, 0, 0);
+                sem_post(&secure_ipc_receive_sem);
+            }
         } else {
         	_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
         }
@@ -501,10 +507,24 @@ int init_runtime(int runtime_id)
     }
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
+    /* Q_RUNTIME semaphores are not used directly because there is
+     * an indirection layer on top of it.
+     *
+     * Below is a list of event semaphores:
+     * 
+     * runtime_wakeup: runtime queue (non secure ipc mode) receives 
+     *                 a message from OS, awaiting the fixed timer
+     *                 to decode.
+     * secure_ipc_receive_sem: keep track of the secure ipc receives
+     * syscall_wakeup: runtime queue (non secure ipc mode) receives 
+     *                 a syscall response.
+     * Q_RUNTIME (target): keep track of the secure ipc sends
+     */
 	sem_init(&interrupts[q_runtime], 0, 0);
     sem_init(&interrupts[Q_KEYBOARD], 0, 0);
     sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 
+    sem_init(&secure_ipc_receive_sem, 0, 0);
 	sem_init(&load_app_sem, 0, 0);
 
     runtime_inited = TRUE;

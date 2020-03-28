@@ -967,8 +967,7 @@ static int yield_secure_ipc(void)
 	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
 
-	// FIXME re-enable once sem count is correct again
-	////wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
 	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
 
