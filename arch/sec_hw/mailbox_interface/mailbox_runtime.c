@@ -108,6 +108,15 @@ int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
 	return octopos_mailbox_attest_owner(queue_ptr, OMboxIds[queue_id][owner]);
 }
 
+u8 mailbox_get_queue_owner(uint8_t queue_id)
+{
+	_SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
+
+	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
+
+	return octopos_mailbox_get_owner(queue_ptr);
+}
+
 /* In case the other runtime refuses to yield, we forcefully
  * deplete the quota by repeatedly reading the mailbox.
  */
@@ -133,6 +142,7 @@ void mailbox_force_ownership(uint8_t queue_id, uint8_t owner)
 
     if (!mailbox_attest_queue_owner(queue_id, owner)) {
     	_SEC_HW_ERROR("fail to force an ownership change");
+    	_SEC_HW_ERROR("actual owner: %d", mailbox_get_queue_owner(queue_id));
     	_SEC_HW_ASSERT_VOID(FALSE)
     }
 }

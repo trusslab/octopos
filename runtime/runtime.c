@@ -967,6 +967,26 @@ static int yield_secure_ipc(void)
 	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
 
+	/* Before we change runtime queue access, we must
+	 * make sure the other side has done with its reading
+	 * or writing.
+	 */
+	char yield_msg[MAILBOX_QUEUE_MSG_SIZE] = "ADIOS";
+	int yield_msg_size = strlen(yield_msg) + 1;
+
+	IPC_SET_ZERO_ARGS_DATA(yield_msg, yield_msg_size)
+	runtime_send_msg_on_queue(buf, qid);
+
+	{
+		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+		runtime_recv_msg_from_queue(buf, q_runtime);
+		IPC_GET_ZERO_ARGS_DATA
+
+		int goodbye_received = memcmp(data, yield_msg, strlen(yield_msg));
+		_SEC_HW_ASSERT_NON_VOID(0 == goodbye_received)
+		_SEC_HW_DEBUG("ADIOS received from %d", qid);
+	}
+
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
 	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);

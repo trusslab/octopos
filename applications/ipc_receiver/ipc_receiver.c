@@ -81,11 +81,11 @@ void app_main(struct runtime_api *api)
 	_SEC_HW_ERROR("msg: %s (size = %d)", secure_msg, secure_msg_size);
 #endif
 
-	sleep(1);
+//	sleep(1);
 	strcpy(secure_msg, "secure msg 2");
 	secure_msg_size = sizeof("secure msg 2");
 	api->send_msg_on_secure_ipc(secure_msg, secure_msg_size);
-	sleep(1);
+//	sleep(1);
 	api->yield_secure_ipc();
 }
 
