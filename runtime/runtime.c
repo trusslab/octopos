@@ -312,13 +312,13 @@ static void issue_syscall(uint8_t *buf)
 	runtime_send_msg_on_queue(buf, q_os);
 
 	/* wait for response */
-#ifdef ARCH_SEC_HW
-	wait_on_queue(q_runtime, buf);
-	_SEC_HW_ASSERT_VOID(buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG);
-#else
+// #ifdef ARCH_SEC_HW
+// 	wait_on_queue(q_runtime, buf);
+// 	_SEC_HW_ASSERT_VOID(buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG);
+// #else
 	wait_on_queue(q_runtime);
 	read_syscall_response(buf);
-#endif
+// #endif
 }
 
 static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)

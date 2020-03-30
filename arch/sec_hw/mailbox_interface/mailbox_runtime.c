@@ -57,6 +57,7 @@ sem_t 			interrupt_change;
 
 sem_t 			load_app_sem,
 				runtime_wakeup,
+                syscall_wakeup,
                 secure_ipc_receive_sem;
 
 XMbox 			Mbox_out,
@@ -234,9 +235,9 @@ void queue_sync_getval(uint8_t queue_id, int *val)
 	sem_getvalue(&interrupts[queue_id], val);
 }
 
-void wait_on_queue(uint8_t queue_id, uint8_t *buf)
+void wait_on_queue(uint8_t queue_id)
 {
-	sem_wait_impatient_receive_buf(&interrupts[queue_id], Mbox_regs[queue_id], buf);
+    sem_wait(&syscall_wakeup);
 }
 
 void wait_for_app_load(void)
@@ -266,12 +267,9 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	}
 	
 	if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
-        // FIXME syscall are blocking wait on resp, this intr isn't in use.
-        // There is a small chance that the OS sends something other than
-        // syscall resp.
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG");
-//		 write_syscall_response(buf);
-  		 // sem_post(&interrupts[q_runtime]);
+		write_syscall_response(buf);
+  		sem_post(&syscall_wakeup);
 	} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_EXEC_APP_TAG");
 		memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
@@ -557,6 +555,7 @@ int init_runtime(int runtime_id)
 
     sem_init(&secure_ipc_receive_sem, 0, 0);
 	sem_init(&load_app_sem, 0, 0);
+    sem_init(&syscall_wakeup, 0, 0);
 
     runtime_inited = TRUE;
 
