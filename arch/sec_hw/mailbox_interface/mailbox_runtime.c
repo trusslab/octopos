@@ -247,6 +247,7 @@ void wait_for_app_load(void)
 
 void load_application_arch(char *msg, struct runtime_api *api)
 {
+	_SEC_HW_ERROR("app: %s", msg);
 	app_main(api);
 }
 
@@ -521,6 +522,22 @@ int init_runtime(int runtime_id)
         return XST_FAILURE;
     }
 
+    Status = XIntc_Connect(&intc,
+    	OMboxCtrlIntrs[p_runtime][Q_SERIAL_OUT],
+        (XInterruptHandler)handle_octopos_mailbox_interrupts,
+		(void*) Q_SERIAL_OUT);
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+
+    Status = XIntc_Connect(&intc,
+    	OMboxCtrlIntrs[p_runtime][Q_KEYBOARD],
+        (XInterruptHandler)handle_octopos_mailbox_interrupts,
+		(void*) Q_KEYBOARD);
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+
     XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR);
     XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR);
     XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR);
@@ -529,6 +546,8 @@ int init_runtime(int runtime_id)
     XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
     XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_RUNTIME1]);
     XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_RUNTIME2]);
+    XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_SERIAL_OUT]);
+    XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_KEYBOARD]);
 
     Status = XIntc_Start(&intc, XIN_REAL_MODE);
     if (Status != XST_SUCCESS) {
