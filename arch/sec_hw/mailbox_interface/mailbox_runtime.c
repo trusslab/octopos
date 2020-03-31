@@ -17,6 +17,8 @@
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox.h"
 #include "arch/octopos_mbox_owner_map.h"
+#include "arch/preload_application_map.h"
+#include "arch/hashmap.h"
 
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
@@ -77,7 +79,7 @@ _Bool           runtime_inited = FALSE;
 _Bool			force_take_ownership_mode = FALSE;
 
 int write_syscall_response(uint8_t *buf);
-void app_main(struct runtime_api *api);
+//void app_main(struct runtime_api *api);
 
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
@@ -247,8 +249,18 @@ void wait_for_app_load(void)
 
 void load_application_arch(char *msg, struct runtime_api *api)
 {
-	_SEC_HW_ERROR("app: %s", msg);
-	app_main(api);
+	if (msg[strlen(msg) - 1] == '\r' || msg[strlen(msg) - 1] == '\n')
+			msg[strlen(msg) - 1] = '\0';
+
+	void* app_main = preloaded_app(msg);
+
+	if (!app_main) {
+		_SEC_HW_ERROR("app %s does not exist", msg);
+		return;
+	}
+	_SEC_HW_ERROR("loading %s: %p", msg, app_main);
+
+	((void(*)(struct runtime_api*))app_main)(api);
 }
 
 static void handle_fixed_timer_interrupts(void* ignored)
@@ -273,7 +285,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
   		sem_post(&syscall_wakeup);
 	} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_EXEC_APP_TAG");
-		memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
+		memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
 		sem_post(&load_app_sem);
 	} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_CONTEXT_SWITCH_TAG");
@@ -285,11 +297,10 @@ static void handle_fixed_timer_interrupts(void* ignored)
 static void handle_octopos_mailbox_interrupts(void* callback_ref)
 {
 	uint8_t queue_id = (int) callback_ref;
-//    _SEC_HW_ERROR("interrupt_change");
 	octopos_mailbox_clear_interrupt(OMboxCtrlIntrs[p_runtime][queue_id]);
 
 	if (queue_id == change_queue) {
-		_SEC_HW_ERROR("interrupt_change");
+		_SEC_HW_DEBUG("interrupt_change");
 		sem_post(&interrupt_change);
 	}
 
@@ -374,7 +385,7 @@ void *run_app(void *load_buf);
 
 void runtime_core()
 {
-	run_app(NULL);
+	run_app(load_buf);
 }
 
 /* Initializes the runtime and its mailbox */
@@ -576,6 +587,8 @@ int init_runtime(int runtime_id)
 	sem_init(&load_app_sem, 0, 0);
     sem_init(&syscall_wakeup, 0, 0);
 
+    preloaded_app_init();
+
     runtime_inited = TRUE;
 
     return XST_SUCCESS;
@@ -584,8 +597,12 @@ int init_runtime(int runtime_id)
 void close_runtime(void)
 {
 	// FIXME: rm this when microblaze doesn't use ddr for cache
+#if RUNTIME == 1
 	Xil_DCacheDisable();
 	Xil_ICacheDisable();
+#endif
+
+	preloaded_app_destroy();
 }
 
 #endif

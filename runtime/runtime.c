@@ -1391,7 +1391,7 @@ int main()
 	net_stack_exit();
 #endif
 
-#if RUNTIME == 1
+#ifdef ARCH_SEC_HW
 	close_runtime();
 #endif
 

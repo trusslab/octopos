@@ -20,7 +20,7 @@
 #define ALL_PROCESSORS		9
 #define INVALID_PROCESSOR	10
 
-#define NUM_RUNTIME_PROCS	1
+#define NUM_RUNTIME_PROCS	2
 
 /* queue IDs */
 #define	Q_OS1			1

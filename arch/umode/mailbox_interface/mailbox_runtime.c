@@ -209,7 +209,7 @@ void runtime_core(void)
 				if (!still_running)
 					keep_polling = false;
 			} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
-				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
+				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
 				sem_post(&load_app_sem);
 			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
 				//TODO
