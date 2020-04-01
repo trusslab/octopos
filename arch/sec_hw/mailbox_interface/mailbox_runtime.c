@@ -18,7 +18,6 @@
 #include "arch/octopos_mbox.h"
 #include "arch/octopos_mbox_owner_map.h"
 #include "arch/preload_application_map.h"
-#include "arch/hashmap.h"
 
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
