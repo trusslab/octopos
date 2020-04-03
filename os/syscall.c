@@ -163,7 +163,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	*no_response = false;
 
 #ifdef ARCH_SEC_HW
-	_SEC_HW_DEBUG("syscall %d received from %d", syscall_nr, runtime_proc_id);
+	_SEC_HW_ERROR("syscall %d received from %d", syscall_nr, runtime_proc_id);
 #endif
 
 	switch (syscall_nr) {

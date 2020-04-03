@@ -280,13 +280,28 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
+void _mailbox_print_queue_status(uint8_t runtime_proc_id)
+{
+    uint8_t queue_id = get_runtime_queue_id(runtime_proc_id);
+    if (!queue_id) {
+        return ERR_INVALID;
+    }   
+
+    UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
+	_SEC_HW_ERROR("queue %d: ctrl reg %p", queue_id, queue_ptr);
+    _SEC_HW_ERROR("queue %d: ctrl reg content %08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+    _SEC_HW_ERROR("[6]");
+}
+
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint16_t count)
 {
     _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
 	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
 	u32 reg = 0;
+    
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
+    _SEC_HW_DEBUG("queue %d: ctrl reg %p", queue_id, queue_ptr);
 
 	reg = octopos_mailbox_calc_owner(reg, OMboxIds[queue_id][proc_id]);
 	reg = octopos_mailbox_calc_quota_limit(reg, count * factor);
@@ -328,6 +343,8 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 static void handle_change_queue_interrupts(void* callback_ref)
 {
 	uint8_t queue_id = (int) callback_ref;
+
+    sem_post(&availables[queue_id]);
 
 	mailbox_change_queue_access_bottom_half(queue_id);
 	octopos_mailbox_clear_interrupt(OMboxCtrlIntrs[P_OS][queue_id]);

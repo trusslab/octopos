@@ -1,6 +1,8 @@
 #ifndef __SEC_HW_MAILBOX_OS_H
 #define __SEC_HW_MAILBOX_OS_H
 
+void _mailbox_print_queue_status(uint8_t queue_id);
+
 int is_queue_available(uint8_t queue_id);
 void wait_for_queue_availability(uint8_t queue_id);
 void mark_queue_unavailable(uint8_t queue_id);
