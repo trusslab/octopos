@@ -18,6 +18,7 @@
 #include "arch/octopos_mbox.h"
 #include "arch/octopos_mbox_owner_map.h"
 #include "arch/preload_application_map.h"
+#include "arch/context_switch.h"
 
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
@@ -72,9 +73,10 @@ cbuf_handle_t   cbuf_keyboard, cbuf_runtime;
 
 XMbox*			Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
-_Bool          MBOX_PENDING_STA[NUM_QUEUES + 1] = {0};
+_Bool           MBOX_PENDING_STA[NUM_QUEUES + 1] = {0};
 
 _Bool           runtime_inited = FALSE;
+_Bool           runtime_terminated = FALSE;
 _Bool			force_take_ownership_mode = FALSE;
 
 int write_syscall_response(uint8_t *buf);
@@ -262,9 +264,45 @@ void load_application_arch(char *msg, struct runtime_api *api)
 	((void(*)(struct runtime_api*))app_main)(api);
 }
 
+//int main();
+//debug
+//void* context_switch_stack;
+
+static void context_switch()
+{
+
+//  	__asm__ __volatile__ ("or r1,r0,%0\n" :: "d" (context_switch_stack));
+	_SEC_HW_ERROR("enter context_switch");
+	for (int i = 10; i >=0 ; --i) {
+		sleep(1);
+		_SEC_HW_ERROR("%d", i);
+	}
+	_SEC_HW_ERROR("exit context_switch");
+	while(1)sleep(1);
+	return;
+}
+
+static void context_switch_begin()
+{
+	context_switch();
+}
+
 static void handle_fixed_timer_interrupts(void* ignored)
 {
 	int 		bytes_read;
+
+
+    if (runtime_terminated) {
+    	runtime_terminated = FALSE;
+//        mtgpr(r14, &main);
+		runtime_inited = FALSE;
+		force_take_ownership_mode = FALSE;
+  		/* r14: address to return from interrupt */
+//  		context_switch_begin();
+//  		context_switch_stack = calloc(32, 4);
+  		__asm__ __volatile__ ("or r14,r0,%0\n" :: "d" (&context_switch_begin));
+  		return;
+    }
 
 	if (q_runtime == 0 || !runtime_inited) {
 		return;
@@ -308,7 +346,6 @@ static void handle_octopos_mailbox_interrupts(void* callback_ref)
 
 static void handle_mailbox_interrupts(void* callback_ref)
 {
-
     u32         mask;
     XMbox       *mbox_inst = (XMbox *)callback_ref;
 
@@ -603,6 +640,7 @@ void close_runtime(void)
 #endif
 
 	preloaded_app_destroy();
+	runtime_terminated = TRUE;
 }
 
 #endif

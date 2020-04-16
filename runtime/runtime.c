@@ -1326,10 +1326,13 @@ void *store_context(void *data)
 }
 #endif
 
+////debug
+//volatile u32 GP_REGS[32], SP_RMSR;
 
 #ifdef ARCH_UMODE
 int main(int argc, char **argv)
 #else
+//extern runtime_terminated;
 int main()
 {
     // FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
@@ -1338,6 +1341,42 @@ int main()
     Xil_DCacheEnable();
 #endif
 
+//    if (runtime_terminated) {
+//    	mtgpr(r1, GP_REGS[1]);
+//    	mtgpr(r3, GP_REGS[3]);
+//    	mtgpr(r4, GP_REGS[4]);
+//    	mtgpr(r5, GP_REGS[5]);
+//    	mtgpr(r6, GP_REGS[6]);
+//    	mtgpr(r7, GP_REGS[7]);
+//    	mtgpr(r8, GP_REGS[8]);
+//    	mtgpr(r9, GP_REGS[9]);
+//    	mtgpr(r10, GP_REGS[10]);
+//    	mtgpr(r11, GP_REGS[11]);
+//    	mtgpr(r12, GP_REGS[12]);
+//    	mtgpr(r15, GP_REGS[15]);
+//    	mtgpr(r17, GP_REGS[17]);
+//    	mtgpr(r18, GP_REGS[18]);
+//    	mtmsr(SP_RMSR);
+//        _SEC_HW_ERROR("runtime_terminated");
+//    } else {
+//    	GP_REGS[1] = mfgpr(r1);
+//    	GP_REGS[3] = mfgpr(r3);
+//    	GP_REGS[4] = mfgpr(r4);
+//    	GP_REGS[5] = mfgpr(r5);
+//    	GP_REGS[6] = mfgpr(r6);
+//    	GP_REGS[7] = mfgpr(r7);
+//    	GP_REGS[8] = mfgpr(r8);
+//    	GP_REGS[9] = mfgpr(r9);
+//    	GP_REGS[10] = mfgpr(r10);
+//    	GP_REGS[11] = mfgpr(r11);
+//    	GP_REGS[12] = mfgpr(r12);
+//    	GP_REGS[15] = mfgpr(r15);
+//    	GP_REGS[17] = mfgpr(r17);
+//    	GP_REGS[18] = mfgpr(r18);
+//    	SP_RMSR = mfmsr();
+//    }
+//
+//    runtime_terminated = FALSE;
 #endif
 
 	int runtime_id = -1;
@@ -1367,6 +1406,10 @@ int main()
 		printf("%s: Error: couldn't initialize the runtime\n", __func__);
 		return -1;
 	}
+
+//	// DEBUG
+//	for (int i =0; i<32; ++i)
+//		_SEC_HW_ERROR("r%d = %08x", i, GP_REGS[i]);
 
 	/* initialize syscall response queue */
 	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
