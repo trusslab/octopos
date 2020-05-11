@@ -634,7 +634,7 @@ int init_runtime(int runtime_id)
 void close_runtime(void)
 {
 	// FIXME: rm this when microblaze doesn't use ddr for cache
-#if RUNTIME == 1
+#if RUNTIME_ID == 1
 	Xil_DCacheDisable();
 	Xil_ICacheDisable();
 #endif

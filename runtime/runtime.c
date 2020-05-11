@@ -1329,6 +1329,16 @@ void *store_context(void *data)
 ////debug
 //volatile u32 GP_REGS[32], SP_RMSR;
 
+//DEBUG>>>
+#include "xparameters.h"
+#include "stdio.h"
+//#include "xutil.h"
+volatile int i = 0xDEADBEEF;
+extern unsigned char __datacopy;
+extern unsigned char __data_start;
+extern unsigned char __data_end;
+//DEBUG<<<
+
 #ifdef ARCH_UMODE
 int main(int argc, char **argv)
 #else
@@ -1336,11 +1346,26 @@ int main(int argc, char **argv)
 int main()
 {
     // FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
-#if RUNTIME == 1
+#if RUNTIME_ID == 1
     Xil_ICacheEnable();
     Xil_DCacheEnable();
 #endif
 
+#if RUNTIME_ID == 2
+//    _SEC_HW_ERROR("ENTERING MAIN");
+
+    unsigned char *dataCopyStart = &__datacopy;
+    unsigned char *dataStart = &__data_start;
+    unsigned char *dataEnd = &__data_end;
+    if (i == 0xDEADBEEF)
+    	while(dataStart < dataEnd)
+    		*dataCopyStart++ = *dataStart++;
+    else
+    	while(dataStart < dataEnd)
+    		*dataStart++ = *dataCopyStart++;
+
+    i = 0;
+#endif
 //    if (runtime_terminated) {
 //    	mtgpr(r1, GP_REGS[1]);
 //    	mtgpr(r3, GP_REGS[3]);
