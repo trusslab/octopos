@@ -49,10 +49,10 @@ extern int		q_os;
 
 uint8_t 		load_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
 extern bool 	still_running;
-
 extern int 		change_queue;
-
 extern bool 	secure_ipc_mode;
+
+// extern _Bool    _mb_restarted;
 
 sem_t 			interrupts[NUM_QUEUES + 1];
 sem_t 			interrupt_change;
@@ -260,6 +260,10 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		return;
 	}
 	_SEC_HW_ERROR("loading %s: %p", msg, app_main);
+
+    /* This is to clear semaphore posted by stale syscall responses */
+    // if (_mb_restarted)
+    sem_init(&syscall_wakeup, 0, 0);
 
 	((void(*)(struct runtime_api*))app_main)(api);
 }

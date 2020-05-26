@@ -1334,6 +1334,7 @@ void *store_context(void *data)
 #include "stdio.h"
 //#include "xutil.h"
 volatile int i = 0xDEADBEEF;
+// _Bool _mb_restarted = FALSE;
 extern unsigned char __datacopy;
 extern unsigned char __data_start;
 extern unsigned char __data_end;
@@ -1357,12 +1358,14 @@ int main()
     unsigned char *dataCopyStart = &__datacopy;
     unsigned char *dataStart = &__data_start;
     unsigned char *dataEnd = &__data_end;
-    if (i == 0xDEADBEEF)
+    if (i == 0xDEADBEEF) {
     	while(dataStart < dataEnd)
     		*dataCopyStart++ = *dataStart++;
-    else
+    } else {
     	while(dataStart < dataEnd)
     		*dataStart++ = *dataCopyStart++;
+    	// _mb_restarted = TRUE;
+    }
 
     i = 0;
 #endif
