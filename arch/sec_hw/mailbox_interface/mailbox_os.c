@@ -8,6 +8,8 @@
 #include "xparameters.h"
 #include "xil_exception.h"
 #include "xscugic.h"
+#include "xttcps.h"
+#include "xipipsu.h"
 
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
@@ -20,6 +22,8 @@
 #include "os/scheduler.h"
 
 XScuGic         irq_controller;
+//XScuGic 		gic_controller;
+XIpiPsu 		ipi_pmu_inst;
 
 XMbox           Mbox_output, 
                 Mbox_keyboard, 
@@ -350,6 +354,75 @@ static void handle_change_queue_interrupts(void* callback_ref)
 	octopos_mailbox_clear_interrupt(OMboxCtrlIntrs[P_OS][queue_id]);
 }
 
+/*
+ * Based on https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841941/Zynq+UltraScale+MPSoC+-+IPI+Messaging+Example
+ */
+//#define IPI_MSG_LEN				8U
+#define RESP_AND_MSG_NUM_OFFSET	0x1U
+#define IPI_HEADER_OFFSET		0x0U
+#define IPI_HEADER			0x1E0000 /* 1E - Target Module ID */
+
+void Rpu_IpiHandler(XIpiPsu *IpiInstPtr)
+{
+	u32 RegVal;
+
+	/* Check if the IPI is from the expected source i.e., PMU channel-1 */
+	RegVal = Xil_In32(0xFF310010U);
+	if((RegVal & (u32)XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK) == 0U) {
+		xil_printf("RPU: Received IPI from invalid source, ISR:%x\r\n", RegVal);
+		return;
+	} else {
+		/* Valid IPI. Clear the appropriate bit in the respective ISR */
+		Xil_Out32(0xFF310010U, (RegVal & (u32)XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK));
+
+	}
+}
+
+//u32 Rpu_GicInit(XScuGic *IntcInstPtr, u32 IntId, Xil_ExceptionHandler Handler,
+//		void *PeriphInstPtr)
+//{
+////	XScuGic_Config *IntcConfig;
+////	u32 Status = XST_FAILURE;
+////
+////	IntcConfig = XScuGic_LookupConfig(XPAR_SCUGIC_0_DEVICE_ID);
+////
+////	if(IntcConfig == NULL) {
+////		xil_printf("RPU: Error: GIC Config failed\r\n");
+////		goto END;
+////	}
+////
+////	Status = XScuGic_CfgInitialize(IntcInstPtr, IntcConfig,
+////			IntcConfig->CpuBaseAddress);
+////
+////	if(Status != XST_SUCCESS) {
+////		xil_printf("RPU: Error: GIC initialization failed\r\n");
+////		goto END;
+////	}
+////
+////	/* Connect the interrupt controller interrupt handler to the hardware
+////	 * interrupt handling logic in the processor
+////	 */
+////
+////	Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_INT,
+////			(Xil_ExceptionHandler)XScuGic_InterruptHandler, IntcInstPtr);
+//
+//	/*
+//	 * Make the connection between the IntId of the interrupt source and the
+//	 * associated handler that is to run when the interrupt is recognized.
+//	 */
+//
+//	(void)XScuGic_Connect(IntcInstPtr, IntId, Handler, PeriphInstPtr);
+//
+//	XScuGic_Enable(IntcInstPtr, IntId);
+//
+//	/* Enable interrupts in the processor */
+//	Xil_ExceptionEnableMask(XIL_EXCEPTION_IRQ);
+//
+//	return XST_SUCCESS;
+//}
+
+/************************************************************************/
+
 static void handle_mailbox_interrupts(void* callback_ref) 
 {
     u32         mask;
@@ -582,6 +655,15 @@ int init_os_mailbox(void)
     XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
     XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
+	XScuGic_Connect(&irq_controller,
+			XPAR_PSU_IPI_1_INT_ID,
+			(Xil_ExceptionHandler)Rpu_IpiHandler,
+			&ipi_pmu_inst);
+	XScuGic_Enable(&irq_controller, XPAR_PSU_IPI_1_INT_ID);
+
+	/* Enable interrupts in the processor */
+	Xil_ExceptionEnableMask(XIL_EXCEPTION_IRQ);
+
     Mbox_regs[Q_OS1] = &Mbox_OS1;
     Mbox_regs[Q_OS2] = &Mbox_OS2;
    	Mbox_regs[Q_RUNTIME1] = &Mbox_runtime1;
@@ -621,6 +703,73 @@ int init_os_mailbox(void)
     sem_init(&availables[Q_RUNTIME2], 0, 1);
 
     cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
+
+    /*
+     * Based on https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841941/Zynq+UltraScale+MPSoC+-+IPI+Messaging+Example
+     */
+    _SEC_HW_ERROR("[0] PMU IPI");
+    u32 pmu_ipi_status = XST_FAILURE;
+
+//	/* Initialize RPU GIC and Connect IPI interrupt*/
+//    pmu_ipi_status = Rpu_GicInit(&gic_controller, XPAR_PSU_IPI_1_INT_ID,
+//			(Xil_ExceptionHandler)Rpu_IpiHandler, &ipi_pmu_inst);
+//
+//	if(pmu_ipi_status != XST_SUCCESS) {
+//		_SEC_HW_ERROR("RPU: Error: GIC initialization failed");
+//		return -XST_FAILURE;
+//	}
+
+    XIpiPsu_Config *ipi_psu_config;
+
+    ipi_psu_config = XIpiPsu_LookupConfig(XPAR_XIPIPSU_0_DEVICE_ID);
+    if (ipi_psu_config == NULL) {
+    	_SEC_HW_ERROR("RPU: Error: Ipi Init failed");
+    	return -XST_FAILURE;
+    }
+
+    _SEC_HW_ERROR("[1] PMU IPI");
+
+    pmu_ipi_status = XIpiPsu_CfgInitialize(
+    		&ipi_pmu_inst,
+    		ipi_psu_config,
+			ipi_psu_config->BaseAddress);
+
+    if (pmu_ipi_status != XST_SUCCESS) {
+    	_SEC_HW_ERROR("RPU: Error: IPI Config failed");
+    	return -XST_FAILURE;
+    }
+
+    _SEC_HW_ERROR("[2] PMU IPI");
+
+    /* Enable IPI from PMU to RPU_0 */
+    Xil_Out32(0xFF310018U, 0xF0000U);
+
+    _SEC_HW_ERROR("[3] PMU IPI");
+
+//    /* Send a test */
+//    static u32 MsgPtr[2] = {IPI_HEADER, 0U};
+//    MsgPtr[RESP_AND_MSG_NUM_OFFSET] += 1;
+//    pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK,
+//			MsgPtr, 2U, XIPIPSU_BUF_TYPE_MSG);
+//
+//	if(pmu_ipi_status != (u32)XST_SUCCESS) {
+//		_SEC_HW_ERROR("RPU: IPI Write message failed");
+//		return -XST_FAILURE;
+//	}
+//
+//	pmu_ipi_status = XIpiPsu_TriggerIpi(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK);
+//
+//	if(pmu_ipi_status != (u32)XST_SUCCESS) {
+//		_SEC_HW_ERROR("RPU: IPI Trigger failed");
+//		return -XST_FAILURE;
+//	}
+//
+//	pmu_ipi_status = XIpiPsu_PollForAck(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK, (~0));
+//
+//	if(pmu_ipi_status != (u32)XST_SUCCESS) {
+//		_SEC_HW_ERROR("RPU: IPI Poll for ack failed");
+//		return -XST_FAILURE;
+//	}
 
     return XST_SUCCESS;
 }

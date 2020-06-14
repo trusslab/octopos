@@ -428,29 +428,35 @@ void sched_next_app(void)
 
 void sched_clean_up_app(uint8_t runtime_proc_id)
 {
+	_SEC_HW_ERROR("[0] SCHED");
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc) {
 		printf("%s: Error: invalid runtime proc id %d\n", __func__, runtime_proc_id);
 		return;
 	}
 
+	_SEC_HW_ERROR("[1] SCHED");
 	if (runtime_proc->state != RUNTIME_PROC_RUNNING_APP) {
 		printf("%s: Error: invalid runtime proc state\n", __func__);
 		return;
 	}
 
+	_SEC_HW_ERROR("[2] SCHED");
 	struct app *app = runtime_proc->app;
 	if (!app) {
 		printf("%s: Error: app struct is NULL\n", __func__);
 		return;
 	}
 
+	_SEC_HW_ERROR("[3] SCHED");
 	runtime_proc->state = RUNTIME_PROC_RESETTING;	
 	runtime_proc->app = NULL;	
 
+	_SEC_HW_ERROR("[4] SCHED");
 	mark_app_id_as_unused(app->id);
 	remove_app_from_all_app_list(app);
 	free(app);
+	_SEC_HW_ERROR("[5] SCHED");
 }
 
 void sched_pause_app(uint8_t runtime_proc_id)
