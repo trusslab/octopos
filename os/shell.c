@@ -224,6 +224,9 @@ static void PSU_Mask_Write(unsigned long offset, unsigned long mask, unsigned lo
 #define IPI_HEADER			0x1E0000 /* 1E - Target Module ID */
 extern XIpiPsu 		ipi_pmu_inst;
 
+// DEBUG ONLY
+u32 octopos_mailbox_get_status_reg(UINTPTR base);
+
 void inform_shell_of_termination(uint8_t runtime_proc_id)
 {
 	_SEC_HW_DEBUG("runtime_proc_id=%d", runtime_proc_id);
@@ -237,18 +240,15 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		return;
 	}
 
-	_SEC_HW_ERROR("[0] TERM");
+	// DEBUG ONLY
+    _SEC_HW_ERROR("queue %d: ctrl reg content %08x", Q_SERIAL_OUT, octopos_mailbox_get_status_reg(125U));
+
 	if (runtime_proc->app == foreground_app) {
-		_SEC_HW_ERROR("[0.1] TERM");
 		shell_status = SHELL_STATE_WAITING_FOR_CMD;
-		_SEC_HW_ERROR("[0.2] TERM");
 		foreground_app = NULL;
-		_SEC_HW_ERROR("[0.3] TERM");
 		output_printf("octopos$> ");
 	}
-	_SEC_HW_ERROR("[0.5] TERM");
 	sched_clean_up_app(runtime_proc_id);
-	_SEC_HW_ERROR("[1] TERM");
 //	PSU_Mask_Write(GPIO_MASK_DATA_5_MSW_OFFSET, 0xFFFF0000U, 0xC0000000U);
 //	PSU_Mask_Write(GPIO_DIRM_5_OFFSET, 0xFFFFFFFFU, 0xC0000000U);
 //	PSU_Mask_Write(GPIO_OEN_5_OFFSET, 0xFFFFFFFFU, 0xC0000000U);
@@ -268,29 +268,26 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 //	PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x40000000U);
 	//DEBUG <<<
 
-	    /* Send a test */
+	/* Send a test */
 	u32 pmu_ipi_status = XST_FAILURE;
 
-	_SEC_HW_ERROR("RPU  IPI [0]");
-	    static u32 MsgPtr[2] = {IPI_HEADER, 0U};
-	    MsgPtr[RESP_AND_MSG_NUM_OFFSET] += 1;
-	    pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK,
-				MsgPtr, 2U, XIPIPSU_BUF_TYPE_MSG);
+    static u32 MsgPtr[2] = {IPI_HEADER, 0U};
+    MsgPtr[RESP_AND_MSG_NUM_OFFSET] += 1;
+    pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK,
+			MsgPtr, 2U, XIPIPSU_BUF_TYPE_MSG);
 
-		if(pmu_ipi_status != (u32)XST_SUCCESS) {
-			_SEC_HW_ERROR("RPU: IPI Write message failed");
-			return;
-		}
+	if(pmu_ipi_status != (u32)XST_SUCCESS) {
+		_SEC_HW_ERROR("RPU: IPI Write message failed");
+		return;
+	}
 
-		_SEC_HW_ERROR("RPU  IPI [1]");
-		pmu_ipi_status = XIpiPsu_TriggerIpi(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK);
+	pmu_ipi_status = XIpiPsu_TriggerIpi(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK);
 
-		if(pmu_ipi_status != (u32)XST_SUCCESS) {
-			_SEC_HW_ERROR("RPU: IPI Trigger failed");
-			return;
-		}
+	if(pmu_ipi_status != (u32)XST_SUCCESS) {
+		_SEC_HW_ERROR("RPU: IPI Trigger failed");
+		return;
+	}
 
-		_SEC_HW_ERROR("RPU  IPI [2]");
 
 //		pmu_ipi_status = XIpiPsu_PollForAck(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK, (~0));
 //

@@ -288,13 +288,12 @@ void _mailbox_print_queue_status(uint8_t runtime_proc_id)
 {
     uint8_t queue_id = get_runtime_queue_id(runtime_proc_id);
     if (!queue_id) {
-        return ERR_INVALID;
+        return;
     }   
 
     UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 	_SEC_HW_ERROR("queue %d: ctrl reg %p", queue_id, queue_ptr);
     _SEC_HW_ERROR("queue %d: ctrl reg content %08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
-    _SEC_HW_ERROR("[6]");
 }
 
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint16_t count)
@@ -707,7 +706,6 @@ int init_os_mailbox(void)
     /*
      * Based on https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841941/Zynq+UltraScale+MPSoC+-+IPI+Messaging+Example
      */
-    _SEC_HW_ERROR("[0] PMU IPI");
     u32 pmu_ipi_status = XST_FAILURE;
 
 //	/* Initialize RPU GIC and Connect IPI interrupt*/
@@ -727,7 +725,6 @@ int init_os_mailbox(void)
     	return -XST_FAILURE;
     }
 
-    _SEC_HW_ERROR("[1] PMU IPI");
 
     pmu_ipi_status = XIpiPsu_CfgInitialize(
     		&ipi_pmu_inst,
@@ -739,12 +736,10 @@ int init_os_mailbox(void)
     	return -XST_FAILURE;
     }
 
-    _SEC_HW_ERROR("[2] PMU IPI");
 
     /* Enable IPI from PMU to RPU_0 */
     Xil_Out32(0xFF310018U, 0xF0000U);
 
-    _SEC_HW_ERROR("[3] PMU IPI");
 
 //    /* Send a test */
 //    static u32 MsgPtr[2] = {IPI_HEADER, 0U};
