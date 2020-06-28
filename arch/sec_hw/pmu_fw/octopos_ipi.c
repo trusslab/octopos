@@ -86,11 +86,7 @@ static void IpiExampleHandler(const XPfw_Module_t *ModPtr, u32 IpiNum, u32 SrcMa
 void octopos_ipi_init(void) {
 	xil_printf("PMU: IPI INIT BEGIN\r\n");
 	IpiExampleModPtr = XPfw_CoreCreateMod();
-//
-//	if (XPfw_CoreSetCfgHandler(IpiExampleModPtr, IpiExampleCfgInit) != XST_SUCCESS) {
-//		XPfw_Printf(DEBUG_DETAILED,
-//				"PMU: Warning: IpiExampleModPtr: Failed to set CfgHandler \r\n")
-//	}
+
 	(void)XPfw_CoreSetIpiHandler(IpiExampleModPtr, IpiExampleHandler, 0x1EU);
 	xil_printf("PMU: IPI INIT DONE\r\n");
 }
