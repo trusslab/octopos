@@ -33,21 +33,20 @@
  * in advertising or otherwise to promote the sale, use or other dealings in
  * this Software without prior written authorization from Xilinx.
  ******************************************************************************/
-#include "octopos_ipi.h"
-
 #include <unistd.h>
+
+#include "octopos_ipi.h"
+#include "octopos_pmu_common.h"
 
 #include "../xpfw_default.h"
 #include "../xpfw_config.h"
 #include "../xpfw_core.h"
 #include "../xpfw_events.h"
 #include "../xpfw_module.h"
-
 #include "../xpfw_ipi_manager.h"
 
 #define RESP_AND_MSG_NUM_OFFSET		0x1U
-
-#define GPIO_DATA_5_OFFSET                  0XFF0A0054
+#define GPIO_DATA_5_OFFSET          0XFF0A0054
 
 const XPfw_Module_t *IpiExampleModPtr;
 
@@ -61,34 +60,55 @@ static void PSU_Mask_Write(unsigned long offset, unsigned long mask, unsigned lo
 	Xil_Out32(offset, RegVal);
 }
 
+/* Reset through GPIO only available through PMU.
+ * APUs do not have permission to reset according to our isolation setup
+ **/
 static void IpiExampleHandler(const XPfw_Module_t *ModPtr, u32 IpiNum, u32 SrcMask, const u32* Payload, u8 Len)
 {
 	if (IpiNum > 0) {
-		xil_printf("PMU: IPI Example Handler: It handles"
-				" only IPI on PMU-0\r\n");
+		_SEC_HW_ERROR("PMU: IPI Example Handler: It handles"
+				" only IPI on PMU-0");
 	} else {
-		xil_printf("PMU: Payload received:\r\n");
-		xil_printf("PMU: IPI Message number from payload: 0x%x\r\n",
+		_SEC_HW_DEBUG("PMU: Payload received:");
+		_SEC_HW_DEBUG("PMU: IPI Message number from payload: 0x%x",
 				Payload[RESP_AND_MSG_NUM_OFFSET]);
 
-		/* Reset through GPIO only available through PMU.
-		 * APUs do not have permission to reset according to our isolation setup
-		 **/
-		PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x40000000U);
-		usleep(1);
-		PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x00000000U);
-		usleep(1);
-		PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x40000000U);
-		xil_printf("PMU: Reset done");
+		/* This delay is to avoid interrupting any last-minute prints from runtime */
+		usleep(10);
+
+		switch(Payload[RESP_AND_MSG_NUM_OFFSET]) {
+		case OCTOPOS_PMU_RUNTIME_1:
+			_SEC_HW_DEBUG("PMU: Reset request on runtime 1");
+			// FIXME change to bit mask, sometimes need to reset more than one runtimes
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0xC0000000U, 0xC0000000U);
+			usleep(1);
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0xC0000000U, 0x00000000U);
+			usleep(1);
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0xC0000000U, 0xC0000000U);
+			_SEC_HW_DEBUG("PMU: Reset done");
+			break;
+		case OCTOPOS_PMU_RUNTIME_2:
+			_SEC_HW_DEBUG("PMU: Reset request on runtime 2");
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x40000000U);
+			usleep(1);
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x00000000U);
+			usleep(1);
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x40000000U);
+			_SEC_HW_DEBUG("PMU: Reset done");
+			break;
+		default:
+			_SEC_HW_ERROR("PMU: Invalid reset target");
+			break;
+		}
 	}
 }
 
 void octopos_ipi_init(void) {
-	xil_printf("PMU: IPI INIT BEGIN\r\n");
+	_SEC_HW_DEBUG("PMU: IPI initialize begin");
 	IpiExampleModPtr = XPfw_CoreCreateMod();
 
 	(void)XPfw_CoreSetIpiHandler(IpiExampleModPtr, IpiExampleHandler, 0x1EU);
-	xil_printf("PMU: IPI INIT DONE\r\n");
+	_SEC_HW_DEBUG("PMU: IPI initialize end");
 }
 
 #endif

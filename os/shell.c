@@ -244,10 +244,6 @@ void shell_process_input(char buf)
 }
 
 
-
-// DEBUG ONLY
-u32 octopos_mailbox_get_status_reg(UINTPTR base);
-
 void inform_shell_of_termination(uint8_t runtime_proc_id)
 {
 	_SEC_HW_DEBUG("runtime_proc_id=%d", runtime_proc_id);
@@ -261,9 +257,6 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		return;
 	}
 
-	// DEBUG ONLY
-    _SEC_HW_ERROR("queue %d: ctrl reg content %08x", Q_SERIAL_OUT, octopos_mailbox_get_status_reg(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR));
-
 	if (runtime_proc->app == foreground_app) {
 		shell_status = SHELL_STATE_WAITING_FOR_CMD;
 		foreground_app = NULL;
@@ -275,7 +268,8 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 	u32 pmu_ipi_status = XST_FAILURE;
 
     static u32 MsgPtr[2] = {IPI_HEADER, 0U};
-    MsgPtr[RESP_AND_MSG_NUM_OFFSET] += 1;
+    /* Convert from proc id to runtime number */
+    MsgPtr[RESP_AND_MSG_NUM_OFFSET] = runtime_proc_id - 6;
     pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK,
 			MsgPtr, 2U, XIPIPSU_BUF_TYPE_MSG);
 

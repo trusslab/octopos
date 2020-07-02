@@ -8,6 +8,7 @@
 #include "xil_io.h"
 
 #include "mailbox_pmu.h"
+#include "octopos_pmu_common.h"
 
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
@@ -21,8 +22,8 @@ u32 octopos_mailbox_get_status_reg(UINTPTR base)
 void mailbox_print_queue_status(uint8_t queue_id)
 {
     UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
-    xil_printf("queue %d: ctrl reg %p", queue_id, queue_ptr);
-    xil_printf("queue %d: ctrl reg content %08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+    _SEC_HW_DEBUG("queue %d: ctrl reg %p", queue_id, queue_ptr);
+    _SEC_HW_DEBUG("queue %d: ctrl reg content %08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
 }
 
 void pmu_initialize_octopos_mbox()

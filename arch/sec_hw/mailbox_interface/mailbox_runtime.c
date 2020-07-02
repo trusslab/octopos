@@ -52,8 +52,6 @@ extern bool 	still_running;
 extern int 		change_queue;
 extern bool 	secure_ipc_mode;
 
-// extern _Bool    _mb_restarted;
-
 sem_t 			interrupts[NUM_QUEUES + 1];
 sem_t 			interrupt_change;
 
@@ -280,22 +278,9 @@ void load_application_arch(char *msg, struct runtime_api *api)
 	((void(*)(struct runtime_api*))app_main)(api);
 }
 
-//int main();
-//debug
-//void* context_switch_stack;
-
 static void context_switch()
 {
-
-//  	__asm__ __volatile__ ("or r1,r0,%0\n" :: "d" (context_switch_stack));
-	_SEC_HW_ERROR("enter context_switch");
-	for (int i = 10; i >=0 ; --i) {
-		sleep(1);
-		_SEC_HW_ERROR("%d", i);
-	}
-	_SEC_HW_ERROR("exit context_switch");
 	while(1)sleep(1);
-	return;
 }
 
 static void context_switch_begin()
@@ -310,12 +295,9 @@ static void handle_fixed_timer_interrupts(void* ignored)
 
     if (runtime_terminated) {
     	runtime_terminated = FALSE;
-//        mtgpr(r14, &main);
 		runtime_inited = FALSE;
 		force_take_ownership_mode = FALSE;
   		/* r14: address to return from interrupt */
-//  		context_switch_begin();
-//  		context_switch_stack = calloc(32, 4);
   		__asm__ __volatile__ ("or r14,r0,%0\n" :: "d" (&context_switch_begin));
   		return;
     }
