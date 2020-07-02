@@ -82,16 +82,28 @@ _Bool			force_take_ownership_mode = FALSE;
 int write_syscall_response(uint8_t *buf);
 //void app_main(struct runtime_api *api);
 
+void mailbox_yield_to_previous_owner(uint8_t queue_id)
+{
+    _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
+
+    UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
+
+    _SEC_HW_DEBUG("Before yield: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+    octopos_mailbox_deduct_and_set_owner(queue_ptr, P_PREVIOUS);
+
+    _SEC_HW_DEBUG("After yield: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+}
+
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
     _SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
-	_SEC_HW_ERROR("[0] queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_DEBUG("Before change: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
 	octopos_mailbox_deduct_and_set_owner(queue_ptr, OMboxIds[queue_id][proc_id]);
 
-	_SEC_HW_ERROR("[1] queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_DEBUG("After change: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
 }
 
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count)

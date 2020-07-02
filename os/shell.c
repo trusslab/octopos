@@ -262,7 +262,7 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 	}
 
 	// DEBUG ONLY
-    _SEC_HW_ERROR("queue %d: ctrl reg content %08x", Q_SERIAL_OUT, octopos_mailbox_get_status_reg(125U));
+    _SEC_HW_ERROR("queue %d: ctrl reg content %08x", Q_SERIAL_OUT, octopos_mailbox_get_status_reg(XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR));
 
 	if (runtime_proc->app == foreground_app) {
 		shell_status = SHELL_STATE_WAITING_FOR_CMD;

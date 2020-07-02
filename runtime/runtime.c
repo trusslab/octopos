@@ -496,7 +496,11 @@ static int request_secure_keyboard(int count)
 
 static int yield_secure_keyboard(void)
 {
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_KEYBOARD);
+#else
 	mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, P_OS);
+#endif
 	return 0;
 }
 
@@ -532,7 +536,11 @@ static int yield_secure_serial_out(void)
 {
 	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
+#else
 	mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, P_OS);
+#endif
 	return 0;
 }
 
@@ -769,8 +777,13 @@ static int yield_secure_storage_access(void)
 
 	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
+	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
+#else
 	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+#endif
 
 	return 0;
 }
@@ -989,7 +1002,11 @@ static int yield_secure_ipc(void)
 
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(qid);
+#else
 	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
+#endif
 
 /* ARCH_SEC_HW OctopOS mailbox only allows the current owner
  * to change/yield ownership. This is different from umode.
@@ -1154,9 +1171,14 @@ static int yield_network_access(void)
 
 	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
+#else
 	mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, P_OS);
-
+#endif
+	
 	return 0;
 }
 
