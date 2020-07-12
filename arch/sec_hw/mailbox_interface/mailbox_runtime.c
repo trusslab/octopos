@@ -108,10 +108,18 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count
 {
     _SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
 
+    _Bool result = TRUE;
 	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
-	return octopos_mailbox_attest_quota_limit(queue_ptr, count * factor);
+    result &= octopos_mailbox_attest_owner_fast(queue_ptr);
+    result &= octopos_mailbox_attest_quota_limit(queue_ptr, count * factor);
+    result &= octopos_mailbox_attest_time_limit_lower_bound(
+        queue_ptr, 
+        MAX_OCTOPOS_MAILBOX_QUOTE - OCTOPOS_MAILBOX_MAX_TIME_DRIFT
+        );
+    
+	return result;
 }
 
 int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)

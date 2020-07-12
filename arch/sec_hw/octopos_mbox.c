@@ -111,13 +111,23 @@ _Bool octopos_mailbox_attest_owner(UINTPTR base, u8 owner)
 {
 	Xil_AssertNonvoid(base != 0);
 
+	_SEC_HW_DEBUG("%08x: %08x", base, octopos_mailbox_get_status_reg(base));
 	return owner == (u8) (octopos_mailbox_get_status_reg(base) >> 24 & 0xff);
+}
+
+_Bool octopos_mailbox_attest_owner_fast(UINTPTR base)
+{
+	Xil_AssertNonvoid(base != 0);
+
+	_SEC_HW_DEBUG("%08x: %08x", base, octopos_mailbox_get_status_reg(base));
+	return 0xDEAFBEEF != octopos_mailbox_get_status_reg(base);
 }
 
 _Bool octopos_mailbox_attest_quota_limit(UINTPTR base, u16 limit)
 {
 	Xil_AssertNonvoid(base != 0);
 
+	_SEC_HW_DEBUG("%08x: %08x", base, octopos_mailbox_get_status_reg(base));
 	return limit == (u16) (octopos_mailbox_get_status_reg(base) >> 12 & 0xfff);
 }
 
@@ -125,7 +135,16 @@ _Bool octopos_mailbox_attest_time_limit(UINTPTR base, u16 limit)
 {
 	Xil_AssertNonvoid(base != 0);
 
+	_SEC_HW_DEBUG("%08x: %08x", base, octopos_mailbox_get_status_reg(base));
 	return limit == (u16) (octopos_mailbox_get_status_reg(base) & 0xfff);
+}
+
+_Bool octopos_mailbox_attest_time_limit_lower_bound(UINTPTR base, u16 limit)
+{
+	Xil_AssertNonvoid(base != 0);
+
+	_SEC_HW_DEBUG("%08x: %08x", base, octopos_mailbox_get_status_reg(base));
+	return limit <= (u16) (octopos_mailbox_get_status_reg(base) & 0xfff);
 }
 
 void octopos_mailbox_clear_interrupt(UINTPTR base)

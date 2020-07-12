@@ -7,6 +7,8 @@
 
 #define MAX_OCTOPOS_MAILBOX_QUOTE 4094
 
+#define OCTOPOS_MAILBOX_MAX_TIME_DRIFT 10
+
 u32 octopos_mailbox_get_status_reg(UINTPTR base);
 
 void octopos_mailbox_set_status_reg(UINTPTR base, u32 value);
@@ -31,9 +33,13 @@ u32 octopos_mailbox_calc_time_limit(u32 reg, u16 limit);
 
 _Bool octopos_mailbox_attest_owner(UINTPTR base, u8 owner);
 
+_Bool octopos_mailbox_attest_owner_fast(UINTPTR base);
+
 _Bool octopos_mailbox_attest_quota_limit(UINTPTR base, u16 limit);
 
 _Bool octopos_mailbox_attest_time_limit(UINTPTR base, u16 limit);
+
+_Bool octopos_mailbox_attest_time_limit_lower_bound(UINTPTR base, u16 limit);
 
 void octopos_mailbox_clear_interrupt(UINTPTR base);
 
