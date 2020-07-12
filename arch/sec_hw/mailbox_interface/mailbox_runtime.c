@@ -118,7 +118,7 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count
         queue_ptr, 
         MAX_OCTOPOS_MAILBOX_QUOTE - OCTOPOS_MAILBOX_MAX_TIME_DRIFT
         );
-    
+
 	return result;
 }
 
@@ -277,7 +277,7 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		_SEC_HW_ERROR("app %s does not exist", msg);
 		return;
 	}
-	_SEC_HW_ERROR("loading %s: %p", msg, app_main);
+	_SEC_HW_DEBUG("loading %s: %p", msg, app_main);
 
     /* This is to clear semaphore posted by stale syscall responses */
     // if (_mb_restarted)

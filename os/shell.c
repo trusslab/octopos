@@ -234,10 +234,14 @@ void shell_process_input(char buf)
 #else
 	if (buf == '\n' || num_chars >= MAX_LINE_SIZE) {
 #endif
-		if (shell_status == SHELL_STATE_WAITING_FOR_CMD)
+		if (shell_status == SHELL_STATE_WAITING_FOR_CMD) {
 			process_input_line(line);
-		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT)
+			memset(line, 0, MAX_LINE_SIZE);
+		}
+		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT) {
 			process_app_input(foreground_app, (uint8_t *) line, num_chars);
+			memset(line, 0, MAX_LINE_SIZE);
+		}
 		/* don't need to do anything if SHELL_STATE_RUNNING_APP */
 		num_chars = 0;
 	}
