@@ -78,7 +78,7 @@ _Bool           runtime_terminated = FALSE;
 _Bool			force_take_ownership_mode = FALSE;
 
 int write_syscall_response(uint8_t *buf);
-//void app_main(struct runtime_api *api);
+int write_to_shell(char *data, int size);
 
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
@@ -268,15 +268,24 @@ void wait_for_app_load(void)
 
 void load_application_arch(char *msg, struct runtime_api *api)
 {
+    char output_buf[64];    
+    int num_chars = 0;     
+
 	if (msg[strlen(msg) - 1] == '\r' || msg[strlen(msg) - 1] == '\n')
 			msg[strlen(msg) - 1] = '\0';
 
 	void* app_main = preloaded_app(msg);
 
 	if (!app_main) {
-		_SEC_HW_ERROR("app %s does not exist", msg);
+		_SEC_HW_DEBUG("app %s does not exist", msg);
+        
+        memset(output_buf, 0x0, 64);                                        
+        num_chars = snprintf(output_buf, 61, "app %s does not exist\r\n", msg);        
+        write_to_shell(output_buf, num_chars);
+
 		return;
 	}
+
 	_SEC_HW_DEBUG("loading %s: %p", msg, app_main);
 
     /* This is to clear semaphore posted by stale syscall responses */

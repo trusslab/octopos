@@ -589,7 +589,12 @@ static int inform_os_runtime_ready(void)
 	return (int) ret0;
 }
 
+#ifdef ARCH_SEC_HW
+/* Runtime needs to print critical messages to shell */
+int write_to_shell(char *data, int size)
+#else
 static int write_to_shell(char *data, int size)
+#endif
 {
 	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_WRITE_TO_SHELL, data, size)
 	issue_syscall(buf);
