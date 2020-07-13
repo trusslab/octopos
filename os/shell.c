@@ -226,6 +226,14 @@ static int num_chars = 0;
 
 void shell_process_input(char buf)
 {
+	/* Backspace */
+	if (buf == '\b') {
+		/* Still print it, so that cursor goes back */
+		output_printf("%c", buf);
+		line[--num_chars] = '\0';
+		return;
+	}
+
 	line[num_chars] = buf;
 	output_printf("%c", buf);
 	num_chars++;
