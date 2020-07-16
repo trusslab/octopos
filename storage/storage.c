@@ -661,6 +661,9 @@ static void process_secure_request(uint8_t *buf)
 			return;
 		}
 
+		bound_partition = -1;
+		is_queue_set_bound = false;
+
 		STORAGE_SET_ONE_RET(0)
 	} else {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
