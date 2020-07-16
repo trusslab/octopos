@@ -600,6 +600,9 @@ static int read_from_shell(char *data, int *data_size)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA(data)
 	*data_size = (int) _size;
+#ifdef ARCH_SEC_HW
+	data[*data_size - 1] = '\0';
+#endif
 	return (int) ret0;
 }
 

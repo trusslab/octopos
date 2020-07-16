@@ -42,7 +42,6 @@ void secure_interact(struct runtime_api *api)
 	insecure_printf("Provide an insecure phrase: \n");
 
 	api->read_from_shell(line, &size);
-	line[size - 1] = '\0';
 	insecure_printf("Your insecure phrase: %s\n", line);
 
 	insecure_printf("Switching to secure interaction mode now.\n");
@@ -76,13 +75,6 @@ void secure_interact(struct runtime_api *api)
 #endif
 			break;
 		}
-
-// FIXME: This should be moved to runtime
-#ifdef ARCH_SEC_HW
-		if (line[i] == '\0') {
-			i -= 1; // This is to compensate the empty read
-		}
-#endif
 	}
 
 	secure_printf("\nYour secure phrase is: %s\n", line);
