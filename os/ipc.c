@@ -64,19 +64,16 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 	*no_response = false;
 	if (!target_proc_id)
 		return ERR_INVALID;
-	_SEC_HW_ERROR("[0]");
 
 	struct runtime_proc *target_runtime_proc = get_runtime_proc(target_proc_id);
 	if (!target_runtime_proc)
 		return ERR_FAULT;
-	_SEC_HW_ERROR("[1]");
 
 	/* FIXME: need a critical section here. */
 
 	if (target_runtime_proc->pending_secure_ipc_request == runtime_queue_id) {
 
 		/* FIXME: do we need to wait for these queues to be empty using wait_until_empty()? */
-		_SEC_HW_ERROR("[2]");
 
 		mark_queue_unavailable(target_runtime_queue_id);
 		mark_queue_unavailable(runtime_queue_id);
@@ -87,11 +84,7 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 							target_runtime_proc->id, (uint8_t) count);
 		target_runtime_proc->pending_secure_ipc_request = 0;
 		*no_response = true;
-		_SEC_HW_ERROR("[3]");
-
 	} else {
-		_SEC_HW_ERROR("[4]");
-
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc)
 			return ERR_FAULT;
@@ -101,8 +94,6 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 
 		runtime_proc->pending_secure_ipc_request = target_runtime_queue_id;
 		*no_response = true;
-		_SEC_HW_ERROR("[5]");
-
 	}
 
 	return 0;
