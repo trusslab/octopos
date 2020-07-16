@@ -6,36 +6,6 @@
  * Based on https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841941/Zynq+UltraScale+MPSoC+-+IPI+Messaging+Example
  */
 
-/******************************************************************************
- * Copyright (C) 2017 Xilinx, Inc.  All rights reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * Use of the Software is limited solely to applications:
- * (a) running on a Xilinx device, or
- * (b) that interact with a Xilinx device through a bus or interconnect.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * XILINX  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- * Except as contained in this notice, the name of the Xilinx shall not be used
- * in advertising or otherwise to promote the sale, use or other dealings in
- * this Software without prior written authorization from Xilinx.
- ******************************************************************************/
-
 /* Compile with: g++ -Wall –Werror -o shell shell.c */
 
 #include <stdio.h>
@@ -72,11 +42,11 @@ int command_pipe[2];
 #define SHELL_STATE_APP_WAITING_FOR_INPUT	2
 
 #ifdef 	ARCH_SEC_HW_OS
-extern 	XIpiPsu 				ipi_pmu_inst;
+extern 	XIpiPsu 					ipi_pmu_inst;
 
-#define RESP_AND_MSG_NUM_OFFSET	0x1U
-#define IPI_HEADER_OFFSET		0x0U
-#define IPI_HEADER				0x1E0000 /* 1E - Target Module ID */
+#define RESP_AND_MSG_NUM_OFFSET		0x1U
+#define IPI_HEADER_OFFSET			0x0U
+#define IPI_HEADER					0x1E0000 /* 1E - Target Module ID */
 #endif
 
 struct app *foreground_app = NULL;
@@ -258,7 +228,9 @@ void shell_process_input(char buf)
 
 void inform_shell_of_termination(uint8_t runtime_proc_id)
 {
+#ifdef ARCH_SEC_HW
 	_SEC_HW_DEBUG("runtime_proc_id=%d", runtime_proc_id);
+#endif
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 #ifdef ARCH_SEC_HW
@@ -276,13 +248,14 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 	}
 	sched_clean_up_app(runtime_proc_id);
 
+#ifdef ARCH_SEC_HW
 	/* Send IPI to PMU, PMU will reset the runtime */
 	u32 pmu_ipi_status = XST_FAILURE;
 
-    static u32 MsgPtr[2] = {IPI_HEADER, 0U};
-    /* Convert from proc id to runtime number */
-    MsgPtr[RESP_AND_MSG_NUM_OFFSET] = runtime_proc_id - 6;
-    pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK,
+	static u32 MsgPtr[2] = {IPI_HEADER, 0U};
+	/* Convert from proc id to runtime number */
+	MsgPtr[RESP_AND_MSG_NUM_OFFSET] = runtime_proc_id - 6;
+	pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK,
 			MsgPtr, 2U, XIPIPSU_BUF_TYPE_MSG);
 
 	if(pmu_ipi_status != (u32)XST_SUCCESS) {
@@ -303,6 +276,7 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		_SEC_HW_ERROR("RPU: IPI Poll for ack failed");
 		return;
 	}
+#endif
 }
 
 void inform_shell_of_pause(uint8_t runtime_proc_id)

@@ -642,7 +642,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 #endif
 	case SYSCALL_DEBUG_OUTPUTS: {
 		SYSCALL_GET_ZERO_ARGS_DATA
+#ifdef ARCH_SEC_HW
 		xil_printf("RUNTIME%d: %s\r\n", runtime_proc_id, data);
+#else
+		printf("RUNTIME%d: %s\r\n", runtime_proc_id, data);
+#endif
 		*no_response = true;
 		break;
 	}

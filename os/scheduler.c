@@ -99,8 +99,6 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	}
 
 	/* Let's first see if any of the runtimes are idle */
-	// FIXME Zephyr debug
-//	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
 	for (int i = NUM_RUNTIME_PROCS - 1; i >= 0; i--) {
 		/* FIXME: this needs to be in a critical section */
 		if (runtime_procs[i].state == RUNTIME_PROC_IDLE) {

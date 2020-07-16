@@ -46,7 +46,7 @@
 #include "../xpfw_ipi_manager.h"
 
 #define RESP_AND_MSG_NUM_OFFSET		0x1U
-#define GPIO_DATA_5_OFFSET          0XFF0A0054
+#define GPIO_DATA_5_OFFSET			0XFF0A0054
 
 const XPfw_Module_t *IpiExampleModPtr;
 

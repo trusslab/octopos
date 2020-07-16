@@ -15,40 +15,32 @@
 
 /* FIXME: how does the app know the size of the buf? */
 
-#ifdef ARCH_SEC_HW
-//char output_buf[64];
-//int num_chars = 0;
-//#define secure_printf(fmt, args...) {memset(output_buf, 0x0, 64); sprintf(output_buf, fmt, ##args);	\
-//				     api->write_to_secure_serial_out(output_buf);}			\
-//
-//#define insecure_printf(fmt, ...)                                      		\
-//	do {memset(output_buf, 0x0, 64);  						 			 	\
-//	num_chars = snprintf(output_buf, 61, fmt "\r\n", ##__VA_ARGS__);		\
-//	if (num_chars > 61) num_chars = 61;										\
-//	api->write_to_shell(output_buf, num_chars);} while(0)
-
-#else
+#ifndef ARCH_SEC_HW
 char output_buf[64];
 int num_chars = 0;
 #define secure_printf(fmt, args...) {memset(output_buf, 0x0, 64); sprintf(output_buf, fmt, ##args);	\
-				     api->write_to_secure_serial_out(output_buf);}			\
+					 api->write_to_secure_serial_out(output_buf);}			\
 
 #define insecure_printf(fmt, args...) {memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args);\
-				     api->write_to_shell(output_buf, num_chars);}				 \
+					 api->write_to_shell(output_buf, num_chars);}				 \
 
 #endif
 
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
-#endif
+void app_main(struct runtime_api *api)
+#else
 void ipc_sender(struct runtime_api *api)
+#endif
 {
 	char line[1024];
 	int size;
 	uint8_t target_qid = 0;
 	uint8_t own_qid = api->get_runtime_queue_id();
 
+#ifdef ARCH_SEC_HW
 	_SEC_HW_ERROR("own_qid = %d", own_qid);
+#endif
 
 	/* send message */
 	insecure_printf("%c", own_qid);
@@ -56,7 +48,7 @@ void ipc_sender(struct runtime_api *api)
 	/* receive response */
 	int ret = api->read_from_shell(line, &size);
 	if (ret || size == 0) {
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 		printf("Didn't receive a valid response\n");
 #else
 		_SEC_HW_ERROR("Didn't receive a valid response\n");
@@ -65,8 +57,11 @@ void ipc_sender(struct runtime_api *api)
 	}
 
 	target_qid = line[0];
+#ifndef ARCH_SEC_HW
 	printf("Received response: target_qid = %d (size = %d)\n", target_qid, size);
+#else
 	_SEC_HW_ERROR("target_qid = %d (size = %d)\n", target_qid, size);
+#endif
 
 	/* secure IPC */
 	ret = api->request_secure_ipc(target_qid, 200);
@@ -80,7 +75,7 @@ void ipc_sender(struct runtime_api *api)
 	api->send_msg_on_secure_ipc(secure_msg, secure_msg_size);
 
 	api->recv_msg_on_secure_ipc(secure_msg, &secure_msg_size);
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 	printf("Received secure msg: %s (size = %d)\n", secure_msg, secure_msg_size);
 #else
 	_SEC_HW_ERROR("msg: %s (size = %d)\n", secure_msg, secure_msg_size);

@@ -36,7 +36,7 @@ void cleanup_platform();
 /* Defines the maximum length of a single command line */
 #define MAILBOX_MAX_COMMAND_SIZE                64
 #define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING     \
-    (MAILBOX_MAX_COMMAND_SIZE-MAILBOX_QUEUE_MSG_SIZE+1)
+	(MAILBOX_MAX_COMMAND_SIZE-MAILBOX_QUEUE_MSG_SIZE+1)
 
 /* Defines the value written to the mailbox receive
  * threshold register. The MAILBOX_DEFAULT_RX_THRESHOLDth
@@ -45,89 +45,89 @@ void cleanup_platform();
  */
 #define MAILBOX_DEFAULT_RX_THRESHOLD			MAILBOX_MAX_COMMAND_SIZE/4 - 1
 
-#define TO_BIG_ENDIAN_16(i)                     \
-     ((((u16) i>>8) & 0x00FF) |                 \
-     (((u16) i<<8) & 0xFF00))
+#define TO_BIG_ENDIAN_16(i)						\
+	 ((((u16) i>>8) & 0x00FF) |					\
+	 (((u16) i<<8) & 0xFF00))
 
-#define TO_BIG_ENDIAN_32(i)                     \
-     ((((u32) i>>24) & 0x000000FF) |            \
-     (((u32) i>>8) & 0x0000FF00) |              \
-     (((u32) i<<8) & 0x00FF0000) |              \
-     (((u32) i<<24) & 0xFF000000))
+#define TO_BIG_ENDIAN_32(i)						\
+	 ((((u32) i>>24) & 0x000000FF) |			\
+	 (((u32) i>>8) & 0x0000FF00) |				\
+	 (((u32) i<<8) & 0x00FF0000) |				\
+	 (((u32) i<<24) & 0xFF000000))
 
-#define SEC_HW_PS_LOCAL_DISABLE_INTERRUPT()                 \
-    do {Xil_ExceptionDisable();} while (0)
+#define SEC_HW_PS_LOCAL_DISABLE_INTERRUPT()		\
+	do {Xil_ExceptionDisable();} while (0)
 
-#define SEC_HW_PS_LOCAL_ENABLE_INTERRUPT()                  \
-    do {Xil_ExceptionEnable();} while (0)
+#define SEC_HW_PS_LOCAL_ENABLE_INTERRUPT()		\
+	do {Xil_ExceptionEnable();} while (0)
 
 #ifdef ARCH_SEC_HW_RUNTIME
 
 char host_printf_buf[64];
 
-#define _SEC_HW_ERROR(fmt, ...)                                      		\
-	do {memset(host_printf_buf, 0x0, 64);  						 		 	\
-	*((uint16_t *) &host_printf_buf[0]) = SYSCALL_DEBUG_OUTPUTS;			\
-	host_printf_buf[2] = 61;												\
-	snprintf(&host_printf_buf[3], 61,								 		\
-		"ERR: " fmt "\r\n", ##__VA_ARGS__);									\
-    sem_wait_impatient_send(&interrupts[q_os],								\
+#define _SEC_HW_ERROR(fmt, ...)										\
+	do {memset(host_printf_buf, 0x0, 64);							\
+	*((uint16_t *) &host_printf_buf[0]) = SYSCALL_DEBUG_OUTPUTS;	\
+	host_printf_buf[2] = 61;										\
+	snprintf(&host_printf_buf[3], 61,								\
+		"ERR: " fmt "\r\n", ##__VA_ARGS__);							\
+	sem_wait_impatient_send(&interrupts[q_os],						\
 		Mbox_regs[q_os], (u32*) host_printf_buf);} while(0)
 
-//#define _SEC_HW_WARNING(fmt, ...)                                      		\
-//	do {memset(host_printf_buf, 0x0, 64);  						 		 	\
+//#define _SEC_HW_WARNING(fmt, ...)											\
+//	do {memset(host_printf_buf, 0x0, 64);									\
 //	*((uint16_t *) &host_printf_buf[0]) = SYSCALL_DEBUG_OUTPUTS;			\
 //	host_printf_buf[2] = 61;												\
-//	snprintf(&host_printf_buf[3], 61,								 		\
+//	snprintf(&host_printf_buf[3], 61,										\
 //		"WRN: " fmt "\r\n", ##__VA_ARGS__);									\
-//    sem_wait_impatient_send(&interrupts[q_os],								\
+//    sem_wait_impatient_send(&interrupts[q_os],							\
 //		Mbox_regs[q_os], (u32*) host_printf_buf);} while(0)
 
 #define _SEC_HW_WARNING(fmt, ...)
 
-//#define _SEC_HW_INFO(fmt, ...)                                      		\
-//	do {memset(host_printf_buf, 0x0, 64);  						 		 	\
+//#define _SEC_HW_INFO(fmt, ...)											\
+//	do {memset(host_printf_buf, 0x0, 64);  									\
 //	*((uint16_t *) &host_printf_buf[0]) = SYSCALL_DEBUG_OUTPUTS;			\
 //	host_printf_buf[2] = 61;												\
-//	snprintf(&host_printf_buf[3], 61,								 		\
+//	snprintf(&host_printf_buf[3], 61,										\
 //		"INF: " fmt "\r\n", ##__VA_ARGS__);									\
-//    sem_wait_impatient_send(&interrupts[q_os],								\
+//    sem_wait_impatient_send(&interrupts[q_os],							\
 //		Mbox_regs[q_os], (u32*) host_printf_buf);} while(0)
 
 #define _SEC_HW_INFO(fmt, ...)
 
-//#define _SEC_HW_DEBUG(fmt, ...)                                      		\
-//	do {memset(host_printf_buf, 0x0, 64);  						 		 	\
+//#define _SEC_HW_DEBUG(fmt, ...)											\
+//	do {memset(host_printf_buf, 0x0, 64);  									\
 //	*((uint16_t *) &host_printf_buf[0]) = SYSCALL_DEBUG_OUTPUTS;			\
 //	host_printf_buf[2] = 61;												\
-//	snprintf(&host_printf_buf[3], 61,								 		\
+//	snprintf(&host_printf_buf[3], 61,										\
 //		"DBG: " fmt "\r\n", ##__VA_ARGS__);									\
-//    sem_wait_impatient_send(&interrupts[q_os],								\
+//    sem_wait_impatient_send(&interrupts[q_os],							\
 //		Mbox_regs[q_os], (u32*) host_printf_buf);} while(0)
 
 #define _SEC_HW_DEBUG(fmt, ...)
 
 #else
 
-#define _SEC_HW_ERROR(fmt, ...)                                     \
-    do {xil_printf("--ERROR: %-20.20s: " fmt "\r\n", __FUNCTION__,  \
-            ##__VA_ARGS__);} while (0)
+#define _SEC_HW_ERROR(fmt, ...)										\
+	do {xil_printf("--ERROR: %-20.20s: " fmt "\r\n", __FUNCTION__,	\
+			##__VA_ARGS__);} while (0)
 
-#define _SEC_HW_WARNING(fmt, ...)                                   \
-    do {xil_printf("--WARNING: %-20.20s: " fmt "\r\n", __FUNCTION__,\
-            ##__VA_ARGS__);} while (0)
+#define _SEC_HW_WARNING(fmt, ...)									\
+	do {xil_printf("--WARNING: %-20.20s: " fmt "\r\n", __FUNCTION__,\
+			##__VA_ARGS__);} while (0)
 
-#define _SEC_HW_INFO(fmt, ...)                                      \
-    do {xil_printf("--INFO: %-20.20s: " fmt "\r\n", __FUNCTION__,   \
-            ##__VA_ARGS__);} while (0)
+#define _SEC_HW_INFO(fmt, ...)										\
+	do {xil_printf("--INFO: %-20.20s: " fmt "\r\n", __FUNCTION__,	\
+			##__VA_ARGS__);} while (0)
 
-// #define _SEC_HW_DEBUG1(fmt, ...)                                     \
-//     do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n", \
-//             __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
+// #define _SEC_HW_DEBUG1(fmt, ...)										\
+// 	do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n",		\
+// 		__FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
 
-//#define _SEC_HW_DEBUG(fmt, ...)                                     \
-//    do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n", \
-//            __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
+// #define _SEC_HW_DEBUG(fmt, ...)										\
+// 	do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n", 	\
+// 		__FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
 
 #define _SEC_HW_DEBUG(fmt, ...)
 #define _SEC_HW_DEBUG1(fmt, ...)
@@ -137,38 +137,38 @@ char host_printf_buf[64];
  * not return anything (void). It does some clean up than just
  * calling Xil_AssertVoid.
  */
-#define _SEC_HW_ASSERT_VOID(expr)                           \
-    {                                                       \
-    if (expr)                                               \
-        {                                                   \
-        Xil_AssertStatus = XIL_ASSERT_NONE;                 \
-        }                                                   \
-    else                                                    \
-        {                                                   \
-        _SEC_HW_ERROR("ASSERT %s\r\n", #expr);  \
-        Xil_Assert(__FILE__, __LINE__);                     \
-        Xil_AssertStatus = XIL_ASSERT_OCCURRED;             \
-        return;                                             \
-        }                                                   \
-    }
+#define _SEC_HW_ASSERT_VOID(expr)							\
+	{														\
+	if (expr)												\
+		{													\
+		Xil_AssertStatus = XIL_ASSERT_NONE;					\
+		}													\
+	else													\
+		{													\
+		_SEC_HW_ERROR("ASSERT %s\r\n", #expr);				\
+		Xil_Assert(__FILE__, __LINE__);						\
+		Xil_AssertStatus = XIL_ASSERT_OCCURRED;				\
+		return;												\
+		}													\
+	}
 
 /* This assertion macro must be used within functions that do
  * return something. It does some clean up than just calling
  * Xil_AssertNonVoid.
  */
-#define _SEC_HW_ASSERT_NON_VOID(expr)                       \
-    {                                                       \
-    if (expr)                                               \
-        {                                                   \
-        Xil_AssertStatus = XIL_ASSERT_NONE;                 \
-        }                                                   \
-    else                                                    \
-        {                                                   \
-        _SEC_HW_ERROR("ASSERT %s\r\n", #expr);  \
-        Xil_Assert(__FILE__, __LINE__);                     \
-        Xil_AssertStatus = XIL_ASSERT_OCCURRED;             \
-        return 0;                                           \
-        }                                                   \
-    }
+#define _SEC_HW_ASSERT_NON_VOID(expr)						\
+	{														\
+	if (expr)												\
+		{													\
+		Xil_AssertStatus = XIL_ASSERT_NONE;					\
+		}													\
+	else													\
+		{													\
+		_SEC_HW_ERROR("ASSERT %s\r\n", #expr);				\
+		Xil_Assert(__FILE__, __LINE__);						\
+		Xil_AssertStatus = XIL_ASSERT_OCCURRED;				\
+		return 0;											\
+		}													\
+	}
 
 #endif /* __SEC_HW_H */

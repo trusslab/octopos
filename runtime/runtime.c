@@ -35,6 +35,7 @@
 #include <arch/mailbox_runtime.h>
 
 #ifdef ARCH_SEC_HW
+#include "xparameters.h"
 #include "arch/sec_hw.h"
 #include "xil_cache.h"
 #endif
@@ -51,6 +52,11 @@ typedef int bool;
 #define true	(int) 1
 #define false	(int) 0
 #endif
+
+volatile int i = 0xDEADBEEF;
+extern unsigned char __datacopy;
+extern unsigned char __data_start;
+extern unsigned char __data_end;
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -312,13 +318,8 @@ static void issue_syscall(uint8_t *buf)
 	runtime_send_msg_on_queue(buf, q_os);
 
 	/* wait for response */
-// #ifdef ARCH_SEC_HW
-// 	wait_on_queue(q_runtime, buf);
-// 	_SEC_HW_ASSERT_VOID(buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG);
-// #else
 	wait_on_queue(q_runtime);
 	read_syscall_response(buf);
-// #endif
 }
 
 static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
@@ -330,10 +331,6 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 
 	/* wait for response or a change of queue ownership */
 #ifdef ARCH_SEC_HW
-//	wait_on_queue(q_runtime, buf);
-	// FIXME potential errors are ignored FOR DEBUG ONLY
-	// FIXME question: why don't return 0 on success,
-	//	so we don't have to be speculative whether or not syscall will return something?
 	sem_wait(&interrupt_change);
 	*no_response = true;
 #else
@@ -371,7 +368,7 @@ int local_address(unsigned int addr)
 }
 
 void icmp_send(unsigned char type, unsigned char code,
-                unsigned int data, struct pkbuf *pkb_in)
+				unsigned int data, struct pkbuf *pkb_in)
 {
 	printf("icmp_send not implemented.\n");
 	exit(-1);
@@ -544,12 +541,6 @@ static int yield_secure_serial_out(void)
 	return 0;
 }
 
-// FIXME: rm when the mailbox quota problem is fixed.
-u32 octopos_mailbox_get_quota_limit(UINTPTR base);
-u32 octopos_mailbox_get_time_limit(UINTPTR base);
-extern XMbox Mbox_keyboard;
-extern XMbox Mbox_out;
-
 static void write_to_secure_serial_out(char *buf)
 {
 	runtime_send_msg_on_queue((uint8_t *) buf, Q_SERIAL_OUT);
@@ -642,7 +633,7 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 {
 	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_WRITE_FILE_BLOCKS, fd,
-			       (uint32_t) start_block, (uint32_t) num_blocks)
+				   (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
@@ -660,7 +651,7 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num
 {
 	reset_queue_sync(Q_STORAGE_DATA_OUT, 0);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FILE_BLOCKS, fd,
-			       (uint32_t) start_block, (uint32_t) num_blocks)
+				   (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
@@ -965,13 +956,16 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 		return ERR_FAULT;
 	}
 
-	/* FIXME: attest this
+/* ARCH_SEC_HW */
+#ifndef ARCH_SEC_HW 
+	/* FIXME: 
 	attest_ret = mailbox_attest_queue_access(q_runtime,
 					WRITE_ACCESS, count, other runtime);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure ipc recv queue access\n", __func__);
 		return ERR_FAULT;
 	}*/
+#endif
 
 	secure_ipc_mode = true;
 	secure_ipc_target_queue = target_runtime_queue_id;
@@ -985,6 +979,7 @@ static int yield_secure_ipc(void)
 	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
 
+#ifdef ARCH_SEC_HW
 	/* Before we change runtime queue access, we must
 	 * make sure the other side has done with its reading
 	 * or writing.
@@ -1004,6 +999,7 @@ static int yield_secure_ipc(void)
 		_SEC_HW_ASSERT_NON_VOID(0 == goodbye_received)
 		_SEC_HW_DEBUG("ADIOS received from %d", qid);
 	}
+#endif
 
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
@@ -1069,7 +1065,7 @@ int network_access_count = 0;
 
 #ifdef ARCH_UMODE
 static struct socket *create_socket(int family, int type, int protocol,
-				    struct sock_addr *skaddr)
+					struct sock_addr *skaddr)
 {
 	unsigned short sport = 0; /* do not support suggesting a port for now */
 	unsigned int saddr;
@@ -1353,86 +1349,38 @@ void *store_context(void *data)
 }
 #endif
 
-////debug
-//volatile u32 GP_REGS[32], SP_RMSR;
-
-//DEBUG>>>
-#include "xparameters.h"
-#include "stdio.h"
-//#include "xutil.h"
-volatile int i = 0xDEADBEEF;
-// _Bool _mb_restarted = FALSE;
-extern unsigned char __datacopy;
-extern unsigned char __data_start;
-extern unsigned char __data_end;
-//DEBUG<<<
-
 #ifdef ARCH_UMODE
 int main(int argc, char **argv)
 #else
-//extern runtime_terminated;
 int main()
-{
-    // FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
-#if RUNTIME_ID == 1
-    Xil_ICacheEnable();
-    Xil_DCacheEnable();
 #endif
+{
+#ifdef ARCH_SEC_HW
+	// FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
+#if RUNTIME_ID == 1
+	Xil_ICacheEnable();
+	Xil_DCacheEnable();
+#endif /* RUNTIME_ID == 1 */
 
 #if RUNTIME_ID == 2
 //    _SEC_HW_ERROR("ENTERING MAIN");
 
-    unsigned char *dataCopyStart = &__datacopy;
-    unsigned char *dataStart = &__data_start;
-    unsigned char *dataEnd = &__data_end;
-    if (i == 0xDEADBEEF) {
-    	while(dataStart < dataEnd)
-    		*dataCopyStart++ = *dataStart++;
-    } else {
-    	while(dataStart < dataEnd)
-    		*dataStart++ = *dataCopyStart++;
-    	// _mb_restarted = TRUE;
-    }
+	unsigned char *dataCopyStart = &__datacopy;
+	unsigned char *dataStart = &__data_start;
+	unsigned char *dataEnd = &__data_end;
+	if (i == 0xDEADBEEF) {
+		while(dataStart < dataEnd)
+			*dataCopyStart++ = *dataStart++;
+	} else {
+		while(dataStart < dataEnd)
+			*dataStart++ = *dataCopyStart++;
+		// _mb_restarted = TRUE;
+	}
 
-    i = 0;
-#endif
-//    if (runtime_terminated) {
-//    	mtgpr(r1, GP_REGS[1]);
-//    	mtgpr(r3, GP_REGS[3]);
-//    	mtgpr(r4, GP_REGS[4]);
-//    	mtgpr(r5, GP_REGS[5]);
-//    	mtgpr(r6, GP_REGS[6]);
-//    	mtgpr(r7, GP_REGS[7]);
-//    	mtgpr(r8, GP_REGS[8]);
-//    	mtgpr(r9, GP_REGS[9]);
-//    	mtgpr(r10, GP_REGS[10]);
-//    	mtgpr(r11, GP_REGS[11]);
-//    	mtgpr(r12, GP_REGS[12]);
-//    	mtgpr(r15, GP_REGS[15]);
-//    	mtgpr(r17, GP_REGS[17]);
-//    	mtgpr(r18, GP_REGS[18]);
-//    	mtmsr(SP_RMSR);
-//        _SEC_HW_ERROR("runtime_terminated");
-//    } else {
-//    	GP_REGS[1] = mfgpr(r1);
-//    	GP_REGS[3] = mfgpr(r3);
-//    	GP_REGS[4] = mfgpr(r4);
-//    	GP_REGS[5] = mfgpr(r5);
-//    	GP_REGS[6] = mfgpr(r6);
-//    	GP_REGS[7] = mfgpr(r7);
-//    	GP_REGS[8] = mfgpr(r8);
-//    	GP_REGS[9] = mfgpr(r9);
-//    	GP_REGS[10] = mfgpr(r10);
-//    	GP_REGS[11] = mfgpr(r11);
-//    	GP_REGS[12] = mfgpr(r12);
-//    	GP_REGS[15] = mfgpr(r15);
-//    	GP_REGS[17] = mfgpr(r17);
-//    	GP_REGS[18] = mfgpr(r18);
-//    	SP_RMSR = mfmsr();
-//    }
-//
-//    runtime_terminated = FALSE;
-#endif
+	i = 0;
+#endif /* RUNTIME_ID == 2 */
+
+#endif /* ARCH_SEC_HW */
 
 	int runtime_id = -1;
 
@@ -1461,10 +1409,6 @@ int main()
 		printf("%s: Error: couldn't initialize the runtime\n", __func__);
 		return -1;
 	}
-
-//	// DEBUG
-//	for (int i =0; i<32; ++i)
-//		_SEC_HW_ERROR("r%d = %08x", i, GP_REGS[i]);
 
 	/* initialize syscall response queue */
 	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
