@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 #include "lib.h"
 #include "netif.h"
 #include "route.h"

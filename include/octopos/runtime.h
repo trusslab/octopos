@@ -11,7 +11,7 @@ struct runtime_api {
 	int (*write_to_shell)(char *data, int size);
 	int (*read_from_shell)(char *data, int *data_size);
 
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 	/* file system */
 	uint32_t (*open_file)(char *filename, uint32_t mode);
 	int (*write_to_file)(uint32_t fd, uint8_t *data, int size, int offset);
@@ -43,7 +43,7 @@ struct runtime_api {
 	uint8_t (*get_runtime_proc_id)(void);
 	uint8_t (*get_runtime_queue_id)(void);
 
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 	/* socket and network */
 	struct socket *(*create_socket)(int family, int type, int protocol,
 					struct sock_addr *skaddr);

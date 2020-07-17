@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 #ifndef __INET_H
 #define __INET_H
 

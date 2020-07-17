@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 
 /* secure_login app */
 #include <stdio.h>

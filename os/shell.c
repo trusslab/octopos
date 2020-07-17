@@ -25,9 +25,11 @@
 #include <arch/mailbox_os.h>
 #include <arch/defines.h>
 
+#ifdef 	ARCH_SEC_HW
 #include "xscugic.h"
 #include "xttcps.h"
 #include "xipipsu.h"
+#endif
 
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];

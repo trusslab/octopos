@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 
 /* simple_loop app */
 #include <stdio.h>

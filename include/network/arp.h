@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 #ifndef __ARP_H
 #define __ARP_H
 

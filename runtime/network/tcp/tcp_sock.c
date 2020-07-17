@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 #include "socket.h"
 #include "tcp_hash.h"
 #include "tcp.h"

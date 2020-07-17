@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 #include "netif.h"
 #include "sock.h"
 #include "list.h"

@@ -1,4 +1,6 @@
 /* octopos application runtime */
+#include <arch/defines.h>
+
 #include <stdio.h>
 #include <string.h>
 #ifdef ARCH_UMODE

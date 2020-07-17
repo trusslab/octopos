@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 #ifndef __SOCK_H
 #define __SOCK_H
 

@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 /* fs_loop app */
 #include <stdio.h>
 #include <string.h>

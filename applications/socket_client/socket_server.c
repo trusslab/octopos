@@ -1,4 +1,4 @@
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 
 /* A simple server in the internet domain using TCP */
 #include <stdio.h>

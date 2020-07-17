@@ -6,8 +6,7 @@
 #include <stdint.h>
 #include <sys/stat.h>
 
-#include "arch/defines.h"
-#ifdef ARCH_SEC_HW
+#ifdef ARCH_SEC_HW_RUNTIME
 #include "arch/sec_hw.h"
 #include "arch/app_utilities.h"
 #endif
