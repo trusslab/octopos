@@ -80,17 +80,6 @@ _Bool			force_take_ownership_mode = FALSE;
 int write_syscall_response(uint8_t *buf);
 int write_to_shell(char *data, int size);
 
-static void remove_backspace(char *msg){ 
-	int j; 
-
-	for (int i = j = 0; i < strlen(msg); ++i) {
-		if (msg[i] != '\b')
-			msg[j++] = msg[i];
-	}
-	  
-	msg[j] = '\0'; 
-}
-
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
 	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
