@@ -32,7 +32,13 @@ static void *handle_mailbox_interrupts(void *data)
 
 uint8_t read_char_from_keyboard(void)
 {
-	return (uint8_t) getchar();
+	char c = getchar();
+
+	/* A backspace key press is returned as a delete. We fix it here. */
+	if (c == 127)
+		c = '\b';
+
+	return (uint8_t) c;
 }
 
 void put_char_on_keyboard_queue(uint8_t kchar)

@@ -199,7 +199,7 @@ static int num_chars = 0;
 void shell_process_input(char buf)
 {
 	/* Backspace */
-	if (buf == '\b') {
+	if (buf == '\b' && num_chars >= 1) {
 		/* Still print it, so that cursor goes back */
 		output_printf("%c", buf);
 		line[--num_chars] = '\0';
