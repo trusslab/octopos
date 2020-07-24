@@ -54,11 +54,13 @@ static void send_receive(struct runtime_api *api)
 {
 	char buf[32];
 	int len;
+	printf("%s [1]\n", __func__);
 
 	if (api->connect_socket(sock, &skaddr) < 0) {
 		printf("%s: Error: _connect\n", __func__);
 		return;
 	}
+	printf("%s [2]\n", __func__);
 
 	insecure_printf("Type your message: ");
 	int ret = api->read_from_shell(buf, &len);
@@ -66,13 +68,16 @@ static void send_receive(struct runtime_api *api)
 		printf("%s: Error: read stdin\n", __func__);
 		return;
 	}
+	printf("%s [3]\n", __func__);
 	if (api->write_to_socket(sock, buf, len) < 0) {
 		printf("%s: Error: _write\n", __func__);
 		return;
 	}
+	printf("%s [4]\n", __func__);
 	while ((len = api->read_from_socket(sock, buf, 512)) > 0) {
 		insecure_printf("%.*s\n", len, buf);
 	}
+	printf("%s [5]\n", __func__);
 }
 
 extern "C" __attribute__ ((visibility ("default")))
@@ -83,6 +88,7 @@ void app_main(struct runtime_api *api)
 	memset(&skaddr, 0x0, sizeof(skaddr));
 	type = SOCK_STREAM;	/* default TCP stream */
 	sock = NULL;
+	printf("%s [1]\n", __func__);
 	
 	char addr[256] = "10.0.0.2:12345";	
 	err = _parse_ip_port(addr, &skaddr.dst_addr,
@@ -91,6 +97,7 @@ void app_main(struct runtime_api *api)
 		printf("address format is error\n");
 		return;
 	}
+	printf("%s [2]\n", __func__);
 
 	/* init socket */
 	sock = api->create_socket(AF_INET, type, 0, &skaddr);
@@ -98,13 +105,16 @@ void app_main(struct runtime_api *api)
 		printf("%s: Error: _socket\n", __func__);
 		goto out;
 	}
+	printf("%s [3]\n", __func__);
 
 	if (api->request_network_access(200)) {
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}
+	printf("%s [4]\n", __func__);
 
 	send_receive(api);
+	printf("%s [5]\n", __func__);
 
 out:	/* close and out */
 	struct socket *tmp;
@@ -114,5 +124,6 @@ out:	/* close and out */
 		api->close_socket(tmp);
 	}
 	api->yield_network_access();
+	printf("%s [6]\n", __func__);
 }
 #endif

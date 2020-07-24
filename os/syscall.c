@@ -100,33 +100,6 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 }
 
 #ifdef ARCH_UMODE
-static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
-{
-	STORAGE_SET_ZERO_ARGS_DATA(temp_key, STORAGE_KEY_SIZE) 
-	buf[0] = STORAGE_OP_CREATE_SECURE_PARTITION;
-	send_msg_to_storage_no_response(buf);
-	get_response_from_storage(buf);
-	STORAGE_GET_TWO_RETS
-	if (ret0)
-		return (int) ret0;
-
-	*partition_id = (int) ret1;
-
-	return 0;
-}
-
-static int storage_delete_secure_partition(int partition_id)
-{
-	STORAGE_SET_ONE_ARG(partition_id) 
-	buf[0] = STORAGE_OP_DELETE_SECURE_PARTITION;
-	send_msg_to_storage_no_response(buf);
-	get_response_from_storage(buf);
-	STORAGE_GET_ONE_RET
-
-	return (int) ret0;
-}
-
-
 static int network_set_up_socket(uint32_t saddr, uint32_t sport,
 				 uint32_t daddr, uint32_t dport)
 {
@@ -373,93 +346,16 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_CREATION: {
-		int sec_partition_id = 0;
-
-		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
-		if (!runtime_proc || !runtime_proc->app) {
-			char dummy;
-			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
-			break;
-		}
-		struct app *app = runtime_proc->app;
-
-		/* temp key */
-		uint8_t temp_key[STORAGE_KEY_SIZE];
-		/* generate a key */
-		for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-			/* FIXME: use a random number */
-			temp_key[i] = runtime_proc_id;
-
-		int ret = storage_create_secure_partition(temp_key, &sec_partition_id);
-		if (ret) {
-			char dummy;
-			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
-			break;
-		}
-
-		app->sec_partition_id = sec_partition_id;
-		app->sec_partition_created = true;
-
-		SYSCALL_SET_ONE_RET_DATA(0, temp_key, STORAGE_KEY_SIZE)
+		handle_request_secure_storage_creation_syscall(runtime_proc_id, buf);
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_ACCESS: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
-
-		/* FIXME: should we check to see whether we have previously created a partition for this app? */
-
-		/* No more than 200 block reads/writes */
-		/* FIXME: hard-coded */
-		if (count > 200) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		int ret_in = is_queue_available(Q_STORAGE_IN_2);
-		int ret_out = is_queue_available(Q_STORAGE_OUT_2);
-		/* Or should we make this blocking? */
-		if (!ret_in || !ret_out) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
-			break;
-		}
-
-		wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
-
-		mark_queue_unavailable(Q_STORAGE_IN_2);
-		mark_queue_unavailable(Q_STORAGE_OUT_2);
-
-#ifdef ARCH_SEC_HW
-		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
-		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint16_t) count);
-#else
-		mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-		mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, runtime_proc_id, (uint8_t) count);
-#endif
-
-		SYSCALL_SET_ONE_RET(0)
+		handle_request_secure_storage_access_syscall(runtime_proc_id, buf);
 		break;
 	}
 	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
 	case SYSCALL_DELETE_SECURE_STORAGE: {
-
-		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
-		if (!runtime_proc || !runtime_proc->app) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-			break;
-		}
-		struct app *app = runtime_proc->app;
-
-		if (!app->sec_partition_created) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		storage_delete_secure_partition(app->sec_partition_id);
-		app->sec_partition_created = false;
-		app->sec_partition_id = -1;
-
-		SYSCALL_SET_ONE_RET(0)
+		handle_delete_secure_storage_syscall(runtime_proc_id, buf);
 		break;
 	}
 #endif
@@ -661,6 +557,47 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 }
 
+static void handle_untrusted_syscall(uint8_t *buf)
+{
+	uint16_t syscall_nr;
+
+	syscall_nr = *((uint16_t *) &buf[0]);
+
+	switch (syscall_nr) {
+	case SYSCALL_WRITE_TO_SHELL: {
+		int ret;
+		SYSCALL_GET_ZERO_ARGS_DATA
+
+		ret = untrusted_write_to_shell(data, data_size);
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
+	/* FIXME: the next four are very similar to normal secure syscall handler */
+	case SYSCALL_INFORM_OS_OF_TERMINATION: {
+		inform_shell_of_termination(P_UNTRUSTED);
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+	case SYSCALL_REQUEST_SECURE_STORAGE_CREATION: {
+		handle_request_secure_storage_creation_syscall(P_UNTRUSTED, buf);
+		break;
+	}
+	case SYSCALL_REQUEST_SECURE_STORAGE_ACCESS: {
+		handle_request_secure_storage_access_syscall(P_UNTRUSTED, buf);
+		break;
+	}
+	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
+	case SYSCALL_DELETE_SECURE_STORAGE: {
+		handle_delete_secure_storage_syscall(P_UNTRUSTED, buf);
+		break;
+	}
+	default:
+		printf("Error: invalid syscall\n");
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+		break;
+	}
+}
+
 void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 {
 	if (runtime_proc_id == P_RUNTIME1 || runtime_proc_id == P_RUNTIME2) {
@@ -680,6 +617,9 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
 #endif
+	} else if (runtime_proc_id == P_UNTRUSTED) {
+		handle_untrusted_syscall(buf);
+		send_cmd_to_untrusted(buf);
 	} else {
 		printf("Error: invalid syscall caller (%d)\n", runtime_proc_id);
 	}

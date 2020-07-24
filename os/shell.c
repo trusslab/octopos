@@ -19,6 +19,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <octopos/runtime.h>
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/syscall.h>
@@ -54,6 +55,7 @@ extern 	XIpiPsu 					ipi_pmu_inst;
 struct app *foreground_app = NULL;
 
 int shell_status = SHELL_STATE_WAITING_FOR_CMD;
+bool untrusted_in_foreground = false;
 
 /* FIXME: move all mailbox-related stuff out of shell */
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
@@ -128,6 +130,17 @@ static void process_input_line(char *line)
 	int single = 1;
 	int bg = 0;
 
+	/* command for the untrusted domain */
+	if (line[0] == '@') {
+		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+		buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+		memcpy(&buf[1], &line[1], MAILBOX_QUEUE_MSG_SIZE - 1);
+		send_cmd_to_untrusted(buf);
+		untrusted_in_foreground = true;
+		shell_status = SHELL_STATE_RUNNING_APP;
+		return;
+	}
+	
 	/* detect double pipe */
 	char* cmd = line;
 	/* FIXME: use '||' instead of '%' */
@@ -233,6 +246,15 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 #ifdef ARCH_SEC_HW
 	_SEC_HW_DEBUG("runtime_proc_id=%d", runtime_proc_id);
 #endif
+	if (runtime_proc_id == P_UNTRUSTED && untrusted_in_foreground) {
+		untrusted_in_foreground = false;
+		shell_status = SHELL_STATE_WAITING_FOR_CMD;
+		output_printf("octopos$> ");
+		/* FIXME: this return might break the sec_hw code in the
+		 * end of this function */
+		return;
+	}
+
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 #ifdef ARCH_SEC_HW
@@ -301,6 +323,31 @@ int app_write_to_shell(struct app *app, uint8_t *data, int size)
 {
 	if (app != foreground_app) {
 		/* only the foreground app can write to shell */
+		return -ERR_INVALID;
+	}
+
+	if (shell_status != SHELL_STATE_RUNNING_APP) {
+		printf("Error: shell is not running an app\n");
+		return ERR_INVALID;
+	}
+
+	if (size > MAILBOX_QUEUE_MSG_SIZE) {
+		printf("Error: size of data to be written to shell is too large\n");
+		return ERR_INVALID;
+	}
+
+	/* FIXME: don't use output_buf here. It's a char array. */
+	memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+	memcpy(output_buf, data, size);
+	send_output((uint8_t *) output_buf);
+
+	return 0;
+}
+
+int untrusted_write_to_shell(uint8_t *data, int size)
+{
+	if (!untrusted_in_foreground) {
+		/* can write to shell only if executing an untrusted command */
 		return -ERR_INVALID;
 	}
 

@@ -209,7 +209,7 @@ void runtime_core(void)
 				if (!still_running)
 					keep_polling = false;
 			} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
-				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
+				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
 				sem_post(&load_app_sem);
 			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
 				//TODO
@@ -219,6 +219,9 @@ void runtime_core(void)
 				if (ret)
 					printf("Error: couldn't launch the app thread\n");
 				has_ctx_thread = true;
+			}  else {
+				printf("Error: %s: received invalid message (%d).\n", __func__, buf[0]);
+				exit(-1);
 			}
 		} else {
 			sem_post(&interrupts[interrupt]);
