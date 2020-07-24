@@ -76,6 +76,7 @@ sem_t srq_sem;
 extern sem_t interrupt_change;
 #endif
 
+/* FIXME: use the macros in syscall.h */
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\

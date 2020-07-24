@@ -26,6 +26,8 @@ static void distribute_input(void)
 		process_system_call(input_buf, P_RUNTIME1);
 	} else if (queue_id == Q_OS2) {
 		process_system_call(input_buf, P_RUNTIME2);
+	} else if (queue_id == Q_OSU) {
+		process_system_call(input_buf, P_UNTRUSTED);
 #ifdef ARCH_SEC_HW
 	} else if (queue_id == 0) {
 #endif

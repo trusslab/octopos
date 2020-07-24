@@ -1,3 +1,4 @@
+#ifndef UNTRUSTED_DOMAIN
 struct runtime_api {
 	/* secure keyboard/serial_out */
 	int (*request_secure_keyboard)(int count);
@@ -58,6 +59,7 @@ struct runtime_api {
 	int (*yield_network_access)(void);
 #endif
 };
+#endif /* UNTRUSTED_DOMAIN */
 
 /* file open modes */
 #define FILE_OPEN_MODE		0

@@ -1,7 +1,9 @@
 #ifndef OCTOPOS_SYSCALL_H_
 #define OCTOPOS_SYSCALL_H_
 
+#ifndef UNTRUSTED_DOMAIN
 #include "arch/syscall.h"
+#endif
 
 /* syscall numbers */
 #define SYSCALL_REQUEST_SECURE_SERIAL_OUT	0
@@ -32,6 +34,7 @@
 /* defines for SYSCALL_ALLOCATE_SOCKET_PORT */
 #define TCP_SOCKET	0
 
+#ifndef UNTRUSTED_DOMAIN
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
@@ -111,4 +114,5 @@
 	arg2 = *((uint32_t *) &buf[10]);	\
 	arg3 = *((uint32_t *) &buf[14]);	\
 
+#endif /* UNTRUSTED_DOMAIN */
 #endif /* OCTOPOS_SYSCALL_H_ */

@@ -86,6 +86,11 @@ static void runtime2_send_interrupt(uint8_t queue_id)
 	send_interrupt(&processors[P_RUNTIME2], queue_id);
 }
 
+static void untrusted_send_interrupt(uint8_t queue_id)
+{
+	send_interrupt(&processors[P_UNTRUSTED], queue_id);
+}
+
 static void initialize_processors(void)
 {
 	/* initialize connections to the processors */
@@ -110,6 +115,9 @@ static void initialize_processors(void)
 	mkfifo(FIFO_RUNTIME2_OUT, 0666);
 	mkfifo(FIFO_RUNTIME2_IN, 0666);
 	mkfifo(FIFO_RUNTIME2_INTR, 0666);
+	mkfifo(FIFO_UNTRUSTED_OUT, 0666);
+	mkfifo(FIFO_UNTRUSTED_IN, 0666);
+	mkfifo(FIFO_UNTRUSTED_INTR, 0666);
 
 	/* initialize processor objects */
 	/* OS processor */
@@ -166,6 +174,13 @@ static void initialize_processors(void)
 	processors[P_RUNTIME2].out_handle = open(FIFO_RUNTIME2_OUT, O_RDWR);
 	processors[P_RUNTIME2].in_handle = open(FIFO_RUNTIME2_IN, O_RDWR);
 	processors[P_RUNTIME2].intr_handle = open(FIFO_RUNTIME2_INTR, O_RDWR);
+
+	/* untrusted processor */
+	processors[P_UNTRUSTED].processor_id = P_UNTRUSTED;
+	processors[P_UNTRUSTED].send_interrupt = untrusted_send_interrupt;
+	processors[P_UNTRUSTED].out_handle = open(FIFO_UNTRUSTED_OUT, O_RDWR);
+	processors[P_UNTRUSTED].in_handle = open(FIFO_UNTRUSTED_IN, O_RDWR);
+	processors[P_UNTRUSTED].intr_handle = open(FIFO_UNTRUSTED_INTR, O_RDWR);
 }
 
 static void close_processors(void)
@@ -189,6 +204,9 @@ static void close_processors(void)
 	close(processors[P_RUNTIME2].out_handle);
 	close(processors[P_RUNTIME2].in_handle);
 	close(processors[P_RUNTIME2].intr_handle);
+	close(processors[P_UNTRUSTED].out_handle);
+	close(processors[P_UNTRUSTED].in_handle);
+	close(processors[P_UNTRUSTED].intr_handle);
 
 	remove(FIFO_OS_OUT);
 	remove(FIFO_OS_IN);
@@ -210,6 +228,9 @@ static void close_processors(void)
 	remove(FIFO_RUNTIME2_OUT);
 	remove(FIFO_RUNTIME2_IN);
 	remove(FIFO_RUNTIME2_INTR);
+	remove(FIFO_UNTRUSTED_OUT);
+	remove(FIFO_UNTRUSTED_IN);
+	remove(FIFO_UNTRUSTED_INTR);
 }
 
 static int write_queue(struct queue *queue, int out_handle)
@@ -299,7 +320,7 @@ static void initialize_queues(void)
 	queues[Q_OS1].messages = 
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
-	/* OS queue for runtime1 */
+	/* OS queue for runtime2 */
 	queues[Q_OS2].queue_id = Q_OS2;
 	queues[Q_OS2].queue_type = QUEUE_TYPE_FIXED_READER;
 	queues[Q_OS2].head = 0;
@@ -516,6 +537,35 @@ static void initialize_queues(void)
 	queues[Q_RUNTIME2].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
+	/* OS queue for untrusted */
+	queues[Q_OSU].queue_id = Q_OSU;
+	queues[Q_OSU].queue_type = QUEUE_TYPE_FIXED_READER;
+	queues[Q_OSU].head = 0;
+	queues[Q_OSU].tail = 0;
+	queues[Q_OSU].counter = 0;
+	queues[Q_OSU].reader_id = P_OS;
+	queues[Q_OSU].writer_id = P_UNTRUSTED;
+	queues[Q_OSU].access_count = 0;
+	queues[Q_OSU].prev_owner = 0;
+	queues[Q_OSU].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_OSU].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_OSU].messages = 
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+
+	/* untrusted queue */
+	queues[Q_UNTRUSTED].queue_id = Q_UNTRUSTED;
+	queues[Q_UNTRUSTED].queue_type = QUEUE_TYPE_FIXED_READER;
+	queues[Q_UNTRUSTED].head = 0;
+	queues[Q_UNTRUSTED].tail = 0;
+	queues[Q_UNTRUSTED].counter = 0;
+	queues[Q_UNTRUSTED].reader_id = P_UNTRUSTED;
+	queues[Q_UNTRUSTED].writer_id = P_OS;
+	queues[Q_UNTRUSTED].access_count = 0; /* irrelevant for the UNTRUSTED queue */
+	queues[Q_UNTRUSTED].prev_owner = 0;
+	queues[Q_UNTRUSTED].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_UNTRUSTED].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_UNTRUSTED].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -537,6 +587,7 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
+	printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[(int) queue_id];
 		read_queue(queue, processors[(int) reader_id].in_handle);
@@ -553,6 +604,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
+	printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
@@ -850,6 +902,8 @@ int main(int argc, char **argv)
 		nfds = processors[P_RUNTIME1].out_handle;
 	if (processors[P_RUNTIME2].out_handle > nfds)
 		nfds = processors[P_RUNTIME2].out_handle;
+	if (processors[P_UNTRUSTED].out_handle > nfds)
+		nfds = processors[P_UNTRUSTED].out_handle;
 
 	int pret = pthread_create(&timer_thread, NULL, run_timer, NULL);
 	if (pret) {
@@ -865,6 +919,7 @@ int main(int argc, char **argv)
 		FD_SET(processors[P_NETWORK].out_handle, &listen_fds);
 		FD_SET(processors[P_RUNTIME1].out_handle, &listen_fds);
 		FD_SET(processors[P_RUNTIME2].out_handle, &listen_fds);
+		FD_SET(processors[P_UNTRUSTED].out_handle, &listen_fds);
 
 		if (select(nfds + 1, &listen_fds, NULL, NULL, NULL) < 0) {
 			printf("Error: select\n");
@@ -1047,6 +1102,24 @@ int main(int argc, char **argv)
 				handle_write_queue(queue_id, writer_id);
 			} else {
 				printf("Error: invalid opcode from storage\n");
+			}
+		}
+		
+		if (FD_ISSET(processors[P_UNTRUSTED].out_handle, &listen_fds)) {
+			memset(opcode, 0x0, 2);
+			read(processors[P_UNTRUSTED].out_handle, opcode, 2);
+			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
+				reader_id = P_UNTRUSTED;
+				queue_id = opcode[1];
+				writer_id = INVALID_PROCESSOR;
+				handle_read_queue(queue_id, reader_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
+				writer_id = P_UNTRUSTED;
+				queue_id = opcode[1];
+				reader_id = INVALID_PROCESSOR;
+				handle_write_queue(queue_id, writer_id);
+			} else {
+				printf("Error: invalid opcode from untrusted\n");
 			}
 		}
 	}	

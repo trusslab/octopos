@@ -661,6 +661,35 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 }
 
+static void handle_untrusted_syscall(uint8_t *buf)
+{
+	uint16_t syscall_nr;
+
+	syscall_nr = *((uint16_t *) &buf[0]);
+
+	switch (syscall_nr) {
+	case SYSCALL_WRITE_TO_SHELL: {
+		int ret;
+		SYSCALL_GET_ZERO_ARGS_DATA
+
+		ret = untrusted_write_to_shell(data, data_size);
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
+
+	case SYSCALL_INFORM_OS_OF_TERMINATION: {
+		inform_shell_of_termination(P_UNTRUSTED);
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
+
+	default:
+		printf("Error: invalid syscall\n");
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+		break;
+	}
+}
+
 void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 {
 	if (runtime_proc_id == P_RUNTIME1 || runtime_proc_id == P_RUNTIME2) {
@@ -680,6 +709,9 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
 #endif
+	} else if (runtime_proc_id == P_UNTRUSTED) {
+		handle_untrusted_syscall(buf);
+		send_cmd_to_untrusted(buf);
 	} else {
 		printf("Error: invalid syscall caller (%d)\n", runtime_proc_id);
 	}
