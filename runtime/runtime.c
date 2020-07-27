@@ -1361,11 +1361,6 @@ int main()
 #endif
 {
 #ifdef ARCH_SEC_HW
-	// FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
-#if RUNTIME_ID == 1
-	Xil_ICacheEnable();
-	Xil_DCacheEnable();
-#endif /* RUNTIME_ID == 1 */
 
 #if RUNTIME_ID == 2
 //    _SEC_HW_ERROR("ENTERING MAIN");
