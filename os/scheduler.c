@@ -27,8 +27,8 @@ struct app_list_node *all_app_list_tail = NULL;
 struct app_list_node *ready_queue_head = NULL;
 struct app_list_node *ready_queue_tail = NULL;
 
-uint8_t RUNTIME_PROC_IDS[NUM_RUNTIME_PROCS] = {P_RUNTIME1, P_RUNTIME2};
-uint8_t RUNTIME_QUEUE_IDS[NUM_RUNTIME_PROCS] = {Q_RUNTIME1, Q_RUNTIME2};
+uint8_t RUNTIME_PROC_IDS[NUM_RUNTIME_PROCS] = {P_RUNTIME1, P_RUNTIME2, P_UNTRUSTED};
+uint8_t RUNTIME_QUEUE_IDS[NUM_RUNTIME_PROCS] = {Q_RUNTIME1, Q_RUNTIME2, Q_UNTRUSTED};
 
 struct runtime_proc *runtime_procs = NULL;
 
@@ -514,4 +514,29 @@ void initialize_scheduler(void)
 		runtime_procs[i].app = NULL;
 		runtime_procs[i].pending_secure_ipc_request = 0;
 	}
+	
+	/* FIXME: hack for the untrusted domain */
+	int untrusted_app_id = sched_create_app((char *) "untrusted_dummy");
+	if (untrusted_app_id < 0) {
+		printf("Error (%s): couldn't create the untrusted dummy app.\n", __func__);
+		exit(-1);
+	}
+
+	struct app *untrusted_app = get_app(untrusted_app_id);
+	if (!untrusted_app) {
+		printf("Error (%s): couldn't get the untrusted dummy app.\n", __func__);
+		exit(-1);
+	}
+
+	struct runtime_proc *untrusted_runtime_proc = get_runtime_proc(P_UNTRUSTED);
+	if (!untrusted_runtime_proc) {
+		printf("Error (%s): couldn't get the untrusted runtime proc.\n", __func__);
+		exit(-1);
+
+	}
+
+	untrusted_app->state = SCHED_RUNNING;
+	untrusted_app->runtime_proc = untrusted_runtime_proc;
+	untrusted_runtime_proc->app = untrusted_app;
+	untrusted_runtime_proc->state = RUNTIME_PROC_RUNNING_APP;
 }

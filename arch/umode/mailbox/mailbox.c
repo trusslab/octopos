@@ -657,18 +657,18 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			allowed = true;
 	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS) {
 		if (queues[Q_STORAGE_IN_2].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
 			allowed = true;
 
-		if ((queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME1 || queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME2) &&
+		if ((queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME1 || queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME2 || queues[Q_STORAGE_IN_2].writer_id == P_UNTRUSTED) &&
 		    proc_id == P_OS && queues[Q_STORAGE_IN_2].access_count == 0)
 			allowed = true;
 	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS) {
 		if (queues[Q_STORAGE_OUT_2].reader_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
 			allowed = true;
 
-		if ((queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME1 || queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME2) &&
+		if ((queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME1 || queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME2 || queues[Q_STORAGE_OUT_2].reader_id == P_UNTRUSTED) &&
 		    proc_id == P_OS &&
 		    queues[Q_STORAGE_OUT_2].access_count == 0)
 			allowed = true;
@@ -760,11 +760,11 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 		 queues[Q_KEYBOARD].reader_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS && 
-		 (queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME1 || queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME2) &&
+		 (queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME1 || queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME2 || queues[Q_STORAGE_IN_2].writer_id == P_UNTRUSTED) &&
 		 queues[Q_STORAGE_IN_2].writer_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS &&
-		 (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME1 || queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME2) &&
+		 (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME1 || queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME2 || queues[Q_STORAGE_OUT_2].reader_id == P_UNTRUSTED) &&
 		 queues[Q_STORAGE_OUT_2].reader_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS && 
@@ -1118,6 +1118,17 @@ int main(int argc, char **argv)
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
+				uint8_t opcode_rest[2];
+				memset(opcode_rest, 0x0, 2);
+				read(processors[P_UNTRUSTED].out_handle, opcode_rest, 2);
+				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_UNTRUSTED);				
+			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
+				uint8_t opcode_rest[2];
+				memset(opcode_rest, 0x0, 2);
+				read(processors[P_UNTRUSTED].out_handle, opcode_rest, 2);
+				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_UNTRUSTED);				
+				write(processors[P_UNTRUSTED].in_handle, &ret, 1);
 			} else {
 				printf("Error: invalid opcode from untrusted\n");
 			}

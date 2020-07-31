@@ -23,7 +23,7 @@
 #define ALL_PROCESSORS		10
 #define INVALID_PROCESSOR	11
 
-#define NUM_RUNTIME_PROCS	2
+#define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */
 
 /* queue IDs */
 #define	Q_OS1			1
@@ -81,3 +81,10 @@
 
 #define READ_ACCESS		0
 #define WRITE_ACCESS		1
+
+/* FIXME: move somewhere else */
+#ifdef UNTRUSTED_DOMAIN
+void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id);
+int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count);
+void reset_queue_sync(uint8_t queue_id, int init_val);
+#endif

@@ -10,6 +10,7 @@
 #include <linux/miscdevice.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
+#include <linux/semaphore.h>
 #include <init.h>
 #include <irq_kern.h>
 #include <os.h>
@@ -94,6 +95,7 @@ static int inform_os_of_termination(void)
 	return (int) ret0;
 }
 
+
 static int om_dev_open(struct inode *inode, struct file *filp)
 {
 	return 0;
@@ -141,7 +143,6 @@ static ssize_t om_dev_write(struct file *filp, const char __user *buf, size_t si
 
 	ret = copy_from_user(data, buf, size);
 	*offp += (size - ret);
-
 	write_to_shell(data, size - ret);
 	inform_os_of_termination();
 
@@ -161,18 +162,109 @@ static struct miscdevice om_miscdev = {
 	&om_chrdev_ops,
 };
 
-/*
-static irqreturn_t random_interrupt(int irq, void *data)
-{
-	wake_up(&host_read_wait);
+int fd_out, fd_in, fd_intr;
+struct semaphore interrupts[NUM_QUEUES + 1];
 
+void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+{
+	uint8_t opcode[2];
+	uint8_t interrupt;
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = queue_id;
+	/* wait for message */
+	printk("%s [1]\n", __func__);
+	down(&interrupts[queue_id]);
+	printk("%s [2]\n", __func__);
+	os_write_file(fd_out, opcode, 2), 
+	printk("%s [3]\n", __func__);
+	os_read_file(fd_in, buf, queue_msg_size);
+	printk("%s [4]\n", __func__);
+}
+
+void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+{
+	uint8_t opcode[2];
+	uint8_t interrupt;
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = queue_id;
+	printk("%s [1]\n", __func__);
+	down(&interrupts[queue_id]);
+	printk("%s [2]\n", __func__);
+	os_write_file(fd_out, opcode, 2);
+	printk("%s [3]\n", __func__);
+	os_write_file(fd_out, buf, queue_msg_size);
+	printk("%s [4]\n", __func__);
+}
+
+static irqreturn_t om_interrupt(int irq, void *data)
+{
+	uint8_t interrupt;
+	int n;
+	//printk("%s [1]\n", __func__);
+
+	while (true) {
+		n = os_read_file(fd_intr, &interrupt, 1);
+		if (n != 1)
+			break;
+		//printk("%s [2]: interrupt = %d, n = %d\n", __func__, interrupt, n);
+		if (!(interrupt == Q_UNTRUSTED || interrupt == Q_OSU)) {
+			printk("Error: interrupt from an invalid queue (%d)\n", interrupt);
+			BUG();
+		}
+		//printk("%s [3]\n", __func__);
+		up(&interrupts[interrupt]);
+		//printk("%s [4]\n", __func__);
+	}
 	return IRQ_HANDLED;
 }
-*/
 
-static int __init om_init (void)
+static int __init om_init(void)
 {
 	int err, pid;
+
+	err = init_octopos_mailbox_interface();
+	if (err) {
+		printk(KERN_ERR OM_MODULE_NAME ": initializing mailbox interface "
+		       "failed\n");
+		return err;
+	}
+
+	fd_out = os_open_file(FIFO_UNTRUSTED_OUT, of_write(OPENFLAGS()), 0);
+	if (fd_out < 0) {
+		printk(KERN_ERR OM_MODULE_NAME ": opening out file "
+		       "failed\n");
+		return fd_out;
+	}
+
+	fd_in = os_open_file(FIFO_UNTRUSTED_IN, of_read(OPENFLAGS()), 0);
+	if (fd_in < 0) {
+		printk(KERN_ERR OM_MODULE_NAME ": opening in file "
+		       "failed\n");
+		return fd_in;
+	}
+
+	fd_intr = os_open_file(FIFO_UNTRUSTED_INTR, of_read(OPENFLAGS()), 0);
+	if (fd_intr < 0) {
+		printk(KERN_ERR OM_MODULE_NAME ": opening intr file "
+		       "failed\n");
+		return fd_intr;
+	}
+	os_set_fd_block(fd_intr, 0);
+
+	err = um_request_irq(OCTOPOS_IRQ, fd_intr, IRQ_READ, om_interrupt,
+			     0, "octopos", NULL);
+	if (err) {
+		printk(KERN_ERR OM_MODULE_NAME ": interrupt register "
+		       "failed\n");
+		return err;
+	}
+
+	//sigio_broken(fd_intr, 1);
+
+	sema_init(&interrupts[Q_OSU], MAILBOX_QUEUE_SIZE);
+	sema_init(&interrupts[Q_UNTRUSTED], 0);
 
 	/* register char dev */
 	err = misc_register(&om_miscdev);
@@ -182,31 +274,20 @@ static int __init om_init (void)
 		return err;
 	}
 
-	err = init_octopos_mailbox_interface();
-	if (err) {
-		printk(KERN_ERR OM_MODULE_NAME ": initializing mailbox interface "
-		       "failed\n");
-		return err;
-	}
-
-	//pid = run_helper_thread(handle_mailbox_interrupts, NULL,
-	//			CLONE_FILES | CLONE_VM | CLONE_THREAD, NULL);
-	//if (pid < 0) {
-	//	printk(KERN_ERR OM_MODULE_NAME ": launching the mailbox thread "
-	//	       "failed\n");
-	//	return pid;
-	//}
-	
 	return 0;
 }
 
 static void cleanup(void)
 {
-	//free_irq_by_fd(random_fd);
+	free_irq_by_fd(fd_intr);
 }
 
 static void __exit om_cleanup(void)
 {
+	os_close_file(fd_out);
+	os_close_file(fd_in);
+	os_close_file(fd_intr);
+
 	close_octopos_mailbox_interface();
 	
 	misc_deregister(&om_miscdev);
