@@ -348,7 +348,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
 static void handle_octopos_mailbox_interrupts(void* callback_ref)
 {
 	uint8_t queue_id = (int) callback_ref;
-	octopos_mailbox_clear_interrupt(OMboxCtrlIntrs[p_runtime][queue_id]);
+	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[queue_id]);
 
 	if (queue_id == change_queue) {
 		_SEC_HW_DEBUG("interrupt_change");

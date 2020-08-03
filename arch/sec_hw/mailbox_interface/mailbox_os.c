@@ -358,7 +358,7 @@ static void handle_change_queue_interrupts(void* callback_ref)
 	sem_post(&availables[queue_id]);
 
 	mailbox_change_queue_access_bottom_half(queue_id);
-	octopos_mailbox_clear_interrupt(OMboxCtrlIntrs[P_OS][queue_id]);
+	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[queue_id]);
 }
 
 void Rpu_IpiHandler(XIpiPsu *IpiInstPtr)
