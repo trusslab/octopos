@@ -15,6 +15,7 @@ u8 OMboxIds[NUM_QUEUES][NUM_PROCESSORS] = {0};
  */
 u8 OMboxCtrlIntrs[ALL_PROCESSORS][NUM_QUEUES] = {0};
 
+//xxxxxxx
 #define P_PREVIOUS 0xff
 
 void OMboxIds_init() {

@@ -33,6 +33,10 @@
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_1_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_1_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_1_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_1_INTR
 #elif RUNTIME_ID == 2
 	#define XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR XPAR_MICROBLAZE_3_AXI_INTC_FIT_TIMER_1_INTERRUPT_INTR
 	#define XPAR_COMMON_AXI_INTC_ENCLAVE_MAILBOX_INTERRUPT_INTR XPAR_MICROBLAZE_3_AXI_INTC_ENCLAVE1_PS_MAILBOX_INTERRUPT_1_INTR
@@ -41,6 +45,10 @@
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_2_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_2_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_2_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_2_INTR
 #endif
 
 extern int		p_runtime;
@@ -64,7 +72,11 @@ XMbox 			Mbox_out,
 				Mbox_keyboard,
 				Mbox_Runtime1,
 				Mbox_Runtime2,
-				Mbox_sys;
+				Mbox_sys,
+				Mbox_storage_in_2,
+				Mbox_storage_out_2,
+				Mbox_storage_data_in,
+				Mbox_storage_data_out;
 
 static XIntc 	intc;
 cbuf_handle_t   cbuf_keyboard, cbuf_runtime;
@@ -197,6 +209,26 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 			XMbox_SetSendThreshold(&Mbox_Runtime2, 0);
 			XMbox_SetReceiveThreshold(&Mbox_Runtime2, MAILBOX_DEFAULT_RX_THRESHOLD);
 			XMbox_SetInterruptEnable(&Mbox_Runtime2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_DATA_OUT:
+			XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+			XMbox_SetInterruptEnable(&Mbox_storage_data_out, XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_DATA_IN:
+			XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
+			XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_STA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_OUT_2:
+			XMbox_SetSendThreshold(&Mbox_storage_out_2, MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetInterruptEnable(&Mbox_storage_out_2, XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_IN_2:
+			XMbox_SetSendThreshold(&Mbox_storage_in_2, 0);
+			XMbox_SetInterruptEnable(&Mbox_storage_in_2, XMB_IX_STA | XMB_IX_ERR);
 			break;
 
 		default:
@@ -430,6 +462,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 	}
 
 	XMbox_ClearInterrupt(mbox_inst, mask);
+	//xxxxxxx
 }
 
 void *run_app(void *load_buf);
@@ -447,7 +480,11 @@ int init_runtime(int runtime_id)
 					*ConfigPtr_keyboard,
 					*ConfigPtr_Runtime1,
 					*ConfigPtr_Runtime2,
-					*ConfigPtr_sys;
+					*ConfigPtr_sys, 
+					*Config_storage_in_2, 
+					*Config_storage_out_2,
+					*Config_storage_data_in, 
+					*Config_storage_data_out;
 
 	switch(runtime_id) {
 	case 1:
@@ -491,16 +528,45 @@ int init_runtime(int runtime_id)
 		return XST_FAILURE;
 	}
 
+	Config_storage_data_in = XMbox_LookupConfig(XPAR_MBOX_4_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_data_in, Config_storage_data_in, Config_storage_data_in->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+	Config_storage_data_out = XMbox_LookupConfig(XPAR_MBOX_5_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_data_out, Config_storage_data_out, Config_storage_data_out->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+	Config_storage_in_2 = XMbox_LookupConfig(XPAR_MBOX_6_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_in_2, Config_storage_in_2, Config_storage_in_2->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+	Config_storage_out_2 = XMbox_LookupConfig(XPAR_MBOX_7_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_out_2, Config_storage_out_2, Config_storage_out_2->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
 	Mbox_regs[q_os] = &Mbox_sys;
 	Mbox_regs[Q_RUNTIME1] = &Mbox_Runtime1;
 	Mbox_regs[Q_RUNTIME2] = &Mbox_Runtime2;
 	Mbox_regs[Q_KEYBOARD] = &Mbox_keyboard;
 	Mbox_regs[Q_SERIAL_OUT] = &Mbox_out;
+	Mbox_regs[Q_STORAGE_DATA_IN] = &Mbox_storage_data_in;
+	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
+	Mbox_regs[Q_STORAGE_IN_2] = &Mbox_storage_in_2;
+	Mbox_regs[Q_STORAGE_OUT_2] = &Mbox_storage_out_2;
 
 	Mbox_ctrl_regs[Q_KEYBOARD] = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
 	Mbox_ctrl_regs[Q_SERIAL_OUT] = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
 	Mbox_ctrl_regs[Q_RUNTIME1] = XPAR_OCTOPOS_MAILBOX_3WRI_2_BASEADDR;
 	Mbox_ctrl_regs[Q_RUNTIME2] = XPAR_OCTOPOS_MAILBOX_3WRI_1_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = XPAR_Q_STORAGE_DATA_IN_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = XPAR_Q_STORAGE_DATA_OUT_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_IN_2] = XPAR_Q_STORAGE_IN_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_OUT_2] = XPAR_Q_STORAGE_OUT_2_BASEADDR;
 
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();
@@ -600,16 +666,91 @@ int init_runtime(int runtime_id)
 		return XST_FAILURE;
 	}
 
+	Status = XIntc_Connect(&intc,
+		XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR,
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*) &Mbox_storage_data_out);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR,
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*) &Mbox_storage_data_in);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		XPAR_COMMON_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_0_INTR,
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*) &Mbox_storage_out_2);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR,
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*) &Mbox_storage_in_2);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		OMboxCtrlIntrs[p_runtime][Q_STORAGE_DATA_OUT],
+		(XInterruptHandler)handle_octopos_mailbox_interrupts,
+		(void*) Q_STORAGE_DATA_OUT);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+
+	Status = XIntc_Connect(&intc,
+		OMboxCtrlIntrs[p_runtime][Q_STORAGE_DATA_IN],
+		(XInterruptHandler)handle_octopos_mailbox_interrupts,
+		(void*) Q_STORAGE_DATA_IN);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+
+	Status = XIntc_Connect(&intc,
+		OMboxCtrlIntrs[p_runtime][Q_STORAGE_IN_2],
+		(XInterruptHandler)handle_octopos_mailbox_interrupts,
+		(void*) Q_STORAGE_IN_2);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+
+	Status = XIntc_Connect(&intc,
+		OMboxCtrlIntrs[p_runtime][Q_STORAGE_OUT_2],
+		(XInterruptHandler)handle_octopos_mailbox_interrupts,
+		(void*) Q_STORAGE_OUT_2);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
 	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_0_INTERRUPT_0_INTR);
 	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR);
 	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR);
 	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR);
 	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_ENCLAVE_MAILBOX_INTERRUPT_INTR);
 	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
+	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR);
+	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR);
+	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_0_INTR);
+	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_RUNTIME1]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_RUNTIME2]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_SERIAL_OUT]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_KEYBOARD]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_DATA_OUT]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_DATA_IN]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_OUT_2]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_IN_2]);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
@@ -633,6 +774,10 @@ int init_runtime(int runtime_id)
 	sem_init(&interrupts[q_runtime], 0, 0);
 	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
 	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
+	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
+	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 
 	sem_init(&secure_ipc_receive_sem, 0, 0);
 	sem_init(&load_app_sem, 0, 0);

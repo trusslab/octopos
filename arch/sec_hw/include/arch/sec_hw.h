@@ -34,8 +34,12 @@ void cleanup_platform();
 // #define HW_MAILBOX_BLOCKING
 
 /* Defines the maximum length of a single command line */
-#define MAILBOX_MAX_COMMAND_SIZE                64
-#define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING     \
+#define MAILBOX_MAX_COMMAND_SIZE                  64
+#define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING       \
+	(MAILBOX_MAX_COMMAND_SIZE-MAILBOX_QUEUE_MSG_SIZE+1)
+
+#define MAILBOX_MAX_COMMAND_SIZE_LARGE            64
+#define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING_LARGE \
 	(MAILBOX_MAX_COMMAND_SIZE-MAILBOX_QUEUE_MSG_SIZE+1)
 
 /* Defines the value written to the mailbox receive
@@ -44,6 +48,7 @@ void cleanup_platform();
  * of the receive interrupt.
  */
 #define MAILBOX_DEFAULT_RX_THRESHOLD			MAILBOX_MAX_COMMAND_SIZE/4 - 1
+#define MAILBOX_DEFAULT_RX_THRESHOLD_LARGE		MAILBOX_MAX_COMMAND_SIZE_LARGE/4 - 1
 
 #define TO_BIG_ENDIAN_16(i)						\
 	 ((((u16) i>>8) & 0x00FF) |					\
@@ -60,6 +65,9 @@ void cleanup_platform();
 
 #define SEC_HW_PS_LOCAL_ENABLE_INTERRUPT()		\
 	do {Xil_ExceptionEnable();} while (0)
+
+#define SEC_HW_DEBUG_HANG()						\
+	do {while(1) sleep(1);} while (0)
 
 #ifdef ARCH_SEC_HW_RUNTIME
 
