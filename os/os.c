@@ -9,6 +9,7 @@
 #include <os/shell.h>
 #include <os/file_system.h>
 #include <os/syscall.h>
+#include <os/storage.h>
 #include <arch/mailbox_os.h>
 #include <arch/defines.h>
 
@@ -44,6 +45,7 @@ int main()
 		return ret;
 
 	initialize_shell();
+	initialize_storage_partition();
 #ifdef ARCH_UMODE
 	initialize_file_system();
 #endif

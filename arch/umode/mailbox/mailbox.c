@@ -422,34 +422,6 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_CMD_OUT].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
-	queues[Q_STORAGE_IN_2].queue_id = Q_STORAGE_IN_2;
-	queues[Q_STORAGE_IN_2].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_STORAGE_IN_2].head = 0;
-	queues[Q_STORAGE_IN_2].tail = 0;
-	queues[Q_STORAGE_IN_2].counter = 0;
-	queues[Q_STORAGE_IN_2].reader_id = P_STORAGE;
-	queues[Q_STORAGE_IN_2].writer_id = P_OS;
-	queues[Q_STORAGE_IN_2].access_count = 0;
-	queues[Q_STORAGE_IN_2].prev_owner = 0;
-	queues[Q_STORAGE_IN_2].queue_size = MAILBOX_QUEUE_SIZE;
-	queues[Q_STORAGE_IN_2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
-	queues[Q_STORAGE_IN_2].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
-
-	queues[Q_STORAGE_OUT_2].queue_id = Q_STORAGE_OUT_2;
-	queues[Q_STORAGE_OUT_2].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_STORAGE_OUT_2].head = 0;
-	queues[Q_STORAGE_OUT_2].tail = 0;
-	queues[Q_STORAGE_OUT_2].counter = 0;
-	queues[Q_STORAGE_OUT_2].reader_id = P_OS;
-	queues[Q_STORAGE_OUT_2].writer_id = P_STORAGE;
-	queues[Q_STORAGE_OUT_2].access_count = 0;
-	queues[Q_STORAGE_OUT_2].prev_owner = 0;
-	queues[Q_STORAGE_OUT_2].queue_size = MAILBOX_QUEUE_SIZE;
-	queues[Q_STORAGE_OUT_2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
-	queues[Q_STORAGE_OUT_2].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
-
 	/* network queues */
 	queues[Q_NETWORK_DATA_IN].queue_id = Q_NETWORK_DATA_IN;
 	queues[Q_NETWORK_DATA_IN].queue_type = QUEUE_TYPE_FIXED_READER;
@@ -655,37 +627,37 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 		if ((queues[Q_KEYBOARD].reader_id == P_RUNTIME1 || queues[Q_KEYBOARD].reader_id == P_RUNTIME2) &&
 		    proc_id == P_OS && queues[Q_KEYBOARD].access_count == 0)
 			allowed = true;
-	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS) {
-		if (queues[Q_STORAGE_IN_2].writer_id == P_OS &&
+	} else if (queue_id == Q_STORAGE_CMD_IN && access == WRITE_ACCESS) {
+		if (queues[Q_STORAGE_CMD_IN].writer_id == P_OS &&
 		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
 			allowed = true;
 
-		if ((queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME1 || queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME2 || queues[Q_STORAGE_IN_2].writer_id == P_UNTRUSTED) &&
-		    proc_id == P_OS && queues[Q_STORAGE_IN_2].access_count == 0)
+		if ((queues[Q_STORAGE_CMD_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_CMD_IN].writer_id == P_RUNTIME2 || queues[Q_STORAGE_CMD_IN].writer_id == P_UNTRUSTED) &&
+		    proc_id == P_OS && queues[Q_STORAGE_CMD_IN].access_count == 0)
 			allowed = true;
-	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS) {
-		if (queues[Q_STORAGE_OUT_2].reader_id == P_OS &&
+	} else if (queue_id == Q_STORAGE_CMD_OUT && access == READ_ACCESS) {
+		if (queues[Q_STORAGE_CMD_OUT].reader_id == P_OS &&
 		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
 			allowed = true;
 
-		if ((queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME1 || queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME2 || queues[Q_STORAGE_OUT_2].reader_id == P_UNTRUSTED) &&
+		if ((queues[Q_STORAGE_CMD_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_CMD_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_CMD_OUT].reader_id == P_UNTRUSTED) &&
 		    proc_id == P_OS &&
-		    queues[Q_STORAGE_OUT_2].access_count == 0)
+		    queues[Q_STORAGE_CMD_OUT].access_count == 0)
 			allowed = true;
 	} else if (queue_id == Q_STORAGE_DATA_IN && access == WRITE_ACCESS) {
 		if (queues[Q_STORAGE_DATA_IN].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
 			allowed = true;
 
-		if ((queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME2) &&
+		if ((queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_IN].writer_id == P_UNTRUSTED) &&
 		    proc_id == P_OS && queues[Q_STORAGE_DATA_IN].access_count == 0)
 			allowed = true;
 	} else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS) {
 		if (queues[Q_STORAGE_DATA_OUT].reader_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
 			allowed = true;
 
-		if ((queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME2) &&
+		if ((queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_OUT].reader_id == P_UNTRUSTED) &&
 		    proc_id == P_OS &&
 		    queues[Q_STORAGE_DATA_OUT].access_count == 0)
 			allowed = true;
@@ -759,13 +731,21 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 		 (queues[Q_KEYBOARD].reader_id == P_RUNTIME1 || queues[Q_KEYBOARD].reader_id == P_RUNTIME2) &&
 		 queues[Q_KEYBOARD].reader_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
-	else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS && 
-		 (queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME1 || queues[Q_STORAGE_IN_2].writer_id == P_RUNTIME2 || queues[Q_STORAGE_IN_2].writer_id == P_UNTRUSTED) &&
-		 queues[Q_STORAGE_IN_2].writer_id == requesting_proc_id && proc_id == P_OS)
+	else if (queue_id == Q_STORAGE_CMD_IN && access == WRITE_ACCESS && 
+		 (queues[Q_STORAGE_CMD_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_CMD_IN].writer_id == P_RUNTIME2 || queues[Q_STORAGE_CMD_IN].writer_id == P_UNTRUSTED) &&
+		 queues[Q_STORAGE_CMD_IN].writer_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
-	else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS &&
-		 (queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME1 || queues[Q_STORAGE_OUT_2].reader_id == P_RUNTIME2 || queues[Q_STORAGE_OUT_2].reader_id == P_UNTRUSTED) &&
-		 queues[Q_STORAGE_OUT_2].reader_id == requesting_proc_id && proc_id == P_OS)
+	else if (queue_id == Q_STORAGE_CMD_OUT && access == READ_ACCESS &&
+		 (queues[Q_STORAGE_CMD_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_CMD_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_CMD_OUT].reader_id == P_UNTRUSTED) &&
+		 queues[Q_STORAGE_CMD_OUT].reader_id == requesting_proc_id && proc_id == P_OS)
+			allowed = true;
+	else if (queue_id == Q_STORAGE_DATA_IN && access == WRITE_ACCESS && 
+		 (queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_IN].writer_id == P_UNTRUSTED) &&
+		 queues[Q_STORAGE_DATA_IN].writer_id == requesting_proc_id && proc_id == P_OS)
+			allowed = true;
+	else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS &&
+		 (queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_OUT].reader_id == P_UNTRUSTED) &&
+		 queues[Q_STORAGE_DATA_OUT].reader_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS && 
 		 (queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME2) &&
@@ -827,13 +807,25 @@ static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uin
 			return 1;
 		else
 			return 0;
-	} else if (queue_id == Q_STORAGE_OUT_2 && access == READ_ACCESS) {
+	} else if (queue_id == Q_STORAGE_CMD_OUT && access == READ_ACCESS) {
 		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;
 		else
 			return 0;
-	} else if (queue_id == Q_STORAGE_IN_2 && access == WRITE_ACCESS) {
+	} else if (queue_id == Q_STORAGE_CMD_IN && access == WRITE_ACCESS) {
+		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	} else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS) {
+		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
+		    queues[(int) queue_id].access_count == count)
+			return 1;
+		else
+			return 0;
+	} else if (queue_id == Q_STORAGE_DATA_IN && access == WRITE_ACCESS) {
 		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
 		    queues[(int) queue_id].access_count == count)
 			return 1;

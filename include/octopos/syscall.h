@@ -1,6 +1,7 @@
 #ifndef OCTOPOS_SYSCALL_H_
 #define OCTOPOS_SYSCALL_H_
 
+#include <octopos/runtime.h>
 #include <octopos/error.h>
 #ifndef UNTRUSTED_DOMAIN
 #include "arch/syscall.h"

@@ -212,6 +212,7 @@ void runtime_core(void)
 				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE);
 				sem_post(&load_app_sem);
 			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
+				printf("%s [3]\n", __func__);
 				//TODO
 				pthread_cancel(app_thread);
 				pthread_join(app_thread, NULL);

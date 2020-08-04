@@ -34,6 +34,10 @@ struct runtime_proc *runtime_procs = NULL;
 
 uint64_t timer_ticks = 0;
 
+/* FIXME: hack for the untrusted domain */
+struct runtime_proc untrusted_runtime_proc;
+struct app untrusted_app;
+
 void update_timer_ticks(void)
 {
 	timer_ticks++;
@@ -395,6 +399,10 @@ int sched_run_app(int app_id)
 
 struct runtime_proc *get_runtime_proc(int id)
 {
+	/* FIXME: hack for the untrusted domain */
+	if (id == P_UNTRUSTED)
+		return &untrusted_runtime_proc;
+
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
 		if (runtime_procs[i].id == id)
 			return &runtime_procs[i];
@@ -516,27 +524,8 @@ void initialize_scheduler(void)
 	}
 	
 	/* FIXME: hack for the untrusted domain */
-	int untrusted_app_id = sched_create_app((char *) "untrusted_dummy");
-	if (untrusted_app_id < 0) {
-		printf("Error (%s): couldn't create the untrusted dummy app.\n", __func__);
-		exit(-1);
-	}
-
-	struct app *untrusted_app = get_app(untrusted_app_id);
-	if (!untrusted_app) {
-		printf("Error (%s): couldn't get the untrusted dummy app.\n", __func__);
-		exit(-1);
-	}
-
-	struct runtime_proc *untrusted_runtime_proc = get_runtime_proc(P_UNTRUSTED);
-	if (!untrusted_runtime_proc) {
-		printf("Error (%s): couldn't get the untrusted runtime proc.\n", __func__);
-		exit(-1);
-
-	}
-
-	untrusted_app->state = SCHED_RUNNING;
-	untrusted_app->runtime_proc = untrusted_runtime_proc;
-	untrusted_runtime_proc->app = untrusted_app;
-	untrusted_runtime_proc->state = RUNTIME_PROC_RUNNING_APP;
+	untrusted_app.state = SCHED_RUNNING;
+	untrusted_app.runtime_proc = &untrusted_runtime_proc;
+	untrusted_runtime_proc.app = &untrusted_app;
+	untrusted_runtime_proc.state = RUNTIME_PROC_RUNNING_APP;
 }

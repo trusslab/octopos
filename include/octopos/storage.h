@@ -10,6 +10,3 @@
 #define STORAGE_OP_DELETE_SECURE_PARTITION	7
 
 #define STORAGE_BLOCK_SIZE	512  /* bytes */
-#define STORAGE_MAIN_PARTITION_SIZE	1000  /* num blocks */
-#define STORAGE_SECURE_PARTITION_SIZE	100  /* num blocks */
-#define NUM_SEC_PARTITIONS		10

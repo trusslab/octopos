@@ -546,35 +546,48 @@ static int remove_file(char *filename)
 	return (int) ret0;
 }
 
-int send_msg_to_storage(uint8_t *buf)
-{
-	runtime_send_msg_on_queue(buf, Q_STORAGE_IN_2);
-	runtime_recv_msg_from_queue(buf, Q_STORAGE_OUT_2);
-
-	return 0;
-}
 
 bool context_set = false;
 void *context_addr = NULL;
 uint32_t context_size = 0;
+uint32_t context_tag = 0xDEADBEEF;
+#define CONTEXT_TAG_SIZE	4
 
 static int set_up_context(void *addr, uint32_t size)
 {
+	uint8_t context_block[STORAGE_BLOCK_SIZE];
+
+	if (size > (STORAGE_BLOCK_SIZE - CONTEXT_TAG_SIZE)) {
+		printf("Error (%s): context size is too big.\n", __func__);
+		return ERR_INVALID;
+	}
+
 	context_addr = addr;
 	context_size = size;
 	context_set = true;
 
 	/* Now, let's retrieve the context. */
-	/* FIXME: we need to store the context in a way to allow us to know if there is none. */
-	int ret = request_secure_storage_access(200);
+	int ret = request_secure_storage_access(200, 100);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
 	}
 
-	uint32_t rret = read_from_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
-	if (rret != context_size)
+	uint32_t rret = read_from_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
+	printf("%s [1]: rret = %d, context_size = %d\n", __func__, rret, context_size);
+	if (rret != (context_size + CONTEXT_TAG_SIZE)) {
+		printf("%s: Couldn't read from secure storage.\n", __func__);
+		yield_secure_storage_access();
+		return ERR_FAULT;
+	}
+
+	if ((*(uint32_t *) context_block) != context_tag) {
 		printf("%s: No context to use.\n", __func__);
+		yield_secure_storage_access();
+		return ERR_INVALID;
+	}
+
+	memcpy(context_addr, &context_block[CONTEXT_TAG_SIZE], context_size);
 
 	yield_secure_storage_access();
 
@@ -910,8 +923,10 @@ static void load_application(char *msg)
 		.request_secure_storage_access = request_secure_storage_access,
 		.yield_secure_storage_access = yield_secure_storage_access,
 		.delete_and_yield_secure_storage = delete_and_yield_secure_storage,
-		.write_to_secure_storage = write_to_secure_storage,
-		.read_from_secure_storage = read_from_secure_storage,
+		.write_secure_storage_blocks = write_secure_storage_blocks,
+		.read_secure_storage_blocks = read_secure_storage_blocks,
+		.write_to_secure_storage_block = write_to_secure_storage_block,
+		.read_from_secure_storage_block = read_from_secure_storage_block,
 		.set_up_context = set_up_context,
 #endif
 		.request_secure_ipc = request_secure_ipc,
@@ -980,19 +995,25 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 #ifdef ARCH_UMODE
 void *store_context(void *data)
 {
+	uint8_t context_block[STORAGE_BLOCK_SIZE];
+
 	if (!is_secure_storage_key_set() || !context_set) {
 		printf("%s: Error: either the secure storage key or context not set\n", __func__);
 		return NULL;
 	}
 
-	int ret = request_secure_storage_access(200);
+	int ret = request_secure_storage_access(200, 100);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return NULL;
 	}
 
-	uint32_t wret = write_to_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
-	if (wret != context_size)
+	memcpy(context_block, &context_tag, CONTEXT_TAG_SIZE);
+	memcpy(&context_block[CONTEXT_TAG_SIZE], context_addr, context_size);
+
+	uint32_t wret = write_to_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
+	printf("%s [1]: wret = %d, context_size = %d\n", __func__, wret, context_size);
+	if (wret != (context_size + CONTEXT_TAG_SIZE))
 		printf("Error: couldn't write the context to secure storage.\n");
 
 	yield_secure_storage_access();

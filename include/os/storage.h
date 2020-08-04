@@ -34,10 +34,10 @@
 	memcpy(&buf[2], (uint8_t *) data, size);				\
 
 
-#define STORAGE_SET_TWO_ARGS_DATA(arg0, arg1, data, size)			\
+#define STORAGE_SET_ONE_ARG_DATA(arg0, data, size)				\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 10;				\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;				\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
@@ -47,9 +47,8 @@
 		return ERR_INVALID;						\
 	}									\
 	*((uint32_t *) &buf[1]) = arg0;						\
-	*((uint32_t *) &buf[5]) = arg1;						\
-	buf[9] = size;								\
-	memcpy(&buf[10], (uint8_t *) data, size);				\
+	buf[5] = size;								\
+	memcpy(&buf[6], (uint8_t *) data, size);				\
 
 #define STORAGE_GET_ONE_RET				\
 	uint32_t ret0;					\
@@ -75,3 +74,12 @@
 	}									\
 	memcpy(data, &buf[5], _size);						\
 
+
+void wait_for_storage(void);
+void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
+						    uint8_t *buf);
+void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
+						  uint8_t *buf);
+void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
+					  uint8_t *buf);
+void initialize_storage_partition(void);

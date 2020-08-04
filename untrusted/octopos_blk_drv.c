@@ -268,6 +268,8 @@ static int brd_do_bvec(struct brd_device *brd, struct page *page,
 	void *mem;
 	int err = 0;
 	printk("%s [1]: sector = %d, len = %d, off = %d\n", __func__, sector, len, off);
+	if (len % 512)
+		BUG();
 
 	if (op_is_write(op)) {
 		err = copy_to_brd_setup(brd, sector, len);
@@ -275,19 +277,28 @@ static int brd_do_bvec(struct brd_device *brd, struct page *page,
 			goto out;
 	}
 
+	int ret = request_secure_storage_access(200, 2048);
+	if (ret) {
+		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
+		return ret;
+	}
+	printk("%s [1]: Got secure access to storage.\n", __func__);
+
 	mem = kmap_atomic(page);
 	if (!op_is_write(op)) {
 		printk("%s [2]\n", __func__);
-		copy_from_brd(mem + off, brd, sector, len);
+		//copy_from_brd(mem + off, brd, sector, len);
+		read_secure_storage_blocks(mem + off, sector, len / 512);
 		flush_dcache_page(page);
-		//read_from_secure_storage(mem + off, 0, 0, 32);
 	} else {
 		printk("%s [3]\n", __func__);
 		flush_dcache_page(page);
-		copy_to_brd(brd, mem + off, sector, len);
-		//write_to_secure_storage(mem + off, 0, 0, 32);
+		//copy_to_brd(brd, mem + off, sector, len);
+		write_secure_storage_blocks(mem + off, sector, len / 512);
 	}
 	kunmap_atomic(mem);
+
+	yield_secure_storage_access();
 
 out:
 	return err;
@@ -554,16 +565,13 @@ static int __init brd_init(void)
 	pr_info("brd: module loaded\n");
 
 	/* octopos */
+	printk("%s [1]\n", __func__);
 	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
 	for (i = 0; i < STORAGE_KEY_SIZE; i++)
 		secure_storage_key[i] = i + 2;
+	printk("%s [1]\n", __func__);
 	set_up_secure_storage_key(secure_storage_key);
-	int ret = request_secure_storage_access(200);
-	if (ret) {
-		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
-		return ret;
-	}
-	printk("%s [1]: Got secure access to storage.\n", __func__);
+	printk("%s [1]\n", __func__);
 	/* octopos */
 
 	return 0;

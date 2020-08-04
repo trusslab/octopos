@@ -38,7 +38,13 @@
 #define printf printk
 #endif
 
-/* FIXME: there are a lot of repetition in these macros (also see file_system.c) */
+/* FIXME: there are a lot of repetition in these macros (also see include/os/storage.h) */
+#define STORAGE_SET_TWO_ARGS(arg0, arg1)			\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
+	*((uint32_t *) &buf[1]) = arg0;				\
+	*((uint32_t *) &buf[5]) = arg1;				\
+
 #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
@@ -97,7 +103,57 @@
 	}									\
 	memcpy(data, &buf[5], _size);						\
 
+#ifdef CONFIG_UML
+/* FIXME: move to a header file */
+void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id);
+void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id);
+void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
+void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
+#endif
 
+int send_msg_to_storage(uint8_t *buf)
+{
+	runtime_send_msg_on_queue(buf, Q_STORAGE_CMD_IN);
+	runtime_recv_msg_from_queue(buf, Q_STORAGE_CMD_OUT);
+
+	return 0;
+}
+
+/* FIXME: the same function is defined in arch/umode/mailbox_interface/mailbox_os.c.
+ * Consolidate.
+ */
+int send_msg_to_storage_no_response(uint8_t *buf)
+{
+	runtime_send_msg_on_queue(buf, Q_STORAGE_CMD_IN);
+
+	return 0;
+}
+
+/* FIXME: the same function is defined in arch/umode/mailbox_interface/mailbox_os.c.
+ * Consolidate.
+ */
+int get_response_from_storage(uint8_t *buf)
+{
+	runtime_recv_msg_from_queue(buf, Q_STORAGE_CMD_OUT);
+
+	return 0;
+}
+
+/* FIXME: the same function is defined in arch/umode/mailbox_interface/mailbox_os.c.
+ * Consolidate.
+ */
+void read_from_storage_data_queue(uint8_t *buf)
+{
+	runtime_recv_msg_from_queue_large(buf, Q_STORAGE_DATA_OUT);
+}
+
+/* FIXME: the same function is defined in arch/umode/mailbox_interface/mailbox_os.c.
+ * Consolidate.
+ */
+void write_to_storage_data_queue(uint8_t *buf)
+{
+	runtime_send_msg_on_queue_large(buf, Q_STORAGE_DATA_IN);
+}
 
 static int unlock_secure_storage(uint8_t *key)
 {
@@ -155,9 +211,9 @@ int set_up_secure_storage_key(uint8_t *key)
 	return 0;
 }
 
-static int request_secure_storage_creation(uint8_t *returned_key)
+static int request_secure_storage_creation(uint8_t *returned_key, uint32_t size)
 {
-	SYSCALL_SET_ZERO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE_CREATION)
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_CREATION, size)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA(buf)
 	if (ret0)
@@ -169,6 +225,24 @@ static int request_secure_storage_creation(uint8_t *returned_key)
 	memcpy(returned_key, buf, STORAGE_KEY_SIZE);
 
 	return 0;
+}
+
+static void yield_secure_storage_queues_access(void)
+{
+	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+#else
+	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, P_OS);
+#endif
 }
 
 int yield_secure_storage_access(void)
@@ -183,30 +257,17 @@ int yield_secure_storage_access(void)
 
 	has_access_to_secure_storage = false;
 
-	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
-
-#ifdef ARCH_SEC_HW
-	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
-	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
-#else
-	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
-#endif
+	yield_secure_storage_queues_access();
 
 	return 0;
 }
 
-int request_secure_storage_access(int count)
+static int request_secure_storage_queues_access(int count)
 {
-	printf("%s [1]\n", __func__);
-	if (!secure_storage_key_set) {
-		printf("%s: Error: secure storage key not set.\n", __func__);
-		return ERR_INVALID;
-	}
-	printf("%s [2]\n", __func__);
-
-	reset_queue_sync(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
-	reset_queue_sync(Q_STORAGE_OUT_2, 0);
+	reset_queue_sync(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+	reset_queue_sync(Q_STORAGE_CMD_OUT, 0);
+	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	reset_queue_sync(Q_STORAGE_DATA_OUT, 0);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
 	issue_syscall(buf);
@@ -215,23 +276,62 @@ int request_secure_storage_access(int count)
 		return (int) ret0;
 	printf("%s [3]\n", __func__);
 
-	/* FIXME: if any of the attetations fail, we should yield the other one */
-	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
+	/* FIXME: if any of the attetations fail, we should yield the other ones */
+	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN,
 					WRITE_ACCESS, count);
 	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure storage write access\n", __func__);
+		printf("%s: Error: failed to attest secure storage cmd write access\n", __func__);
 		return ERR_FAULT;
 	}
 	printf("%s [4]\n", __func__);
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
+	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT,
 					READ_ACCESS, count);
 	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure storage read access\n", __func__);
+		printf("%s: Error: failed to attest secure storage cmd read access\n", __func__);
+		return ERR_FAULT;
+	}
+
+	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN,
+					WRITE_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest secure storage data write access\n", __func__);
+		return ERR_FAULT;
+	}
+	printf("%s [4.1]\n", __func__);
+
+	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT,
+					READ_ACCESS, count);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest secure storage data read access\n", __func__);
 		return ERR_FAULT;
 	}
 	printf("%s [5]\n", __func__);
 	has_access_to_secure_storage = true;
+	
+	return 0;
+}
+
+/*
+ * partiton_size will be only used if not partition is already created and a new
+ * one needs to be created.
+ */
+int request_secure_storage_access(int count, uint32_t partition_size)
+{
+	int ret;
+
+	printf("%s [1]\n", __func__);
+	if (!secure_storage_key_set) {
+		printf("%s: Error: secure storage key not set.\n", __func__);
+		return ERR_INVALID;
+	}
+	printf("%s [2]\n", __func__);
+
+	ret = request_secure_storage_queues_access(count);	
+	if (ret) {
+		printf("%s: Error: couldn't get access to storage queues.\n", __func__);
+		return ret;
+	}
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
@@ -240,20 +340,27 @@ int request_secure_storage_access(int count)
 	if (unlock_ret == ERR_EXIST) {
 		printf("%s [7]\n", __func__);
 		uint8_t temp_key[STORAGE_KEY_SIZE];
-		int create_ret = request_secure_storage_creation(temp_key);
+		yield_secure_storage_queues_access();
+		int create_ret = request_secure_storage_creation(temp_key, partition_size);
 		if (create_ret) {
-			yield_secure_storage_access();
+			printf("%s: Error: request for secure storage creation failed.\n", __func__);
 			return create_ret;
 		}
+		ret = request_secure_storage_queues_access(count);	
+		if (ret) {
+			printf("%s: Error: couldn't regain access to storage queues.\n", __func__);
+			return ret;
+		}
+		/* FIXME: verify the partition size? */
 		printf("%s [7.1]\n", __func__);
 		int unlock_ret_2 = unlock_secure_storage(temp_key);
 		if (unlock_ret_2) {
-			yield_secure_storage_access();
+			yield_secure_storage_queues_access();
 			return create_ret;
 		}
 	} else if (unlock_ret) {
 		printf("%s [8]\n", __func__);
-		yield_secure_storage_access();
+		yield_secure_storage_queues_access();
 		return unlock_ret;
 	}
 	printf("%s [9]\n", __func__);
@@ -284,11 +391,13 @@ int delete_and_yield_secure_storage(void)
 
 	has_access_to_secure_storage = false;
 
-	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
-
-	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, P_OS);
+	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, P_OS);
 
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_DELETE_SECURE_STORAGE)
 	issue_syscall(buf);
@@ -299,32 +408,134 @@ int delete_and_yield_secure_storage(void)
 	return 0;
 }
 
-uint32_t write_to_secure_storage(uint8_t *data, uint32_t block_num,
-				 uint32_t block_offset, uint32_t write_size)
+/* FIXME: modified from write_blocks() in os/file_system.c */
+int write_secure_storage_blocks(uint8_t *data, uint32_t start_block,
+				uint32_t num_blocks)
 {
+	int i;
+
 	if (!secure_storage_available) {
 		printf("%s: Error: secure storage has not been set up\n", __func__);
-		return ERR_INVALID;
+		return 0;
 	}
 
-	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
+	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
-	send_msg_to_storage(buf);
+	send_msg_to_storage_no_response(buf);
+	for (i = 0; i < (int) num_blocks; i++)
+		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+	get_response_from_storage(buf);
+
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
 
-uint32_t read_from_secure_storage(uint8_t *data, uint32_t block_num,
-				  uint32_t block_offset, uint32_t read_size)
+/* FIXME: modified from read_blocks() in os/file_system.c */
+int read_secure_storage_blocks(uint8_t *data, uint32_t start_block,
+			       uint32_t num_blocks)
 {
+	int i;
+	printf("%s [1]\n", __func__);
+
 	if (!secure_storage_available) {
 		printf("%s: Error: secure storage has not been set up\n", __func__);
-		return ERR_INVALID;
+		return 0;
 	}
 
-	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
+	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET_DATA(data)
+	send_msg_to_storage_no_response(buf);
+	for (i = 0; i < (int) num_blocks; i++)
+		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+	get_response_from_storage(buf);
+	printf("%s [2]\n", __func__);
+
+	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
+
+/* FIXME: modified from read_from_block() in os/file_system.c */
+int read_from_secure_storage_block(uint8_t *data, uint32_t block_num,
+				   uint32_t block_offset, uint32_t read_size)
+{
+	uint8_t buf[STORAGE_BLOCK_SIZE];
+	if (!secure_storage_available) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return 0;
+	}
+
+	if (block_offset + read_size > STORAGE_BLOCK_SIZE)
+		return 0;
+
+	int ret = read_secure_storage_blocks(buf, block_num, 1);
+	if (ret != STORAGE_BLOCK_SIZE)
+		return 0;
+
+	memcpy(data, buf + block_offset, read_size);
+
+	return (int) read_size;
+}
+
+/* FIXME: modified from write_to_block in os/file_system.c */
+int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
+				  uint32_t block_offset, uint32_t write_size)
+{
+	printf("%s [1]\n", __func__);
+	uint8_t buf[STORAGE_BLOCK_SIZE];
+	if (!secure_storage_available) {
+		printf("%s: Error: secure storage has not been set up\n", __func__);
+		return 0;
+	}
+	printf("%s [2]\n", __func__);
+
+	if (block_offset + write_size > STORAGE_BLOCK_SIZE)
+		return 0;
+	printf("%s [3]\n", __func__);
+
+	/* partial block write */
+	if (!(block_offset == 0 && write_size == STORAGE_BLOCK_SIZE)) {
+		int read_ret = read_secure_storage_blocks(buf, block_num, 1);
+		if (read_ret != STORAGE_BLOCK_SIZE)
+			return 0;
+	}
+	printf("%s [4]\n", __func__);
+
+	memcpy(buf + block_offset, data, write_size);
+
+	int ret = write_secure_storage_blocks(buf, block_num, 1);
+	/* FIXME: data might have been partially written. */
+	if (ret != STORAGE_BLOCK_SIZE)
+		return 0;
+
+	return (int) write_size;
+}
+
+//uint32_t write_to_secure_storage(uint8_t *data, uint32_t block_num,
+//				 uint32_t block_offset, uint32_t write_size)
+//{
+//	if (!secure_storage_available) {
+//		printf("%s: Error: secure storage has not been set up\n", __func__);
+//		return ERR_INVALID;
+//	}
+//
+//	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
+//	buf[0] = STORAGE_OP_WRITE;
+//	send_msg_to_storage(buf);
+//	STORAGE_GET_ONE_RET
+//	return (int) ret0;
+//}
+//
+//uint32_t read_from_secure_storage(uint8_t *data, uint32_t block_num,
+//				  uint32_t block_offset, uint32_t read_size)
+//{
+//	if (!secure_storage_available) {
+//		printf("%s: Error: secure storage has not been set up\n", __func__);
+//		return ERR_INVALID;
+//	}
+//
+//	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
+//	buf[0] = STORAGE_OP_READ;
+//	send_msg_to_storage(buf);
+//	STORAGE_GET_ONE_RET_DATA(data)
+//	return (int) ret0;
+//}

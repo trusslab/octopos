@@ -1,3 +1,6 @@
+#ifndef _OCTOPOS_RUNTIME_H_
+#define _OCTOPOS_RUNTIME_H_
+
 #ifndef UNTRUSTED_DOMAIN
 struct runtime_api {
 	/* secure keyboard/serial_out */
@@ -24,11 +27,14 @@ struct runtime_api {
 
 	/* secure storage */
 	int (*set_up_secure_storage_key)(uint8_t *key);
-	int (*request_secure_storage_access)(int count);
+	/* FIXME: use uint32_t for count in all applicable functions here. */
+	int (*request_secure_storage_access)(int count, uint32_t partition_size);
 	int (*yield_secure_storage_access)(void);
 	int (*delete_and_yield_secure_storage)(void);
-	uint32_t (*write_to_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size);
-	uint32_t (*read_from_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
+	int (*write_secure_storage_blocks)(uint8_t *data, uint32_t start_block, uint32_t num_blocks);
+	int (*read_secure_storage_blocks)(uint8_t *data, uint32_t start_block,	uint32_t num_blocks);
+	int (*read_from_secure_storage_block)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
+	int (*write_to_secure_storage_block)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size);
 
 	/* storing context in secure storage */
 	int (*set_up_context)(void *addr, uint32_t size);
@@ -68,3 +74,5 @@ struct runtime_api {
 #define RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG	0
 #define RUNTIME_QUEUE_CONTEXT_SWITCH_TAG	1
 #define RUNTIME_QUEUE_EXEC_APP_TAG		2
+
+#endif /* _OCTPOS_RUNTIME_H_ */

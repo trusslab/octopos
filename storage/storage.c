@@ -46,25 +46,6 @@
 	arg1 = *((uint32_t *) &buf[5]); \
 	arg2 = *((uint32_t *) &buf[9]);\
 
-#define STORAGE_GET_TWO_ARGS_DATA				\
-	uint32_t arg0, arg1;					\
-	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[1]);				\
-	arg1 = *((uint32_t *) &buf[5]);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 10;		\
-	if (max_size >= 256) {					\
-		printf("Error: max_size not supported\n");	\
-		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
-		return;						\
-	}							\
-	data_size = buf[9];					\
-	if (data_size > max_size) {				\
-		printf("Error: size not supported\n");		\
-		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
-		return;						\
-	}							\
-	data = &buf[10];					\
-
 #define STORAGE_GET_ZERO_ARGS_DATA				\
 	uint8_t data_size, *data;				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;		\
@@ -81,9 +62,27 @@
 	}							\
 	data = &buf[2];
 
+#define STORAGE_GET_ONE_ARG_DATA				\
+	uint32_t arg0;						\
+	uint8_t data_size, *data;				\
+	arg0 = *((uint32_t *) &buf[1]);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
+	if (max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		return;						\
+	}							\
+	data_size = buf[5];					\
+	if (data_size > max_size) {				\
+		printf("Error: size not supported\n");		\
+		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		return;						\
+	}							\
+	data = &buf[6];						\
+
 /* partition information */
 struct partition {
-	int size; /* in blocks */
+	uint32_t size; /* in blocks */
 	char data_name[256];
 	char create_name[256];
 	char lock_name[256];
@@ -91,8 +90,13 @@ struct partition {
 	bool is_locked;
 };
 
-struct partition main_partition;
-struct partition sec_partitions[NUM_SEC_PARTITIONS];
+//#define STORAGE_MAIN_PARTITION_SIZE	1000  /* num blocks */
+//#define STORAGE_SECURE_PARTITION_SIZE	100  /* num blocks */
+#define NUM_PARTITIONS		5
+
+/* FIXME: determine partitions and their sizes dynamically. */
+struct partition partitions[NUM_PARTITIONS];
+uint32_t partition_sizes[NUM_PARTITIONS] = {1000, 2048, 100, 100, 100};
 
 bool is_queue_set_bound = false;
 int bound_partition = -1;
@@ -105,18 +109,11 @@ sem_t interrupts[NUM_QUEUES + 1];
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 static void initialize_storage_space(void)
 {
-	for (int i = 0; i < (NUM_SEC_PARTITIONS + 1); i++) {
+	for (int i = 0; i < NUM_PARTITIONS; i++) {
 		struct partition *partition;
-		int suffix = 0;
-		if (i == 0) {
-			partition = &main_partition;
-			partition->size = STORAGE_MAIN_PARTITION_SIZE;
-			suffix = 1;
-		} else {
-			partition = &sec_partitions[i - 1];
-			partition->size = STORAGE_SECURE_PARTITION_SIZE;
-			suffix = i + 1;
-		}
+		int suffix = i;
+		partition = &partitions[i];
+		partition->size = partition_sizes[i];
 
 		memset(partition->data_name, 0x0, 256);
 		sprintf(partition->data_name, "octopos_partition_%d_data", suffix);
@@ -131,6 +128,12 @@ static void initialize_storage_space(void)
 		if (!filep) {
 			/* create empty file */
 			FILE *filep2 = fopen(partition->data_name, "w");
+			/* populate with zeros (so that first read doesn't return an error */
+			uint8_t zero_block[STORAGE_BLOCK_SIZE];
+			memset(zero_block, 0x0, STORAGE_BLOCK_SIZE);
+			fseek(filep2, 0, SEEK_SET);
+			for (uint32_t j = 0; j < partition->size; j++)
+				fwrite(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep2);
 			fclose(filep2);
 		}
 
@@ -189,11 +192,11 @@ static void initialize_storage_space(void)
 	}
 }
 
-static int set_secure_partition_key(uint8_t *data, int partition_id)
+static int set_partition_key(uint8_t *data, int partition_id)
 {
-	FILE *filep = fopen(sec_partitions[partition_id].lock_name, "r+");
+	FILE *filep = fopen(partitions[partition_id].lock_name, "r+");
 	if (!filep) {
-		printf("%s: Error: couldn't open %s\n", __func__, sec_partitions[partition_id].lock_name);
+		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
 
@@ -202,7 +205,7 @@ static int set_secure_partition_key(uint8_t *data, int partition_id)
         fclose(filep);
 	if (size < STORAGE_KEY_SIZE) {
 		/* make sure to delete what was written */
-		filep = fopen(sec_partitions[partition_id].lock_name, "w");
+		filep = fopen(partitions[partition_id].lock_name, "w");
 		fclose(filep);
 		return ERR_FAULT;
 	}
@@ -212,9 +215,9 @@ static int set_secure_partition_key(uint8_t *data, int partition_id)
 
 static int remove_partition_key(int partition_id)
 {
-	FILE *filep = fopen(sec_partitions[partition_id].lock_name, "w");
+	FILE *filep = fopen(partitions[partition_id].lock_name, "w");
 	if (!filep) {
-		printf("%s: Error: couldn't open %s\n", __func__, sec_partitions[partition_id].lock_name);
+		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
 	fclose(filep);
@@ -224,9 +227,9 @@ static int remove_partition_key(int partition_id)
 static int unlock_partition(uint8_t *data, int partition_id)
 {
 	uint8_t key[STORAGE_KEY_SIZE];
-	FILE *filep = fopen(sec_partitions[partition_id].lock_name, "r");
+	FILE *filep = fopen(partitions[partition_id].lock_name, "r");
 	if (!filep) {
-		printf("%s: Error: couldn't open %s\n", __func__, sec_partitions[partition_id].lock_name);
+		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
 
@@ -243,15 +246,15 @@ static int unlock_partition(uint8_t *data, int partition_id)
 			return ERR_INVALID;
 	}
 
-	sec_partitions[partition_id].is_locked = false;
+	partitions[partition_id].is_locked = false;
 	return 0;
 }
 
 static int wipe_partition(int partition_id)
 {
-	FILE *filep = fopen(sec_partitions[partition_id].data_name, "w");
+	FILE *filep = fopen(partitions[partition_id].data_name, "w");
 	if (!filep) {
-		printf("%s: Error: couldn't open %s\n", __func__, sec_partitions[partition_id].data_name);
+		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].data_name);
 		return ERR_FAULT;
 	}
 	fclose(filep);
@@ -301,252 +304,100 @@ static void process_request(uint8_t *buf)
 
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
-		if (main_partition.is_locked) {
+		if (!is_queue_set_bound) {
+			printf("%s: Error: no partition is bound to queue set\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+
+		int partition_id = bound_partition;
+
+		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
+			printf("%s: Error: invalid partition ID\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+
+		if (partitions[partition_id].is_locked) {
 			printf("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		filep = fopen(main_partition.data_name, "r+");
+
+		filep = fopen(partitions[partition_id].data_name, "r+");
 		if (!filep) {
-			printf("%s: Error: couldn't open %s for write\n", __func__, main_partition.data_name);
+			printf("%s: Error: couldn't open %s for write\n", __func__,
+						partitions[partition_id].data_name);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
+
 		STORAGE_GET_TWO_ARGS
-		int start_block = (int) arg0;
-		int num_blocks = (int) arg1;
-		if (start_block + num_blocks >= main_partition.size) {
+		uint32_t start_block = arg0;
+		uint32_t num_blocks = arg1;
+		if (start_block + num_blocks > partitions[partition_id].size) {
 			printf("%s: Error: invalid args\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			fclose(filep);
 			return;
 		}
-		int seek_off = start_block * STORAGE_BLOCK_SIZE;
+		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
 		fseek(filep, seek_off, SEEK_SET);
 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
 		uint32_t size = 0;
-		for (int i = 0; i < num_blocks; i++) {
+		for (uint32_t i = 0; i < num_blocks; i++) {
 			read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
 			size += (uint32_t) fwrite(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 		}
 		STORAGE_SET_ONE_RET(size);
 		fclose(filep);
 	} else if (buf[0] == STORAGE_OP_READ) { /* read */
-		if (main_partition.is_locked) {
+		if (!is_queue_set_bound) {
+			printf("%s: Error: no partition is bound to queue set\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+
+		int partition_id = bound_partition;
+
+		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
+			printf("%s: Error: invalid partition ID\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+
+		if (partitions[partition_id].is_locked) {
 			printf("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		filep = fopen(main_partition.data_name, "r");
+
+		filep = fopen(partitions[partition_id].data_name, "r");
 		if (!filep) {
-			printf("%s: Error: couldn't open %s for read\n", __func__, main_partition.data_name);
+			printf("%s: Error: couldn't open %s for read\n", __func__,
+						partitions[partition_id].data_name);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
+
 		STORAGE_GET_TWO_ARGS
-		int start_block = (int) arg0;
-		int num_blocks = (int) arg1;
-		if (start_block + num_blocks >= main_partition.size) {
+		uint32_t start_block = arg0;
+		uint32_t num_blocks = arg1;
+		if (start_block + num_blocks > partitions[partition_id].size) {
 			printf("%s: Error: invalid args\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			fclose(filep);
 			return;
 		}
-		int seek_off = start_block * STORAGE_BLOCK_SIZE;
+		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
 		fseek(filep, seek_off, SEEK_SET);
 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
 		uint32_t size = 0;
-		for (int i = 0; i < num_blocks; i++) {
+		for (uint32_t i = 0; i < num_blocks; i++) {
 			size += (uint32_t) fread(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 		}
 		STORAGE_SET_ONE_RET(size);
-		fclose(filep);
-	/* creates a new secure partition */
-	/* FIXME: temp implementation */
-	} else if (buf[0] == STORAGE_OP_CREATE_SECURE_PARTITION) {
-		STORAGE_GET_ZERO_ARGS_DATA
-		if (data_size != STORAGE_KEY_SIZE) {
-			printf("%s: Error: incorrect key size\n", __func__);
-			STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
-			return;
-		}
-
-		int partition_id = -1;
-
-		for (int i = 0; i < NUM_SEC_PARTITIONS; i++) {
-			if (!sec_partitions[i].is_created) {
-				partition_id = i;
-				break;
-			}
-		}
-
-		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
-			printf("%s: Error: no secure partitions available\n", __func__);
-			STORAGE_SET_TWO_RETS(ERR_AVAILABLE, 0)
-			return;
-		}
-
-		int ret = set_secure_partition_key(data, partition_id);
-		if (ret) {
-			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-			return;
-		}
-
-		filep = fopen(sec_partitions[partition_id].create_name, "r+");
-		if (!filep) {
-			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-			return;
-		}
-
-		fseek(filep, 0, SEEK_SET);
-		uint32_t tag = 1;
-		uint32_t size = (uint32_t) fwrite(&tag, sizeof(uint8_t), 4, filep);
-		fclose(filep);
-		if (size != 4) {
-			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-			if (size > 0) { /* partial write */
-				/* wipe the file */
-				FILE *filep2 = fopen(sec_partitions[partition_id].create_name, "w");
-				fclose(filep2);
-			}
-			return;
-		}
-
-		sec_partitions[partition_id].is_created = true;
-
-		STORAGE_SET_TWO_RETS(0, partition_id)
-	} else if (buf[0] == STORAGE_OP_DELETE_SECURE_PARTITION) {
-		STORAGE_GET_ONE_ARG
-		uint32_t sec_partition_id = arg0;
-
-		if (sec_partition_id >= NUM_SEC_PARTITIONS) {
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		if (!sec_partitions[sec_partition_id].is_created) {
-			printf("%s: Error: secure partition does not exist\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_EXIST)
-			return;
-		}
-
-		if (is_queue_set_bound && (bound_partition == (int) sec_partition_id)) {
-			printf("%s: Error: secure partition currently bound to a queue set\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-		if (sec_partitions[sec_partition_id].is_locked) {
-			printf("%s: Error: can't delete a locked partition\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		sec_partitions[sec_partition_id].is_created = false;
-		/* wipe the create and lock files of the partition */
-		FILE *filep2 = fopen(sec_partitions[sec_partition_id].create_name, "w");
-		fclose(filep2);
-		filep2 = fopen(sec_partitions[sec_partition_id].lock_name, "w");
-		fclose(filep2);
-
-		STORAGE_SET_ONE_RET(0)
-	} else {
-		STORAGE_SET_ONE_RET(ERR_INVALID)
-		return;
-	}
-}
-
-/* FIXME: there's duplicate code between process_request and this function */
-static void process_secure_request(uint8_t *buf)
-{
-	FILE *filep = NULL;
-	printf("%s [1]: buf[0] = %d\n", __func__, buf[0]);
-
-	/* write */
-	if (buf[0] == STORAGE_OP_WRITE) {
-		if (!is_queue_set_bound) {
-			printf("%s: Error: no partition is bound to queue set\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		int partition_id = bound_partition;
-
-		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
-			printf("%s: Error: invalid partition ID\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		if (sec_partitions[partition_id].is_locked) {
-			printf("%s: Error: partition is locked\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		filep = fopen(sec_partitions[partition_id].data_name, "r+");
-		if (!filep) {
-			printf("%s: Error: couldn't open %s for write\n", __func__, sec_partitions[partition_id].data_name);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		STORAGE_GET_TWO_ARGS_DATA
-		if (((int) arg0) > sec_partitions[partition_id].size) {
-			printf("%s: Error: invalid block size\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			fclose(filep);
-			return;
-		}
-
-		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
-		fseek(filep, seek_off, SEEK_SET);
-		uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), data_size, filep);
-
-		STORAGE_SET_ONE_RET(size);
-		fclose(filep);
-	} else if (buf[0] == STORAGE_OP_READ) { /* read */
-		if (!is_queue_set_bound) {
-			printf("%s: Error: no partition is bound to queue set\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		int partition_id = bound_partition;
-
-		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
-			printf("%s: Error: invalid partition ID\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		if (sec_partitions[partition_id].is_locked) {
-			printf("%s: Error: partition is locked\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		filep = fopen(sec_partitions[partition_id].data_name, "r");
-		if (!filep) {
-			printf("%s: Error: couldn't open %s for read\n", __func__, sec_partitions[partition_id].data_name);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		STORAGE_GET_THREE_ARGS
-		if (((int) arg0) > sec_partitions[partition_id].size) {
-			printf("%s: Error: invalid block size\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			fclose(filep);
-			return;
-		}
-
-		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
-		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
-		fseek(filep, seek_off, SEEK_SET);
-		uint32_t size = (uint32_t) fread(ret_buf, sizeof(uint8_t), arg2, filep);
-
-		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);
 		fclose(filep);
 	} else if (buf[0] == STORAGE_OP_SET_KEY) {
 		if (!is_queue_set_bound) {
@@ -557,13 +408,13 @@ static void process_secure_request(uint8_t *buf)
 
 		int partition_id = bound_partition;
 
-		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
 			printf("%s: Error: invalid partition ID\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
 			return;
 		}
 
-		if (sec_partitions[partition_id].is_locked) {
+		if (partitions[partition_id].is_locked) {
 			printf("%s: Error: can't set the key for a locked partition\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
 			return;
@@ -576,7 +427,7 @@ static void process_secure_request(uint8_t *buf)
 			return;
 		}
 
-		uint32_t ret = (uint32_t) set_secure_partition_key(data, partition_id);
+		uint32_t ret = (uint32_t) set_partition_key(data, partition_id);
 		STORAGE_SET_ONE_RET(ret)
 	} else if (buf[0] == STORAGE_OP_UNLOCK) {
 		STORAGE_GET_ZERO_ARGS_DATA
@@ -588,7 +439,7 @@ static void process_secure_request(uint8_t *buf)
 
 		int partition_id = -1;
 
-		for (int i = 0; i < NUM_SEC_PARTITIONS; i++) {
+		for (int i = 0; i < NUM_PARTITIONS; i++) {
 			int ret = unlock_partition(data, i);
 			if (!ret) {
 				partition_id = i;
@@ -596,12 +447,12 @@ static void process_secure_request(uint8_t *buf)
 			}			
 		}
 
-		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
 			STORAGE_SET_ONE_RET(ERR_EXIST)
 			return;
 		}
 
-		if (sec_partitions[partition_id].is_locked) {
+		if (partitions[partition_id].is_locked) {
 			STORAGE_SET_ONE_RET(ERR_FAULT)
 			return;
 		}
@@ -619,13 +470,13 @@ static void process_secure_request(uint8_t *buf)
 
 		int partition_id = bound_partition;
 
-		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
 			printf("%s: Error: invalid partition ID\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
 			return;
 		}
 
-		sec_partitions[partition_id].is_locked = true;
+		partitions[partition_id].is_locked = true;
 		bound_partition = -1;
 		is_queue_set_bound = false;
 			
@@ -639,12 +490,12 @@ static void process_secure_request(uint8_t *buf)
 
 		int partition_id = bound_partition;
 
-		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
 			printf("%s: Error: invalid partition ID\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
 			return;
 		}
-		if (sec_partitions[partition_id].is_locked) {
+		if (partitions[partition_id].is_locked) {
 			printf("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
 			return;
@@ -667,11 +518,319 @@ static void process_secure_request(uint8_t *buf)
 		is_queue_set_bound = false;
 
 		STORAGE_SET_ONE_RET(0)
+	/* creates a new secure partition */
+	/* FIXME: temp implementation */
+	} else if (buf[0] == STORAGE_OP_CREATE_SECURE_PARTITION) {
+		STORAGE_GET_ONE_ARG_DATA
+		if (data_size != STORAGE_KEY_SIZE) {
+			printf("%s: Error: incorrect key size\n", __func__);
+			STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+			return;
+		}
+		uint32_t partition_size = arg0;
+
+		int partition_id = -1;
+
+		for (int i = 0; i < NUM_PARTITIONS; i++) {
+			if (!partitions[i].is_created && partitions[i].size == partition_size) {
+				partition_id = i;
+				break;
+			}
+		}
+
+		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
+			printf("%s: Error: no partitions with the requested size available\n", __func__);
+			STORAGE_SET_TWO_RETS(ERR_AVAILABLE, 0)
+			return;
+		}
+
+		int ret = set_partition_key(data, partition_id);
+		if (ret) {
+			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
+			return;
+		}
+
+		filep = fopen(partitions[partition_id].create_name, "r+");
+		if (!filep) {
+			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
+			return;
+		}
+
+		fseek(filep, 0, SEEK_SET);
+		uint32_t tag = 1;
+		uint32_t size = (uint32_t) fwrite(&tag, sizeof(uint8_t), 4, filep);
+		fclose(filep);
+		if (size != 4) {
+			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
+			if (size > 0) { /* partial write */
+				/* wipe the file */
+				FILE *filep2 = fopen(partitions[partition_id].create_name, "w");
+				fclose(filep2);
+			}
+			return;
+		}
+
+		partitions[partition_id].is_created = true;
+
+		/* FIXME: don't return the partition ID */
+		STORAGE_SET_TWO_RETS(0, partition_id)
+	} else if (buf[0] == STORAGE_OP_DELETE_SECURE_PARTITION) {
+		STORAGE_GET_ONE_ARG
+		uint32_t partition_id = arg0;
+
+		if (partition_id >= NUM_PARTITIONS) {
+			STORAGE_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+
+		if (!partitions[partition_id].is_created) {
+			printf("%s: Error: partition does not exist\n", __func__);
+			STORAGE_SET_ONE_RET(ERR_EXIST)
+			return;
+		}
+
+		if (is_queue_set_bound && (bound_partition == (int) partition_id)) {
+			printf("%s: Error: partition currently bound to the queue set\n", __func__);
+			STORAGE_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+		if (partitions[partition_id].is_locked) {
+			printf("%s: Error: can't delete a locked partition\n", __func__);
+			STORAGE_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+
+		partitions[partition_id].is_created = false;
+		/* wipe the create and lock files of the partition */
+		FILE *filep2 = fopen(partitions[partition_id].create_name, "w");
+		fclose(filep2);
+		filep2 = fopen(partitions[partition_id].lock_name, "w");
+		fclose(filep2);
+		/* FIXME: do we need to wipe the partition content? */
+
+		STORAGE_SET_ONE_RET(0)
 	} else {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
 }
+
+///* FIXME: there's duplicate code between process_request and this function */
+//static void process_secure_request(uint8_t *buf)
+//{
+//	FILE *filep = NULL;
+//	printf("%s [1]: buf[0] = %d\n", __func__, buf[0]);
+//
+//	/* write */
+//	if (buf[0] == STORAGE_OP_WRITE) {
+//		if (!is_queue_set_bound) {
+//			printf("%s: Error: no partition is bound to queue set\n", __func__);
+//			STORAGE_SET_ONE_RET(0)
+//			return;
+//		}
+//
+//		int partition_id = bound_partition;
+//
+//		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+//			printf("%s: Error: invalid partition ID\n", __func__);
+//			STORAGE_SET_ONE_RET(0)
+//			return;
+//		}
+//
+//		if (sec_partitions[partition_id].is_locked) {
+//			printf("%s: Error: partition is locked\n", __func__);
+//			STORAGE_SET_ONE_RET(0)
+//			return;
+//		}
+//
+//		filep = fopen(sec_partitions[partition_id].data_name, "r+");
+//		if (!filep) {
+//			printf("%s: Error: couldn't open %s for write\n", __func__, sec_partitions[partition_id].data_name);
+//			STORAGE_SET_ONE_RET(0)
+//			return;
+//		}
+//
+//		STORAGE_GET_TWO_ARGS_DATA
+//		if (((int) arg0) > sec_partitions[partition_id].size) {
+//			printf("%s: Error: invalid block size\n", __func__);
+//			STORAGE_SET_ONE_RET(0)
+//			fclose(filep);
+//			return;
+//		}
+//
+//		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
+//		fseek(filep, seek_off, SEEK_SET);
+//		uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), data_size, filep);
+//
+//		STORAGE_SET_ONE_RET(size);
+//		fclose(filep);
+//	} else if (buf[0] == STORAGE_OP_READ) { /* read */
+//		if (!is_queue_set_bound) {
+//			printf("%s: Error: no partition is bound to queue set\n", __func__);
+//			STORAGE_SET_ONE_RET(0)
+//			return;
+//		}
+//
+//		int partition_id = bound_partition;
+//
+//		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+//			printf("%s: Error: invalid partition ID\n", __func__);
+//			STORAGE_SET_ONE_RET(0)
+//			return;
+//		}
+//
+//		if (sec_partitions[partition_id].is_locked) {
+//			printf("%s: Error: partition is locked\n", __func__);
+//			STORAGE_SET_ONE_RET(0)
+//			return;
+//		}
+//
+//		filep = fopen(sec_partitions[partition_id].data_name, "r");
+//		if (!filep) {
+//			printf("%s: Error: couldn't open %s for read\n", __func__, sec_partitions[partition_id].data_name);
+//			STORAGE_SET_ONE_RET(0)
+//			return;
+//		}
+//
+//		STORAGE_GET_THREE_ARGS
+//		if (((int) arg0) > sec_partitions[partition_id].size) {
+//			printf("%s: Error: invalid block size\n", __func__);
+//			STORAGE_SET_ONE_RET(0)
+//			fclose(filep);
+//			return;
+//		}
+//
+//		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
+//		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
+//		fseek(filep, seek_off, SEEK_SET);
+//		uint32_t size = (uint32_t) fread(ret_buf, sizeof(uint8_t), arg2, filep);
+//
+//		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);
+//		fclose(filep);
+//	} else if (buf[0] == STORAGE_OP_SET_KEY) {
+//		if (!is_queue_set_bound) {
+//			printf("%s: Error: no partition is bound to queue set\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//
+//		int partition_id = bound_partition;
+//
+//		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+//			printf("%s: Error: invalid partition ID\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//
+//		if (sec_partitions[partition_id].is_locked) {
+//			printf("%s: Error: can't set the key for a locked partition\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//
+//		STORAGE_GET_ZERO_ARGS_DATA
+//		if (data_size != STORAGE_KEY_SIZE) {
+//			printf("%s: Error: incorrect key size\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//
+//		uint32_t ret = (uint32_t) set_secure_partition_key(data, partition_id);
+//		STORAGE_SET_ONE_RET(ret)
+//	} else if (buf[0] == STORAGE_OP_UNLOCK) {
+//		STORAGE_GET_ZERO_ARGS_DATA
+//		if (data_size != STORAGE_KEY_SIZE) {
+//			printf("%s: Error: incorrect key size (sent for unlocking)\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//
+//		int partition_id = -1;
+//
+//		for (int i = 0; i < NUM_SEC_PARTITIONS; i++) {
+//			int ret = unlock_partition(data, i);
+//			if (!ret) {
+//				partition_id = i;
+//				break;
+//			}			
+//		}
+//
+//		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+//			STORAGE_SET_ONE_RET(ERR_EXIST)
+//			return;
+//		}
+//
+//		if (sec_partitions[partition_id].is_locked) {
+//			STORAGE_SET_ONE_RET(ERR_FAULT)
+//			return;
+//		}
+//
+//		bound_partition = partition_id;
+//		is_queue_set_bound = true;
+//
+//		STORAGE_SET_ONE_RET(0)
+//	} else if (buf[0] == STORAGE_OP_LOCK) {
+//		if (!is_queue_set_bound) {
+//			printf("%s: Error: no partition is bound to queue set\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//
+//		int partition_id = bound_partition;
+//
+//		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+//			printf("%s: Error: invalid partition ID\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//
+//		sec_partitions[partition_id].is_locked = true;
+//		bound_partition = -1;
+//		is_queue_set_bound = false;
+//			
+//		STORAGE_SET_ONE_RET(0)
+//	} else if (buf[0] == STORAGE_OP_WIPE) {
+//		if (!is_queue_set_bound) {
+//			printf("%s: Error: no partition is bound to queue set\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//
+//		int partition_id = bound_partition;
+//
+//		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+//			printf("%s: Error: invalid partition ID\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//		if (sec_partitions[partition_id].is_locked) {
+//			printf("%s: Error: partition is locked\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_INVALID)
+//			return;
+//		}
+//		int ret = wipe_partition(partition_id);
+//		if (ret) {
+//			printf("%s: Error: couldn't wipe the partition\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_FAULT)
+//			return;
+//		}
+//
+//		ret = remove_partition_key(partition_id);
+//		if (ret) {
+//			printf("%s: Error: couldn't remove partition key\n", __func__);
+//			STORAGE_SET_ONE_RET(ERR_FAULT)
+//			return;
+//		}
+//
+//		bound_partition = -1;
+//		is_queue_set_bound = false;
+//
+//		STORAGE_SET_ONE_RET(0)
+//	} else {
+//		STORAGE_SET_ONE_RET(ERR_INVALID)
+//		return;
+//	}
+//}
 
 static void *handle_mailbox_interrupts(void *data)
 {
@@ -684,8 +843,8 @@ static void *handle_mailbox_interrupts(void *data)
 			exit(-1);
 		}
 		sem_post(&interrupts[interrupt]);
-		if (interrupt == Q_STORAGE_IN_2)
-			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
+		//if (interrupt == Q_STORAGE_IN_2)
+		//	sem_post(&interrupts[Q_STORAGE_CMD_IN]);
 	}
 }
 
@@ -694,7 +853,7 @@ int main(int argc, char **argv)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t opcode[2];
 	pthread_t mailbox_thread;
-	int is_secure_queue = 0;
+	//int is_secure_queue = 0;
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error: storage data queue msg size must be equal to storage block size\n");
@@ -705,8 +864,8 @@ int main(int argc, char **argv)
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
-	sem_init(&interrupts[Q_STORAGE_IN_2], 0, 0);
-	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, MAILBOX_QUEUE_SIZE);
+	//sem_init(&interrupts[Q_STORAGE_IN_2], 0, 0);
+	//sem_init(&interrupts[Q_STORAGE_OUT_2], 0, MAILBOX_QUEUE_SIZE);
 
 	initialize_storage_space();
 
@@ -729,23 +888,23 @@ int main(int argc, char **argv)
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
-		sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
-		if (!is_secure_queue) {
-			printf("%s [1]\n", __func__);
-			opcode[1] = Q_STORAGE_CMD_IN;
-			write(fd_out, opcode, 2); 
-			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			process_request(buf);
-			send_response(buf, Q_STORAGE_CMD_OUT);
-		} else {
-			printf("%s [2]\n", __func__);
-			sem_wait(&interrupts[Q_STORAGE_IN_2]);
-			opcode[1] = Q_STORAGE_IN_2;
-			write(fd_out, opcode, 2); 
-			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			process_secure_request(buf);
-			send_response(buf, Q_STORAGE_OUT_2);
-		}
+		//sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
+		//if (!is_secure_queue) {
+		printf("%s [1]\n", __func__);
+		opcode[1] = Q_STORAGE_CMD_IN;
+		write(fd_out, opcode, 2); 
+		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+		process_request(buf);
+		send_response(buf, Q_STORAGE_CMD_OUT);
+		//} else {
+		//	printf("%s [2]\n", __func__);
+		//	sem_wait(&interrupts[Q_STORAGE_IN_2]);
+		//	opcode[1] = Q_STORAGE_IN_2;
+		//	write(fd_out, opcode, 2); 
+		//	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+		//	process_secure_request(buf);
+		//	send_response(buf, Q_STORAGE_OUT_2);
+		//}
 	}
 	
 	pthread_cancel(mailbox_thread);

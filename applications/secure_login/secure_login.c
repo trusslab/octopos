@@ -86,16 +86,16 @@ void app_main(struct runtime_api *api)
 	for (i = 0; i < STORAGE_KEY_SIZE; i++)
 		secure_storage_key[i] = i;
 	api->set_up_secure_storage_key(secure_storage_key);
-	ret = api->request_secure_storage_access(200);
+	ret = api->request_secure_storage_access(200, 100);
 	if (ret) {
 		printf("Error: could not get secure access to storage.\n");
 		insecure_printf("Error: could not get secure access to storage.\n");
 		return;
 	}
 
-	api->write_to_secure_storage((uint8_t *) line, 0, 0, size);
+	api->write_to_secure_storage_block((uint8_t *) line, 0, 0, size);
 	memset(line, 0x0, 1024);
-	api->read_from_secure_storage((uint8_t *) line, 0, 0, size);
+	api->read_from_secure_storage_block((uint8_t *) line, 0, 0, size);
 	insecure_printf("secret (from secure storage): %s (size = %d)\n", line, size);	
 	api->delete_and_yield_secure_storage();
 }

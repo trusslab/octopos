@@ -292,13 +292,13 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_SERIAL_OUT]);
 				break;
-			case Q_STORAGE_IN_2:
-				sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
-				sem_post(&availables[Q_STORAGE_IN_2]);
+			case Q_STORAGE_CMD_IN:
+				sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_STORAGE_CMD_IN]);
 				break;
-			case Q_STORAGE_OUT_2:
-				sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
-				sem_post(&availables[Q_STORAGE_OUT_2]);
+			case Q_STORAGE_CMD_OUT:
+				sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
+				sem_post(&availables[Q_STORAGE_CMD_OUT]);
 				break;
 			case Q_STORAGE_DATA_IN:
 				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
@@ -355,8 +355,6 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
-	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
-	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
@@ -372,8 +370,6 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_IN], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_OUT], 0, 1);
-	sem_init(&availables[Q_STORAGE_IN_2], 0, 1);
-	sem_init(&availables[Q_STORAGE_OUT_2], 0, 1);
 	sem_init(&availables[Q_NETWORK_DATA_IN], 0, 1);
 	sem_init(&availables[Q_NETWORK_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_IN], 0, 1);
