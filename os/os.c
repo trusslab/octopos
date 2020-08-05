@@ -45,7 +45,7 @@ int main()
 		return ret;
 
 	initialize_shell();
-	initialize_storage_partition();
+	initialize_storage();
 #ifdef ARCH_UMODE
 	initialize_file_system();
 #endif

@@ -20,6 +20,38 @@
 
 uint8_t os_storage_key[STORAGE_KEY_SIZE];
 bool is_partition_locked = true;
+uint8_t os_storage_config_key[STORAGE_KEY_SIZE];
+bool is_storage_config_locked = false;
+
+static int set_storage_config_key(uint8_t *key)
+{
+	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+	buf[0] = STORAGE_OP_SET_CONFIG_KEY;
+	send_msg_to_storage_no_response(buf);
+	get_response_from_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
+static int unlock_storage_config(uint8_t *key)
+{
+	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+	buf[0] = STORAGE_OP_UNLOCK_CONFIG;
+	send_msg_to_storage_no_response(buf);
+	get_response_from_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+
+static int lock_storage_config(void)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	buf[0] = STORAGE_OP_LOCK_CONFIG;
+	send_msg_to_storage_no_response(buf);
+	get_response_from_storage(buf);
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
 
 /* FIXME: modified from runtime/storage_client.c */
 static int unlock_secure_storage(uint8_t *key)
@@ -102,6 +134,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 		/* FIXME: use a random number */
 		temp_key[i] = runtime_proc_id;
 
+	wait_for_storage();
 	int ret = storage_create_secure_partition(temp_key, &sec_partition_id,
 						  partition_size);
 	if (ret) {
@@ -149,6 +182,16 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		is_partition_locked = true;
 	}
 
+	if (!is_storage_config_locked) {
+		int ret = lock_storage_config();
+		if (ret) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			return;
+		}
+		printf("%s [1]: locking\n", __func__);
+		is_storage_config_locked = true;
+	}
+
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
@@ -187,6 +230,7 @@ void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 
+	wait_for_storage();
 	storage_delete_secure_partition(app->sec_partition_id);
 	app->sec_partition_created = false;
 	app->sec_partition_id = -1;
@@ -219,16 +263,28 @@ void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
 
+	if (is_storage_config_locked) {
+		unlock_storage_config(os_storage_config_key);
+		printf("%s [1]: unlocking\n", __func__);
+		is_storage_config_locked = false;
+	}
+
 	if (is_partition_locked) {
 		unlock_secure_storage(os_storage_key);
 		is_partition_locked = false;
 	}
 }
 
-void initialize_storage_partition(void)
+void initialize_storage(void)
 {
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		os_storage_key[i] = i + 3;
+
+	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
+		os_storage_config_key[i] = i + 4;
+
+	set_storage_config_key(os_storage_config_key);
+
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
 	int unlock_ret = unlock_secure_storage(os_storage_key);

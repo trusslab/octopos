@@ -39,8 +39,6 @@ To prevent a malicious app from never releasing a partition, a few solutions are
 OctopOS currently does not support either of these solutions.
 Given that apps using these partitions are trusted and given the abundant storage space, this is not an urgent issue.
 
-Note 3: some APIs of the storage service can be locked.
-This includes the APIs to allocate and delete (unlocked) partition.
-This allows the OS to prevent an app from creating new partitions when using the storage service.
+Note 3: the config APIs of the storage service (i.e., create and delete partition) can be locked.
+This allows the OS to prevent an app from creating new partitions (or deleting them) when using the storage service.
 The OS locks these APIs when giving an app access to the storage service.
-This feature is not implemented yet.
