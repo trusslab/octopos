@@ -434,7 +434,13 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			} else {
 				_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
 			}
-		} else {
+		} else if (callback_ref == Mbox_regs[Q_STORAGE_DATA_IN]) {
+			/* storage data in queue */
+			sem_post(&interrupts[Q_STORAGE_DATA_IN]);
+		} else if (callback_ref == Mbox_regs[Q_STORAGE_IN_2]) {
+			/* storage cmd in queue */
+			sem_post(&interrupts[Q_STORAGE_IN_2]);
+		}  else {
 			_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
 		}
 	} else if (mask & XMB_IX_RTA) {
@@ -451,6 +457,12 @@ static void handle_mailbox_interrupts(void* callback_ref)
 				sem_init(&secure_ipc_receive_sem, 0, 0);
 				sem_post(&secure_ipc_receive_sem);
 			}
+		} else if (callback_ref == Mbox_regs[Q_STORAGE_DATA_OUT]) {
+			/* storage data out queue */
+			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
+		} else if (callback_ref == Mbox_regs[Q_STORAGE_OUT_2]) {
+			/* storage cmd out queue */
+			sem_post(&interrupts[Q_STORAGE_OUT_2]);
 		} else {
 			_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
 		}
@@ -462,7 +474,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
 	}
 
 	XMbox_ClearInterrupt(mbox_inst, mask);
-	//xxxxxxx
 }
 
 void *run_app(void *load_buf);

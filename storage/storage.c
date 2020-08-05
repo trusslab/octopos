@@ -12,14 +12,15 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 
+#include "arch/mailbox_storage.h"
 
 //bool is_queue_set_bound = false;
 //int bound_partition = -1;
 
-int fd_out, fd_in, fd_intr;
+// int fd_out, fd_in, fd_intr;
 
 /* Not all will be used */
-sem_t interrupts[NUM_QUEUES + 1];
+// sem_t interrupts[NUM_QUEUES + 1];
 
 ///* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 //static void initialize_storage_space(void)
@@ -608,15 +609,18 @@ sem_t interrupts[NUM_QUEUES + 1];
 
 int main_(int argc, char **argv)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t opcode[2];
+	// uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	// uint8_t opcode[2];
 	// pthread_t mailbox_thread;
-	int is_secure_queue = 0;
+	// int is_secure_queue = 0;
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error: storage data queue msg size must be equal to storage block size\n");
 		return -1;
 	}
+
+	init_storage();
+	storage_event_loop();
 
 	// sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, 0);
 	// sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
@@ -641,27 +645,27 @@ int main_(int argc, char **argv)
 	// 	return -1;
 	// }
 
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	// opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	
-	while(1) {
-		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
-		sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
-		if (!is_secure_queue) {
-			opcode[1] = Q_STORAGE_CMD_IN;
-			write(fd_out, opcode, 2); 
-			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			process_request(buf);
-			send_response(buf, Q_STORAGE_CMD_OUT);
-		} else {
-			sem_wait(&interrupts[Q_STORAGE_IN_2]);
-			opcode[1] = Q_STORAGE_IN_2;
-			write(fd_out, opcode, 2); 
-			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			process_secure_request(buf);
-			send_response(buf, Q_STORAGE_OUT_2);
-		}
-	}
+	// while(1) {
+	// 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+	// 	sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
+	// 	sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
+	// 	if (!is_secure_queue) {
+	// 		opcode[1] = Q_STORAGE_CMD_IN;
+	// 		write(fd_out, opcode, 2); 
+	// 		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+	// 		process_request(buf);
+	// 		send_response(buf, Q_STORAGE_CMD_OUT);
+	// 	} else {
+	// 		sem_wait(&interrupts[Q_STORAGE_IN_2]);
+	// 		opcode[1] = Q_STORAGE_IN_2;
+	// 		write(fd_out, opcode, 2); 
+	// 		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+	// 		process_secure_request(buf);
+	// 		send_response(buf, Q_STORAGE_OUT_2);
+	// 	}
+	// }
 	
 	// pthread_cancel(mailbox_thread);
 	// pthread_join(mailbox_thread, NULL);

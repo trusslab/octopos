@@ -659,7 +659,7 @@ int init_os_mailbox(void)
 	XMbox_SetSendThreshold(&Mbox_storage_in_2, 0);
 	XMbox_SetInterruptEnable(&Mbox_storage_in_2, XMB_IX_STA | XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_storage_data_out, MAILBOX_DEFAULT_RX_THRESHOLD);
+	XMbox_SetSendThreshold(&Mbox_storage_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
 	XMbox_SetInterruptEnable(&Mbox_storage_data_out, XMB_IX_RTA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);

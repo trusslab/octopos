@@ -19,8 +19,12 @@
 
 XIntc			intc;
 
-XMbox			Mbox_CMD_IN,
-				Mbox_CMD_OUT;
+XMbox			Mbox_storage_in_2,
+				Mbox_storage_out_2,
+				Mbox_storage_cmd_in,
+				Mbox_storage_cmd_out,
+				Mbox_storage_data_in,
+				Mbox_storage_data_out;
 
 sem_t			interrupts[NUM_QUEUES + 1];
 
@@ -622,29 +626,22 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
 	if (mask & XMB_IX_STA) {
 		_SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
-		if (callback_ref == &Mbox_CMD_IN) {
-			/* Q_STORAGE_CMD_IN */
-			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
-//		} else if (callback_ref == &Mbox_runtime1) {
-//			/* Runtime 1 */
-//			sem_post(&interrupts[Q_RUNTIME1]);
-//			_SEC_HW_DEBUG("Q_RUNTIME1 = %d", interrupts[Q_RUNTIME1].count);
-//		} else if (callback_ref == &Mbox_runtime2) {
-//			/* Runtime 2 */
-//			sem_post(&interrupts[Q_RUNTIME2]);
-//			_SEC_HW_DEBUG("Q_RUNTIME2 = %d", interrupts[Q_RUNTIME2].count);
+		if (callback_ref == &Mbox_storage_cmd_out) {
+			sem_post(&interrupts[Q_STORAGE_CMD_OUT]);
+		} else if (callback_ref == &Mbox_storage_data_out) {
+			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
+		} else if (callback_ref == &Mbox_storage_out_2) {
+			sem_post(&interrupts[Q_STORAGE_OUT_2]);
 		}
 	} else if (mask & XMB_IX_RTA) {
 		_SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
-		if (callback_ref == &Mbox_CMD_OUT) {
-			/* Q_STORAGE_CMD_OUT */
-			sem_post(&interrupts[Q_STORAGE_CMD_OUT]);
-//		} else if (callback_ref == &Mbox_OS1) {
-//			/* OS1 */
-//			sem_post(&interrupts[Q_OS1]);
-//		} else if (callback_ref == &Mbox_OS2) {
-//			/* OS2 */
-//			sem_post(&interrupts[Q_OS2]);
+		if (callback_ref == &Mbox_storage_cmd_in) {
+			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
+		} else if (callback_ref == &Mbox_storage_data_in) {
+			sem_post(&interrupts[Q_STORAGE_DATA_IN]);
+		} else if (callback_ref == &Mbox_storage_in_2) {
+			sem_post(&interrupts[Q_STORAGE_IN_2]);
+			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
 		}
 	} else if (mask & XMB_IX_ERR) {
 		_SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
@@ -657,30 +654,161 @@ static void handle_mailbox_interrupts(void* callback_ref)
 	_SEC_HW_DEBUG("interrupt cleared");
 }
 
+/* duplicate as in mailbox_os.c */
+_Bool handle_partial_message(uint8_t *message_buffer, uint8_t *queue_id, u32 bytes_read) 
+{
+	/* Same handling logic as in semaphore.c
+	 * If the message is incomplete due to sync issues, try to collect
+	 * the rest of the message in the next read.
+	 */
+	_SEC_HW_DEBUG1("queue %d read only %d bytes, should be %d bytes",
+		*queue_id, bytes_read, MAILBOX_QUEUE_MSG_SIZE);
+	if (!sketch_buffer[*queue_id]) {
+		_SEC_HW_DEBUG1("new sktech_buffer", *queue_id);
+		sketch_buffer_offset[*queue_id] = bytes_read;
+		sketch_buffer[*queue_id] = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+		memcpy(sketch_buffer[*queue_id], message_buffer, bytes_read);
+		*queue_id = 0;
+		return FALSE;
+	} else {
+		/* There is already a incomplete message on the sketch_buffer */
+		if (bytes_read + sketch_buffer_offset[*queue_id] > MAILBOX_QUEUE_MSG_SIZE) {
+			_SEC_HW_ERROR("mailbox corrupted: buffer overflow");
+			_SEC_HW_ASSERT_NON_VOID(FALSE)
+		}
+
+		memcpy(sketch_buffer[*queue_id] + sketch_buffer_offset[*queue_id],
+				message_buffer, bytes_read);
+		if (bytes_read + sketch_buffer_offset[*queue_id] == MAILBOX_QUEUE_MSG_SIZE) {
+			/* This read completes the message */
+			_SEC_HW_DEBUG1("complete sketch_buffer");
+			memcpy(message_buffer, sketch_buffer[*queue_id], MAILBOX_QUEUE_MSG_SIZE);
+			free(sketch_buffer[*queue_id]);
+			sketch_buffer[*queue_id] = NULL;
+			return TRUE;
+		} else {
+			/* The message is still incomplete after this read */
+			_SEC_HW_DEBUG1("partially full sketch_buffer");
+			*queue_id = 0;
+			return FALSE;
+		}
+
+	}
+}
+
+void storage_event_loop(void)
+{
+	u32 bytes_read;
+	uint8_t queue_id = 0;
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	int is_secure_queue = 0;
+	
+	while(1) {
+		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
+		sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
+		if (!is_secure_queue) {
+#ifdef HW_MAILBOX_BLOCKING
+			XMbox_ReadBlocking(&Mbox_storage_cmd_in, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
+#else
+			queue_id = Q_STORAGE_CMD_IN;
+			XMbox_Read(&Mbox_storage_cmd_in,
+				(u32*) buf,
+				MAILBOX_QUEUE_MSG_SIZE,
+				&bytes_read);
+			if (bytes_read != MAILBOX_QUEUE_MSG_SIZE &&
+				!handle_partial_message(buf, &queue_id, bytes_read))
+#endif
+			process_request(buf);
+			XMbox_WriteBlocking(&Mbox_storage_cmd_out, buf, MAILBOX_QUEUE_MSG_SIZE)
+		} else {
+			sem_wait(&interrupts[Q_STORAGE_IN_2]);
+#ifdef HW_MAILBOX_BLOCKING
+			XMbox_ReadBlocking(&Mbox_storage_in_2, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
+#else
+			queue_id = Q_STORAGE_IN_2;
+			XMbox_Read(&Mbox_storage_in_2,
+				(u32*) buf,
+				MAILBOX_QUEUE_MSG_SIZE,
+				&bytes_read);
+			if (bytes_read != MAILBOX_QUEUE_MSG_SIZE &&
+				!handle_partial_message(buf, &queue_id, bytes_read))
+#endif
+			process_secure_request(buf);
+			XMbox_WriteBlocking(&Mbox_storage_out_2, buf, MAILBOX_QUEUE_MSG_SIZE)
+		}
+	}
+}
+
 int init_storage(void)
 {
 	int				Status;
-	XMbox_Config	*ConfigPtr, *ConfigPtr2;
+	XMbox_Config	*Config_cmd_out, 
+					*Config_cmd_in, 
+					*Config_Data_out, 
+					*Config_Data_in, 
+					*Config_storage_in_2, 
+					*Config_storage_out_2;
 
 	/* Initialize XMbox */
-	ConfigPtr = XMbox_LookupConfig(XPAR_Q_STORAGE_CMD_IN_IF_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_CMD_IN, ConfigPtr, ConfigPtr->BaseAddress);
+	Config_cmd_in = XMbox_LookupConfig(XPAR_Q_STORAGE_CMD_IN_IF_1_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_cmd_in, Config_cmd_in, Config_cmd_in->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_Q_STORAGE_CMD_IN_IF_1_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	ConfigPtr2 = XMbox_LookupConfig(XPAR_Q_STORAGE_CMD_IN_IF_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_CMD_OUT, ConfigPtr2, ConfigPtr2->BaseAddress);
+	Config_cmd_out = XMbox_LookupConfig(XPAR_Q_STORAGE_CMD_OUT_IF_1_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_cmd_out, Config_cmd_out, Config_cmd_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_Q_STORAGE_CMD_IN_IF_1_DEVICE_ID);
+		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_Q_STORAGE_CMD_OUT_IF_1_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	XMbox_SetSendThreshold(&Mbox_CMD_IN, 0);
-	XMbox_SetInterruptEnable(&Mbox_CMD_IN, XMB_IX_STA | XMB_IX_ERR);
+	Config_Data_in = XMbox_LookupConfig(XPAR_MAILBOX_1_IF_0_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_data_in, Config_Data_in, Config_Data_in->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_1_IF_0_DEVICE_ID);
+		return XST_FAILURE;
+	}
 
-	XMbox_SetSendThreshold(&Mbox_CMD_OUT, 0);
+	Config_Data_out = XMbox_LookupConfig(XPAR_MAILBOX_2_IF_0_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_data_out, Config_Data_out, Config_Data_out->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_2_IF_0_DEVICE_ID);
+		return XST_FAILURE;
+	}
+
+	Config_storage_in_2 = XMbox_LookupConfig(XPAR_MAILBOX_3_IF_0_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_in_2, Config_storage_in_2, Config_storage_in_2->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_3_IF_0_DEVICE_ID);
+		return XST_FAILURE;
+	}
+
+	Config_storage_out_2 = XMbox_LookupConfig(XPAR_MAILBOX_4_IF_0_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_out_2, Config_storage_out_2, Config_storage_out_2->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_4_IF_0_DEVICE_ID);
+		return XST_FAILURE;
+	}
+
+	XMbox_SetSendThreshold(&Mbox_storage_cmd_in, MAILBOX_DEFAULT_RX_THRESHOLD);
+	XMbox_SetInterruptEnable(&Mbox_CMD_IN, XMB_IX_RTA | XMB_IX_ERR);
+
+	XMbox_SetSendThreshold(&Mbox_storage_cmd_out, 0);
+	XMbox_SetInterruptEnable(&Mbox_CMD_OUT, XMB_IX_STA | XMB_IX_ERR);
+
+	XMbox_SetSendThreshold(&Mbox_storage_data_in, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+	XMbox_SetInterruptEnable(&Mbox_CMD_IN, XMB_IX_RTA | XMB_IX_ERR);
+
+	XMbox_SetSendThreshold(&Mbox_storage_data_out, 0);
+	XMbox_SetInterruptEnable(&Mbox_CMD_OUT, XMB_IX_STA | XMB_IX_ERR);
+
+	XMbox_SetSendThreshold(&Mbox_storage_in_2, MAILBOX_DEFAULT_RX_THRESHOLD);
+	XMbox_SetInterruptEnable(&Mbox_CMD_IN, XMB_IX_RTA | XMB_IX_ERR);
+
+	XMbox_SetSendThreshold(&Mbox_storage_out_2, 0);
 	XMbox_SetInterruptEnable(&Mbox_CMD_OUT, XMB_IX_STA | XMB_IX_ERR);
 
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
@@ -700,7 +828,7 @@ int init_storage(void)
 	Status = XIntc_Connect(&intc,
 			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR,
 		(XInterruptHandler)handle_mailbox_interrupts,
-		(void*)&Mbox_CMD_IN);
+		(void*)&Mbox_storage_cmd_in);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed",
 				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR);
@@ -710,16 +838,60 @@ int init_storage(void)
 	Status = XIntc_Connect(&intc,
 			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_OUT_INTERRUPT_1_INTR,
 		(XInterruptHandler)handle_mailbox_interrupts,
-		(void*)&Mbox_CMD_OUT);
+		(void*)&Mbox_storage_cmd_out);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed",
 				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_OUT_INTERRUPT_1_INTR);
 		return XST_FAILURE;
 	}
 
+	Status = XIntc_Connect(&intc,
+			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_FIXED_INTR,
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)&Mbox_storage_data_out);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed",
+				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_FIXED_INTR);
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR,
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)&Mbox_storage_data_in);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed",
+				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR);
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_FIXED_INTR,
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)&Mbox_storage_out_2);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed",
+				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_FIXED_INTR);
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_FIXED_INTR,
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)&Mbox_storage_in_2);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed",
+				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_FIXED_INTR);
+		return XST_FAILURE;
+	}
+
 	/* Enable and start interrupts */
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_OUT_INTERRUPT_1_INTR);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_FIXED_INTR);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {

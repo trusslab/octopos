@@ -608,8 +608,6 @@ static int read_from_shell(char *data, int *data_size)
 	return (int) ret0;
 }
 
-#ifdef ARCH_UMODE
-
 static uint32_t open_file(char *filename, uint32_t mode)
 {
 	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
@@ -931,7 +929,6 @@ static int set_up_context(void *addr, uint32_t size)
 
 	return 0;
 }
-#endif
 
 bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
@@ -1249,7 +1246,6 @@ static void load_application(char *msg)
 		.read_char_from_secure_keyboard = read_char_from_secure_keyboard,
 		.write_to_shell = write_to_shell,
 		.read_from_shell = read_from_shell,
-#ifdef ARCH_UMODE
 		.open_file = open_file,
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
@@ -1264,7 +1260,6 @@ static void load_application(char *msg)
 		.write_to_secure_storage = write_to_secure_storage,
 		.read_from_secure_storage = read_from_secure_storage,
 		.set_up_context = set_up_context,
-#endif
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,

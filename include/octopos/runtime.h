@@ -11,7 +11,6 @@ struct runtime_api {
 	int (*write_to_shell)(char *data, int size);
 	int (*read_from_shell)(char *data, int *data_size);
 
-#ifndef ARCH_SEC_HW
 	/* file system */
 	uint32_t (*open_file)(char *filename, uint32_t mode);
 	int (*write_to_file)(uint32_t fd, uint8_t *data, int size, int offset);
@@ -31,7 +30,6 @@ struct runtime_api {
 
 	/* storing context in secure storage */
 	int (*set_up_context)(void *addr, uint32_t size);
-#endif
 
 	/* secure IPC */
 	int (*request_secure_ipc)(uint8_t target_runtime_queue_id, int count);
