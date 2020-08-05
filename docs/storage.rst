@@ -11,11 +11,11 @@ Secure Access to a Partition
 A secure app can use a secure partition as follows:
 
 Step 1: the app asks the OS to allocate a partition to it using the SYSCALL_REQUEST_SECURE_STORAGE_CREATION syscall. 
-The OS communicates with the storage service through its designated mailbox/channel and allocates an unused partition, if available.
+The OS communicates with the storage service and allocates an unused partition, if available.
 It then sets a temporary lock key on the partition and returns it to the app when responding to the syscall.
 
 Step 2: the app requests and receives secure access to the storage service.
-That is, the app will have exclusive access to a mailbox/channel that it can use to talk to the service.
+That is, the app will have exclusive access to the mailbox/channel that it can use to talk to the service.
 
 Step 3: the app uses the temporary key for the partition to unlock the partition through messages sents on its secure mailbox/channel.
 It then sets a new key for the partition in order to prevent the OS from using the old key successfully to access the partition.
@@ -38,3 +38,9 @@ To prevent a malicious app from never releasing a partition, a few solutions are
 
 OctopOS currently does not support either of these solutions.
 Given that apps using these partitions are trusted and given the abundant storage space, this is not an urgent issue.
+
+Note 3: some APIs of the storage service can be locked.
+This includes the APIs to allocate and delete (unlocked) partition.
+This allows the OS to prevent an app from creating new partitions when using the storage service.
+The OS locks these APIs when giving an app access to the storage service.
+This feature is not implemented yet.
