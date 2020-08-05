@@ -18,7 +18,11 @@
 #define STORAGE_OP_CREATE_SECURE_PARTITION	6
 #define STORAGE_OP_DELETE_SECURE_PARTITION	7
 
+#ifdef ARCH_SEC_HW
+#define STORAGE_BLOCK_SIZE	64  /* bytes */
+#else
 #define STORAGE_BLOCK_SIZE	512  /* bytes */
+#endif
 #define STORAGE_MAIN_PARTITION_SIZE	1000  /* num blocks */
 #define STORAGE_SECURE_PARTITION_SIZE	100  /* num blocks */
 #define NUM_SEC_PARTITIONS		10

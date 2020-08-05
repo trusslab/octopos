@@ -399,7 +399,7 @@ static void process_request(uint8_t *buf)
 /* FIXME: there's duplicate code between process_request and this function */
 static void process_secure_request(uint8_t *buf)
 {
-	FIL filep, filep2;
+	FIL filep;
 	FRESULT result;
 	UINT NumBytesRead = 0, NumBytesWritten = 0;
 
@@ -720,7 +720,7 @@ void storage_event_loop(void)
 				!handle_partial_message(buf, &queue_id, bytes_read))
 #endif
 			process_request(buf);
-			XMbox_WriteBlocking(&Mbox_storage_cmd_out, buf, MAILBOX_QUEUE_MSG_SIZE)
+			XMbox_WriteBlocking(&Mbox_storage_cmd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 		} else {
 			sem_wait(&interrupts[Q_STORAGE_IN_2]);
 #ifdef HW_MAILBOX_BLOCKING
@@ -735,7 +735,7 @@ void storage_event_loop(void)
 				!handle_partial_message(buf, &queue_id, bytes_read))
 #endif
 			process_secure_request(buf);
-			XMbox_WriteBlocking(&Mbox_storage_out_2, buf, MAILBOX_QUEUE_MSG_SIZE)
+			XMbox_WriteBlocking(&Mbox_storage_out_2, buf, MAILBOX_QUEUE_MSG_SIZE);
 		}
 	}
 }
@@ -765,51 +765,51 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
-	Config_Data_in = XMbox_LookupConfig(XPAR_MAILBOX_1_IF_0_DEVICE_ID);
+	Config_Data_in = XMbox_LookupConfig(XPAR_MAILBOX_0_IF_0_DEVICE_ID);
 	Status = XMbox_CfgInitialize(&Mbox_storage_data_in, Config_Data_in, Config_Data_in->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_0_IF_0_DEVICE_ID);
+		return XST_FAILURE;
+	}
+
+	Config_Data_out = XMbox_LookupConfig(XPAR_MAILBOX_1_IF_0_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_data_out, Config_Data_out, Config_Data_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_1_IF_0_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	Config_Data_out = XMbox_LookupConfig(XPAR_MAILBOX_2_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_data_out, Config_Data_out, Config_Data_out->BaseAddress);
+	Config_storage_in_2 = XMbox_LookupConfig(XPAR_MAILBOX_2_IF_0_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_in_2, Config_storage_in_2, Config_storage_in_2->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_2_IF_0_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	Config_storage_in_2 = XMbox_LookupConfig(XPAR_MAILBOX_3_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_in_2, Config_storage_in_2, Config_storage_in_2->BaseAddress);
+	Config_storage_out_2 = XMbox_LookupConfig(XPAR_MAILBOX_3_IF_0_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_out_2, Config_storage_out_2, Config_storage_out_2->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_3_IF_0_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	Config_storage_out_2 = XMbox_LookupConfig(XPAR_MAILBOX_4_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_out_2, Config_storage_out_2, Config_storage_out_2->BaseAddress);
-	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_4_IF_0_DEVICE_ID);
-		return XST_FAILURE;
-	}
-
 	XMbox_SetSendThreshold(&Mbox_storage_cmd_in, MAILBOX_DEFAULT_RX_THRESHOLD);
-	XMbox_SetInterruptEnable(&Mbox_CMD_IN, XMB_IX_RTA | XMB_IX_ERR);
+	XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, XMB_IX_RTA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_cmd_out, 0);
-	XMbox_SetInterruptEnable(&Mbox_CMD_OUT, XMB_IX_STA | XMB_IX_ERR);
+	XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, XMB_IX_STA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_data_in, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-	XMbox_SetInterruptEnable(&Mbox_CMD_IN, XMB_IX_RTA | XMB_IX_ERR);
+	XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_RTA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_data_out, 0);
-	XMbox_SetInterruptEnable(&Mbox_CMD_OUT, XMB_IX_STA | XMB_IX_ERR);
+	XMbox_SetInterruptEnable(&Mbox_storage_data_out, XMB_IX_STA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_in_2, MAILBOX_DEFAULT_RX_THRESHOLD);
-	XMbox_SetInterruptEnable(&Mbox_CMD_IN, XMB_IX_RTA | XMB_IX_ERR);
+	XMbox_SetInterruptEnable(&Mbox_storage_in_2, XMB_IX_RTA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_out_2, 0);
-	XMbox_SetInterruptEnable(&Mbox_CMD_OUT, XMB_IX_STA | XMB_IX_ERR);
+	XMbox_SetInterruptEnable(&Mbox_storage_out_2, XMB_IX_STA | XMB_IX_ERR);
 
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();
