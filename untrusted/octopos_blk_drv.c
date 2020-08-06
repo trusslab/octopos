@@ -38,7 +38,6 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 {
 	void *mem;
 	int err = 0;
-	printk("%s [1]: sector = %d, len = %d, off = %d\n", __func__, sector, len, off);
 	if (len % 512)
 		BUG();
 
@@ -47,15 +46,12 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
 	}
-	printk("%s [1]: Got secure access to storage.\n", __func__);
 
 	mem = kmap_atomic(page);
 	if (!op_is_write(op)) {
-		printk("%s [2]\n", __func__);
 		read_secure_storage_blocks(mem + off, sector, len / 512);
 		flush_dcache_page(page);
 	} else {
-		printk("%s [3]\n", __func__);
 		flush_dcache_page(page);
 		write_secure_storage_blocks(mem + off, sector, len / 512);
 	}
@@ -72,7 +68,6 @@ static blk_qc_t obd_make_request(struct request_queue *q, struct bio *bio)
 	struct bio_vec bvec;
 	sector_t sector;
 	struct bvec_iter iter;
-	printk("%s [1]\n", __func__);
 
 	sector = bio->bi_iter.bi_sector;
 	if (bio_end_sector(bio) > get_capacity(bio->bi_disk))
@@ -104,7 +99,6 @@ static int obd_rw_page(struct block_device *bdev, sector_t sector,
 		       struct page *page, unsigned int op)
 {
 	int err;
-	printk("%s [1]: sector = %d, op = %d\n", __func__, sector, op);
 
 	if (PageTransHuge(page))
 		return -ENOTSUPP;
@@ -139,18 +133,15 @@ static void obd_free(void)
 static struct kobject *obd_probe(dev_t dev, int *part, void *data)
 {
 	struct kobject *kobj;
-	printk("%s [1]\n", __func__);
 
 	add_disk(obd_disk);
 	kobj = get_disk_and_module(obd_disk);
-	printk("%s [2]\n", __func__);
 
 	return kobj;
 }
 
 static int obd_init_disk(void)
 {
-	printk("%s [1]\n", __func__);
 	obd_queue = blk_alloc_queue(obd_make_request, NUMA_NO_NODE);
 	if (!obd_queue)
 		goto out;
@@ -177,7 +168,6 @@ static int obd_init_disk(void)
 	/* Tell the block layer that this is not a rotational device */
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, obd_queue);
 	blk_queue_flag_clear(QUEUE_FLAG_ADD_RANDOM, obd_queue);
-	printk("%s [2]\n", __func__);
 
 	return 0;
 
@@ -191,7 +181,6 @@ static int __init obd_init(void)
 {
 	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
 	int i;
-	printk("%s [1]\n", __func__);
 
 	if (register_blkdev(OCTOPOS_BLK_MAJOR, "octopos_blk"))
 		return -EIO;
@@ -215,7 +204,6 @@ static int __init obd_init(void)
 		secure_storage_key[i] = i + 2;
 
 	set_up_secure_storage_key(secure_storage_key);
-	printk("%s [2]\n", __func__);
 
 	return 0;
 

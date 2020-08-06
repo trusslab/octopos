@@ -574,7 +574,6 @@ static int set_up_context(void *addr, uint32_t size)
 	}
 
 	uint32_t rret = read_from_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
-	printf("%s [1]: rret = %d, context_size = %d\n", __func__, rret, context_size);
 	if (rret != (context_size + CONTEXT_TAG_SIZE)) {
 		printf("%s: Couldn't read from secure storage.\n", __func__);
 		yield_secure_storage_access();
@@ -1012,7 +1011,6 @@ void *store_context(void *data)
 	memcpy(&context_block[CONTEXT_TAG_SIZE], context_addr, context_size);
 
 	uint32_t wret = write_to_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
-	printf("%s [1]: wret = %d, context_size = %d\n", __func__, wret, context_size);
 	if (wret != (context_size + CONTEXT_TAG_SIZE))
 		printf("Error: couldn't write the context to secure storage.\n");
 

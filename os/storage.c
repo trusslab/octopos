@@ -56,7 +56,6 @@ static int lock_storage_config(void)
 /* FIXME: modified from runtime/storage_client.c */
 static int unlock_secure_storage(uint8_t *key)
 {
-	printf("%s [1]\n", __func__);
 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
 	buf[0] = STORAGE_OP_UNLOCK;
 	send_msg_to_storage_no_response(buf);
@@ -188,7 +187,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 			return;
 		}
-		printf("%s [1]: locking\n", __func__);
 		is_storage_config_locked = true;
 	}
 
@@ -265,7 +263,6 @@ void wait_for_storage(void)
 
 	if (is_storage_config_locked) {
 		unlock_storage_config(os_storage_config_key);
-		printf("%s [1]: unlocking\n", __func__);
 		is_storage_config_locked = false;
 	}
 
@@ -288,9 +285,7 @@ void initialize_storage(void)
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
 	int unlock_ret = unlock_secure_storage(os_storage_key);
-	printf("%s [6]\n", __func__);
 	if (unlock_ret == ERR_EXIST) {
-		printf("%s [7]\n", __func__);
 		int unused_partition_id;
 		int create_ret = storage_create_secure_partition(os_storage_key,
 						&unused_partition_id, 1000);
@@ -300,7 +295,6 @@ void initialize_storage(void)
 			exit(-1);
 		}
 		/* FIXME: verify the partition size? */
-		printf("%s [7.1]\n", __func__);
 		int unlock_ret_2 = unlock_secure_storage(os_storage_key);
 		if (unlock_ret_2) {
 			printf("Error (%s): couldn't unlock the storage partition for the OS.\n",
@@ -312,5 +306,4 @@ void initialize_storage(void)
 		exit(-1);
 	}
 	is_partition_locked = false;
-	printf("%s [8]\n", __func__);
 }

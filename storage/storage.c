@@ -303,7 +303,6 @@ static void write_data_to_queue(uint8_t *buf, uint8_t queue_id)
 static void process_request(uint8_t *buf)
 {
 	FILE *filep = NULL;
-	printf("%s [1]: buf[0] = %d\n", __func__, buf[0]);
 
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
@@ -735,23 +734,11 @@ int main(int argc, char **argv)
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
-		//sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
-		//if (!is_secure_queue) {
-		printf("%s [1]\n", __func__);
 		opcode[1] = Q_STORAGE_CMD_IN;
 		write(fd_out, opcode, 2); 
 		read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 		process_request(buf);
 		send_response(buf, Q_STORAGE_CMD_OUT);
-		//} else {
-		//	printf("%s [2]\n", __func__);
-		//	sem_wait(&interrupts[Q_STORAGE_IN_2]);
-		//	opcode[1] = Q_STORAGE_IN_2;
-		//	write(fd_out, opcode, 2); 
-		//	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-		//	process_secure_request(buf);
-		//	send_response(buf, Q_STORAGE_OUT_2);
-		//}
 	}
 	
 	pthread_cancel(mailbox_thread);
