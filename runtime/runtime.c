@@ -147,6 +147,7 @@ int write_syscall_response(uint8_t *buf)
 	if (srq_counter >= srq_size) {
 		printf("Error: syscall response queue is full\n");
 		_exit(-1);
+		/* FIXME: dead code */
 		return -1;
 	}
 
@@ -163,6 +164,7 @@ static int read_syscall_response(uint8_t *buf)
 	if (srq_counter <= 0) {
 		printf("Error: syscall response queue is empty\n");
 		exit(-1);
+		/* FIXME: dead code */
 		return -1;
 	}
 

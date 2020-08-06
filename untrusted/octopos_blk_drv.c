@@ -37,11 +37,12 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 		       unsigned int op, sector_t sector)
 {
 	void *mem;
-	int err = 0;
+	int ret;
+
 	if (len % 512)
 		BUG();
 
-	int ret = request_secure_storage_access(200, 2048);
+	ret = request_secure_storage_access(200, 2048);
 	if (ret) {
 		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
@@ -59,8 +60,7 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 
 	yield_secure_storage_access();
 
-out:
-	return err;
+	return 0;
 }
 
 static blk_qc_t obd_make_request(struct request_queue *q, struct bio *bio)
