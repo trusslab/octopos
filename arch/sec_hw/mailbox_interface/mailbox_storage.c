@@ -12,6 +12,7 @@
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
 #include "arch/ring_buffer.h"
+#include "arch/octopos_mbox_owner_map.h"
 
 #include "octopos/mailbox.h"
 #include "octopos/storage.h"
@@ -33,8 +34,14 @@ UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
 static FATFS	fatfs;
 
-bool is_queue_set_bound = false;
-int bound_partition = -1;
+
+static uint8_t 	*sketch_buffer[NUM_QUEUES + 1];
+static u32 		sketch_buffer_offset[NUM_QUEUES + 1];
+
+bool 			is_queue_set_bound = false;
+int 			bound_partition = -1;
+
+_Bool handle_partial_message(uint8_t *message_buffer, uint8_t *queue_id, u32 bytes_read);
 
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 static void initialize_storage_space(void)
@@ -235,6 +242,8 @@ static void process_request(uint8_t *buf)
 	FIL filep, filep2;
 	FRESULT result;
 	UINT NumBytesRead = 0, NumBytesWritten = 0;
+	uint8_t queue_id = 0;
+	u32 bytes_read;
 
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
@@ -263,7 +272,17 @@ static void process_request(uint8_t *buf)
 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
 		uint32_t size = 0;
 		for (int i = 0; i < num_blocks; i++) {
-			read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
+#ifdef HW_MAILBOX_BLOCKING
+			XMbox_ReadBlocking(&Mbox_storage_data_in, (u32*) data_buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+#else
+			queue_id = Q_STORAGE_DATA_IN;
+			XMbox_Read(&Mbox_storage_data_in,
+				(u32*) data_buf,
+				MAILBOX_QUEUE_MSG_SIZE_LARGE,
+				&bytes_read);
+			if (bytes_read != MAILBOX_QUEUE_MSG_SIZE_LARGE &&
+				!handle_partial_message(buf, &queue_id, bytes_read))
+#endif
 			f_write(&filep, (const void*)data_buf, STORAGE_BLOCK_SIZE, &NumBytesWritten);
 			size += (uint32_t) NumBytesWritten;
 		}
@@ -297,7 +316,7 @@ static void process_request(uint8_t *buf)
 		for (int i = 0; i < num_blocks; i++) {
 			f_read(&filep, (void*)data_buf, STORAGE_BLOCK_SIZE, &NumBytesRead);
 			size += (uint32_t) NumBytesRead;
-			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
+			XMbox_WriteBlocking(&Mbox_storage_data_out, (u32*) data_buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		}
 		STORAGE_SET_ONE_RET(size);
 		f_close(&filep);
@@ -720,7 +739,7 @@ void storage_event_loop(void)
 				!handle_partial_message(buf, &queue_id, bytes_read))
 #endif
 			process_request(buf);
-			XMbox_WriteBlocking(&Mbox_storage_cmd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+			XMbox_WriteBlocking(&Mbox_storage_cmd_out, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 		} else {
 			sem_wait(&interrupts[Q_STORAGE_IN_2]);
 #ifdef HW_MAILBOX_BLOCKING
@@ -735,7 +754,7 @@ void storage_event_loop(void)
 				!handle_partial_message(buf, &queue_id, bytes_read))
 #endif
 			process_secure_request(buf);
-			XMbox_WriteBlocking(&Mbox_storage_out_2, buf, MAILBOX_QUEUE_MSG_SIZE);
+			XMbox_WriteBlocking(&Mbox_storage_out_2, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 		}
 	}
 }

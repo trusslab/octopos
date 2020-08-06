@@ -1,4 +1,3 @@
-#ifdef ARCH_UMODE
 /* OctopOS file system */
 #include <arch/defines.h>
 #include <stdio.h>
@@ -20,9 +19,7 @@
 #define MAX_FILENAME_SIZE	256
 
 #ifdef ARCH_SEC_HW
-#define bool _Bool
-#define true 1
-#define false 0
+#include <arch/sec_hw.h>
 #endif
 
 struct file {
@@ -747,4 +744,3 @@ void initialize_file_system(void)
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
 }
-#endif

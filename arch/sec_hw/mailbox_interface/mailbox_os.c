@@ -333,6 +333,41 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 }
 
+
+int send_msg_to_storage_no_response(uint8_t *buf)
+{
+	sem_wait_impatient_send(
+		&interrupts[Q_STORAGE_CMD_IN], 
+		Mbox_regs[Q_STORAGE_CMD_IN], 
+		(u32*) buf);
+	return 0;
+}
+
+int get_response_from_storage(uint8_t *buf)
+{
+	sem_wait_impatient_receive_buf(
+		&interrupts[Q_STORAGE_CMD_OUT], 
+		Mbox_regs[Q_STORAGE_CMD_OUT],
+		(uint8_t*) buf);
+	return 0;
+}
+
+void read_from_storage_data_queue(uint8_t *buf)
+{
+	sem_wait_impatient_receive_buf_large(
+		&interrupts[Q_STORAGE_DATA_OUT], 
+		Mbox_regs[Q_STORAGE_DATA_OUT],
+		(uint8_t*) buf);
+}
+
+void write_to_storage_data_queue(uint8_t *buf)
+{
+	sem_wait_impatient_send_large(
+			&interrupts[Q_STORAGE_DATA_IN],
+		Mbox_regs[Q_STORAGE_DATA_IN],
+		(u32*) buf);
+}
+
 void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 {
 	/* Threshold registers will need to be reinitialized
