@@ -147,13 +147,17 @@ static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
+	_SEC_HW_ERROR("write_blocks [2]");
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage_no_response(buf);
+	_SEC_HW_ERROR("write_blocks [2.5]");
 	for (int i = 0; i < (int) num_blocks; i++)
 		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+	_SEC_HW_ERROR("write_blocks [3]");
 	get_response_from_storage(buf);
+	_SEC_HW_ERROR("write_blocks [4]");
 
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
@@ -161,17 +165,21 @@ static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks
 
 static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
+	_SEC_HW_ERROR("read_blocks [1]");
 	int ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
+	_SEC_HW_ERROR("read_blocks [2]");
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
 	for (int i = 0; i < (int) num_blocks; i++)
 		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+	_SEC_HW_ERROR("read_blocks [3]");
 	get_response_from_storage(buf);
+	_SEC_HW_ERROR("read_blocks [4]");
 
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
@@ -320,6 +328,7 @@ static int alloc_blocks_for_file(struct file *file)
 		uint8_t zero_buf[STORAGE_BLOCK_SIZE];
 		memset(zero_buf, 0x0, STORAGE_BLOCK_SIZE);
 		for (int i = 0; i < num_blocks; i++) {
+	_SEC_HW_ERROR("alloc_blocks_for_file [2]i=%d",i);
 			write_blocks(zero_buf, start_block + i, 1);
 		}
 		return 0;
@@ -340,10 +349,12 @@ static void release_file_blocks(struct file *file)
 uint32_t file_system_open_file(char *filename, uint32_t mode)
 {
 	struct file *file = NULL;
+	_SEC_HW_ERROR("file_system_open_file [1]");
 	if (!(mode == FILE_OPEN_MODE || mode == FILE_OPEN_CREATE_MODE)) {
 		printf("Error: invalid mode for opening a file\n");
 		return (uint32_t) 0;
 	}
+	_SEC_HW_ERROR("file_system_open_file [2]");
 
 	for (struct file_list_node *node = file_list_head; node;
 	     node = node->next) {
@@ -355,11 +366,13 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			file = node->file;
 		}
 	}
+	_SEC_HW_ERROR("file_system_open_file [3]");
 
 	if (file == NULL && mode == FILE_OPEN_CREATE_MODE) {
 		file = (struct file *) malloc(sizeof(struct file));
 		if (!file)
 			return (uint32_t) 0;
+	_SEC_HW_ERROR("file_system_open_file [4]");
 
 		strcpy(file->filename, filename);
 
@@ -368,6 +381,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			free(file);
 			return (uint32_t) 0;
 		}
+	_SEC_HW_ERROR("file_system_open_file [5]");
 
 		ret = add_file_to_directory(file);
 		if (ret) {
@@ -375,22 +389,27 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			free(file);
 			return (uint32_t) 0;
 		}
+	_SEC_HW_ERROR("file_system_open_file [6]");
 
 		add_file_to_list(file);
+	_SEC_HW_ERROR("file_system_open_file [7]");
 	}
 
 	if (file) {
 		int ret = get_unused_fd();
 		if (ret < 0)
 			return (uint32_t) 0;
+	_SEC_HW_ERROR("file_system_open_file [8]");
 
 		uint32_t fd = (uint32_t) ret;
 		if (fd == 0 || fd >= MAX_NUM_FD)
 			return (uint32_t) 0;
+	_SEC_HW_ERROR("file_system_open_file [9]");
 
 		/* Shouldn't happen, but let's check. */
 		if (file_array[fd])
 			return (uint32_t) 0;
+	_SEC_HW_ERROR("file_system_open_file [10]");
 
 		file_array[fd] = file;
 		file->opened = true;

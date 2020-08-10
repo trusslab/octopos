@@ -18,6 +18,8 @@
 #include "octopos/storage.h"
 #include "octopos/error.h"
 
+#define HW_MAILBOX_BLOCKING
+
 XIntc			intc;
 
 XMbox			Mbox_storage_in_2,
@@ -41,6 +43,8 @@ static u32 		sketch_buffer_offset[NUM_QUEUES + 1];
 bool 			is_queue_set_bound = false;
 int 			bound_partition = -1;
 
+u32				DEBUG_STATUS_REGISTERS[30] = {0};
+
 _Bool handle_partial_message(uint8_t *message_buffer, uint8_t *queue_id, u32 bytes_read);
 
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
@@ -57,14 +61,15 @@ static void initialize_storage_space(void)
 		SEC_HW_DEBUG_HANG();
 		return;
 	}
-
+	DEBUG_STATUS_REGISTERS[4] = 1;
 	result = f_mkfs(Path, FM_FAT, 0, work, sizeof work);
 	if (result != FR_OK) {
 		SEC_HW_DEBUG_HANG();
 		return;
 	}
-
+	DEBUG_STATUS_REGISTERS[5] = 1;
 	for (int i = 0; i < (NUM_SEC_PARTITIONS + 1); i++) {
+		DEBUG_STATUS_REGISTERS[6] = i;
 		struct partition *partition;
 		int suffix = 0;
 		if (i == 0) {
@@ -92,7 +97,7 @@ static void initialize_storage_space(void)
 			f_open(&filep2, partition->data_name, FA_CREATE_ALWAYS | FA_WRITE);
 			f_close(&filep2);
 		}
-
+		DEBUG_STATUS_REGISTERS[7] = i;
 		/* Is partition created? */
 		result = f_open(&filep, partition->create_name, FA_READ);
 		if (result) {
@@ -105,10 +110,10 @@ static void initialize_storage_space(void)
 			partition->is_locked = false;
 			continue;
 		}
-
+		DEBUG_STATUS_REGISTERS[8] = i;
 		f_lseek(&filep, 0);
 		uint32_t tag = 0;
-
+		DEBUG_STATUS_REGISTERS[9] = i;
 		f_read(&filep, &tag, 4, &NumBytesRead);
 		f_close(&filep);
 		if (NumBytesRead == 4 && tag == 1) {
@@ -123,7 +128,7 @@ static void initialize_storage_space(void)
 			partition->is_locked = false;
 			continue;
 		}
-
+		DEBUG_STATUS_REGISTERS[10] = i;
 		/* lock partitions that have an active key */
 		result = f_open(&filep, partition->lock_name, FA_READ);
 		if (result) {
@@ -133,11 +138,12 @@ static void initialize_storage_space(void)
 			partition->is_locked = false;
 			continue;
 		}
-
+		DEBUG_STATUS_REGISTERS[11] = i;
 		uint8_t key[STORAGE_KEY_SIZE];
 		f_lseek(&filep, 0);
 		f_read(&filep, key, STORAGE_KEY_SIZE, &NumBytesRead);
 		f_close(&filep);
+		DEBUG_STATUS_REGISTERS[12] = i;
 		if (NumBytesRead == STORAGE_KEY_SIZE) {
 			partition->is_locked = true;
 		} else {
@@ -146,6 +152,7 @@ static void initialize_storage_space(void)
 			f_close(&filep2);
 			partition->is_locked = false;
 		}
+		DEBUG_STATUS_REGISTERS[13] = i;
 	}
 }
 
@@ -635,13 +642,15 @@ static void process_secure_request(uint8_t *buf)
 	}
 }
 
-static void handle_mailbox_interrupts(void* callback_ref)
+void handle_mailbox_interrupts(void* callback_ref)
 {
+	DEBUG_STATUS_REGISTERS[19] = (u32) callback_ref;
 	u32         mask;
 	XMbox       *mbox_inst = (XMbox *)callback_ref;
 
 	_SEC_HW_DEBUG("Mailbox ref: %p", callback_ref);
 	mask = XMbox_GetInterruptStatus(mbox_inst);
+	DEBUG_STATUS_REGISTERS[20] = mask;
 
 	if (mask & XMB_IX_STA) {
 		_SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
@@ -721,12 +730,14 @@ void storage_event_loop(void)
 	uint8_t queue_id = 0;
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int is_secure_queue = 0;
-	
+	DEBUG_STATUS_REGISTERS[14] = 1;
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
+		DEBUG_STATUS_REGISTERS[15] = 1;
 		sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
 		if (!is_secure_queue) {
+			DEBUG_STATUS_REGISTERS[16] = 1;
 #ifdef HW_MAILBOX_BLOCKING
 			XMbox_ReadBlocking(&Mbox_storage_cmd_in, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 #else
@@ -741,10 +752,12 @@ void storage_event_loop(void)
 			process_request(buf);
 			XMbox_WriteBlocking(&Mbox_storage_cmd_out, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 		} else {
+			DEBUG_STATUS_REGISTERS[17] = 1;
 			sem_wait(&interrupts[Q_STORAGE_IN_2]);
 #ifdef HW_MAILBOX_BLOCKING
 			XMbox_ReadBlocking(&Mbox_storage_in_2, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 #else
+			DEBUG_STATUS_REGISTERS[18] = 1;
 			queue_id = Q_STORAGE_IN_2;
 			XMbox_Read(&Mbox_storage_in_2,
 				(u32*) buf,
@@ -769,6 +782,9 @@ int init_storage(void)
 					*Config_storage_in_2, 
 					*Config_storage_out_2;
 
+	init_platform();
+
+	DEBUG_STATUS_REGISTERS[0] = 1;
 	/* Initialize XMbox */
 	Config_cmd_in = XMbox_LookupConfig(XPAR_Q_STORAGE_CMD_IN_IF_1_DEVICE_ID);
 	Status = XMbox_CfgInitialize(&Mbox_storage_cmd_in, Config_cmd_in, Config_cmd_in->BaseAddress);
@@ -812,19 +828,19 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
-	XMbox_SetSendThreshold(&Mbox_storage_cmd_in, MAILBOX_DEFAULT_RX_THRESHOLD);
+	XMbox_SetReceiveThreshold(&Mbox_storage_cmd_in, MAILBOX_DEFAULT_RX_THRESHOLD);
 	XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, XMB_IX_RTA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_cmd_out, 0);
 	XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, XMB_IX_STA | XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_storage_data_in, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+	XMbox_SetReceiveThreshold(&Mbox_storage_data_in, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
 	XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_RTA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_data_out, 0);
 	XMbox_SetInterruptEnable(&Mbox_storage_data_out, XMB_IX_STA | XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_storage_in_2, MAILBOX_DEFAULT_RX_THRESHOLD);
+	XMbox_SetReceiveThreshold(&Mbox_storage_in_2, MAILBOX_DEFAULT_RX_THRESHOLD);
 	XMbox_SetInterruptEnable(&Mbox_storage_in_2, XMB_IX_RTA | XMB_IX_ERR);
 
 	XMbox_SetSendThreshold(&Mbox_storage_out_2, 0);
@@ -832,6 +848,10 @@ int init_storage(void)
 
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();
+	DEBUG_STATUS_REGISTERS[1] = 1;
+//
+//	Xil_ExceptionInit();
+//	Xil_ExceptionEnable();
 
 	/* Initialize XIntc */
 	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
@@ -840,9 +860,12 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
-	Xil_ExceptionInit();
-	Xil_ExceptionEnable();
+	Status = XIntc_SelfTest(&intc);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
 
+	DEBUG_STATUS_REGISTERS[2] = 1;
 	/* Connect interrupts */
 	Status = XIntc_Connect(&intc,
 			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR,
@@ -904,7 +927,13 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
-	/* Enable and start interrupts */
+	Status = XIntc_Start(&intc, XIN_REAL_MODE);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Start failed");
+		return XST_FAILURE;
+	}
+
+	/* Enable interrupts */
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_OUT_INTERRUPT_1_INTR);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_FIXED_INTR);
@@ -912,12 +941,23 @@ int init_storage(void)
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_FIXED_INTR);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_FIXED_INTR);
 
-	Status = XIntc_Start(&intc, XIN_REAL_MODE);
-	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Start failed");
-		return XST_FAILURE;
-	}
+	Xil_ExceptionInit();
 
+//	vPortEnableInterrupt(XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR);
+//	xPortInstallInterruptHandler(XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR, (XInterruptHandler) handle_mailbox_interrupts, (void*)&Mbox_storage_data_in);
+//
+//	vPortEnableInterrupt(XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR);
+//	xPortInstallInterruptHandler(XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR, (XInterruptHandler) handle_mailbox_interrupts, (void*)&Mbox_storage_cmd_in);
+
+//	Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_INT,
+//			(Xil_ExceptionHandler)XIntc_InterruptHandler,
+//			&intc);
+
+	Xil_ExceptionEnable();
+
+//	portENABLE_INTERRUPTS();
+
+	DEBUG_STATUS_REGISTERS[3] = 1;
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
@@ -932,6 +972,7 @@ int init_storage(void)
 
 void close_storage(void)
 {
+	cleanup_platform();
 }
 
 #endif /* ARCH_SEC_HW_STORAGE */

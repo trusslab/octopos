@@ -35,6 +35,7 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <arch/mailbox_runtime.h>
+#include <arch/syscall.h>
 
 #ifdef ARCH_SEC_HW
 #include "xparameters.h"
@@ -88,7 +89,7 @@ extern sem_t interrupt_change;
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[0]) = syscall_nr;					\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
 	buf[2] = size;								\
 	memcpy(&buf[3], (uint8_t *) data, size);				\
 
@@ -97,15 +98,15 @@ extern sem_t interrupt_change;
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;				\
 	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
+		_SEC_HW_ERROR("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
 	}									\
 	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
+		_SEC_HW_ERROR("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[0]) = syscall_nr;					\
-	*((uint32_t *) &buf[2]) = arg0;						\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SERIALIZE_32(arg0, &buf[2])					\
 	buf[6] = size;								\
 	memcpy(&buf[7], (uint8_t *) data, size);				\
 
@@ -121,9 +122,9 @@ extern sem_t interrupt_change;
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[0]) = syscall_nr;					\
-	*((uint32_t *) &buf[2]) = arg0;						\
-	*((uint32_t *) &buf[6]) = arg1;						\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SERIALIZE_32(arg0, &buf[2])					\
+	SERIALIZE_32(arg1, &buf[6])					\
 	buf[10] = size;								\
 	memcpy(&buf[11], (uint8_t *) data, size);				\
 
@@ -610,9 +611,17 @@ static int read_from_shell(char *data, int *data_size)
 
 static uint32_t open_file(char *filename, uint32_t mode)
 {
+	_SEC_HW_ERROR("open_file: filename %s", filename);
 	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
+	_SEC_HW_ERROR("open_file [1]");
 	issue_syscall(buf);
+		_SEC_HW_ERROR("buf[0]=%02X", buf[0]);
+		_SEC_HW_ERROR("buf[1]=%02X", buf[1]);
+		_SEC_HW_ERROR("buf[2]=%02X", buf[2]);
+		_SEC_HW_ERROR("buf[3]=%02X", buf[3]);
+		_SEC_HW_ERROR("buf[4]=%02X", buf[4]);
 	SYSCALL_GET_ONE_RET
+	_SEC_HW_ERROR("open_file [2] %d", ret0);
 	return ret0;
 }
 

@@ -99,7 +99,6 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
-#ifdef ARCH_UMODE
 static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
 {
 	STORAGE_SET_ZERO_ARGS_DATA(temp_key, STORAGE_KEY_SIZE) 
@@ -126,7 +125,7 @@ static int storage_delete_secure_partition(int partition_id)
 	return (int) ret0;
 }
 
-
+#ifdef ARCH_UMODE
 static int network_set_up_socket(uint32_t saddr, uint32_t sport,
 				 uint32_t daddr, uint32_t dport)
 {
@@ -163,7 +162,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	*no_response = false;
 
 #ifdef ARCH_SEC_HW
-	_SEC_HW_DEBUG("syscall %d received from %d", syscall_nr, runtime_proc_id);
+	_SEC_HW_ERROR("syscall %d received from %d", syscall_nr, runtime_proc_id);
+	// for (int i = 0; i < MAILBOX_QUEUE_MSG_SIZE; i++)
+	// 	_SEC_HW_ERROR("%02X", buf[i]);
 #endif
 
 	switch (syscall_nr) {
@@ -288,7 +289,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 		break;
 	}
-#ifdef ARCH_UMODE
 	case SYSCALL_OPEN_FILE: {
 		SYSCALL_GET_ONE_ARG_DATA
 		uint32_t mode = arg0;
@@ -301,7 +301,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		/* playing it safe */
 		filename[data_size] = '\0';
 		uint32_t fd = file_system_open_file(filename, mode);
+		_SEC_HW_ERROR("fd(%d)",fd);
 		SYSCALL_SET_ONE_RET(fd)
+		_SEC_HW_ERROR("buf[0]=%02X", buf[0]);
+		_SEC_HW_ERROR("buf[1]=%02X", buf[1]);
+		_SEC_HW_ERROR("buf[2]=%02X", buf[2]);
+		_SEC_HW_ERROR("buf[3]=%02X", buf[3]);
+		_SEC_HW_ERROR("buf[4]=%02X", buf[4]);
 		break;
 	}
 	case SYSCALL_WRITE_TO_FILE: {
@@ -322,6 +328,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			printf("Error: read size too big. Will truncate\n");
 			size = MAILBOX_QUEUE_MSG_SIZE - 5;
 		}
+		_SEC_HW_ERROR("arg0 (%d) arg1 (%d) arg2(%d)", arg0, arg1, arg2);
 		fs_ret = file_system_read_from_file(arg0, ret_buf, size, (int) arg2);
 		/* safety check */
 		if (fs_ret > size) {
@@ -462,7 +469,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
-#endif
 	case SYSCALL_REQUEST_SECURE_IPC: {
 		SYSCALL_GET_TWO_ARGS
 		uint8_t target_runtime_queue_id = arg0;

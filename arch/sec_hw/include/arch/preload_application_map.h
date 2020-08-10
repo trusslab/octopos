@@ -10,7 +10,7 @@ u8 app_counter = 0;
 void secure_interact(struct runtime_api *api);
 void ipc_receiver(struct runtime_api *api);
 void ipc_sender(struct runtime_api *api);
-void secure_interact(struct runtime_api *api);
+void secure_login(struct runtime_api *api);
 
 void set_app(char* app_name, void* app_addr)
 {

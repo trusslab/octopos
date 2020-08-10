@@ -607,7 +607,7 @@
 // 	}
 // }
 
-int main_(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	// uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	// uint8_t opcode[2];

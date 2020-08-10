@@ -222,7 +222,7 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 			break;
 
 		case Q_STORAGE_OUT_2:
-			XMbox_SetSendThreshold(&Mbox_storage_out_2, MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetReceiveThreshold(&Mbox_storage_out_2, MAILBOX_DEFAULT_RX_THRESHOLD);
 			XMbox_SetInterruptEnable(&Mbox_storage_out_2, XMB_IX_RTA | XMB_IX_ERR);
 			break;
 
