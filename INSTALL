@@ -30,4 +30,13 @@ sudo apt -y install autoconf-archive libcmocka0 libcmocka-dev procps \
 
 Use the following sequence to build and install the octopos:
 
+make umode
+
+To build and run octops with a simulated TPM do:
+
 make
+
+To create a TPM environment do:
+
+./external/ibmtpm1637/tpm_server
+sudo -u tss tpm2-abrmd --tcti=mssim
