@@ -13,6 +13,7 @@
 #include "arch/semaphore.h"
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox_owner_map.h"
+#include "arch/octopos_mbox.h"
 
 #include "octopos/mailbox.h"
 #include "octopos/storage.h"
@@ -61,15 +62,12 @@ static void initialize_storage_space(void)
 		SEC_HW_DEBUG_HANG();
 		return;
 	}
-	DEBUG_STATUS_REGISTERS[4] = 1;
 	result = f_mkfs(Path, FM_FAT, 0, work, sizeof work);
 	if (result != FR_OK) {
 		SEC_HW_DEBUG_HANG();
 		return;
 	}
-	DEBUG_STATUS_REGISTERS[5] = 1;
 	for (int i = 0; i < (NUM_SEC_PARTITIONS + 1); i++) {
-		DEBUG_STATUS_REGISTERS[6] = i;
 		struct partition *partition;
 		int suffix = 0;
 		if (i == 0) {
@@ -97,7 +95,6 @@ static void initialize_storage_space(void)
 			f_open(&filep2, partition->data_name, FA_CREATE_ALWAYS | FA_WRITE);
 			f_close(&filep2);
 		}
-		DEBUG_STATUS_REGISTERS[7] = i;
 		/* Is partition created? */
 		result = f_open(&filep, partition->create_name, FA_READ);
 		if (result) {
@@ -110,10 +107,8 @@ static void initialize_storage_space(void)
 			partition->is_locked = false;
 			continue;
 		}
-		DEBUG_STATUS_REGISTERS[8] = i;
 		f_lseek(&filep, 0);
 		uint32_t tag = 0;
-		DEBUG_STATUS_REGISTERS[9] = i;
 		f_read(&filep, &tag, 4, &NumBytesRead);
 		f_close(&filep);
 		if (NumBytesRead == 4 && tag == 1) {
@@ -128,7 +123,6 @@ static void initialize_storage_space(void)
 			partition->is_locked = false;
 			continue;
 		}
-		DEBUG_STATUS_REGISTERS[10] = i;
 		/* lock partitions that have an active key */
 		result = f_open(&filep, partition->lock_name, FA_READ);
 		if (result) {
@@ -138,12 +132,10 @@ static void initialize_storage_space(void)
 			partition->is_locked = false;
 			continue;
 		}
-		DEBUG_STATUS_REGISTERS[11] = i;
 		uint8_t key[STORAGE_KEY_SIZE];
 		f_lseek(&filep, 0);
 		f_read(&filep, key, STORAGE_KEY_SIZE, &NumBytesRead);
 		f_close(&filep);
-		DEBUG_STATUS_REGISTERS[12] = i;
 		if (NumBytesRead == STORAGE_KEY_SIZE) {
 			partition->is_locked = true;
 		} else {
@@ -152,7 +144,6 @@ static void initialize_storage_space(void)
 			f_close(&filep2);
 			partition->is_locked = false;
 		}
-		DEBUG_STATUS_REGISTERS[13] = i;
 	}
 }
 
@@ -171,7 +162,9 @@ static int set_secure_partition_key(uint8_t *data, int partition_id)
 
 	f_lseek(&filep, 0);
 	f_write(&filep, (const void*)data, STORAGE_KEY_SIZE, &NumBytesWritten);
-
+	DEBUG_STATUS_REGISTERS[7] = partition_id;
+	DEBUG_STATUS_REGISTERS[8] = NumBytesWritten;
+	DEBUG_STATUS_REGISTERS[9] += 1;
 	if (NumBytesWritten < STORAGE_KEY_SIZE) {
 		/* make sure to delete what was written */
 		f_open(&filep, sec_partitions[partition_id].lock_name, FA_CREATE_ALWAYS | FA_WRITE);
@@ -179,6 +172,14 @@ static int set_secure_partition_key(uint8_t *data, int partition_id)
 		return ERR_FAULT;
 	}
 
+	// debug >>>
+	UINT NumBytesRead = 0;
+	uint8_t key[STORAGE_KEY_SIZE];
+	f_lseek(&filep, 0);
+	f_read(&filep, key, STORAGE_KEY_SIZE, &NumBytesRead);
+	f_close(&filep);
+	DEBUG_STATUS_REGISTERS[13]=NumBytesRead;
+	// debug <<<
 	return 0;
 }
 
@@ -199,31 +200,42 @@ static int remove_partition_key(int partition_id)
 
 static int unlock_partition(uint8_t *data, int partition_id)
 {
+	if (partition_id == 0) DEBUG_STATUS_REGISTERS[10] += 1;
+	if (partition_id == 0) DEBUG_STATUS_REGISTERS[5]=0;
+	if (partition_id == 0) DEBUG_STATUS_REGISTERS[6]=0;
+
 	FIL filep;
 	FRESULT result;
+	volatile FRESULT result2, result3, result4;//debug
 	UINT NumBytesRead = 0;
 	uint8_t key[STORAGE_KEY_SIZE];
 
 	result = f_open(&filep, sec_partitions[partition_id].lock_name, FA_READ);
 
 	if (result) {
+		if (partition_id == 0) DEBUG_STATUS_REGISTERS[5] = 1;
 		_SEC_HW_ERROR("%s: Error: couldn't open %s\n", __func__, sec_partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
 
-	f_lseek(&filep, 0);
-	f_read(&filep, (void*)key, STORAGE_KEY_SIZE, &NumBytesRead);
-	f_close(&filep);
+	result2 = f_lseek(&filep, 0);
+	result3 = f_read(&filep, (void*)key, STORAGE_KEY_SIZE, &NumBytesRead);
+	result4 = f_close(&filep);
 	if (NumBytesRead != STORAGE_KEY_SIZE) {
+		if (DEBUG_STATUS_REGISTERS[10] == 2) SEC_HW_DEBUG_HANG();
+		if (partition_id == 0) DEBUG_STATUS_REGISTERS[5] = 2;
 		/* TODO: if the key file is corrupted, then we might need to unlock, otherwise, we'll lose the partition. */
 		return ERR_FAULT;
 	}
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
-		if (key[i] != data[i])
+		if (key[i] != data[i]) {
+			if (partition_id == 0) DEBUG_STATUS_REGISTERS[6] = i;
 			return ERR_INVALID;
+		}
 	}
 
+	if (partition_id == 0) DEBUG_STATUS_REGISTERS[5] = 3;
 	sec_partitions[partition_id].is_locked = false;
 	return 0;
 }
@@ -336,6 +348,7 @@ static void process_request(uint8_t *buf)
 			STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
 			return;
 		}
+		DEBUG_STATUS_REGISTERS[4] = 1;
 
 		int partition_id = -1;
 
@@ -345,25 +358,25 @@ static void process_request(uint8_t *buf)
 				break;
 			}
 		}
-
+		DEBUG_STATUS_REGISTERS[4] = 2;
 		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
 			_SEC_HW_ERROR("%s: Error: no secure partitions available\n", __func__);
 			STORAGE_SET_TWO_RETS(ERR_AVAILABLE, 0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[4] = 3;
 		int ret = set_secure_partition_key(data, partition_id);
 		if (ret) {
 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[4] = 4;
 		result = f_open(&filep, sec_partitions[partition_id].create_name, FA_READ | FA_WRITE);
 		if (result) {
 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[4] = 5;
 		f_lseek(&filep, 0);
 		uint32_t tag = 1;
 		f_write(&filep, (const void*)&tag, 4, &NumBytesWritten);
@@ -378,9 +391,9 @@ static void process_request(uint8_t *buf)
 			}
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[4] = 6;
 		sec_partitions[partition_id].is_created = true;
-
+		DEBUG_STATUS_REGISTERS[5] = partition_id;
 		STORAGE_SET_TWO_RETS(0, partition_id)
 	} else if (buf[0] == STORAGE_OP_DELETE_SECURE_PARTITION) {
 		STORAGE_GET_ONE_ARG
@@ -429,6 +442,7 @@ static void process_secure_request(uint8_t *buf)
 	FRESULT result;
 	UINT NumBytesRead = 0, NumBytesWritten = 0;
 
+DEBUG_STATUS_REGISTERS[0] = buf[0];
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
 		if (!is_queue_set_bound) {
@@ -436,7 +450,7 @@ static void process_secure_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[14] =1;
 		int partition_id = bound_partition;
 
 		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
@@ -444,20 +458,20 @@ static void process_secure_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[14] =2;
 		if (sec_partitions[partition_id].is_locked) {
 			_SEC_HW_ERROR("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[14] =3;
 		result = f_open(&filep, sec_partitions[partition_id].data_name, FA_READ | FA_WRITE);
 		if (result) {
 			_SEC_HW_ERROR("%s: Error: couldn't open %s for write\n", __func__, sec_partitions[partition_id].data_name);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[14] =4;
 		STORAGE_GET_TWO_ARGS_DATA
 		if (((int) arg0) > sec_partitions[partition_id].size) {
 			_SEC_HW_ERROR("%s: Error: invalid block size\n", __func__);
@@ -465,12 +479,12 @@ static void process_secure_request(uint8_t *buf)
 			f_close(&filep);
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[14] =5;
 		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
 		f_lseek(&filep, seek_off);
 		f_write(&filep, (const void*)data, data_size, &NumBytesWritten);
 		uint32_t size = NumBytesWritten;
-
+		DEBUG_STATUS_REGISTERS[15] =NumBytesWritten;
 		STORAGE_SET_ONE_RET(size);
 		f_close(&filep);
 	} else if (buf[0] == STORAGE_OP_READ) { /* read */
@@ -479,7 +493,7 @@ static void process_secure_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[16] =1;
 		int partition_id = bound_partition;
 
 		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
@@ -487,20 +501,20 @@ static void process_secure_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[16] =2;
 		if (sec_partitions[partition_id].is_locked) {
 			_SEC_HW_ERROR("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[16] =3;
 		result = f_open(&filep, sec_partitions[partition_id].data_name, FA_READ);
 		if (result) {
 			_SEC_HW_ERROR("%s: Error: couldn't open %s for read\n", __func__, sec_partitions[partition_id].data_name);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[16] =4;
 		STORAGE_GET_THREE_ARGS
 		if (((int) arg0) > sec_partitions[partition_id].size) {
 			_SEC_HW_ERROR("%s: Error: invalid block size\n", __func__);
@@ -508,13 +522,13 @@ static void process_secure_request(uint8_t *buf)
 			f_close(&filep);
 			return;
 		}
-
+		DEBUG_STATUS_REGISTERS[16] =5;
 		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
 		int seek_off = (arg0 * STORAGE_BLOCK_SIZE) + arg1;
 		f_lseek(&filep, seek_off);
 		f_read(&filep, ret_buf, arg2, &NumBytesRead);
 		uint32_t size = (uint32_t) NumBytesRead;
-
+		DEBUG_STATUS_REGISTERS[17] =NumBytesRead;
 		STORAGE_SET_ONE_RET_DATA(size, ret_buf, size);
 		f_close(&filep);
 	} else if (buf[0] == STORAGE_OP_SET_KEY) {
@@ -549,6 +563,9 @@ static void process_secure_request(uint8_t *buf)
 		STORAGE_SET_ONE_RET(ret)
 	} else if (buf[0] == STORAGE_OP_UNLOCK) {
 		STORAGE_GET_ZERO_ARGS_DATA
+DEBUG_STATUS_REGISTERS[11] += 1;
+DEBUG_STATUS_REGISTERS[12] =0;
+DEBUG_STATUS_REGISTERS[2] = 0;
 		if (data_size != STORAGE_KEY_SIZE) {
 			_SEC_HW_ERROR("%s: Error: incorrect key size (sent for unlocking)\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
@@ -566,11 +583,13 @@ static void process_secure_request(uint8_t *buf)
 		}
 
 		if (partition_id < 0 || partition_id >= NUM_SEC_PARTITIONS) {
+DEBUG_STATUS_REGISTERS[12] = partition_id;
 			STORAGE_SET_ONE_RET(ERR_EXIST)
 			return;
 		}
 
 		if (sec_partitions[partition_id].is_locked) {
+DEBUG_STATUS_REGISTERS[2] = 2;
 			STORAGE_SET_ONE_RET(ERR_FAULT)
 			return;
 		}
@@ -578,6 +597,7 @@ static void process_secure_request(uint8_t *buf)
 		bound_partition = partition_id;
 		is_queue_set_bound = true;
 
+DEBUG_STATUS_REGISTERS[2] = 3;
 		STORAGE_SET_ONE_RET(0)
 	} else if (buf[0] == STORAGE_OP_LOCK) {
 		if (!is_queue_set_bound) {
@@ -636,21 +656,56 @@ static void process_secure_request(uint8_t *buf)
 		is_queue_set_bound = false;
 
 		STORAGE_SET_ONE_RET(0)
+
 	} else {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
 }
 
-void handle_mailbox_interrupts(void* callback_ref)
+void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 {
-	DEBUG_STATUS_REGISTERS[19] = (u32) callback_ref;
+	/* Threshold registers will need to be reinitialized
+	 * every time it switches ownership
+	 */
+	switch (queue_id) {
+		case Q_STORAGE_OUT_2:
+		case Q_STORAGE_CMD_OUT:
+		case Q_STORAGE_DATA_OUT:
+			XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
+			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_STA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_IN_2:
+		case Q_STORAGE_CMD_IN:
+			XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
+			break;
+		case Q_STORAGE_DATA_IN:
+			XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		default:
+			_SEC_HW_ERROR("unknown/unsupported queue %d", queue_id);
+	}
+}
+
+static void handle_change_queue_interrupts(void* callback_ref)
+{
+	uint8_t queue_id = (int) callback_ref;
+
+	mailbox_change_queue_access_bottom_half(queue_id);
+	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[queue_id]);
+}
+
+static void handle_mailbox_interrupts(void* callback_ref)
+{
 	u32         mask;
 	XMbox       *mbox_inst = (XMbox *)callback_ref;
 
 	_SEC_HW_DEBUG("Mailbox ref: %p", callback_ref);
 	mask = XMbox_GetInterruptStatus(mbox_inst);
-	DEBUG_STATUS_REGISTERS[20] = mask;
 
 	if (mask & XMB_IX_STA) {
 		_SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
@@ -730,14 +785,11 @@ void storage_event_loop(void)
 	uint8_t queue_id = 0;
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int is_secure_queue = 0;
-	DEBUG_STATUS_REGISTERS[14] = 1;
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
-		DEBUG_STATUS_REGISTERS[15] = 1;
 		sem_getvalue(&interrupts[Q_STORAGE_IN_2], &is_secure_queue);
 		if (!is_secure_queue) {
-			DEBUG_STATUS_REGISTERS[16] = 1;
 #ifdef HW_MAILBOX_BLOCKING
 			XMbox_ReadBlocking(&Mbox_storage_cmd_in, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 #else
@@ -752,12 +804,10 @@ void storage_event_loop(void)
 			process_request(buf);
 			XMbox_WriteBlocking(&Mbox_storage_cmd_out, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 		} else {
-			DEBUG_STATUS_REGISTERS[17] = 1;
 			sem_wait(&interrupts[Q_STORAGE_IN_2]);
 #ifdef HW_MAILBOX_BLOCKING
 			XMbox_ReadBlocking(&Mbox_storage_in_2, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 #else
-			DEBUG_STATUS_REGISTERS[18] = 1;
 			queue_id = Q_STORAGE_IN_2;
 			XMbox_Read(&Mbox_storage_in_2,
 				(u32*) buf,
@@ -784,7 +834,6 @@ int init_storage(void)
 
 	init_platform();
 
-	DEBUG_STATUS_REGISTERS[0] = 1;
 	/* Initialize XMbox */
 	Config_cmd_in = XMbox_LookupConfig(XPAR_Q_STORAGE_CMD_IN_IF_1_DEVICE_ID);
 	Status = XMbox_CfgInitialize(&Mbox_storage_cmd_in, Config_cmd_in, Config_cmd_in->BaseAddress);
@@ -848,10 +897,19 @@ int init_storage(void)
 
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();
-	DEBUG_STATUS_REGISTERS[1] = 1;
-//
-//	Xil_ExceptionInit();
-//	Xil_ExceptionEnable();
+
+	/* Initialize pointers for bookkeeping */
+	Mbox_regs[Q_STORAGE_CMD_IN] = &Mbox_storage_cmd_in;
+	Mbox_regs[Q_STORAGE_CMD_OUT] = &Mbox_storage_cmd_out;
+	Mbox_regs[Q_STORAGE_IN_2] = &Mbox_storage_in_2;
+	Mbox_regs[Q_STORAGE_OUT_2] = &Mbox_storage_out_2;
+	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
+	Mbox_regs[Q_STORAGE_DATA_IN] = &Mbox_storage_data_in;
+
+	Mbox_ctrl_regs[Q_STORAGE_IN_2] = XPAR_Q_STORAGE_IN_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_OUT_2] = XPAR_Q_STORAGE_OUT_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = XPAR_Q_STORAGE_DATA_OUT_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = XPAR_Q_STORAGE_DATA_IN_BASEADDR;
 
 	/* Initialize XIntc */
 	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
@@ -865,7 +923,6 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
-	DEBUG_STATUS_REGISTERS[2] = 1;
 	/* Connect interrupts */
 	Status = XIntc_Connect(&intc,
 			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR,
@@ -927,12 +984,55 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
+	Status = XIntc_Connect(&intc, 
+		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_CTRL_FIXED_INTR,
+		(XInterruptHandler)handle_change_queue_interrupts, 
+		(void*)Q_STORAGE_IN_2);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed", 
+			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_CTRL_FIXED_INTR);
+		return XST_FAILURE;
+	}
+
+
+	Status = XIntc_Connect(&intc, 
+		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_CTRL_FIXED_INTR,
+		(XInterruptHandler)handle_change_queue_interrupts, 
+		(void*)Q_STORAGE_OUT_2);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed", 
+			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_CTRL_FIXED_INTR);
+		return XST_FAILURE;
+	}
+
+
+	Status = XIntc_Connect(&intc, 
+		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_CTRL_FIXED_INTR,
+		(XInterruptHandler)handle_change_queue_interrupts, 
+		(void*)Q_STORAGE_DATA_IN);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed", 
+			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_CTRL_FIXED_INTR);
+		return XST_FAILURE;
+	}
+
+
+	Status = XIntc_Connect(&intc, 
+		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL_FIXED_INTR,
+		(XInterruptHandler)handle_change_queue_interrupts, 
+		(void*)Q_STORAGE_DATA_OUT);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed", 
+			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL_FIXED_INTR);
+		return XST_FAILURE;
+	}
+
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Start failed");
 		return XST_FAILURE;
 	}
-
+	
 	/* Enable interrupts */
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_IN_INTERRUPT_1_INTR);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_CMD_OUT_INTERRUPT_1_INTR);
@@ -940,6 +1040,10 @@ int init_storage(void)
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_FIXED_INTR);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_CTRL_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_CTRL_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_CTRL_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL_FIXED_INTR);
 
 	Xil_ExceptionInit();
 
@@ -957,7 +1061,6 @@ int init_storage(void)
 
 //	portENABLE_INTERRUPTS();
 
-	DEBUG_STATUS_REGISTERS[3] = 1;
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);

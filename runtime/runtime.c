@@ -130,12 +130,15 @@ extern sem_t interrupt_change;
 
 #define SYSCALL_GET_ONE_RET				\
 	uint32_t ret0;					\
-	ret0 = *((uint32_t *) &buf[1]);			\
+	memcpy((u32*) &ret0, (u32*) &buf[1], 4);		\
+	// ret0 = *((uint32_t *) &buf[1]);			\
 
 #define SYSCALL_GET_TWO_RETS				\
 	uint32_t ret0, ret1;				\
-	ret0 = *((uint32_t *) &buf[1]);			\
-	ret1 = *((uint32_t *) &buf[5]);			\
+	memcpy((u32*) &ret0, (u32*) &buf[1], 4);		\
+	memcpy((u32*) &ret1, (u32*) &buf[5], 4);		\
+	// ret0 = *((uint32_t *) &buf[1]);			\
+	// ret1 = *((uint32_t *) &buf[5]);			\
 
 /* FIXME: are we sure data is big enough for the memcpy here? */
 #define SYSCALL_GET_ONE_RET_DATA(data)						\
@@ -831,6 +834,7 @@ static int request_secure_storage_access(int count)
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
 	int unlock_ret = unlock_secure_storage(secure_storage_key);
+
 	if (unlock_ret == ERR_EXIST) {
 		uint8_t temp_key[STORAGE_KEY_SIZE];
 		int create_ret = request_secure_storage_creation(temp_key);
@@ -838,6 +842,8 @@ static int request_secure_storage_access(int count)
 			yield_secure_storage_access();
 			return create_ret;
 		}
+		_SEC_HW_ERROR("key %02x", temp_key[0]);
+
 		int unlock_ret_2 = unlock_secure_storage(temp_key);
 		if (unlock_ret_2) {
 			yield_secure_storage_access();

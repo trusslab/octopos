@@ -110,7 +110,7 @@ static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
 		return (int) ret0;
 
 	*partition_id = (int) ret1;
-
+	_SEC_HW_ERROR("pid = %d", *partition_id);
 	return 0;
 }
 
@@ -397,6 +397,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			/* FIXME: use a random number */
 			temp_key[i] = runtime_proc_id;
 
+		_SEC_HW_ERROR("key %02x", temp_key[0]);
 		int ret = storage_create_secure_partition(temp_key, &sec_partition_id);
 		if (ret) {
 			char dummy;
@@ -404,6 +405,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
+		_SEC_HW_ERROR("key %02x", temp_key[0]);
 		app->sec_partition_id = sec_partition_id;
 		app->sec_partition_created = true;
 

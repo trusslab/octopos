@@ -157,6 +157,7 @@ u8 mailbox_get_queue_owner(uint8_t queue_id)
  */
 void mailbox_force_ownership(uint8_t queue_id, uint8_t owner)
 {
+	_SEC_HW_ERROR("forcing a yield on queue %d", queue_id);
 	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
 	u32 bytes_read;
@@ -243,7 +244,27 @@ static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int que
 
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
+//	u32 tmp_value = 255;
+//	if (queue_id == Q_STORAGE_IN_2) {
+//		_SEC_HW_ERROR("Writing to IN_2 %p", Mbox_regs[queue_id]);
+//// 		XMbox_ResetFifos(Mbox_regs[queue_id]);
+//// 		XMbox_Flush(Mbox_regs[queue_id]);
+//// 		XMbox_ClearInterrupt(Mbox_regs[queue_id], XMB_IX_ERR | XMB_IX_RTA | XMB_IX_STA);
+//// 		XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
+//// 		XMbox_SetReceiveThreshold(Mbox_regs[queue_id], 0);
+//// 		XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_ERR | XMB_IX_RTA | XMB_IX_STA);
+//// //		XMbox_WriteBlocking(Mbox_regs[queue_id], (u32*)buf, MAILBOX_QUEUE_MSG_SIZE);
+//// 		while(1){sleep(1);XMbox_WriteBlocking(Mbox_regs[queue_id], &tmp_value, 4);}
+//		Xil_Out32(XMB_WRITE_REG_OFFSET + 0x44A40000, tmp_value);
+//	} ///DEBUG
+
+
 	sem_wait_impatient_send(&interrupts[queue_id], Mbox_regs[queue_id], (u32*) buf);
+}
+
+static void _runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+{
+	sem_wait_impatient_send_large(&interrupts[queue_id], Mbox_regs[queue_id], (u32*) buf);
 }
 
 void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id)
@@ -268,7 +289,7 @@ void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
 
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id)
 {
-	return _runtime_send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	return _runtime_send_msg_on_queue_large(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void is_ownership_change(int *is_change)
@@ -381,7 +402,7 @@ static void handle_octopos_mailbox_interrupts(void* callback_ref)
 {
 	uint8_t queue_id = (int) callback_ref;
 	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[queue_id]);
-
+	_SEC_HW_ERROR("change intr: %d", queue_id);
 	if (queue_id == change_queue) {
 		_SEC_HW_DEBUG("interrupt_change");
 		sem_post(&interrupt_change);
@@ -439,6 +460,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&interrupts[Q_STORAGE_DATA_IN]);
 		} else if (callback_ref == Mbox_regs[Q_STORAGE_IN_2]) {
 			/* storage cmd in queue */
+			_SEC_HW_ERROR("Q_STORAGE_IN_2 sent ack");
 			sem_post(&interrupts[Q_STORAGE_IN_2]);
 		}  else {
 			_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
@@ -462,6 +484,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
 		} else if (callback_ref == Mbox_regs[Q_STORAGE_OUT_2]) {
 			/* storage cmd out queue */
+			_SEC_HW_ERROR("Q_STORAGE_OUT_2 sent ack");
 			sem_post(&interrupts[Q_STORAGE_OUT_2]);
 		} else {
 			_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
@@ -469,6 +492,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
 	} else if (mask & XMB_IX_ERR) {
 		if (!force_take_ownership_mode)
 			_SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
+			_SEC_HW_ERROR("status register: %ld", XMbox_GetStatus(callback_ref));
+			_SEC_HW_ERROR("error register: %ld", Xil_In32(0x44A40000 + XMB_ERROR_REG_OFFSET)); //DEBUG
 	} else {
 		_SEC_HW_ERROR("interrupt type unknown, mask %ld, from %p", mask, callback_ref);
 	}

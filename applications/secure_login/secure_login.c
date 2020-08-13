@@ -112,5 +112,6 @@ void secure_login(struct runtime_api *api)
 	memset(line, 0x0, 1024);
 	api->read_from_secure_storage((uint8_t *) line, 0, 0, size);
 	insecure_printf("secret (from secure storage): %s (size = %d)\n", line, size);
+	while(1) {}
 	api->delete_and_yield_secure_storage();
 }

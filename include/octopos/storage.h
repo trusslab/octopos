@@ -1,6 +1,8 @@
 #ifndef __STORAGE_OCTOPOS_CORE_H_
 #define __STORAGE_OCTOPOS_CORE_H_
 
+#include <arch/syscall.h>
+
 #ifdef ARCH_SEC_HW
 #define bool _Bool
 #define true 1
@@ -29,11 +31,11 @@
 
 
 #define STORAGE_SET_ONE_RET(ret0)	\
-	*((uint32_t *) &buf[0]) = ret0; \
+	SERIALIZE_32(ret0, &buf[0])
 
 #define STORAGE_SET_TWO_RETS(ret0, ret1)	\
-	*((uint32_t *) &buf[0]) = ret0;		\
-	*((uint32_t *) &buf[4]) = ret1;		\
+	SERIALIZE_32(ret0, &buf[0])				\
+	SERIALIZE_32(ret1, &buf[4])
 
 /* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
 #define STORAGE_SET_ONE_RET_DATA(ret0, data, size)		\
