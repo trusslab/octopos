@@ -8,6 +8,7 @@ umode:
 		$(MAKE) umode -C $$dir; \
 	done
 	for dir in $(LINUX_DIR); do \
+		$(MAKE) defconfig ARCH=um -C $$dir; \
 		$(MAKE) ARCH=um -C $$dir; \
 	done
 
@@ -16,5 +17,5 @@ clean:
 		$(MAKE) clean -C $$dir; \
 	done
 	for dir in $(LINUX_DIR); do \
-		$(MAKE) ARCH=um clean -C $$dir; \
+		$(MAKE) clean ARCH=um -C $$dir; \
 	done
