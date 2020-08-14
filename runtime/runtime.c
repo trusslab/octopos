@@ -98,11 +98,11 @@ extern sem_t interrupt_change;
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;				\
 	if (max_size >= 256) {							\
-		_SEC_HW_ERROR("Error (%s): max_size not supported\n", __func__);	\
+		printf("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
 	}									\
 	if (size > max_size) {							\
-		_SEC_HW_ERROR("Error (%s): size not supported\n", __func__);		\
+		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
 	SERIALIZE_16(syscall_nr, &buf[0])			\
@@ -130,15 +130,12 @@ extern sem_t interrupt_change;
 
 #define SYSCALL_GET_ONE_RET				\
 	uint32_t ret0;					\
-	memcpy((u32*) &ret0, (u32*) &buf[1], 4);		\
-	// ret0 = *((uint32_t *) &buf[1]);			\
+	DESERIALIZE_32(&ret0, &buf[1]);			\
 
 #define SYSCALL_GET_TWO_RETS				\
 	uint32_t ret0, ret1;				\
-	memcpy((u32*) &ret0, (u32*) &buf[1], 4);		\
-	memcpy((u32*) &ret1, (u32*) &buf[5], 4);		\
-	// ret0 = *((uint32_t *) &buf[1]);			\
-	// ret1 = *((uint32_t *) &buf[5]);			\
+	DESERIALIZE_32(&ret0, &buf[1]);			\
+	DESERIALIZE_32(&ret1, &buf[5]);			\
 
 /* FIXME: are we sure data is big enough for the memcpy here? */
 #define SYSCALL_GET_ONE_RET_DATA(data)						\
@@ -834,7 +831,6 @@ static int request_secure_storage_access(int count)
 			yield_secure_storage_access();
 			return create_ret;
 		}
-		_SEC_HW_ERROR("key %02x", temp_key[0]);
 
 		int unlock_ret_2 = unlock_secure_storage(temp_key);
 		if (unlock_ret_2) {

@@ -110,7 +110,6 @@ static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id)
 		return (int) ret0;
 
 	*partition_id = (int) ret1;
-	_SEC_HW_ERROR("pid = %d", *partition_id);
 	return 0;
 }
 

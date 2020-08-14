@@ -340,12 +340,10 @@ static void release_file_blocks(struct file *file)
 uint32_t file_system_open_file(char *filename, uint32_t mode)
 {
 	struct file *file = NULL;
-	_SEC_HW_ERROR("file_system_open_file [1]");
 	if (!(mode == FILE_OPEN_MODE || mode == FILE_OPEN_CREATE_MODE)) {
 		printf("Error: invalid mode for opening a file\n");
 		return (uint32_t) 0;
 	}
-	_SEC_HW_ERROR("file_system_open_file [2]");
 
 	for (struct file_list_node *node = file_list_head; node;
 	     node = node->next) {
@@ -357,13 +355,11 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			file = node->file;
 		}
 	}
-	_SEC_HW_ERROR("file_system_open_file [3]");
 
 	if (file == NULL && mode == FILE_OPEN_CREATE_MODE) {
 		file = (struct file *) malloc(sizeof(struct file));
 		if (!file)
 			return (uint32_t) 0;
-	_SEC_HW_ERROR("file_system_open_file [4]");
 
 		strcpy(file->filename, filename);
 
@@ -372,7 +368,6 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			free(file);
 			return (uint32_t) 0;
 		}
-	_SEC_HW_ERROR("file_system_open_file [5]");
 
 		ret = add_file_to_directory(file);
 		if (ret) {
@@ -380,27 +375,22 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			free(file);
 			return (uint32_t) 0;
 		}
-	_SEC_HW_ERROR("file_system_open_file [6]");
 
 		add_file_to_list(file);
-	_SEC_HW_ERROR("file_system_open_file [7]");
 	}
 
 	if (file) {
 		int ret = get_unused_fd();
 		if (ret < 0)
 			return (uint32_t) 0;
-	_SEC_HW_ERROR("file_system_open_file [8]");
 
 		uint32_t fd = (uint32_t) ret;
 		if (fd == 0 || fd >= MAX_NUM_FD)
 			return (uint32_t) 0;
-	_SEC_HW_ERROR("file_system_open_file [9]");
 
 		/* Shouldn't happen, but let's check. */
 		if (file_array[fd])
 			return (uint32_t) 0;
-	_SEC_HW_ERROR("file_system_open_file [10]");
 
 		file_array[fd] = file;
 		file->opened = true;
