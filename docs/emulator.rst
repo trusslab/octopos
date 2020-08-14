@@ -8,7 +8,7 @@ The Umode emulator is an easy way to test OctopOS.
 
 Setting up the emulator
 =======================
-After cloning the repo and its submodules, go to the arch/umode/untrusted_linux/ and download a rootfs.
+After cloning the repo and its submodules, download a rootfs and copy to arch/umode/untrusted_linux/.
 We recommend using OpenSuse-12.1-amd64-root_fs.
 You can download it from http://fs.devloop.org.uk/
 
@@ -16,7 +16,16 @@ Running the emulator
 ====================
 You can run the emulator using:
 
-$ arch/umode/emulator/emulator.sh [octopos root directory absolute paty]
+$ arch/umode/emulator/emulator.sh [octopos root directory absolute path]
+
+For example, if you've cloned octopos to your home directory, do:
+
+$ arch/umode/emulator/emulator.sh ~/octopos
+
+Note that running the emulator requires tmuxp. You can install is as follows:
+
+$ sudo apt-get install tmux
+$ pip3 install tmuxp
 
 Once the emulator is loaded, enter the following command in the bottom window (the untrusted Linux domain):
 
