@@ -147,17 +147,13 @@ static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
-	_SEC_HW_ERROR("write_blocks [2]");
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage_no_response(buf);
-	_SEC_HW_ERROR("write_blocks [2.5]");
 	for (int i = 0; i < (int) num_blocks; i++)
 		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
-	_SEC_HW_ERROR("write_blocks [3]");
 	get_response_from_storage(buf);
-	_SEC_HW_ERROR("write_blocks [4]");
 
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
@@ -165,21 +161,17 @@ static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks
 
 static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	_SEC_HW_ERROR("read_blocks [1]");
 	int ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
-	_SEC_HW_ERROR("read_blocks [2]");
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
 	for (int i = 0; i < (int) num_blocks; i++)
 		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
-	_SEC_HW_ERROR("read_blocks [3]");
 	get_response_from_storage(buf);
-	_SEC_HW_ERROR("read_blocks [4]");
 
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
@@ -328,7 +320,6 @@ static int alloc_blocks_for_file(struct file *file)
 		uint8_t zero_buf[STORAGE_BLOCK_SIZE];
 		memset(zero_buf, 0x0, STORAGE_BLOCK_SIZE);
 		for (int i = 0; i < num_blocks; i++) {
-	_SEC_HW_ERROR("alloc_blocks_for_file [2]i=%d",i);
 			write_blocks(zero_buf, start_block + i, 1);
 		}
 		return 0;

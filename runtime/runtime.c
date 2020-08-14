@@ -614,17 +614,9 @@ static int read_from_shell(char *data, int *data_size)
 
 static uint32_t open_file(char *filename, uint32_t mode)
 {
-	_SEC_HW_ERROR("open_file: filename %s", filename);
 	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
-	_SEC_HW_ERROR("open_file [1]");
 	issue_syscall(buf);
-		_SEC_HW_ERROR("buf[0]=%02X", buf[0]);
-		_SEC_HW_ERROR("buf[1]=%02X", buf[1]);
-		_SEC_HW_ERROR("buf[2]=%02X", buf[2]);
-		_SEC_HW_ERROR("buf[3]=%02X", buf[3]);
-		_SEC_HW_ERROR("buf[4]=%02X", buf[4]);
 	SYSCALL_GET_ONE_RET
-	_SEC_HW_ERROR("open_file [2] %d", ret0);
 	return ret0;
 }
 
@@ -715,7 +707,7 @@ static int unlock_secure_storage(uint8_t *key)
 
 static int lock_secure_storage(void)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	buf[0] = STORAGE_OP_LOCK;
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET

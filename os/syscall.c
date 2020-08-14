@@ -162,7 +162,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	*no_response = false;
 
 #ifdef ARCH_SEC_HW
-	_SEC_HW_ERROR("syscall %d received from %d", syscall_nr, runtime_proc_id);
+	_SEC_HW_DEBUG("syscall %d received from %d", syscall_nr, runtime_proc_id);
 	// for (int i = 0; i < MAILBOX_QUEUE_MSG_SIZE; i++)
 	// 	_SEC_HW_ERROR("%02X", buf[i]);
 #endif
@@ -177,10 +177,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-
-#ifdef ARCH_SEC_HW
-		_SEC_HW_DEBUG("arg0 = %d", count);
-#endif
 
 		int ret = is_queue_available(Q_SERIAL_OUT);
 		/* Or should we make this blocking? */
@@ -209,10 +205,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
-
-#ifdef ARCH_SEC_HW
-		_SEC_HW_DEBUG("arg0 = %d", count);
-#endif
 
 		 /* No more than 100 characters */
 		 if (count > 100) {
@@ -301,13 +293,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		/* playing it safe */
 		filename[data_size] = '\0';
 		uint32_t fd = file_system_open_file(filename, mode);
-		_SEC_HW_ERROR("fd(%d)",fd);
 		SYSCALL_SET_ONE_RET(fd)
-		_SEC_HW_ERROR("buf[0]=%02X", buf[0]);
-		_SEC_HW_ERROR("buf[1]=%02X", buf[1]);
-		_SEC_HW_ERROR("buf[2]=%02X", buf[2]);
-		_SEC_HW_ERROR("buf[3]=%02X", buf[3]);
-		_SEC_HW_ERROR("buf[4]=%02X", buf[4]);
 		break;
 	}
 	case SYSCALL_WRITE_TO_FILE: {
@@ -328,7 +314,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			printf("Error: read size too big. Will truncate\n");
 			size = MAILBOX_QUEUE_MSG_SIZE - 5;
 		}
-		_SEC_HW_ERROR("arg0 (%d) arg1 (%d) arg2(%d)", arg0, arg1, arg2);
 		fs_ret = file_system_read_from_file(arg0, ret_buf, size, (int) arg2);
 		/* safety check */
 		if (fs_ret > size) {
@@ -397,7 +382,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			/* FIXME: use a random number */
 			temp_key[i] = runtime_proc_id;
 
-		_SEC_HW_ERROR("key %02x", temp_key[0]);
 		int ret = storage_create_secure_partition(temp_key, &sec_partition_id);
 		if (ret) {
 			char dummy;
@@ -405,7 +389,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		_SEC_HW_ERROR("key %02x", temp_key[0]);
 		app->sec_partition_id = sec_partition_id;
 		app->sec_partition_created = true;
 
@@ -662,7 +645,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	default:
 		printf("Error: invalid syscall\n");
 #ifdef ARCH_SEC_HW
-		_SEC_HW_DEBUG("invalid syscall, args: %s", buf);
+		_SEC_HW_ERROR("invalid syscall, args: %s", buf);
 #endif
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		break;

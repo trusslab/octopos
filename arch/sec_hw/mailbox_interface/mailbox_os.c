@@ -320,26 +320,17 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	u32 reg = 0;
 	
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
-	_SEC_HW_ERROR("queue %d: ctrl reg %p", queue_id, queue_ptr);
+	_SEC_HW_DEBUG("queue %d: ctrl reg %p", queue_id, queue_ptr);
 
 	reg = octopos_mailbox_calc_owner(reg, OMboxIds[queue_id][proc_id]);
 	reg = octopos_mailbox_calc_quota_limit(reg, count * factor);
 	reg = octopos_mailbox_calc_time_limit(reg, MAX_OCTOPOS_MAILBOX_QUOTE);
 
-	_SEC_HW_ERROR("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_DEBUG("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 
 	octopos_mailbox_set_status_reg(queue_ptr, reg);
 
-	_SEC_HW_ERROR("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
-
-	// u32 DEBUG_BUF=255;
-	// if (queue_id == Q_STORAGE_IN_2) {
-	// 	// DEBUG
-	// 	// while(1) {
-	// 		XMbox_WriteBlocking(Mbox_regs[Q_STORAGE_IN_2], &DEBUG_BUF, 4);		
-	// 		// sleep(1);
-	// 	// }
-	// }
+	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 }
 
 
