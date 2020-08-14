@@ -3,12 +3,15 @@ DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network u
 
 EXTERNAL_DIR = ./external
 
-all: install umode
+all: umode
 
-.PHONY: install umode clean
+.PHONY: lib emu umode clean
 
-install:
-	$(MAKE) install -C $(EXTERNAL_DIR)
+lib:
+	$(MAKE) lib -C $(EXTERNAL_DIR)
+
+emu:
+	$(MAKE) emu -C $(EXTERNAL_DIR)
 
 umode:
 	for dir in $(DIRS); do \

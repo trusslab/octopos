@@ -1,3 +1,5 @@
+lib: tss abrmd
+
 tss:
 	cd tpm2-tss && ./bootstrap
 	cd tpm2-tss && ./configure
@@ -18,8 +20,6 @@ abrmd:
 emu:
 	make -j$(nproc) -C ./ibmtpm1637/src
 	mv ./ibmtpm1637/src/tpm_server ./ibmtpm1637/tpm_server
-
-install: tss abrmd emu
 
 clean:
 	make clean -C ./tpm2-tss
