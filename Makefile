@@ -1,7 +1,14 @@
 DIRS := applications arch keyboard os runtime serial_out storage network
 DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network util/network
 
-.PHONY: umode
+EXTERNAL_DIR = ./external
+
+all: install umode
+
+.PHONY: install umode clean
+
+install:
+	$(MAKE) install -C $(EXTERNAL_DIR)
 
 umode:
 	for dir in $(DIRS); do \
