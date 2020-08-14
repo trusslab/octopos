@@ -1,4 +1,4 @@
-/* OctopOS storage client for the OS */
+/* OctopOS storage code for the OS */
 #include <arch/defines.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -245,17 +245,17 @@ void wait_for_storage(void)
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_CMD_IN);
 	}
-	
+
 	ret = is_queue_available(Q_STORAGE_CMD_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
-	
+
 	ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
-	
+
 	ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);

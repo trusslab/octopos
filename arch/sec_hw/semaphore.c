@@ -69,6 +69,12 @@ int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf)
 	return 0;
 }
 
+int _sem_retrieve_mailbox_message_blocking_buf_large(XMbox *InstancePtr, uint8_t* buf)
+{
+	XMbox_ReadBlocking(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	return 0;
+}
+
 static uint8_t *sketch_buffer = NULL;
 static u32 sketch_buffer_offset = 0;
 static XMbox *sketch_xmbox_instance = NULL;
@@ -228,6 +234,13 @@ int _sem_deliver_mailbox_message_blocking(XMbox *InstancePtr, u32* buf)
 	return 0;
 }
 
+int _sem_deliver_mailbox_message_blocking_large(XMbox *InstancePtr, u32* buf)
+{
+	XMbox_WriteBlocking(InstancePtr, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+	return 0;
+}
+
 int sem_wait_impatient_send(sem_t *sem, XMbox *InstancePtr, u32* buf)
 {
 	if (sem->count <= 0) {
@@ -239,6 +252,21 @@ int sem_wait_impatient_send(sem_t *sem, XMbox *InstancePtr, u32* buf)
 	} else {
 		sem->count -= 1;
 		_sem_deliver_mailbox_message_blocking(InstancePtr, buf);
+	}
+	return 0;
+}
+
+int sem_wait_impatient_send_large(sem_t *sem, XMbox *InstancePtr, u32* buf)
+{
+	if (sem->count <= 0) {
+		_sem_deliver_mailbox_message_blocking_large(InstancePtr, buf);
+
+		if (sem->count > 0) {
+			sem->count -= 1;
+		}
+	} else {
+		sem->count -= 1;
+		_sem_deliver_mailbox_message_blocking_large(InstancePtr, buf);
 	}
 	return 0;
 }
@@ -273,6 +301,20 @@ int sem_wait_impatient_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
 	} else {
 		sem->count -= 1;
 		_sem_retrieve_mailbox_message_blocking_buf(InstancePtr, buf);
+	}
+	return 0;
+}
+
+int sem_wait_impatient_receive_buf_large(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
+{
+	if (sem->count <= 0) {
+		_sem_retrieve_mailbox_message_blocking_buf_large(InstancePtr, buf);
+		if (sem->count > 0) {
+			sem->count -= 1;
+		}
+	} else {
+		sem->count -= 1;
+		_sem_retrieve_mailbox_message_blocking_buf_large(InstancePtr, buf);
 	}
 	return 0;
 }

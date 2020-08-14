@@ -11,7 +11,7 @@
 #include <octopos/mailbox.h>
 
 int fd_out, fd_in, fd_intr;
-sem_t interrupt_serial_out;
+sem_t interrupt_serial_out, interrupt_tpm;
 pthread_t mailbox_thread;
 
 static void *handle_mailbox_interrupts(void *data)
@@ -20,11 +20,15 @@ static void *handle_mailbox_interrupts(void *data)
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
-		if (interrupt != Q_SERIAL_OUT) {
+		if (interrupt == Q_SERIAL_OUT) {
+			sem_post(&interrupt_serial_out);
+		} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
+			sem_post(&interrupt_tpm);
+		} else if (interrupt == Q_TPM_DATA_IN) {
+		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
 		}
-		sem_post(&interrupt_serial_out);
 	}
 }
 
@@ -63,6 +67,7 @@ int init_serial_out(void)
 	fd_intr = open(FIFO_SERIAL_OUT_INTR, O_RDONLY);
 	
 	sem_init(&interrupt_serial_out, 0, 0);
+	sem_init(&interrupt_tpm, 0, 0);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
@@ -85,4 +90,16 @@ void close_serial_out(void)
 	remove(FIFO_SERIAL_OUT_OUT);
 	remove(FIFO_SERIAL_OUT_IN);
 	remove(FIFO_SERIAL_OUT_INTR);
+}
+
+void send_ext_request_to_queue(uint8_t* buf)
+{
+	uint8_t opcode[2];
+
+	sem_wait(&interrupt_tpm);
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_TPM_DATA_IN;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }

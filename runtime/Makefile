@@ -11,7 +11,7 @@ CONFIG_TOPLOGY = 2
 LD = ld
 CC = gcc
 CFLAGS = -Wall -Werror -I ../include/ -I ../include/network/ -I ../../include/network/ -I ../../../include/ -I ../../../include/network/ -I ../arch/umode/include/
-LFLAGS = -ldl -lpthread -lrt
+LFLAGS = -ldl -lpthread -lrt -ltss2-esys -ltss2-rc
 export LD CC CFLAGS
 
 ifeq ($(CONFIG_DEBUG), y)
@@ -44,9 +44,10 @@ else
 	CFLAGS += -DCONFIG_TOP2
 endif
 
-RUNTIME_OBJS =  runtime.o 						\
-		storage_client.o					\
+RUNTIME_OBJS =  runtime.o 						            \
+		storage_client.o					                \
 		../arch/umode/mailbox_interface/mailbox_runtime.o	\
+		network_client.o					\
 		network/socket/socket_obj.o				\
 		network/udp/udp_obj.o					\
 		network/tcp/tcp_obj.o					\

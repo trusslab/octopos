@@ -1,74 +1,88 @@
 {
   "session_name": "OctopOS",
   "windows": [
-    {
-      "window_name": "OctopOS terminals",
-      "layout": "tiled",
-      "panes": [
 	{
-	   "shell_command":[
-		"cd os",
-		"sleep 2",
-		"./os"
-	   ]
-	},{
-	   "shell_command":[
-		"cd keyboard",
-		"sleep 1",
-		"./keyboard"
-	   ]
-	},{
-	   "shell_command":[
-		"cd applications/socket_client",
-		"while true; do ./socket_server; done"
-	   ]
-	},{
-	   "shell_command":[
-		"cd arch/umode/mailbox",
-		"./mailbox"
-	   ]
-	},{
-	   "shell_command":[
-		"cd serial_out",
-		"sleep 1",
-		"./serial_out"
-	   ]
-	},{
-	   "shell_command":[
-		"cd runtime",
-		"sleep 1",
-		"while true; do ./runtime 1; done"
-	   ]
-	},{
-	   "shell_command":[
-		"cd storage",
-		"sleep 1",
-		"./storage"
-	   ]
-	},{
-	   "shell_command":[
-		"cd network",
-		"sleep 1",
-		"sudo ./network"
-	   ]
-	},{
-	   "shell_command":[
-		"cd runtime",
-		"sleep 1",
-		"while true; do ./runtime 2; done"
-	   ]
-	},{
-	   "shell_command":[
-		"cd arch/umode/untrusted_linux",
-		"sleep 1",
-		"./linux ubda=OpenSuse-12.1-amd64-root_fs mem=128M",
-		"test"
-	   ]
+	  "window_name": "OctopOS terminals",
+	  "layout": "tiled",
+	  "panes": [
+		{
+		  "shell_command": [
+			"cd os",
+			"./os"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd loader",
+			"sleep 1",
+			"./loader ../keyboard/keyboard.so"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd applications/socket_client",
+			"while true; do ./socket_server; done"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd arch/umode/mailbox",
+			"./mailbox"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd loader",
+			"sleep 1",
+			"./loader ../serial_out/serial_out.so"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd runtime",
+			"sleep 1",
+			"while true; do ./runtime 1; done"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd storage",
+			"sleep 1",
+			"../loader/loader ./storage.so"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd network",
+			"sleep 1",
+			"sudo ./network"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd runtime",
+			"sleep 1",
+			"while true; do ./runtime 2; done"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd tpm",
+			"./tpm"
+		  ]
+		},
+		{
+		  "shell_command": [
+			"cd arch/umode/untrusted_linux",
+			"sleep 1",
+			"./linux ubda=OpenSuse-12.1-amd64-root_fs mem=128M",
+			"test"
+		  ]
+		}
+	  ],
+	  "options_after": {
+		"mouse": true
+	  }
 	}
-      ],
-      "options_after": {
-        "mouse": true
-      }
-    }
   ]
 }

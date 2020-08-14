@@ -2,3 +2,10 @@
 	path = arch/umode/untrusted_linux
 	url = https://gitlab.com/arrdalan/octopos_linux.git
 	branch = octopos_master
+[submodule "external/tpm2-abrmd"]
+	path = external/tpm2-abrmd
+	url = https://github.com/tpm2-software/tpm2-abrmd
+[submodule "external/tpm2-tss"]
+	path = external/tpm2-tss
+	url = https://github.com/tpm2-software/tpm2-tss
+

@@ -29,6 +29,10 @@ $ pip3 install tmuxp
 
 Once the emulator is loaded, enter the following command in the bottom window (the untrusted Linux domain):
 
+# set up network
+$ ip link set octopos_net up
+$ ip addr add 10.0.0.1/24 dev octopos_net
+# set up command processor
 $ while true; do source /dev/octopos_mailbox | xargs echo "@" > /dev/octopos_mailbox; done
 
 Testing the emulator

@@ -15,6 +15,8 @@ static int serial_out_core(void)
 		get_chars_from_serial_out_queue(buf);
 		write_chars_to_serial_out(buf);
 	}
+
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -22,6 +24,8 @@ int main(int argc, char **argv)
 	int ret = init_serial_out();
 	if (ret)
 		return ret;
+
+	send_ext_request_to_queue((uint8_t *) argv[0]);
 
 	serial_out_core();
 

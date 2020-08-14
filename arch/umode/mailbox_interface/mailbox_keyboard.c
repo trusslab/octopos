@@ -12,7 +12,7 @@
 #include <octopos/mailbox.h>
 
 int fd_out, fd_intr;
-sem_t interrupt_keyboard;
+sem_t interrupt_keyboard, interrupt_tpm;
 pthread_t mailbox_thread;
 struct termios orig;
 
@@ -22,11 +22,15 @@ static void *handle_mailbox_interrupts(void *data)
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
-		if (interrupt != Q_KEYBOARD) {
+		if (interrupt == Q_KEYBOARD) {
+			sem_post(&interrupt_keyboard);
+		} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
+			sem_post(&interrupt_tpm);
+		} else if (interrupt == Q_TPM_DATA_IN) {
+		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
 		}
-		sem_post(&interrupt_keyboard);
 	}
 }
 
@@ -65,6 +69,7 @@ int init_keyboard(void)
 	fd_intr = open(FIFO_KEYBOARD_INTR, O_RDONLY);
 
 	sem_init(&interrupt_keyboard, 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupt_tpm, 0, 0);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
@@ -101,4 +106,16 @@ void close_keyboard(void)
 	close(fd_out);
 	remove(FIFO_KEYBOARD_INTR);
 	remove(FIFO_KEYBOARD_OUT);
+}
+
+void send_ext_request_to_queue(uint8_t* buf)
+{
+	uint8_t opcode[2];
+
+	sem_wait(&interrupt_tpm);
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_TPM_DATA_IN;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }

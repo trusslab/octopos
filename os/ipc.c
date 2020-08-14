@@ -78,10 +78,18 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 		mark_queue_unavailable(target_runtime_queue_id);
 		mark_queue_unavailable(runtime_queue_id);
 
+#ifdef ARCH_SEC_HW
+		mailbox_change_queue_access(target_runtime_queue_id, WRITE_ACCESS,
+							runtime_proc_id, (uint16_t) count);
+		mailbox_change_queue_access(runtime_queue_id, WRITE_ACCESS,
+							target_runtime_proc->id, (uint16_t) count);
+#else
 		mailbox_change_queue_access(target_runtime_queue_id, WRITE_ACCESS,
 							runtime_proc_id, (uint8_t) count);
 		mailbox_change_queue_access(runtime_queue_id, WRITE_ACCESS,
 							target_runtime_proc->id, (uint8_t) count);
+#endif
+		
 		target_runtime_proc->pending_secure_ipc_request = 0;
 		*no_response = true;
 	} else {

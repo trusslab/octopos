@@ -43,6 +43,10 @@ int main()
 	int ret = init_os_mailbox();
 	if (ret)
 		return ret;
+	
+	release_tpm_writer(P_SERIAL_OUT);
+	release_tpm_writer(P_STORAGE);
+	release_tpm_writer(P_KEYBOARD);
 
 	initialize_shell();
 	initialize_storage();
