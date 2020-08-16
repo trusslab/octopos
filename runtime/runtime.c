@@ -1360,9 +1360,6 @@ int main()
 {
 #ifdef ARCH_SEC_HW
 
-#if RUNTIME_ID == 2
-//    _SEC_HW_ERROR("ENTERING MAIN");
-
 	unsigned char *dataCopyStart = &__datacopy;
 	unsigned char *dataStart = &__data_start;
 	unsigned char *dataEnd = &__data_end;
@@ -1376,8 +1373,6 @@ int main()
 	}
 
 	i = 0;
-#endif /* RUNTIME_ID == 2 */
-
 #endif /* ARCH_SEC_HW */
 
 	int runtime_id = -1;
