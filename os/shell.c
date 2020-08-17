@@ -236,14 +236,17 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 #ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("NULL runtime_proc or app", __func__);
+		_SEC_HW_ERROR("NULL runtime_proc or app");
 #else
 		printf("%s: Error: NULL runtime_proc or app\n", __func__);
 #endif
 		return;
 	}
 
+_SEC_HW_ERROR("term: %d", runtime_proc_id);
+
 	if (runtime_proc->app == foreground_app) {
+_SEC_HW_ERROR("%d is foreground_app", runtime_proc_id);
 		shell_status = SHELL_STATE_WAITING_FOR_CMD;
 		foreground_app = NULL;
 		output_printf("octopos$> ");
@@ -256,6 +259,7 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 
 	static u32 MsgPtr[2] = {IPI_HEADER, 0U};
 	/* Convert from proc id to runtime number */
+	_SEC_HW_ERROR("Resetting %d", runtime_proc_id);
 	MsgPtr[RESP_AND_MSG_NUM_OFFSET] = runtime_proc_id - 6;
 	pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK,
 			MsgPtr, 2U, XIPIPSU_BUF_TYPE_MSG);

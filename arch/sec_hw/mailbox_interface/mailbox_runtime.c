@@ -86,7 +86,6 @@ _Bool			MBOX_PENDING_STA[NUM_QUEUES + 1] = {0};
 
 _Bool			runtime_inited = FALSE;
 _Bool			runtime_terminated = FALSE;
-_Bool			force_take_ownership_mode = FALSE;
 
 int write_syscall_response(uint8_t *buf);
 int write_to_shell(char *data, int size);
@@ -160,26 +159,17 @@ void mailbox_force_ownership(uint8_t queue_id, uint8_t owner)
 	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
 	u32 bytes_read;
-
-	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
-	u16 quota_left = octopos_mailbox_get_quota_limit(queue_ptr);
 	uint8_t *message_buffer = calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 
-	force_take_ownership_mode = TRUE;
-	for (u16 i = 0; i < quota_left; ++i)
+	while(!mailbox_attest_queue_owner(q_runtime, P_OS)){
+		usleep(10);
 		XMbox_Read(Mbox_regs[queue_id],
 				(u32*)(message_buffer),
 				MAILBOX_QUEUE_MSG_SIZE,
 				&bytes_read);
-
-	force_take_ownership_mode = FALSE;
-	free(message_buffer);
-
-	if (!mailbox_attest_queue_owner(queue_id, owner)) {
-		_SEC_HW_ERROR("fail to force an ownership change");
-		_SEC_HW_ERROR("actual owner: %d", mailbox_get_queue_owner(queue_id));
-		_SEC_HW_ASSERT_VOID(FALSE)
 	}
+
+	free(message_buffer);
 }
 
 
@@ -350,7 +340,6 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	if (runtime_terminated) {
 		runtime_terminated = FALSE;
 		runtime_inited = FALSE;
-		force_take_ownership_mode = FALSE;
 		/* r14: address to return from interrupt */
 		__asm__ __volatile__ ("or r14,r0,%0\n" :: "d" (&context_switch_begin));
 		return;
@@ -471,9 +460,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
 		}
 	} else if (mask & XMB_IX_ERR) {
-		if (!force_take_ownership_mode)
-			_SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
-			_SEC_HW_ERROR("status register: %ld", XMbox_GetStatus(callback_ref));
+		_SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
+		_SEC_HW_ERROR("status register: %ld", XMbox_GetStatus(callback_ref));
 	} else {
 		_SEC_HW_ERROR("interrupt type unknown, mask %ld, from %p", mask, callback_ref);
 	}

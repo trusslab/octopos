@@ -78,7 +78,7 @@ static void IpiExampleHandler(const XPfw_Module_t *ModPtr, u32 IpiNum, u32 SrcMa
 
 		switch(Payload[RESP_AND_MSG_NUM_OFFSET]) {
 		case OCTOPOS_PMU_RUNTIME_1:
-			_SEC_HW_ERROR("PMU: Reset request on runtime 1");
+			_SEC_HW_DEBUG("PMU: Reset request on runtime 1");
 			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x20000000U, 0x20000000U);
 			usleep(1);
 			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x20000000U, 0x00000000U);
@@ -87,7 +87,7 @@ static void IpiExampleHandler(const XPfw_Module_t *ModPtr, u32 IpiNum, u32 SrcMa
 			_SEC_HW_DEBUG("PMU: Reset done");
 			break;
 		case OCTOPOS_PMU_RUNTIME_2:
-			_SEC_HW_ERROR("PMU: Reset request on runtime 2");
+			_SEC_HW_DEBUG("PMU: Reset request on runtime 2");
 			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x40000000U);
 			usleep(1);
 			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x40000000U, 0x00000000U);
