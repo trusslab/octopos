@@ -121,7 +121,9 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 		}
 	}
 
+	_SEC_HW_ERROR("[3] candidate %p", candidate);
 	if (candidate) {
+	_SEC_HW_ERROR("candidate id %d", candidate->id);
 		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 		buf[0] = RUNTIME_QUEUE_CONTEXT_SWITCH_TAG;
 		check_avail_and_send_msg_to_runtime(candidate->id, buf);

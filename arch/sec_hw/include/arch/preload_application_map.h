@@ -11,6 +11,7 @@ void secure_interact(struct runtime_api *api);
 void ipc_receiver(struct runtime_api *api);
 void ipc_sender(struct runtime_api *api);
 void secure_login(struct runtime_api *api);
+void simple_loop(struct runtime_api *api);
 
 void set_app(char* app_name, void* app_addr)
 {
@@ -38,6 +39,7 @@ void preloaded_app_init()
 	set_app("secure_interact", (void*) secure_interact);
 	set_app("ipc_receiver", (void*) ipc_receiver);
 	set_app("ipc_sender", (void*) ipc_sender);
+	set_app("simple_loop", (void*) simple_loop);
 }
 
 void* preloaded_app(char* app_name)

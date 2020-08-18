@@ -556,7 +556,11 @@ static void read_char_from_secure_keyboard(char *buf)
 	*buf = (char) input_buf[0];
 }
 
+#ifdef ARCH_SEC_HW
+int inform_os_of_termination(void)
+#else
 static int inform_os_of_termination(void)
+#endif
 {
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_TERMINATION)
 	issue_syscall(buf);

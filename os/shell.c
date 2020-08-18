@@ -171,6 +171,7 @@ static void process_input_line(char *line)
 	/* see if it's a background command (cmd &) */
 	next = strchr(cmd, '&');
 	if (next != NULL) {
+		_SEC_HW_ERROR("Background app");
 		bg = 1;
 		/* 'next' points to '&' */
 		*next = '\0';
