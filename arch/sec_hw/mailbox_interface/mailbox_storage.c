@@ -906,10 +906,10 @@ int init_storage(void)
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
 	Mbox_regs[Q_STORAGE_DATA_IN] = &Mbox_storage_data_in;
 
-	Mbox_ctrl_regs[Q_STORAGE_IN_2] = XPAR_Q_STORAGE_IN_2_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_OUT_2] = XPAR_Q_STORAGE_OUT_2_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = XPAR_Q_STORAGE_DATA_OUT_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = XPAR_Q_STORAGE_DATA_IN_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_IN_2] = OCTOPOS_STORAGE_Q_STORAGE_IN_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_OUT_2] = OCTOPOS_STORAGE_Q_STORAGE_OUT_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_STORAGE_Q_STORAGE_DATA_OUT_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_STORAGE_Q_STORAGE_DATA_IN_BASEADDR;
 
 	/* Initialize XIntc */
 	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);

@@ -645,7 +645,7 @@ int init_os_mailbox(void)
 		);
 	if (Status != XST_SUCCESS)
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_Q_STORAGE_CMD_IN_IF_0_BASEADDR);
+		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_Q_STORAGE_CMD_IN_IF_0_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
@@ -657,7 +657,7 @@ int init_os_mailbox(void)
 		);
 	if (Status != XST_SUCCESS)
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_Q_STORAGE_CMD_OUT_IF_0_BASEADDR);
+		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_Q_STORAGE_CMD_OUT_IF_0_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
@@ -936,14 +936,14 @@ int init_os_mailbox(void)
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
 	Mbox_regs[Q_STORAGE_DATA_IN] = &Mbox_storage_data_in;
 
-	Mbox_ctrl_regs[Q_KEYBOARD] = XPAR_OCTOPOS_MAILBOX_1WRI_0_BASEADDR;
-	Mbox_ctrl_regs[Q_SERIAL_OUT] = XPAR_OCTOPOS_MAILBOX_3WRI_0_BASEADDR;
-	Mbox_ctrl_regs[Q_RUNTIME1] = XPAR_OCTOPOS_MAILBOX_3WRI_2_BASEADDR;
-	Mbox_ctrl_regs[Q_RUNTIME2] = XPAR_OCTOPOS_MAILBOX_3WRI_1_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_IN_2] = XPAR_Q_STORAGE_IN_2_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_OUT_2] = XPAR_Q_STORAGE_OUT_2_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = XPAR_Q_STORAGE_DATA_OUT_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = XPAR_Q_STORAGE_DATA_IN_BASEADDR;
+	Mbox_ctrl_regs[Q_KEYBOARD] = OCTOPOS_MAILBOX_OS_1WRI_0_BASEADDR;
+	Mbox_ctrl_regs[Q_SERIAL_OUT] = OCTOPOS_MAILBOX_OS_3WRI_0_BASEADDR;
+	Mbox_ctrl_regs[Q_RUNTIME1] = OCTOPOS_MAILBOX_OS_3WRI_2_BASEADDR;
+	Mbox_ctrl_regs[Q_RUNTIME2] = OCTOPOS_MAILBOX_OS_3WRI_1_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_IN_2] = OCTOPOS_OS_Q_STORAGE_IN_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_OUT_2] = OCTOPOS_OS_Q_STORAGE_OUT_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_OS_Q_STORAGE_DATA_OUT_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_OS_Q_STORAGE_DATA_IN_BASEADDR;
 
 	/* Initialize semaphores */
 	sem_init(&interrupts[Q_OS1], 0, 0);
