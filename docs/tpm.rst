@@ -43,7 +43,7 @@ $ sudo apt -y install autoconf-archive libcmocka0 libcmocka-dev procps \
 
 Then use the following command to build and install the library:
 
-$ make lib
+$ make install
 
 
 Setting up the TPM simulator
@@ -51,9 +51,7 @@ Setting up the TPM simulator
 We recommend use the TPM simulator to prevent potential unrecoverable damage to real chips.
 We include the IBM's Software TPM 2.0 in our repo which locates at external/ibmtpm1637/. 
 
-To build the simulator, you should only do:
-
-$ make emu
+When installing the library, we build the simulator as well.
 
 To create a custom TPM environment, you can do:
 

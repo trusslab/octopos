@@ -1,16 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <tss2/tss2_esys.h>
-#include <tss2/tss2_rc.h>
-
-void read_PCR(int slot, TPM2_ALG_ID tpmAlg);
-void print_PCR(TPML_DIGEST *pcrValues);
-void extend_PCR(int slot, char *data, TPM2_ALG_ID tpmAlg);
+#include <tpm/tpm.h>
 
 
-void read_PCR(int slot, TPM2_ALG_ID tpmAlg)
+void pcr_read_single(uint8_t slot)
 {
 	ESYS_CONTEXT *context = NULL;
 	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
@@ -27,7 +21,7 @@ void read_PCR(int slot, TPM2_ALG_ID tpmAlg)
     TPML_PCR_SELECTION pcrSelectionIn = {
         .count = 1,
         .pcrSelections = {
-            { .hash = tpmAlg,
+            { .hash = TPM2_ALG_SHA256,
               .sizeofSelect = 3,
               .pcrSelect = { }
             }
@@ -50,15 +44,15 @@ void read_PCR(int slot, TPM2_ALG_ID tpmAlg)
 		exit(1);
 	}
 
-	print_PCR(pcrValues);
+	pcr_print(slot, pcrValues);
 
-    Esys_Free(pcrSelectionOut);
+	Esys_Free(pcrSelectionOut);
 	Esys_Free(pcrValues);
 
 	Esys_Finalize(&context);
 }
 
-void print_PCR(TPML_DIGEST *pcrValues)
+void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
 {
 	for(uint32_t i = 0; i < pcrValues->count; i++)
 	{
@@ -70,63 +64,51 @@ void print_PCR(TPML_DIGEST *pcrValues)
     }
 }
 
-void extend_PCR(int slot, char *data, TPM2_ALG_ID tpmAlg)
+void pcr_extend_data(uint8_t slot, char *data)
 {
 	ESYS_CONTEXT *context = NULL;
 	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
 	if (rc != TSS2_RC_SUCCESS)
 	{
 		fprintf(stderr, "Esys_Initialize: %s\n", Tss2_RC_Decode(rc));
-		exit(1);
+		exit(TPM_INIT_ERR);
 	}
-
-	ESYS_TR pcrHandle_handle = ESYS_TR_PCR0 + slot;
 
 	TPML_DIGEST_VALUES digests = {
         .count = 1,
         .digests = {
             {
-				.hashAlg = tpmAlg,
+				.hashAlg = TPM2_ALG_SHA256,
 				.digest = {
-					.sha1 = { }
+					.sha256 = { }
                 }
             },
         }
 	};
-	memcpy((digests.digests->digest.sha1), data, strlen(data));
-	
-	rc = Esys_PCR_Extend(context, pcrHandle_handle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, &digests);
+	memcpy((digests.digests->digest.sha256), data, strlen(data));
+
+	rc = Esys_PCR_Extend(context, TPM_PCR_BANK(slot), ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, &digests);
 	if (rc != TSS2_RC_SUCCESS)
 	{
 		fprintf(stderr, "Esys_PCR_Extend: %s\n", Tss2_RC_Decode(rc));
-		exit(1);
+		exit(TPM_EXTD_ERR);
 	}
 }
 
-/**
-* PCR No.    Allocation
-* ------------------------------------------------------
-* 0          BIOS
-* 1          BIOS configuration
-* 2          Option ROMs
-* 3          Option ROM configuration
-* 4          MBR (master boot record)
-* 5          MBR configuration
-* 6          State transitions and wake events
-* 7          Platform manufacturer specific measurements
-* 8–15       Static operating system
-* 16         Debug
-* 17-20      Locality 4-1
-* 21-22      Dynamic OS controlled
-* 23         Application specific
-*/
-int main(int argc, char *argv[])
+void pcr_extend_file(uint8_t slot, char *path)
 {
-	TPM2_ALG_ID algs[] = { TPM2_ALG_SHA1, TPM2_ALG_HMAC, TPM2_ALG_SHA256, TPM2_ALG_SHA384, TPM2_ALG_SHA512 };
-	
-	read_PCR(16, algs[0]);
-	extend_PCR(16, "HelloWorld", algs[0]);
-	read_PCR(16, algs[0]);
+	FILE *bin = fopen(path, "rb");
+	if (bin)
+	{
+		fseek(bin, 0L, SEEK_END);
+		long bin_size = ftell(bin);
+		fseek(bin, 0L, SEEK_SET);
+		char *buffer = (char *)malloc(bin_size * sizeof(char));
+		fread(buffer, 1, bin_size, bin);
+		fclose(bin);
 
-	return 0;
+		pcr_extend_data(slot, buffer);
+
+		free(buffer);
+	}
 }

@@ -1,22 +1,17 @@
-DIRS := applications arch keyboard os runtime serial_out storage network
-DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network util/network
+DIRS := applications arch keyboard os runtime serial_out storage network tpm
+DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network util/network tpm
 
-EXTERNAL_DIR = ./external
-
-all: umode
-
-.PHONY: lib emu umode clean
-
-lib:
-	$(MAKE) lib -C $(EXTERNAL_DIR)
-
-emu:
-	$(MAKE) emu -C $(EXTERNAL_DIR)
+EXTERNAL_DIR := ./external
 
 umode:
 	for dir in $(DIRS); do \
 		$(MAKE) umode -C $$dir; \
 	done
+
+.PHONY: umode clean install
+
+install: 
+	$(MAKE) install -C $(EXTERNAL_DIR)
 
 clean:
 	for dir in $(DIRS_CLEAN); do \

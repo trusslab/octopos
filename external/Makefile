@@ -1,4 +1,4 @@
-lib: tss abrmd
+install: tss abrmd emu
 
 tss:
 	cd tpm2-tss && ./bootstrap
@@ -25,8 +25,8 @@ clean:
 	make clean -C ./tpm2-tss
 	make clean -C ./tpm2-abrmd
 	make clean -C ./ibmtpm1637/src
-	rm ./ibmtpm1637/tpm_server
 
 uninstall:
 	make uninstall -C ./tpm2-abrmd
 	make uninstall -C ./tpm2-tss
+	rm ./ibmtpm1637/tpm_server
