@@ -46,6 +46,12 @@
 		"./storage"
 	   ]
 	},{
+		"shell_command": [
+			"cd tpm",
+			"sleep 1",
+			"./tpm_monitor"
+		]
+	},{
 	   "shell_command":[
 		"cd network",
 		"sleep 1",
