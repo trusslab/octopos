@@ -36,6 +36,7 @@ uint64_t timer_ticks = 0;
 
 void update_timer_ticks(void)
 {
+	_SEC_HW_ERROR("[0] %lld", timer_ticks);
 	timer_ticks++;
 }
 
@@ -112,8 +113,10 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	struct runtime_proc *candidate = NULL;
 	/* Now, let' see if we can context switch any of them */
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
+		_SEC_HW_ERROR("[1] i = %d (%d)", i, runtime_procs[i].state);
 		if (runtime_procs[i].state == RUNTIME_PROC_RUNNING_APP) {
 			uint64_t elapsed = current_ticks - runtime_procs[i].app->start_time;
+			_SEC_HW_ERROR("[2] elapsed %lld, largest %lld", elapsed, largest_elapsed);
 			if (elapsed >= 10 && elapsed > largest_elapsed) { /* FIXME: 10 is arbitrary for now */
 				candidate = &runtime_procs[i];
 				largest_elapsed = elapsed;

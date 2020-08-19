@@ -556,11 +556,7 @@ static void read_char_from_secure_keyboard(char *buf)
 	*buf = (char) input_buf[0];
 }
 
-#ifdef ARCH_SEC_HW
-int inform_os_of_termination(void)
-#else
 static int inform_os_of_termination(void)
-#endif
 {
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_TERMINATION)
 	issue_syscall(buf);
@@ -1308,7 +1304,6 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
-#ifdef ARCH_UMODE
 void *store_context(void *data)
 {
 	if (!secure_storage_key_set || !context_set) {
@@ -1332,7 +1327,6 @@ void *store_context(void *data)
 
 	return NULL;
 }
-#endif
 
 #ifdef ARCH_UMODE
 int main(int argc, char **argv)

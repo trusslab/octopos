@@ -26,9 +26,7 @@
 #include <arch/defines.h>
 
 #ifdef 	ARCH_SEC_HW
-#include "xscugic.h"
-#include "xttcps.h"
-#include "xipipsu.h"
+#include <arch/reset_api.h>
 #endif
 
 /* The array below will hold the arguments: args[0] is the command. */
@@ -43,13 +41,13 @@ int command_pipe[2];
 #define SHELL_STATE_RUNNING_APP			1
 #define SHELL_STATE_APP_WAITING_FOR_INPUT	2
 
-#ifdef 	ARCH_SEC_HW_OS
-extern 	XIpiPsu 					ipi_pmu_inst;
+// #ifdef 	ARCH_SEC_HW_OS
+// extern 	XIpiPsu 					ipi_pmu_inst;
 
-#define RESP_AND_MSG_NUM_OFFSET		0x1U
-#define IPI_HEADER_OFFSET			0x0U
-#define IPI_HEADER					0x1E0000 /* 1E - Target Module ID */
-#endif
+// #define RESP_AND_MSG_NUM_OFFSET		0x1U
+// #define IPI_HEADER_OFFSET			0x0U
+// #define IPI_HEADER					0x1E0000 /* 1E - Target Module ID */
+// #endif
 
 struct app *foreground_app = NULL;
 
@@ -244,46 +242,17 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		return;
 	}
 
-_SEC_HW_ERROR("term: %d", runtime_proc_id);
 
 	if (runtime_proc->app == foreground_app) {
-_SEC_HW_ERROR("%d is foreground_app", runtime_proc_id);
 		shell_status = SHELL_STATE_WAITING_FOR_CMD;
 		foreground_app = NULL;
 		output_printf("octopos$> ");
 	}
-	sched_clean_up_app(runtime_proc_id);
-
 #ifdef ARCH_SEC_HW
-	/* Send IPI to PMU, PMU will reset the runtime */
-	u32 pmu_ipi_status = XST_FAILURE;
-
-	static u32 MsgPtr[2] = {IPI_HEADER, 0U};
-	/* Convert from proc id to runtime number */
-	_SEC_HW_ERROR("Resetting %d", runtime_proc_id);
-	MsgPtr[RESP_AND_MSG_NUM_OFFSET] = runtime_proc_id - 6;
-	pmu_ipi_status = XIpiPsu_WriteMessage(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK,
-			MsgPtr, 2U, XIPIPSU_BUF_TYPE_MSG);
-
-	if(pmu_ipi_status != (u32)XST_SUCCESS) {
-		_SEC_HW_ERROR("RPU: IPI Write message failed");
-		return;
-	}
-
-	pmu_ipi_status = XIpiPsu_TriggerIpi(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH0_MASK);
-
-	if(pmu_ipi_status != (u32)XST_SUCCESS) {
-		_SEC_HW_ERROR("RPU: IPI Trigger failed");
-		return;
-	}
-
-	pmu_ipi_status = XIpiPsu_PollForAck(&ipi_pmu_inst, XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK, (~0));
-
-	if(pmu_ipi_status != (u32)XST_SUCCESS) {
-		_SEC_HW_ERROR("RPU: IPI Poll for ack failed");
-		return;
-	}
+	request_pmu_to_reset(runtime_proc_id);
 #endif
+
+	sched_clean_up_app(runtime_proc_id);
 }
 
 void inform_shell_of_pause(uint8_t runtime_proc_id)
@@ -299,6 +268,9 @@ void inform_shell_of_pause(uint8_t runtime_proc_id)
 		foreground_app = NULL;
 		output_printf("octopos$> ");
 	}
+#ifdef ARCH_SEC_HW
+	request_pmu_to_reset(runtime_proc_id);
+#endif
 	sched_pause_app(runtime_proc_id);
 }
 

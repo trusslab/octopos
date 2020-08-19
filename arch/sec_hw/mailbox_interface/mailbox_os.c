@@ -528,6 +528,12 @@ static void handle_mailbox_interrupts(void* callback_ref)
 //          Xil_In32((mbox_inst->Config.BaseAddress) + (0x28)));
 }
 
+static void handle_fixed_timer_interrupts(void* ignored)
+{
+	update_timer_ticks();
+	sched_next_app();
+}
+
 int init_os_mailbox(void) 
 {
 	int				Status;
@@ -780,6 +786,12 @@ int init_os_mailbox(void)
 	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
 	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
+	irqNo = XPAR_FABRIC_FIT_TIMER_2_INTERRUPT_INTR;
+	XScuGic_Connect(&irq_controller, irqNo, handle_fixed_timer_interrupts, 0);
+	XScuGic_Enable(&irq_controller, irqNo);
+	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
+
 	XScuGic_Connect(&irq_controller,
 			XPAR_PSU_IPI_1_INT_ID,
 			(Xil_ExceptionHandler)Rpu_IpiHandler,
@@ -915,6 +927,18 @@ int init_os_mailbox(void)
 	}
 
 	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL0_INTR);
+
+	// Status = XIntc_Connect(&intc, 
+	// 	XPAR_XI_INTC_STORAGE_FIT_TIMER_2_INTERRUPT_INTR,
+	// 	(XInterruptHandler)handle_fixed_timer_interrupts, 
+	// 	0);
+	// if (Status != XST_SUCCESS) {
+	// 	_SEC_HW_ERROR("XIntc_Connect %d failed", 
+	// 		XPAR_XI_INTC_STORAGE_FIT_TIMER_2_INTERRUPT_INTR);
+	// 	return XST_FAILURE;
+	// }
+
+	// XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_FIT_TIMER_2_INTERRUPT_INTR);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {

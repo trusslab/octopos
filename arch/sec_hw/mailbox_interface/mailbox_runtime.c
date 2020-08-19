@@ -368,8 +368,8 @@ static void handle_fixed_timer_interrupts(void* ignored)
 		memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
 		sem_post(&load_app_sem);
 	} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
-		_SEC_HW_ERROR("RUNTIME_QUEUE_CONTEXT_SWITCH_TAG");
-		inform_os_of_termination();
+		_SEC_HW_DEBUG("RUNTIME_QUEUE_CONTEXT_SWITCH_TAG");
+		store_context(NULL);
 		close_runtime();
 	}
 	free(buf);
