@@ -18,6 +18,7 @@
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <tpm/tpm.h>
 
 /* FIXME: also repeated in runtime.c */
 typedef int bool;
@@ -152,6 +153,8 @@ void load_application_arch(char *msg, struct runtime_api *api)
 	strcat(path, msg);
 	strcat(path, ".so");
 	printf("opening %s\n", path);
+
+	pcr_extend_file(TPM_PCR_DEFAULT_SLOT, path);
 
 	app = dlopen(path, RTLD_LAZY);
 	if (!app) {
