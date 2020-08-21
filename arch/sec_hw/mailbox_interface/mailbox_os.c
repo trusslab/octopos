@@ -279,8 +279,9 @@ int check_avail_and_send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 	}
 
 	int ret = is_queue_available(runtime_queue_id);
-	if (!ret)
+	if (!ret) {
 		return ERR_AVAILABLE;
+	}
 
 	send_msg_to_runtime_queue(runtime_queue_id, buf);
 
@@ -406,6 +407,7 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 static void handle_change_queue_interrupts(void* callback_ref)
 {
 	uint8_t queue_id = (int) callback_ref;
+	_SEC_HW_DEBUG("from %d", queue_id);
 
 	sem_post(&availables[queue_id]);
 
@@ -465,15 +467,21 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			_SEC_HW_DEBUG("Q_RUNTIME2 = %d", interrupts[Q_RUNTIME2].count);
 		} else if (callback_ref == &Mbox_storage_in_2) {
 			/* Storage in */
+			_SEC_HW_DEBUG("from Mbox_storage_in_2");
+
 			sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_STORAGE_IN_2]);
 			sem_post(&interrupts[Q_STORAGE_IN_2]);
 		} else if (callback_ref == &Mbox_storage_data_in) {
 			/* Storage data in */
+			_SEC_HW_DEBUG("from Mbox_storage_data_in");
+
 			sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 			sem_post(&availables[Q_STORAGE_DATA_IN]);
 			sem_post(&interrupts[Q_STORAGE_DATA_IN]);
 		} else if (callback_ref == &Mbox_storage_cmd_in) {
+			_SEC_HW_DEBUG("from Mbox_storage_cmd_in");
+			
 			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
 		}
 		
@@ -481,32 +489,44 @@ static void handle_mailbox_interrupts(void* callback_ref)
 		_SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
 		if (callback_ref == &Mbox_keyboard) {
 			/* Keyboard */
+			_SEC_HW_DEBUG("from Mbox_keyboard");
+
 			sem_init(&interrupts[Q_KEYBOARD], 0, 0);
 			sem_post(&availables[Q_KEYBOARD]);
 			sem_post(&interrupts[Q_KEYBOARD]);
 			sem_post(&interrupt_input);
 		} else if (callback_ref == &Mbox_OS1) {
 			/* OS1 */
+			_SEC_HW_DEBUG("from Mbox_OS1");
+
 			sem_post(&availables[Q_OS1]);
 			sem_post(&interrupts[Q_OS1]);
 			sem_post(&interrupt_input);
 		} else if (callback_ref == &Mbox_OS2) {
 			/* OS2 */
+			_SEC_HW_DEBUG("from Mbox_OS2");
+
 			sem_post(&availables[Q_OS2]);
 			sem_post(&interrupts[Q_OS2]);
 			sem_post(&interrupt_input);
 		} else if (callback_ref == &Mbox_storage_out_2) {
 			/* Storage out */
+			_SEC_HW_DEBUG("from Mbox_storage_out_2");
+
 			sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
 			sem_post(&availables[Q_STORAGE_OUT_2]);
 			sem_post(&interrupts[Q_STORAGE_OUT_2]);
 		} else if (callback_ref == &Mbox_storage_data_out) {
 			/* Storage data out */
+			_SEC_HW_DEBUG("from Mbox_storage_data_out");
+
 			sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 			sem_post(&availables[Q_STORAGE_DATA_OUT]);
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
 		} else if (callback_ref == &Mbox_storage_cmd_out) {
 			/* Storage cmd out */
+			_SEC_HW_DEBUG("from Mbox_storage_cmd_out");
+
 			sem_post(&interrupts[Q_STORAGE_CMD_OUT]);
 		}
 	} else if (mask & XMB_IX_ERR) {
@@ -726,13 +746,13 @@ int init_os_mailbox(void)
 			&irq_controller);
 	Xil_ExceptionEnable();
 
-	irqNo = XPAR_FABRIC_MAILBOX_0_INTERRUPT_1_INTR;
+	irqNo = XPAR_FABRIC_MAILBOX_1_INTERRUPT_1_INTR;
 	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_output);
 	XScuGic_Enable(&irq_controller, irqNo);
 	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
 	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
-	irqNo = XPAR_FABRIC_MAILBOX_1_INTERRUPT_1_INTR;
+	irqNo = XPAR_FABRIC_MAILBOX_0_INTERRUPT_1_INTR;
 	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_keyboard);
 	XScuGic_Enable(&irq_controller, irqNo);
 	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
@@ -945,6 +965,12 @@ int init_os_mailbox(void)
 		_SEC_HW_ERROR("XIntc_Start failed");
 		return XST_FAILURE;
 	}
+
+	irqNo = 138U;
+	XScuGic_Connect(&irq_controller, irqNo, (Xil_InterruptHandler) XIntc_InterruptHandler, (void *)&intc);
+	XScuGic_Enable(&irq_controller, irqNo);
+	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
+	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x1);
 
 	/* Initialize pointers for bookkeeping */
 	Mbox_regs[Q_OS1] = &Mbox_OS1;

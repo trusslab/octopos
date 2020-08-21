@@ -111,7 +111,7 @@ _Bool octopos_mailbox_attest_owner(UINTPTR base, u8 owner)
 {
 	Xil_AssertNonvoid(base != 0);
 
-	_SEC_HW_ERROR("%08x: %08x", base, octopos_mailbox_get_status_reg(base));
+	_SEC_HW_DEBUG("%08x: %08x", base, octopos_mailbox_get_status_reg(base));
 	return owner == (u8) (octopos_mailbox_get_status_reg(base) >> 24 & 0xff);
 }
 

@@ -75,6 +75,8 @@ sem_t srq_sem;
 
 #ifdef ARCH_SEC_HW
 extern sem_t interrupt_change;
+/* This is to deal with the lack of nested interrupt support */
+_Bool async_syscall_mode = FALSE;
 #endif
 
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
@@ -320,6 +322,13 @@ static void issue_syscall(uint8_t *buf)
 {
 	runtime_send_msg_on_queue(buf, q_os);
 
+#ifdef ARCH_SEC_HW
+if (async_syscall_mode) {
+	usleep(10);
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+	return;
+}
+#endif
 	/* wait for response */
 	wait_on_queue(q_runtime);
 	read_syscall_response(buf);
@@ -775,6 +784,9 @@ static int yield_secure_storage_access(void)
 
 	has_access_to_secure_storage = false;
 
+#ifdef ARCH_SEC_HW
+if (!async_syscall_mode)
+#endif
 	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
 #ifdef ARCH_SEC_HW
@@ -795,14 +807,17 @@ static int request_secure_storage_access(int count)
 		return ERR_INVALID;
 	}
 
+// _SEC_HW_ERROR("req [0]");
 	reset_queue_sync(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 	reset_queue_sync(Q_STORAGE_OUT_2, 0);
+// _SEC_HW_ERROR("req [1]");
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
+// _SEC_HW_ERROR("req [2]");
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
@@ -811,6 +826,7 @@ static int request_secure_storage_access(int count)
 		printf("%s: Error: failed to attest secure storage write access\n", __func__);
 		return ERR_FAULT;
 	}
+// _SEC_HW_ERROR("req [3]");
 
 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
 					READ_ACCESS, count);
@@ -819,14 +835,17 @@ static int request_secure_storage_access(int count)
 		return ERR_FAULT;
 	}
 	has_access_to_secure_storage = true;
+// _SEC_HW_ERROR("req [4]");
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
 	int unlock_ret = unlock_secure_storage(secure_storage_key);
+// _SEC_HW_ERROR("req [5] %d", unlock_ret);
 
 	if (unlock_ret == ERR_EXIST) {
 		uint8_t temp_key[STORAGE_KEY_SIZE];
 		int create_ret = request_secure_storage_creation(temp_key);
+// _SEC_HW_ERROR("req [6] %d", create_ret);
 		if (create_ret) {
 			yield_secure_storage_access();
 			return create_ret;
@@ -834,6 +853,7 @@ static int request_secure_storage_access(int count)
 
 		int unlock_ret_2 = unlock_secure_storage(temp_key);
 		if (unlock_ret_2) {
+// _SEC_HW_ERROR("req [7] %d", unlock_ret_2);
 			yield_secure_storage_access();
 			return create_ret;
 		}
@@ -841,6 +861,7 @@ static int request_secure_storage_access(int count)
 		yield_secure_storage_access();
 		return unlock_ret;
 	}
+// _SEC_HW_ERROR("req [8]");
 
 	/* if new storage, set the key */
 	int set_key_ret = set_secure_storage_key(secure_storage_key);
@@ -848,6 +869,7 @@ static int request_secure_storage_access(int count)
 		yield_secure_storage_access();
 		return set_key_ret;
 	}
+// _SEC_HW_ERROR("req [9]");
 
 	secure_storage_available = true;
 	return 0;
@@ -869,9 +891,13 @@ static int delete_and_yield_secure_storage(void)
 
 	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
-
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
+	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
+#else
 	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+#endif
 
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_DELETE_SECURE_STORAGE)
 	issue_syscall(buf);
@@ -915,7 +941,6 @@ static int set_up_context(void *addr, uint32_t size)
 	context_addr = addr;
 	context_size = size;
 	context_set = true;
-
 	/* Now, let's retrieve the context. */
 	/* FIXME: we need to store the context in a way to allow us to know if there is none. */
 	int ret = request_secure_storage_access(200);
@@ -1311,6 +1336,9 @@ void *store_context(void *data)
 		return NULL;
 	}
 
+#ifdef ARCH_SEC_HW
+	async_syscall_mode = true;
+#endif
 	int ret = request_secure_storage_access(200);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
@@ -1322,6 +1350,9 @@ void *store_context(void *data)
 		printf("Error: couldn't write the context to secure storage.\n");
 
 	yield_secure_storage_access();
+#ifdef ARCH_SEC_HW
+	async_syscall_mode = false;
+#endif
 	still_running = false;
 	inform_os_of_pause();
 

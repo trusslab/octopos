@@ -36,7 +36,6 @@ uint64_t timer_ticks = 0;
 
 void update_timer_ticks(void)
 {
-	_SEC_HW_ERROR("[0] %lld", timer_ticks);
 	timer_ticks++;
 }
 
@@ -113,10 +112,8 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	struct runtime_proc *candidate = NULL;
 	/* Now, let' see if we can context switch any of them */
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
-		_SEC_HW_ERROR("[1] i = %d (%d)", i, runtime_procs[i].state);
 		if (runtime_procs[i].state == RUNTIME_PROC_RUNNING_APP) {
 			uint64_t elapsed = current_ticks - runtime_procs[i].app->start_time;
-			_SEC_HW_ERROR("[2] elapsed %lld, largest %lld", elapsed, largest_elapsed);
 			if (elapsed >= 10 && elapsed > largest_elapsed) { /* FIXME: 10 is arbitrary for now */
 				candidate = &runtime_procs[i];
 				largest_elapsed = elapsed;
@@ -124,9 +121,8 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 		}
 	}
 
-	_SEC_HW_ERROR("[3] candidate %p", candidate);
 	if (candidate) {
-	_SEC_HW_ERROR("candidate id %d", candidate->id);
+_SEC_HW_ERROR("candidate: %d", candidate->id);
 		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 		buf[0] = RUNTIME_QUEUE_CONTEXT_SWITCH_TAG;
 		check_avail_and_send_msg_to_runtime(candidate->id, buf);
@@ -255,7 +251,6 @@ static int remove_app_from_list(struct app *app, struct app_list_node **head, st
 
 		prev_node = node;
 	}
-
 	return ERR_EXIST;
 }
 
@@ -282,12 +277,14 @@ struct app *get_app(int app_id)
 
 static int add_app_to_ready_queue(struct app *app)
 {
-	return add_app_to_list(app, &ready_queue_head, &ready_queue_tail);
+	int result = add_app_to_list(app, &ready_queue_head, &ready_queue_tail);
+	return result;
 }
 
 static int remove_app_from_ready_queue(struct app *app)
 {
-	return remove_app_from_list(app, &ready_queue_head, &ready_queue_tail);
+	int result = remove_app_from_list(app, &ready_queue_head, &ready_queue_tail);
+	return result;
 }
 
 static struct app *get_app_from_ready_queue(void)
@@ -426,6 +423,7 @@ void sched_next_app(void)
 		return;
 	}
 
+_SEC_HW_ERROR("run %s on %d", app->name, runtime_proc->id);
 	run_app_on_runtime_proc(app, runtime_proc);
 }
 

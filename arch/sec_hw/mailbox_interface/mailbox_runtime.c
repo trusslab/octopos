@@ -131,6 +131,50 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count
 		MAX_OCTOPOS_MAILBOX_QUOTE - OCTOPOS_MAILBOX_MAX_TIME_DRIFT
 		);
 
+	switch (queue_id) {
+		case Q_KEYBOARD:
+			XMbox_SetReceiveThreshold(&Mbox_keyboard, MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetInterruptEnable(&Mbox_keyboard, XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		case Q_SERIAL_OUT:
+			XMbox_SetSendThreshold(&Mbox_out, 0);
+			XMbox_SetInterruptEnable(&Mbox_out, XMB_IX_STA | XMB_IX_ERR);
+			break;
+
+		case Q_RUNTIME1:
+			XMbox_SetSendThreshold(&Mbox_Runtime1, 0);
+			XMbox_SetReceiveThreshold(&Mbox_Runtime1, MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetInterruptEnable(&Mbox_Runtime1, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		case Q_RUNTIME2:
+			XMbox_SetSendThreshold(&Mbox_Runtime2, 0);
+			XMbox_SetReceiveThreshold(&Mbox_Runtime2, MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetInterruptEnable(&Mbox_Runtime2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_DATA_OUT:
+			XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+			XMbox_SetInterruptEnable(&Mbox_storage_data_out, XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_DATA_IN:
+			XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
+			XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_STA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_OUT_2:
+			XMbox_SetReceiveThreshold(&Mbox_storage_out_2, MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetInterruptEnable(&Mbox_storage_out_2, XMB_IX_RTA | XMB_IX_ERR);
+			break;
+
+		case Q_STORAGE_IN_2:
+			XMbox_SetSendThreshold(&Mbox_storage_in_2, 0);
+			XMbox_SetInterruptEnable(&Mbox_storage_in_2, XMB_IX_STA | XMB_IX_ERR);
+			break;
+	}
+
 	return result;
 }
 
@@ -379,7 +423,7 @@ static void handle_octopos_mailbox_interrupts(void* callback_ref)
 {
 	uint8_t queue_id = (int) callback_ref;
 	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[queue_id]);
-	_SEC_HW_DEBUG("change intr received from Queue %d", queue_id);
+	_SEC_HW_DEBUG("change interrupt from %d", queue_id);
 	if (queue_id == change_queue) {
 		sem_post(&interrupt_change);
 	}
