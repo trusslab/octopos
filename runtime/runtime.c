@@ -23,6 +23,8 @@
 
 #ifdef ARCH_UMODE
 #include <sys/stat.h>
+#include <runtime/runtime.h>
+#include <runtime/storage_client.h>
 #include <network/sock.h>
 #include <network/socket.h>
 #include <network/netif.h>
@@ -49,17 +51,12 @@
 #include "raw.h"
 #endif
 
-/* FIXME: also repeated in mailbox_runtime.c */
-#ifdef ARCH_UMODE
-typedef int bool;
-#define true	(int) 1
-#define false	(int) 0
-#endif
-
+#ifdef ARCH_SEC_HW
 volatile int i = 0xDEADBEEF;
 extern unsigned char __datacopy;
 extern unsigned char __data_start;
 extern unsigned char __data_end;
+#endif
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -79,140 +76,140 @@ extern sem_t interrupt_change;
 _Bool async_syscall_mode = FALSE;
 #endif
 
-#define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 3;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	SERIALIZE_16(syscall_nr, &buf[0])			\
-	buf[2] = size;								\
-	memcpy(&buf[3], (uint8_t *) data, size);				\
+// #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
+// 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+// 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+// 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 3;				\
+// 	if (max_size >= 256) {							\
+// 		printf("Error (%s): max_size not supported\n", __func__);	\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	if (size > max_size) {							\
+// 		printf("Error (%s): size not supported\n", __func__);		\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	SERIALIZE_16(syscall_nr, &buf[0])			\
+// 	buf[2] = size;								\
+// 	memcpy(&buf[3], (uint8_t *) data, size);				\
 
-#define SYSCALL_SET_ONE_ARG_DATA(syscall_nr, arg0, data, size)			\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	SERIALIZE_16(syscall_nr, &buf[0])			\
-	SERIALIZE_32(arg0, &buf[2])					\
-	buf[6] = size;								\
-	memcpy(&buf[7], (uint8_t *) data, size);				\
+// #define SYSCALL_SET_ONE_ARG_DATA(syscall_nr, arg0, data, size)			\
+// 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+// 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+// 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;				\
+// 	if (max_size >= 256) {							\
+// 		printf("Error (%s): max_size not supported\n", __func__);	\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	if (size > max_size) {							\
+// 		printf("Error (%s): size not supported\n", __func__);		\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	SERIALIZE_16(syscall_nr, &buf[0])			\
+// 	SERIALIZE_32(arg0, &buf[2])					\
+// 	buf[6] = size;								\
+// 	memcpy(&buf[7], (uint8_t *) data, size);				\
 
-#define SYSCALL_SET_TWO_ARGS_DATA(syscall_nr, arg0, arg1, data, size)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 11;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	SERIALIZE_16(syscall_nr, &buf[0])			\
-	SERIALIZE_32(arg0, &buf[2])					\
-	SERIALIZE_32(arg1, &buf[6])					\
-	buf[10] = size;								\
-	memcpy(&buf[11], (uint8_t *) data, size);				\
+// #define SYSCALL_SET_TWO_ARGS_DATA(syscall_nr, arg0, arg1, data, size)		\
+// 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+// 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+// 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 11;				\
+// 	if (max_size >= 256) {							\
+// 		printf("Error (%s): max_size not supported\n", __func__);	\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	if (size > max_size) {							\
+// 		printf("Error (%s): size not supported\n", __func__);		\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	SERIALIZE_16(syscall_nr, &buf[0])			\
+// 	SERIALIZE_32(arg0, &buf[2])					\
+// 	SERIALIZE_32(arg1, &buf[6])					\
+// 	buf[10] = size;								\
+// 	memcpy(&buf[11], (uint8_t *) data, size);				\
 
-#define SYSCALL_GET_ONE_RET				\
-	uint32_t ret0;					\
-	DESERIALIZE_32(&ret0, &buf[1]);			\
+// #define SYSCALL_GET_ONE_RET				\
+// 	uint32_t ret0;					\
+// 	DESERIALIZE_32(&ret0, &buf[1]);			\
 
-#define SYSCALL_GET_TWO_RETS				\
-	uint32_t ret0, ret1;				\
-	DESERIALIZE_32(&ret0, &buf[1]);			\
-	DESERIALIZE_32(&ret1, &buf[5]);			\
+// #define SYSCALL_GET_TWO_RETS				\
+// 	uint32_t ret0, ret1;				\
+// 	DESERIALIZE_32(&ret0, &buf[1]);			\
+// 	DESERIALIZE_32(&ret1, &buf[5]);			\
 
-/* FIXME: are we sure data is big enough for the memcpy here? */
-#define SYSCALL_GET_ONE_RET_DATA(data)						\
-	uint32_t ret0;								\
-	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
-	ret0 = *((uint32_t *) &buf[1]);						\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	_size = buf[5];								\
-	if (_size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	memcpy(data, &buf[6], _size);						\
+// /* FIXME: are we sure data is big enough for the memcpy here? */
+// #define SYSCALL_GET_ONE_RET_DATA(data)						\
+// 	uint32_t ret0;								\
+// 	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
+// 	ret0 = *((uint32_t *) &buf[1]);						\
+// 	if (max_size >= 256) {							\
+// 		printf("Error (%s): max_size not supported\n", __func__);	\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	_size = buf[5];								\
+// 	if (_size > max_size) {							\
+// 		printf("Error (%s): size not supported\n", __func__);		\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	memcpy(data, &buf[6], _size);						\
 
-/* FIXME: there are a lot of repetition in these macros (also see file_system.c) */
-#define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	SERIALIZE_32(arg0, &buf[1])						\
-	SERIALIZE_32(arg1, &buf[5])						\
-	SERIALIZE_32(arg2, &buf[9])
+// /* FIXME: there are a lot of repetition in these macros (also see file_system.c) */
+// #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
+// 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
+// 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
+// 	SERIALIZE_32(arg0, &buf[1])						\
+// 	SERIALIZE_32(arg1, &buf[5])						\
+// 	SERIALIZE_32(arg2, &buf[9])
 
-#define STORAGE_SET_ZERO_ARGS_DATA(data, size)					\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	buf[1] = size;								\
-	memcpy(&buf[2], (uint8_t *) data, size);				\
+// #define STORAGE_SET_ZERO_ARGS_DATA(data, size)					\
+// 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+// 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+// 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;				\
+// 	if (max_size >= 256) {							\
+// 		printf("Error (%s): max_size not supported\n", __func__);	\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	if (size > max_size) {							\
+// 		printf("Error (%s): size not supported\n", __func__);		\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	buf[1] = size;								\
+// 	memcpy(&buf[2], (uint8_t *) data, size);				\
 
-#define STORAGE_SET_TWO_ARGS_DATA(arg0, arg1, data, size)			\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 10;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	*((uint32_t *) &buf[1]) = arg0;						\
-	*((uint32_t *) &buf[5]) = arg1;						\
-	buf[9] = size;								\
-	memcpy(&buf[10], (uint8_t *) data, size);				\
+// #define STORAGE_SET_TWO_ARGS_DATA(arg0, arg1, data, size)			\
+// 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+// 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+// 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 10;				\
+// 	if (max_size >= 256) {							\
+// 		printf("Error (%s): max_size not supported\n", __func__);	\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	if (size > max_size) {							\
+// 		printf("Error (%s): size not supported\n", __func__);		\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	*((uint32_t *) &buf[1]) = arg0;						\
+// 	*((uint32_t *) &buf[5]) = arg1;						\
+// 	buf[9] = size;								\
+// 	memcpy(&buf[10], (uint8_t *) data, size);				\
 
-#define STORAGE_GET_ONE_RET				\
-	uint32_t ret0;					\
-	ret0 = *((uint32_t *) &buf[0]);			\
+// #define STORAGE_GET_ONE_RET				\
+// 	uint32_t ret0;					\
+// 	ret0 = *((uint32_t *) &buf[0]);			\
 
-#define STORAGE_GET_ONE_RET_DATA(data)						\
-	uint32_t ret0;								\
-	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 5;			\
-	ret0 = *((uint32_t *) &buf[0]);						\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	_size = buf[4];								\
-	if (_size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	memcpy(data, &buf[5], _size);						\
+// #define STORAGE_GET_ONE_RET_DATA(data)						\
+// 	uint32_t ret0;								\
+// 	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 5;			\
+// 	ret0 = *((uint32_t *) &buf[0]);						\
+// 	if (max_size >= 256) {							\
+// 		printf("Error (%s): max_size not supported\n", __func__);	\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	_size = buf[4];								\
+// 	if (_size > max_size) {							\
+// 		printf("Error (%s): size not supported\n", __func__);		\
+// 		return ERR_INVALID;						\
+// 	}									\
+// 	memcpy(data, &buf[5], _size);						\
 
 /* FIXME: there are a lot of repetition in these macros */
 #define IPC_SET_ZERO_ARGS_DATA(data, size)					\
@@ -290,6 +287,7 @@ int write_syscall_response(uint8_t *buf)
 	if (srq_counter >= srq_size) {
 		printf("Error: syscall response queue is full\n");
 		_exit(-1);
+		/* FIXME: dead code */
 		return -1;
 	}
 
@@ -306,6 +304,7 @@ static int read_syscall_response(uint8_t *buf)
 	if (srq_counter <= 0) {
 		printf("Error: syscall response queue is empty\n");
 		exit(-1);
+		/* FIXME: dead code */
 		return -1;
 	}
 
@@ -318,7 +317,7 @@ static int read_syscall_response(uint8_t *buf)
 	return 0;
 }
 
-static void issue_syscall(uint8_t *buf)
+void issue_syscall(uint8_t *buf)
 {
 	runtime_send_msg_on_queue(buf, q_os);
 
@@ -463,7 +462,7 @@ void net_stack_exit(void)
 
 /* Only to be used for queues that runtime writes to */
 /* FIXME: busy-waiting */
-static void wait_until_empty(uint8_t queue_id, int queue_size)
+void wait_until_empty(uint8_t queue_id, int queue_size)
 {
 	int left;
 
@@ -694,264 +693,282 @@ static int remove_file(char *filename)
 	return (int) ret0;
 }
 
-static int send_msg_to_storage(uint8_t *buf)
-{
-	runtime_send_msg_on_queue(buf, Q_STORAGE_IN_2);
-	runtime_recv_msg_from_queue(buf, Q_STORAGE_OUT_2);
+// static int send_msg_to_storage(uint8_t *buf)
+// {
+// 	runtime_send_msg_on_queue(buf, Q_STORAGE_IN_2);
+// 	runtime_recv_msg_from_queue(buf, Q_STORAGE_OUT_2);
 
-	return 0;
-}
+// 	return 0;
+// }
 
-static int unlock_secure_storage(uint8_t *key)
-{
-	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
-	buf[0] = STORAGE_OP_UNLOCK;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
+// static int unlock_secure_storage(uint8_t *key)
+// {
+// 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+// 	buf[0] = STORAGE_OP_UNLOCK;
+// 	send_msg_to_storage(buf);
+// 	STORAGE_GET_ONE_RET
+// 	return (int) ret0;
+// }
 
-static int lock_secure_storage(void)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	buf[0] = STORAGE_OP_LOCK;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
+// static int lock_secure_storage(void)
+// {
+// 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+// 	buf[0] = STORAGE_OP_LOCK;
+// 	send_msg_to_storage(buf);
+// 	STORAGE_GET_ONE_RET
+// 	return (int) ret0;
+// }
 
-static int set_secure_storage_key(uint8_t *key)
-{
-	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
-	buf[0] = STORAGE_OP_SET_KEY;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
+// static int set_secure_storage_key(uint8_t *key)
+// {
+// 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+// 	buf[0] = STORAGE_OP_SET_KEY;
+// 	send_msg_to_storage(buf);
+// 	STORAGE_GET_ONE_RET
+// 	return (int) ret0;
+// }
 
-static int wipe_secure_storage(void)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	buf[0] = STORAGE_OP_WIPE;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
+// static int wipe_secure_storage(void)
+// {
+// 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+// 	buf[0] = STORAGE_OP_WIPE;
+// 	send_msg_to_storage(buf);
+// 	STORAGE_GET_ONE_RET
+// 	return (int) ret0;
+// }
 
-uint8_t secure_storage_key[STORAGE_KEY_SIZE];
-bool secure_storage_key_set = false;
-bool secure_storage_available = false;
-bool has_access_to_secure_storage = false;
+// uint8_t secure_storage_key[STORAGE_KEY_SIZE];
+// bool secure_storage_key_set = false;
+// bool secure_storage_available = false;
+// bool has_access_to_secure_storage = false;
 
 bool context_set = false;
 void *context_addr = NULL;
 uint32_t context_size = 0;
+uint32_t context_tag = 0xDEADBEEF;
+#define CONTEXT_TAG_SIZE	4
 
-/* FIXME: do we need an int return? */
-static int set_up_secure_storage_key(uint8_t *key)
-{
-	memcpy(secure_storage_key, key, STORAGE_KEY_SIZE);
-	secure_storage_key_set = true;
+// /* FIXME: do we need an int return? */
+// static int set_up_secure_storage_key(uint8_t *key)
+// {
+// 	memcpy(secure_storage_key, key, STORAGE_KEY_SIZE);
+// 	secure_storage_key_set = true;
 
-	return 0;
-}
+// 	return 0;
+// }
 
-static int request_secure_storage_creation(uint8_t *returned_key)
-{
-	SYSCALL_SET_ZERO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE_CREATION)
-	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET_DATA(buf)
-	if (ret0)
-		return (int) ret0;
+// static int request_secure_storage_creation(uint8_t *returned_key)
+// {
+// 	SYSCALL_SET_ZERO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE_CREATION)
+// 	issue_syscall(buf);
+// 	SYSCALL_GET_ONE_RET_DATA(buf)
+// 	if (ret0)
+// 		return (int) ret0;
 
-	if (_size != STORAGE_KEY_SIZE)
-		return ERR_INVALID;
+// 	if (_size != STORAGE_KEY_SIZE)
+// 		return ERR_INVALID;
 
-	memcpy(returned_key, buf, STORAGE_KEY_SIZE);
+// 	memcpy(returned_key, buf, STORAGE_KEY_SIZE);
 
-	return 0;
-}
+// 	return 0;
+// }
 
-static int yield_secure_storage_access(void)
-{
-	if (!has_access_to_secure_storage) {
-		printf("%s: Error: secure storage has not been set up\n", __func__);
-		return ERR_INVALID;
-	}
+// static int yield_secure_storage_access(void)
+// {
+// 	if (!has_access_to_secure_storage) {
+// 		printf("%s: Error: secure storage has not been set up\n", __func__);
+// 		return ERR_INVALID;
+// 	}
 
-	/* FIXME: what if lock fails? */
-	lock_secure_storage();
+// 	/* FIXME: what if lock fails? */
+// 	lock_secure_storage();
 
-	has_access_to_secure_storage = false;
+// 	has_access_to_secure_storage = false;
 
-#ifdef ARCH_SEC_HW
-if (!async_syscall_mode)
-#endif
-	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+// #ifdef ARCH_SEC_HW
+// if (!async_syscall_mode)
+// #endif
+// 	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
-#ifdef ARCH_SEC_HW
-	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
-	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
-#else
-	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
-#endif
+// #ifdef ARCH_SEC_HW
+// 	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
+// 	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
+// #else
+// 	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
+// 	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+// #endif
 
-	return 0;
-}
+// 	return 0;
+// }
 
-static int request_secure_storage_access(int count)
-{
-	if (!secure_storage_key_set) {
-		printf("%s: Error: secure storage key not set.\n", __func__);
-		return ERR_INVALID;
-	}
+// static int request_secure_storage_access(int count)
+// {
+// 	if (!secure_storage_key_set) {
+// 		printf("%s: Error: secure storage key not set.\n", __func__);
+// 		return ERR_INVALID;
+// 	}
 
-// _SEC_HW_ERROR("req [0]");
-	reset_queue_sync(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
-	reset_queue_sync(Q_STORAGE_OUT_2, 0);
-// _SEC_HW_ERROR("req [1]");
+// // _SEC_HW_ERROR("req [0]");
+// 	reset_queue_sync(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+// 	reset_queue_sync(Q_STORAGE_OUT_2, 0);
+// // _SEC_HW_ERROR("req [1]");
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
-	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET
-	if (ret0)
-		return (int) ret0;
-// _SEC_HW_ERROR("req [2]");
+// 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
+// 	issue_syscall(buf);
+// 	SYSCALL_GET_ONE_RET
+// 	if (ret0)
+// 		return (int) ret0;
+// // _SEC_HW_ERROR("req [2]");
 
-	/* FIXME: if any of the attetations fail, we should yield the other one */
-	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
-					WRITE_ACCESS, count);
-	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure storage write access\n", __func__);
-		return ERR_FAULT;
-	}
-// _SEC_HW_ERROR("req [3]");
+// 	/* FIXME: if any of the attetations fail, we should yield the other one */
+// 	int attest_ret = mailbox_attest_queue_access(Q_STORAGE_IN_2,
+// 					WRITE_ACCESS, count);
+// 	if (!attest_ret) {
+// 		printf("%s: Error: failed to attest secure storage write access\n", __func__);
+// 		return ERR_FAULT;
+// 	}
+// // _SEC_HW_ERROR("req [3]");
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
-					READ_ACCESS, count);
-	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure storage read access\n", __func__);
-		return ERR_FAULT;
-	}
-	has_access_to_secure_storage = true;
-// _SEC_HW_ERROR("req [4]");
+// 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_OUT_2,
+// 					READ_ACCESS, count);
+// 	if (!attest_ret) {
+// 		printf("%s: Error: failed to attest secure storage read access\n", __func__);
+// 		return ERR_FAULT;
+// 	}
+// 	has_access_to_secure_storage = true;
+// // _SEC_HW_ERROR("req [4]");
 
-	/* unlock the storage (mainly needed to deal with reset-related interruptions.
-	 * won't do anything if it's the first time accessing the secure storage) */
-	int unlock_ret = unlock_secure_storage(secure_storage_key);
-// _SEC_HW_ERROR("req [5] %d", unlock_ret);
+// 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
+// 	 * won't do anything if it's the first time accessing the secure storage) */
+// 	int unlock_ret = unlock_secure_storage(secure_storage_key);
+// // _SEC_HW_ERROR("req [5] %d", unlock_ret);
 
-	if (unlock_ret == ERR_EXIST) {
-		uint8_t temp_key[STORAGE_KEY_SIZE];
-		int create_ret = request_secure_storage_creation(temp_key);
-// _SEC_HW_ERROR("req [6] %d", create_ret);
-		if (create_ret) {
-			yield_secure_storage_access();
-			return create_ret;
-		}
+// 	if (unlock_ret == ERR_EXIST) {
+// 		uint8_t temp_key[STORAGE_KEY_SIZE];
+// 		int create_ret = request_secure_storage_creation(temp_key);
+// // _SEC_HW_ERROR("req [6] %d", create_ret);
+// 		if (create_ret) {
+// 			yield_secure_storage_access();
+// 			return create_ret;
+// 		}
 
-		int unlock_ret_2 = unlock_secure_storage(temp_key);
-		if (unlock_ret_2) {
-// _SEC_HW_ERROR("req [7] %d", unlock_ret_2);
-			yield_secure_storage_access();
-			return create_ret;
-		}
-	} else if (unlock_ret) {
-		yield_secure_storage_access();
-		return unlock_ret;
-	}
-// _SEC_HW_ERROR("req [8]");
+// 		int unlock_ret_2 = unlock_secure_storage(temp_key);
+// 		if (unlock_ret_2) {
+// // _SEC_HW_ERROR("req [7] %d", unlock_ret_2);
+// 			yield_secure_storage_access();
+// 			return create_ret;
+// 		}
+// 	} else if (unlock_ret) {
+// 		yield_secure_storage_access();
+// 		return unlock_ret;
+// 	}
+// // _SEC_HW_ERROR("req [8]");
 
-	/* if new storage, set the key */
-	int set_key_ret = set_secure_storage_key(secure_storage_key);
-	if (set_key_ret) {
-		yield_secure_storage_access();
-		return set_key_ret;
-	}
-// _SEC_HW_ERROR("req [9]");
+// 	/* if new storage, set the key */
+// 	int set_key_ret = set_secure_storage_key(secure_storage_key);
+// 	if (set_key_ret) {
+// 		yield_secure_storage_access();
+// 		return set_key_ret;
+// 	}
+// // _SEC_HW_ERROR("req [9]");
 
-	secure_storage_available = true;
-	return 0;
-}
+// 	secure_storage_available = true;
+// 	return 0;
+// }
 
-static int delete_and_yield_secure_storage(void)
-{
-	if (!secure_storage_available || !has_access_to_secure_storage) {
-		printf("%s: Error: secure storage has not been set up or there is no access\n", __func__);
-		return ERR_INVALID;
-	}
+// static int delete_and_yield_secure_storage(void)
+// {
+// 	if (!secure_storage_available || !has_access_to_secure_storage) {
+// 		printf("%s: Error: secure storage has not been set up or there is no access\n", __func__);
+// 		return ERR_INVALID;
+// 	}
 
-	secure_storage_available = false;
+// 	secure_storage_available = false;
 
-	/* wipe storage content */
-	wipe_secure_storage();
+// 	/* wipe storage content */
+// 	wipe_secure_storage();
 
-	has_access_to_secure_storage = false;
+// 	has_access_to_secure_storage = false;
 
-	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
+// 	wait_until_empty(Q_STORAGE_IN_2, MAILBOX_QUEUE_SIZE);
 
-#ifdef ARCH_SEC_HW
-	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
-	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
-#else
-	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
-#endif
+// #ifdef ARCH_SEC_HW
+// 	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
+// 	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
+// #else
+// 	mailbox_change_queue_access(Q_STORAGE_IN_2, WRITE_ACCESS, P_OS);
+// 	mailbox_change_queue_access(Q_STORAGE_OUT_2, READ_ACCESS, P_OS);
+// #endif
 
-	SYSCALL_SET_ZERO_ARGS(SYSCALL_DELETE_SECURE_STORAGE)
-	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET
-	if (ret0)
-		return (int) ret0;
+// 	SYSCALL_SET_ZERO_ARGS(SYSCALL_DELETE_SECURE_STORAGE)
+// 	issue_syscall(buf);
+// 	SYSCALL_GET_ONE_RET
+// 	if (ret0)
+// 		return (int) ret0;
 
-	return 0;
-}
+// 	return 0;
+// }
 
-static uint32_t write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
-{
-	if (!secure_storage_available) {
-		printf("%s: Error: secure storage has not been set up\n", __func__);
-		return ERR_INVALID;
-	}
+// static uint32_t write_to_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
+// {
+// 	if (!secure_storage_available) {
+// 		printf("%s: Error: secure storage has not been set up\n", __func__);
+// 		return ERR_INVALID;
+// 	}
 
-	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
-	buf[0] = STORAGE_OP_WRITE;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
+// 	STORAGE_SET_TWO_ARGS_DATA(block_num, block_offset, data, write_size)
+// 	buf[0] = STORAGE_OP_WRITE;
+// 	send_msg_to_storage(buf);
+// 	STORAGE_GET_ONE_RET
+// 	return (int) ret0;
+// }
 
-static uint32_t read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
-{
-	if (!secure_storage_available) {
-		printf("%s: Error: secure storage has not been set up\n", __func__);
-		return ERR_INVALID;
-	}
+// static uint32_t read_from_secure_storage(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
+// {
+// 	if (!secure_storage_available) {
+// 		printf("%s: Error: secure storage has not been set up\n", __func__);
+// 		return ERR_INVALID;
+// 	}
 
-	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
-	buf[0] = STORAGE_OP_READ;
-	send_msg_to_storage(buf);
-	STORAGE_GET_ONE_RET_DATA(data)
-	return (int) ret0;
-}
+// 	STORAGE_SET_THREE_ARGS(block_num, block_offset, read_size)
+// 	buf[0] = STORAGE_OP_READ;
+// 	send_msg_to_storage(buf);
+// 	STORAGE_GET_ONE_RET_DATA(data)
+// 	return (int) ret0;
+// }
 
 static int set_up_context(void *addr, uint32_t size)
 {
+	uint8_t context_block[STORAGE_BLOCK_SIZE];
+	if (size > (STORAGE_BLOCK_SIZE - CONTEXT_TAG_SIZE)) {
+		printf("Error (%s): context size is too big.\n", __func__);
+		return ERR_INVALID;
+	}
+
 	context_addr = addr;
 	context_size = size;
 	context_set = true;
 	/* Now, let's retrieve the context. */
-	/* FIXME: we need to store the context in a way to allow us to know if there is none. */
-	int ret = request_secure_storage_access(200);
+	int ret = request_secure_storage_access(200, 100);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
 	}
 
-	uint32_t rret = read_from_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
-	if (rret != context_size)
+	uint32_t rret = read_from_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
+	if (rret != (context_size + CONTEXT_TAG_SIZE)) {
+		printf("%s: Couldn't read from secure storage.\n", __func__);
+		yield_secure_storage_access();
+		return ERR_FAULT;
+	}
+
+	if ((*(uint32_t *) context_block) != context_tag) {
 		printf("%s: No context to use.\n", __func__);
+		yield_secure_storage_access();
+		return ERR_INVALID;
+	}
+
+	memcpy(context_addr, &context_block[CONTEXT_TAG_SIZE], context_size);
 
 	yield_secure_storage_access();
 
@@ -1263,8 +1280,10 @@ static void load_application(char *msg)
 		.request_secure_storage_access = request_secure_storage_access,
 		.yield_secure_storage_access = yield_secure_storage_access,
 		.delete_and_yield_secure_storage = delete_and_yield_secure_storage,
-		.write_to_secure_storage = write_to_secure_storage,
-		.read_from_secure_storage = read_from_secure_storage,
+		.write_secure_storage_blocks = write_secure_storage_blocks,
+		.read_secure_storage_blocks = read_secure_storage_blocks,
+		.write_to_secure_storage_block = write_to_secure_storage_block,
+		.read_from_secure_storage_block = read_from_secure_storage_block,
 		.set_up_context = set_up_context,
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
@@ -1331,7 +1350,9 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 
 void *store_context(void *data)
 {
-	if (!secure_storage_key_set || !context_set) {
+	uint8_t context_block[STORAGE_BLOCK_SIZE];
+
+	if (!is_secure_storage_key_set() || !context_set) {
 		printf("%s: Error: either the secure storage key or context not set\n", __func__);
 		return NULL;
 	}
@@ -1339,14 +1360,17 @@ void *store_context(void *data)
 #ifdef ARCH_SEC_HW
 	async_syscall_mode = true;
 #endif
-	int ret = request_secure_storage_access(200);
+	int ret = request_secure_storage_access(200, 100);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return NULL;
 	}
 
-	uint32_t wret = write_to_secure_storage((uint8_t *) context_addr, 0, 0, context_size);
-	if (wret != context_size)
+	memcpy(context_block, &context_tag, CONTEXT_TAG_SIZE);
+	memcpy(&context_block[CONTEXT_TAG_SIZE], context_addr, context_size);
+
+	uint32_t wret = write_to_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
+	if (wret != (context_size + CONTEXT_TAG_SIZE))
 		printf("Error: couldn't write the context to secure storage.\n");
 
 	yield_secure_storage_access();

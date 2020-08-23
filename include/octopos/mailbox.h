@@ -1,4 +1,6 @@
+#ifndef UNTRUSTED_DOMAIN
 #include <arch/defines.h>
+#endif
 
 /* mailbox opcodes */
 #define	MAILBOX_OPCODE_READ_QUEUE		0
@@ -16,11 +18,12 @@
 #define	P_SENSOR		6
 #define	P_RUNTIME1		7
 #define	P_RUNTIME2		8
-#define NUM_PROCESSORS		8
-#define ALL_PROCESSORS		9
-#define INVALID_PROCESSOR	10
+#define P_UNTRUSTED		9
+#define NUM_PROCESSORS		9
+#define ALL_PROCESSORS		10
+#define INVALID_PROCESSOR	11
 
-#define NUM_RUNTIME_PROCS	2
+#define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */
 
 /* queue IDs */
 #define	Q_OS1			1
@@ -31,15 +34,15 @@
 #define	Q_STORAGE_DATA_OUT	6
 #define	Q_STORAGE_CMD_IN	7
 #define	Q_STORAGE_CMD_OUT	8
-#define	Q_STORAGE_IN_2		9
-#define	Q_STORAGE_OUT_2		10
-#define	Q_NETWORK_DATA_IN	11
-#define	Q_NETWORK_DATA_OUT	12
-#define	Q_NETWORK_CMD_IN	13
-#define	Q_NETWORK_CMD_OUT	14
-#define Q_SENSOR		15
-#define	Q_RUNTIME1		16
-#define	Q_RUNTIME2		17
+#define	Q_NETWORK_DATA_IN	9
+#define	Q_NETWORK_DATA_OUT	10
+#define	Q_NETWORK_CMD_IN	11
+#define	Q_NETWORK_CMD_OUT	12
+#define Q_SENSOR		13
+#define	Q_RUNTIME1		14
+#define	Q_RUNTIME2		15
+#define	Q_OSU			16
+#define	Q_UNTRUSTED		17
 #define NUM_QUEUES		17
 
 #define MAILBOX_QUEUE_SIZE		4
@@ -75,6 +78,16 @@
 #define FIFO_RUNTIME2_OUT	"/tmp/octopos_mailbox_runtime2_out"
 #define FIFO_RUNTIME2_IN	"/tmp/octopos_mailbox_runtime2_in"
 #define FIFO_RUNTIME2_INTR	"/tmp/octopos_mailbox_runtime2_intr"
+#define FIFO_UNTRUSTED_OUT	"/tmp/octopos_mailbox_untrusted_out"
+#define FIFO_UNTRUSTED_IN	"/tmp/octopos_mailbox_untrusted_in"
+#define FIFO_UNTRUSTED_INTR	"/tmp/octopos_mailbox_untrusted_intr"
 
 #define READ_ACCESS		0
 #define WRITE_ACCESS		1
+
+/* FIXME: move somewhere else */
+#ifdef UNTRUSTED_DOMAIN
+void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id);
+int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count);
+void reset_queue_sync(uint8_t queue_id, int init_val);
+#endif

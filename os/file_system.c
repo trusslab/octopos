@@ -143,10 +143,7 @@ static int remove_file_from_list(struct file *file)
 
 static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	int ret = is_queue_available(Q_STORAGE_DATA_IN);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_IN);
-	}
+	wait_for_storage();
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
@@ -161,10 +158,7 @@ static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks
 
 static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	int ret = is_queue_available(Q_STORAGE_DATA_OUT);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
-	}
+	wait_for_storage();
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
@@ -291,10 +285,11 @@ static int remove_file_from_directory(struct file *file)
 static int alloc_blocks_for_file(struct file *file)
 {
 	int start_block = DIR_DATA_NUM_BLOCKS;
-	int num_blocks = 100; /* fixed for now */
+	int num_blocks = 100; /* FIXME: fixed for now */
 	bool found = false;
 
-	while ((start_block + num_blocks) <= STORAGE_MAIN_PARTITION_SIZE) {
+	/* FIXME: hard-coded the partition size */
+	while ((start_block + num_blocks) <= 1000) {
 		bool used = false;
 		for (struct file_list_node *node = file_list_head; node;
 		     node = node->next) {
@@ -452,7 +447,6 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 	return written_size;
 }
 
-
 int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
@@ -532,10 +526,7 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 		return 0;
 	}
 
-	int ret = is_queue_available(Q_STORAGE_DATA_IN);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_IN);
-	}
+	wait_for_storage();
 
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
@@ -587,10 +578,7 @@ uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_block
 		return 0;
 	}
 
-	int ret = is_queue_available(Q_STORAGE_DATA_OUT);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
-	}
+	wait_for_storage();
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 

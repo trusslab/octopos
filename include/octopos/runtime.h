@@ -1,3 +1,7 @@
+#ifndef _OCTOPOS_RUNTIME_H_
+#define _OCTOPOS_RUNTIME_H_
+
+#ifndef UNTRUSTED_DOMAIN
 struct runtime_api {
 	/* secure keyboard/serial_out */
 	int (*request_secure_keyboard)(int count);
@@ -11,6 +15,7 @@ struct runtime_api {
 	int (*write_to_shell)(char *data, int size);
 	int (*read_from_shell)(char *data, int *data_size);
 
+#ifndef ARCH_SEC_HW
 	/* file system */
 	uint32_t (*open_file)(char *filename, uint32_t mode);
 	int (*write_to_file)(uint32_t fd, uint8_t *data, int size, int offset);
@@ -22,14 +27,18 @@ struct runtime_api {
 
 	/* secure storage */
 	int (*set_up_secure_storage_key)(uint8_t *key);
-	int (*request_secure_storage_access)(int count);
+	/* FIXME: use uint32_t for count in all applicable functions here. */
+	int (*request_secure_storage_access)(int count, uint32_t partition_size);
 	int (*yield_secure_storage_access)(void);
 	int (*delete_and_yield_secure_storage)(void);
-	uint32_t (*write_to_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size);
-	uint32_t (*read_from_secure_storage)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
+	int (*write_secure_storage_blocks)(uint8_t *data, uint32_t start_block, uint32_t num_blocks);
+	int (*read_secure_storage_blocks)(uint8_t *data, uint32_t start_block,	uint32_t num_blocks);
+	int (*read_from_secure_storage_block)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size);
+	int (*write_to_secure_storage_block)(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size);
 
 	/* storing context in secure storage */
 	int (*set_up_context)(void *addr, uint32_t size);
+#endif
 
 	/* secure IPC */
 	int (*request_secure_ipc)(uint8_t target_runtime_queue_id, int count);
@@ -56,6 +65,7 @@ struct runtime_api {
 	int (*yield_network_access)(void);
 #endif
 };
+#endif /* UNTRUSTED_DOMAIN */
 
 /* file open modes */
 #define FILE_OPEN_MODE		0
@@ -64,3 +74,5 @@ struct runtime_api {
 #define RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG	0
 #define RUNTIME_QUEUE_CONTEXT_SWITCH_TAG	1
 #define RUNTIME_QUEUE_EXEC_APP_TAG		2
+
+#endif /* _OCTPOS_RUNTIME_H_ */

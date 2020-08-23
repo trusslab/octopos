@@ -415,6 +415,8 @@ static void handle_fixed_timer_interrupts(void* ignored)
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_CONTEXT_SWITCH_TAG");
 		store_context(NULL);
 		close_runtime();
+	} else {
+		_SEC_HW_ERROR("received invalid message (%d)", buf[0]);
 	}
 	free(buf);
 }
