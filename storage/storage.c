@@ -14,6 +14,11 @@
 
 #include "arch/mailbox_storage.h"
 
+
+/* FIXME: determine partitions and their sizes dynamically. */
+struct partition partitions[NUM_PARTITIONS];
+uint32_t partition_sizes[NUM_PARTITIONS] = {1000, 2048, 100, 100, 100};
+
 //bool is_queue_set_bound = false;
 //int bound_partition = -1;
 

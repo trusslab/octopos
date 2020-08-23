@@ -398,8 +398,8 @@ int delete_and_yield_secure_storage(void)
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
 #ifdef ARCH_SEC_HW
-	mailbox_yield_to_previous_owner(Q_STORAGE_IN_2);
-	mailbox_yield_to_previous_owner(Q_STORAGE_OUT_2);
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
 #else

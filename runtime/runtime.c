@@ -40,6 +40,7 @@
 #include <arch/syscall.h>
 
 #ifdef ARCH_SEC_HW
+#include <runtime/storage_client.h>
 #include "xparameters.h"
 #include "arch/sec_hw.h"
 #include "xil_cache.h"

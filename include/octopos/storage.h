@@ -112,8 +112,5 @@ struct partition {
 //#define STORAGE_SECURE_PARTITION_SIZE	100  /* num blocks */
 #define NUM_PARTITIONS		5
 
-/* FIXME: determine partitions and their sizes dynamically. */
-struct partition partitions[NUM_PARTITIONS];
-uint32_t partition_sizes[NUM_PARTITIONS] = {1000, 2048, 100, 100, 100};
 
 #endif /* __STORAGE_OCTOPOS_CORE_H_ */

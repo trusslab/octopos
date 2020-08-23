@@ -1,6 +1,8 @@
 #ifndef OCTOPOS_SEC_HW_SYSCALL_SERIALIZER_H_
 #define OCTOPOS_SEC_HW_SYSCALL_SERIALIZER_H_
 
+#include "xil_types.h"
+
 #define SERIALIZE_16(arg, buf_lr)				\
 	{											\
 	u16 _arg_local = (u16) arg; 				\

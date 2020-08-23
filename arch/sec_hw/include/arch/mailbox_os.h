@@ -18,6 +18,7 @@ int send_msg_to_storage_no_response(uint8_t *buf);
 int get_response_from_storage(uint8_t *buf);
 void read_from_storage_data_queue(uint8_t *buf);
 void write_to_storage_data_queue(uint8_t *buf);
+int send_cmd_to_untrusted(uint8_t *buf);
 
 int init_os_mailbox(void);
 void close_os_mailbox(void);

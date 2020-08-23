@@ -72,8 +72,8 @@ XMbox 			Mbox_out,
 				Mbox_Runtime1,
 				Mbox_Runtime2,
 				Mbox_sys,
-				Mbox_storage_in_2,
-				Mbox_storage_out_2,
+				Mbox_storage_cmd_in,
+				Mbox_storage_cmd_out,
 				Mbox_storage_data_in,
 				Mbox_storage_data_out;
 
@@ -91,6 +91,7 @@ int write_syscall_response(uint8_t *buf);
 int write_to_shell(char *data, int size);
 int inform_os_of_termination(void);
 void close_runtime(void);
+void *store_context(void *data);
 
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
@@ -164,14 +165,14 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count
 			XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_STA | XMB_IX_ERR);
 			break;
 
-		case Q_STORAGE_OUT_2:
-			XMbox_SetReceiveThreshold(&Mbox_storage_out_2, MAILBOX_DEFAULT_RX_THRESHOLD);
-			XMbox_SetInterruptEnable(&Mbox_storage_out_2, XMB_IX_RTA | XMB_IX_ERR);
+		case Q_STORAGE_CMD_OUT:
+			XMbox_SetReceiveThreshold(&Mbox_storage_cmd_out, MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, XMB_IX_RTA | XMB_IX_ERR);
 			break;
 
-		case Q_STORAGE_IN_2:
-			XMbox_SetSendThreshold(&Mbox_storage_in_2, 0);
-			XMbox_SetInterruptEnable(&Mbox_storage_in_2, XMB_IX_STA | XMB_IX_ERR);
+		case Q_STORAGE_CMD_IN:
+			XMbox_SetSendThreshold(&Mbox_storage_cmd_in, 0);
+			XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, XMB_IX_STA | XMB_IX_ERR);
 			break;
 	}
 
@@ -257,14 +258,14 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 			XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_STA | XMB_IX_ERR);
 			break;
 
-		case Q_STORAGE_OUT_2:
-			XMbox_SetReceiveThreshold(&Mbox_storage_out_2, MAILBOX_DEFAULT_RX_THRESHOLD);
-			XMbox_SetInterruptEnable(&Mbox_storage_out_2, XMB_IX_RTA | XMB_IX_ERR);
+		case Q_STORAGE_CMD_OUT:
+			XMbox_SetReceiveThreshold(&Mbox_storage_cmd_out, MAILBOX_DEFAULT_RX_THRESHOLD);
+			XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, XMB_IX_RTA | XMB_IX_ERR);
 			break;
 
-		case Q_STORAGE_IN_2:
-			XMbox_SetSendThreshold(&Mbox_storage_in_2, 0);
-			XMbox_SetInterruptEnable(&Mbox_storage_in_2, XMB_IX_STA | XMB_IX_ERR);
+		case Q_STORAGE_CMD_IN:
+			XMbox_SetSendThreshold(&Mbox_storage_cmd_in, 0);
+			XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, XMB_IX_STA | XMB_IX_ERR);
 			break;
 
 		default:
@@ -382,7 +383,6 @@ static void handle_fixed_timer_interrupts(void* ignored)
 {
 	int 		bytes_read;
 
-
 	if (runtime_terminated) {
 		runtime_terminated = FALSE;
 		runtime_inited = FALSE;
@@ -463,9 +463,9 @@ static void handle_mailbox_interrupts(void* callback_ref)
 		} else if (callback_ref == Mbox_regs[Q_STORAGE_DATA_IN]) {
 			/* storage data in queue */
 			sem_post(&interrupts[Q_STORAGE_DATA_IN]);
-		} else if (callback_ref == Mbox_regs[Q_STORAGE_IN_2]) {
+		} else if (callback_ref == Mbox_regs[Q_STORAGE_CMD_IN]) {
 			/* storage cmd in queue */
-			sem_post(&interrupts[Q_STORAGE_IN_2]);
+			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
 		} else if (callback_ref != Mbox_regs[q_runtime]) {
 			/* IPC to other runtime */
 			if (callback_ref == &Mbox_Runtime1) {
@@ -503,9 +503,9 @@ static void handle_mailbox_interrupts(void* callback_ref)
 		} else if (callback_ref == Mbox_regs[Q_STORAGE_DATA_OUT]) {
 			/* storage data out queue */
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
-		} else if (callback_ref == Mbox_regs[Q_STORAGE_OUT_2]) {
+		} else if (callback_ref == Mbox_regs[Q_STORAGE_CMD_OUT]) {
 			/* storage cmd out queue */
-			sem_post(&interrupts[Q_STORAGE_OUT_2]);
+			sem_post(&interrupts[Q_STORAGE_CMD_OUT]);
 		} else {
 			_SEC_HW_ERROR("Error: invalid interrupt from %p", callback_ref);
 		}
@@ -535,8 +535,8 @@ int init_runtime(int runtime_id)
 					*ConfigPtr_Runtime1,
 					*ConfigPtr_Runtime2,
 					*ConfigPtr_sys, 
-					*Config_storage_in_2, 
-					*Config_storage_out_2,
+					*Config_storage_cmd_in,
+					*Config_storage_cmd_out,
 					*Config_storage_data_in, 
 					*Config_storage_data_out;
 
@@ -594,14 +594,14 @@ int init_runtime(int runtime_id)
 		return XST_FAILURE;
 	}
 
-	Config_storage_in_2 = XMbox_LookupConfig(XPAR_MBOX_6_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_in_2, Config_storage_in_2, Config_storage_in_2->BaseAddress);
+	Config_storage_cmd_in = XMbox_LookupConfig(XPAR_MBOX_6_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_cmd_in, Config_storage_cmd_in, Config_storage_cmd_in->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Config_storage_out_2 = XMbox_LookupConfig(XPAR_MBOX_7_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_out_2, Config_storage_out_2, Config_storage_out_2->BaseAddress);
+	Config_storage_cmd_out = XMbox_LookupConfig(XPAR_MBOX_7_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage_cmd_out, Config_storage_cmd_out, Config_storage_cmd_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
@@ -613,8 +613,8 @@ int init_runtime(int runtime_id)
 	Mbox_regs[Q_SERIAL_OUT] = &Mbox_out;
 	Mbox_regs[Q_STORAGE_DATA_IN] = &Mbox_storage_data_in;
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
-	Mbox_regs[Q_STORAGE_IN_2] = &Mbox_storage_in_2;
-	Mbox_regs[Q_STORAGE_OUT_2] = &Mbox_storage_out_2;
+	Mbox_regs[Q_STORAGE_CMD_IN] = &Mbox_storage_cmd_in;
+	Mbox_regs[Q_STORAGE_CMD_OUT] = &Mbox_storage_cmd_out;
 
 	Mbox_ctrl_regs[Q_KEYBOARD] = OCTOPOS_ENCLAVE_MAILBOX_1WRI_0_BASEADDR;
 	Mbox_ctrl_regs[Q_SERIAL_OUT] = OCTOPOS_ENCLAVE_MAILBOX_3WRI_0_BASEADDR;
@@ -622,8 +622,8 @@ int init_runtime(int runtime_id)
 	Mbox_ctrl_regs[Q_RUNTIME2] = OCTOPOS_ENCLAVE_MAILBOX_3WRI_1_BASEADDR;
 	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_ENCLAVE_Q_STORAGE_DATA_IN_BASEADDR;
 	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_ENCLAVE_Q_STORAGE_DATA_OUT_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_IN_2] = OCTOPOS_ENCLAVE_Q_STORAGE_IN_2_BASEADDR;
-	Mbox_ctrl_regs[Q_STORAGE_OUT_2] = OCTOPOS_ENCLAVE_Q_STORAGE_OUT_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_CMD_IN] = OCTOPOS_ENCLAVE_Q_STORAGE_IN_2_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_CMD_OUT] = OCTOPOS_ENCLAVE_Q_STORAGE_OUT_2_BASEADDR;
 
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();
@@ -742,7 +742,7 @@ int init_runtime(int runtime_id)
 	Status = XIntc_Connect(&intc,
 		XPAR_COMMON_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_0_INTR,
 		(XInterruptHandler)handle_mailbox_interrupts,
-		(void*) &Mbox_storage_out_2);
+		(void*) &Config_storage_cmd_out);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
@@ -750,7 +750,7 @@ int init_runtime(int runtime_id)
 	Status = XIntc_Connect(&intc,
 		XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR,
 		(XInterruptHandler)handle_mailbox_interrupts,
-		(void*) &Mbox_storage_in_2);
+		(void*) &Config_storage_cmd_in);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
@@ -774,18 +774,18 @@ int init_runtime(int runtime_id)
 
 
 	Status = XIntc_Connect(&intc,
-		OMboxCtrlIntrs[p_runtime][Q_STORAGE_IN_2],
+		OMboxCtrlIntrs[p_runtime][Q_STORAGE_CMD_IN],
 		(XInterruptHandler)handle_octopos_mailbox_interrupts,
-		(void*) Q_STORAGE_IN_2);
+		(void*) Q_STORAGE_CMD_IN);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
 
 	Status = XIntc_Connect(&intc,
-		OMboxCtrlIntrs[p_runtime][Q_STORAGE_OUT_2],
+		OMboxCtrlIntrs[p_runtime][Q_STORAGE_CMD_OUT],
 		(XInterruptHandler)handle_octopos_mailbox_interrupts,
-		(void*) Q_STORAGE_OUT_2);
+		(void*) Q_STORAGE_CMD_OUT);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
@@ -806,8 +806,8 @@ int init_runtime(int runtime_id)
 	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_KEYBOARD]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_DATA_OUT]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_DATA_IN]);
-	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_OUT_2]);
-	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_IN_2]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_CMD_OUT]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[p_runtime][Q_STORAGE_CMD_IN]);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
@@ -833,8 +833,8 @@ int init_runtime(int runtime_id)
 	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
-	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
+	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 
 	sem_init(&secure_ipc_receive_sem, 0, 0);
 	sem_init(&load_app_sem, 0, 0);

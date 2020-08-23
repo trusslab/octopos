@@ -48,6 +48,8 @@ uint8_t config_key[STORAGE_KEY_SIZE];
 bool is_config_locked = false;
 
 u32				DEBUG_STATUS_REGISTERS[30] = {0};
+extern struct partition partitions[NUM_PARTITIONS];
+extern uint32_t partition_sizes[NUM_PARTITIONS]; 
 
 _Bool handle_partial_message(uint8_t *message_buffer, uint8_t *queue_id, u32 bytes_read);
 
@@ -720,7 +722,7 @@ DEBUG_STATUS_REGISTERS[2] = 3;
 			return;
 		}
 
-		result = f_open(&filep, sec_partitions[partition_id].create_name, FA_READ | FA_WRITE);
+		result = f_open(&filep, partitions[partition_id].create_name, FA_READ | FA_WRITE);
 		if (result) {
 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 			return;
@@ -883,8 +885,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&interrupts[Q_STORAGE_CMD_OUT]);
 		} else if (callback_ref == &Mbox_storage_data_out) {
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
-		} else if (callback_ref == &Mbox_storage_out_2) {
-			sem_post(&interrupts[Q_STORAGE_OUT_2]);
 		}
 	} else if (mask & XMB_IX_RTA) {
 		_SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
@@ -892,9 +892,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
 		} else if (callback_ref == &Mbox_storage_data_in) {
 			sem_post(&interrupts[Q_STORAGE_DATA_IN]);
-		} else if (callback_ref == &Mbox_storage_in_2) {
-			sem_post(&interrupts[Q_STORAGE_IN_2]);
-			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
 		}
 	} else if (mask & XMB_IX_ERR) {
 		_SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
@@ -979,7 +976,7 @@ int init_storage(void)
 	XMbox_Config	*Config_cmd_out, 
 					*Config_cmd_in, 
 					*Config_Data_out, 
-					*Config_Data_in, 
+					*Config_Data_in;
 
 	init_platform();
 
