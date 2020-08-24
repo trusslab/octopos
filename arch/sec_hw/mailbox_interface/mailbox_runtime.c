@@ -274,7 +274,7 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 }
 
 static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
-{
+{ //FIXME: large queue
 	sem_wait_impatient_receive_buf(&interrupts[queue_id], Mbox_regs[queue_id], (u8*) buf);
 }
 
@@ -742,7 +742,7 @@ int init_runtime(int runtime_id)
 	Status = XIntc_Connect(&intc,
 		XPAR_COMMON_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_0_INTR,
 		(XInterruptHandler)handle_mailbox_interrupts,
-		(void*) &Config_storage_cmd_out);
+		(void*) &Mbox_storage_cmd_out);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
@@ -750,7 +750,7 @@ int init_runtime(int runtime_id)
 	Status = XIntc_Connect(&intc,
 		XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR,
 		(XInterruptHandler)handle_mailbox_interrupts,
-		(void*) &Config_storage_cmd_in);
+		(void*) &Mbox_storage_cmd_in);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}

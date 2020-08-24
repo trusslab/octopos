@@ -194,8 +194,8 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	}
 	_SEC_HW_ERROR("[3]");
 
-	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
-	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	// wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+	// wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	_SEC_HW_ERROR("[4]");
 
 	mark_queue_unavailable(Q_STORAGE_CMD_IN);
