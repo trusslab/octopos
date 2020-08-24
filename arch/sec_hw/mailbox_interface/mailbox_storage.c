@@ -184,7 +184,7 @@ static int set_partition_key(uint8_t *data, int partition_id)
 	// uint8_t key[STORAGE_KEY_SIZE];
 	// f_lseek(&filep, 0);
 	// f_read(&filep, key, STORAGE_KEY_SIZE, &NumBytesRead);
-	// f_close(&filep);
+	f_close(&filep);
 	// DEBUG_STATUS_REGISTERS[13]=NumBytesRead;
 	// // debug <<<
 	return 0;
@@ -209,7 +209,7 @@ static int unlock_partition(uint8_t *data, int partition_id)
 {
 	if (partition_id == 0) DEBUG_STATUS_REGISTERS[10] += 1;
 	if (partition_id == 0) DEBUG_STATUS_REGISTERS[5]=0;
-	if (partition_id == 0) DEBUG_STATUS_REGISTERS[6]=0;
+	if (partition_id == 0) DEBUG_STATUS_REGISTERS[6]=-1;
 
 	FIL filep;
 	FRESULT result;
@@ -229,8 +229,7 @@ static int unlock_partition(uint8_t *data, int partition_id)
 	result3 = f_read(&filep, (void*)key, STORAGE_KEY_SIZE, &NumBytesRead);
 	result4 = f_close(&filep);
 	if (NumBytesRead != STORAGE_KEY_SIZE) {
-		if (DEBUG_STATUS_REGISTERS[10] == 2) SEC_HW_DEBUG_HANG();
-		if (partition_id == 0) DEBUG_STATUS_REGISTERS[5] = 2;
+		if (partition_id == 0) DEBUG_STATUS_REGISTERS[5] = NumBytesRead;
 		/* TODO: if the key file is corrupted, then we might need to unlock, otherwise, we'll lose the partition. */
 		return ERR_FAULT;
 	}
@@ -449,7 +448,6 @@ static void process_request(uint8_t *buf)
 // 	FRESULT result;
 // 	UINT NumBytesRead = 0, NumBytesWritten = 0;
 
-DEBUG_STATUS_REGISTERS[0] = buf[0];
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
 		if (!is_queue_set_bound) {
@@ -593,8 +591,8 @@ DEBUG_STATUS_REGISTERS[0] = buf[0];
 		STORAGE_SET_ONE_RET(ret)
 	} else if (buf[0] == STORAGE_OP_UNLOCK) {
 		STORAGE_GET_ZERO_ARGS_DATA
-DEBUG_STATUS_REGISTERS[11] += 1;
-DEBUG_STATUS_REGISTERS[12] =0;
+DEBUG_STATUS_REGISTERS[0] += 1;
+DEBUG_STATUS_REGISTERS[1] = 0;
 DEBUG_STATUS_REGISTERS[2] = 0;
 		if (data_size != STORAGE_KEY_SIZE) {
 			_SEC_HW_ERROR("%s: Error: incorrect key size (sent for unlocking)\n", __func__);
@@ -613,7 +611,7 @@ DEBUG_STATUS_REGISTERS[2] = 0;
 		}
 
 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-DEBUG_STATUS_REGISTERS[12] = partition_id;
+DEBUG_STATUS_REGISTERS[1] = partition_id;
 			STORAGE_SET_ONE_RET(ERR_EXIST)
 			return;
 		}
@@ -744,7 +742,7 @@ DEBUG_STATUS_REGISTERS[2] = 3;
 		}
 		DEBUG_STATUS_REGISTERS[4] = 6;
 		partitions[partition_id].is_created = true;
-		DEBUG_STATUS_REGISTERS[5] = partition_id;
+		DEBUG_STATUS_REGISTERS[3] = partition_id;
 		STORAGE_SET_TWO_RETS(0, partition_id)
 	} else if (buf[0] == STORAGE_OP_DELETE_SECURE_PARTITION) {
 		if (is_config_locked) {
