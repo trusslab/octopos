@@ -111,6 +111,21 @@ void secure_login(struct runtime_api *api)
 	api->write_to_secure_storage_block((uint8_t *) line, 0, 0, size);
 	memset(line, 0x0, 1024);
 	api->read_from_secure_storage_block((uint8_t *) line, 0, 0, size);
+	//if (size == 5) {while(1) sleep(1);}
+	insecure_printf("secret (from secure storage): %s (size = %d)\n", line, size);
+	api->delete_and_yield_secure_storage();
+
+		ret = api->request_secure_storage_access(200, 100);
+	if (ret) {
+		printf("Error: could not get secure access to storage.\n");
+		insecure_printf("Error: could not get secure access to storage.\n");
+		return;
+	}
+
+	api->write_to_secure_storage_block((uint8_t *) line, 0, 0, size);
+	memset(line, 0x0, 1024);
+	api->read_from_secure_storage_block((uint8_t *) line, 0, 0, size);
+	//if (size == 5) {while(1) sleep(1);}
 	insecure_printf("secret (from secure storage): %s (size = %d)\n", line, size);
 	api->delete_and_yield_secure_storage();
 }

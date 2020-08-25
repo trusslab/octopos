@@ -39,6 +39,7 @@
 #endif
 
 #ifdef ARCH_SEC_HW
+#include "arch/sec_hw.h"
 extern _Bool async_syscall_mode;
 #endif
 
@@ -450,15 +451,19 @@ int read_secure_storage_blocks(uint8_t *data, uint32_t start_block,
 		printf("%s: Error: secure storage has not been set up\n", __func__);
 		return 0;
 	}
+	_SEC_HW_ERROR("rssb[1]");
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
+	_SEC_HW_ERROR("rssb[2]");
 	for (i = 0; i < (int) num_blocks; i++)
 		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
 	get_response_from_storage(buf);
 
 	STORAGE_GET_ONE_RET
+	_SEC_HW_ERROR("rssb[3] %d", (int) ret0);
+	if ((int) ret0 == 0) {while(1) sleep(1);}
 	return (int) ret0;
 }
 
@@ -468,18 +473,22 @@ int read_from_secure_storage_block(uint8_t *data, uint32_t block_num,
 {
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int ret;
+	_SEC_HW_ERROR("rfssb[1]");
 
 	if (!secure_storage_available) {
 		printf("%s: Error: secure storage has not been set up\n", __func__);
 		return 0;
 	}
+	_SEC_HW_ERROR("rfssb[2]");
 
 	if (block_offset + read_size > STORAGE_BLOCK_SIZE)
 		return 0;
+	_SEC_HW_ERROR("rfssb[3]");
 
 	ret = read_secure_storage_blocks(buf, block_num, 1);
 	if (ret != STORAGE_BLOCK_SIZE)
 		return 0;
+	_SEC_HW_ERROR("rfssb[4]");
 
 	memcpy(data, buf + block_offset, read_size);
 
@@ -492,14 +501,17 @@ int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
 {
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int ret;
+	_SEC_HW_ERROR("wtssb[1]");
 
 	if (!secure_storage_available) {
 		printf("%s: Error: secure storage has not been set up\n", __func__);
 		return 0;
 	}
+	_SEC_HW_ERROR("wtssb[2]");
 
 	if (block_offset + write_size > STORAGE_BLOCK_SIZE)
 		return 0;
+	_SEC_HW_ERROR("wtssb[3]");
 
 	/* partial block write */
 	if (!(block_offset == 0 && write_size == STORAGE_BLOCK_SIZE)) {
@@ -507,6 +519,7 @@ int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
 		if (read_ret != STORAGE_BLOCK_SIZE)
 			return 0;
 	}
+	_SEC_HW_ERROR("wtssb[4]");
 
 	memcpy(buf + block_offset, data, write_size);
 
@@ -514,6 +527,7 @@ int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
 	/* FIXME: data might have been partially written. */
 	if (ret != STORAGE_BLOCK_SIZE)
 		return 0;
+	_SEC_HW_ERROR("wtssb[5]");
 
 	return (int) write_size;
 }
