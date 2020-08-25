@@ -548,10 +548,6 @@ static void process_request(uint8_t *buf)
 			return;
 		}
 		DEBUG_STATUS_REGISTERS[16] =3;
-		// DEBUG BEGIN
-		FILINFO finfo;
-		f_stat(partitions[partition_id].data_name, &finfo);
-		// DEBUG END
 		result = f_open(&filep, partitions[partition_id].data_name, FA_READ);
 		if (result) {
 			_SEC_HW_ERROR("%s: Error: couldn't open %s for read\n", __func__, partitions[partition_id].data_name);
@@ -581,7 +577,6 @@ static void process_request(uint8_t *buf)
 			XMbox_WriteBlocking(&Mbox_storage_data_out, (u32*) data_buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		}
 		DEBUG_STATUS_REGISTERS[17] =size;
-		if (size == 0) {while(1) sleep(1);}
 		DEBUG_STATUS_REGISTERS[16] =6;
 		STORAGE_SET_ONE_RET(size);
 		f_close(&filep);
