@@ -1,0 +1,4 @@
+[submodule "arch/umode/untrusted_linux"]
+	path = arch/umode/untrusted_linux
+	url = https://gitlab.com/arrdalan/octopos_linux.git
+	branch = octopos_master

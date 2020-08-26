@@ -126,7 +126,6 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	}
 
 	if (candidate) {
-_SEC_HW_ERROR("candidate: %d", candidate->id);
 		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 		buf[0] = RUNTIME_QUEUE_CONTEXT_SWITCH_TAG;
 		check_avail_and_send_msg_to_runtime(candidate->id, buf);
@@ -431,7 +430,6 @@ void sched_next_app(void)
 		return;
 	}
 
-_SEC_HW_ERROR("run %s on %d", app->name, runtime_proc->id);
 	run_app_on_runtime_proc(app, runtime_proc);
 }
 

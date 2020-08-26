@@ -44,12 +44,13 @@ static u32 		sketch_buffer_offset[NUM_QUEUES + 1];
 bool 			is_queue_set_bound = false;
 int 			bound_partition = -1;
 
-uint8_t config_key[STORAGE_KEY_SIZE];
-bool is_config_locked = false;
+uint8_t			config_key[STORAGE_KEY_SIZE];
+bool			is_config_locked = false;
 
 u32				DEBUG_STATUS_REGISTERS[30] = {0};
-extern struct partition partitions[NUM_PARTITIONS];
-extern uint32_t partition_sizes[NUM_PARTITIONS]; 
+
+extern struct	partition partitions[NUM_PARTITIONS];
+extern uint32_t	partition_sizes[NUM_PARTITIONS]; 
 
 _Bool handle_partial_message(uint8_t *message_buffer, uint8_t *queue_id, u32 bytes_read);
 
@@ -170,9 +171,6 @@ static int set_partition_key(uint8_t *data, int partition_id)
 
 	f_lseek(&filep, 0);
 	f_write(&filep, (const void*)data, STORAGE_KEY_SIZE, &NumBytesWritten);
-	DEBUG_STATUS_REGISTERS[7] = partition_id;
-	DEBUG_STATUS_REGISTERS[8] = NumBytesWritten;
-	DEBUG_STATUS_REGISTERS[9] += 1;
 	if (NumBytesWritten < STORAGE_KEY_SIZE) {
 		/* make sure to delete what was written */
 		f_open(&filep, partitions[partition_id].lock_name, FA_CREATE_ALWAYS | FA_WRITE);
@@ -180,14 +178,7 @@ static int set_partition_key(uint8_t *data, int partition_id)
 		return ERR_FAULT;
 	}
 
-	// // debug >>>
-	// UINT NumBytesRead = 0;
-	// uint8_t key[STORAGE_KEY_SIZE];
-	// f_lseek(&filep, 0);
-	// f_read(&filep, key, STORAGE_KEY_SIZE, &NumBytesRead);
 	f_close(&filep);
-	// DEBUG_STATUS_REGISTERS[13]=NumBytesRead;
-	// // debug <<<
 	return 0;
 }
 
@@ -208,41 +199,32 @@ static int remove_partition_key(int partition_id)
 
 static int unlock_partition(uint8_t *data, int partition_id)
 {
-	if (partition_id == 0) DEBUG_STATUS_REGISTERS[10] += 1;
-	if (partition_id == 0) DEBUG_STATUS_REGISTERS[5]=0;
-	if (partition_id == 0) DEBUG_STATUS_REGISTERS[6]=-1;
-
 	FIL filep;
 	FRESULT result;
-	volatile FRESULT result2, result3, result4;//debug
 	UINT NumBytesRead = 0;
 	uint8_t key[STORAGE_KEY_SIZE];
 
 	result = f_open(&filep, partitions[partition_id].lock_name, FA_READ);
 
 	if (result) {
-		if (partition_id == 0) DEBUG_STATUS_REGISTERS[5] = 1;
 		_SEC_HW_ERROR("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
 
-	result2 = f_lseek(&filep, 0);
-	result3 = f_read(&filep, (void*)key, STORAGE_KEY_SIZE, &NumBytesRead);
-	result4 = f_close(&filep);
+	f_lseek(&filep, 0);
+	f_read(&filep, (void*)key, STORAGE_KEY_SIZE, &NumBytesRead);
+	f_close(&filep);
 	if (NumBytesRead != STORAGE_KEY_SIZE) {
-		if (partition_id == 0) DEBUG_STATUS_REGISTERS[5] = NumBytesRead;
 		/* TODO: if the key file is corrupted, then we might need to unlock, otherwise, we'll lose the partition. */
 		return ERR_FAULT;
 	}
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
 		if (key[i] != data[i]) {
-			if (partition_id == 0) DEBUG_STATUS_REGISTERS[6] = i;
 			return ERR_INVALID;
 		}
 	}
 
-	if (partition_id == 0) DEBUG_STATUS_REGISTERS[5] = 3;
 	partitions[partition_id].is_locked = false;
 	return 0;
 }
@@ -263,9 +245,7 @@ static int wipe_partition(int partition_id)
 		_SEC_HW_ERROR("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].data_name);
 		return ERR_FAULT;
 	}
-	DEBUG_STATUS_REGISTERS[21] = finfo.fsize;
 	f_write(&filep, (const void*)zero_buf, finfo.fsize, &NumBytesWritten);
-	DEBUG_STATUS_REGISTERS[22] = NumBytesWritten;
 	f_close(&filep);
 	return 0;
 }
@@ -279,195 +259,13 @@ static void process_request(uint8_t *buf)
 	uint8_t queue_id = 0;
 	u32 bytes_read;
 
-	volatile FRESULT result2, result3, result4;//debug
-
-// 	/* write */
-// 	if (buf[0] == STORAGE_OP_WRITE) {
-// 		if (main_partition.is_locked) {
-// 			_SEC_HW_ERROR("%s: Error: partition is locked\n", __func__);
-// 			STORAGE_SET_ONE_RET(0)
-// 			return;
-// 		}
-// 		result = f_open(&filep, main_partition.data_name, FA_READ | FA_WRITE);
-// 		if (result) {
-// 			_SEC_HW_ERROR("%s: Error: couldn't open %s for write\n", __func__, main_partition.data_name);
-// 			STORAGE_SET_ONE_RET(0)
-// 			return;
-// 		}
-// 		STORAGE_GET_TWO_ARGS
-// 		int start_block = (int) arg0;
-// 		int num_blocks = (int) arg1;
-// 		if (start_block + num_blocks >= main_partition.size) {
-// 			_SEC_HW_ERROR("%s: Error: invalid args\n", __func__);
-// 			STORAGE_SET_ONE_RET(0)
-// 			f_close(&filep);
-// 			return;
-// 		}
-// 		int seek_off = start_block * STORAGE_BLOCK_SIZE;
-// 		f_lseek(&filep, seek_off);
-// 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
-// 		uint32_t size = 0;
-// 		for (int i = 0; i < num_blocks; i++) {
-// #ifdef HW_MAILBOX_BLOCKING
-// 			XMbox_ReadBlocking(&Mbox_storage_data_in, (u32*) data_buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-// #else
-// 			queue_id = Q_STORAGE_DATA_IN;
-// 			XMbox_Read(&Mbox_storage_data_in,
-// 				(u32*) data_buf,
-// 				MAILBOX_QUEUE_MSG_SIZE_LARGE,
-// 				&bytes_read);
-// 			if (bytes_read != MAILBOX_QUEUE_MSG_SIZE_LARGE &&
-// 				!handle_partial_message(buf, &queue_id, bytes_read))
-// #endif
-// 			f_write(&filep, (const void*)data_buf, STORAGE_BLOCK_SIZE, &NumBytesWritten);
-// 			size += (uint32_t) NumBytesWritten;
-// 		}
-// 		STORAGE_SET_ONE_RET(size);
-// 		f_close(&filep);
-// 	} else if (buf[0] == STORAGE_OP_READ) { /* read */
-// 		if (main_partition.is_locked) {
-// 			_SEC_HW_ERROR("%s: Error: partition is locked\n", __func__);
-// 			STORAGE_SET_ONE_RET(0)
-// 			return;
-// 		}
-// 		result = f_open(&filep, main_partition.data_name, FA_READ);
-// 		if (result) {
-// 			_SEC_HW_ERROR("%s: Error: couldn't open %s for read\n", __func__, main_partition.data_name);
-// 			STORAGE_SET_ONE_RET(0)
-// 			return;
-// 		}
-// 		STORAGE_GET_TWO_ARGS
-// 		int start_block = (int) arg0;
-// 		int num_blocks = (int) arg1;
-// 		if (start_block + num_blocks >= main_partition.size) {
-// 			_SEC_HW_ERROR("%s: Error: invalid args\n", __func__);
-// 			STORAGE_SET_ONE_RET(0)
-// 			f_close(&filep);
-// 			return;
-// 		}
-// 		int seek_off = start_block * STORAGE_BLOCK_SIZE;
-// 		f_lseek(&filep, seek_off);
-// 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
-// 		uint32_t size = 0;
-// 		for (int i = 0; i < num_blocks; i++) {
-// 			f_read(&filep, (void*)data_buf, STORAGE_BLOCK_SIZE, &NumBytesRead);
-// 			size += (uint32_t) NumBytesRead;
-// 			XMbox_WriteBlocking(&Mbox_storage_data_out, (u32*) data_buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-// 		}
-// 		STORAGE_SET_ONE_RET(size);
-// 		f_close(&filep);
-// 	/* creates a new secure partition */
-// 	/* FIXME: temp implementation */
-// 	} else if (buf[0] == STORAGE_OP_CREATE_SECURE_PARTITION) {
-// 		STORAGE_GET_ZERO_ARGS_DATA
-// 		if (data_size != STORAGE_KEY_SIZE) {
-// 			_SEC_HW_ERROR("%s: Error: incorrect key size\n", __func__);
-// 			STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
-// 			return;
-// 		}
-// 		DEBUG_STATUS_REGISTERS[4] = 1;
-
-// 		int partition_id = -1;
-
-// 		for (int i = 0; i < NUM_PARTITIONS; i++) {
-// 			if (!sec_partitions[i].is_created) {
-// 				partition_id = i;
-// 				break;
-// 			}
-// 		}
-// 		DEBUG_STATUS_REGISTERS[4] = 2;
-// 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-// 			_SEC_HW_ERROR("%s: Error: no secure partitions available\n", __func__);
-// 			STORAGE_SET_TWO_RETS(ERR_AVAILABLE, 0)
-// 			return;
-// 		}
-// 		DEBUG_STATUS_REGISTERS[4] = 3;
-// 		int ret = set_secure_partition_key(data, partition_id);
-// 		if (ret) {
-// 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-// 			return;
-// 		}
-// 		DEBUG_STATUS_REGISTERS[4] = 4;
-// 		result = f_open(&filep, sec_partitions[partition_id].create_name, FA_READ | FA_WRITE);
-// 		if (result) {
-// 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-// 			return;
-// 		}
-// 		DEBUG_STATUS_REGISTERS[4] = 5;
-// 		f_lseek(&filep, 0);
-// 		uint32_t tag = 1;
-// 		f_write(&filep, (const void*)&tag, 4, &NumBytesWritten);
-// 		uint32_t size = NumBytesWritten;
-// 		f_close(&filep);
-// 		if (size != 4) {
-// 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-// 			if (size > 0) { /* partial write */
-// 				/* wipe the file */
-// 				f_open(&filep2, sec_partitions[partition_id].create_name, FA_CREATE_ALWAYS | FA_WRITE);
-// 				f_close(&filep2);
-// 			}
-// 			return;
-// 		}
-// 		DEBUG_STATUS_REGISTERS[4] = 6;
-// 		sec_partitions[partition_id].is_created = true;
-// 		DEBUG_STATUS_REGISTERS[5] = partition_id;
-// 		STORAGE_SET_TWO_RETS(0, partition_id)
-// 	} else if (buf[0] == STORAGE_OP_DELETE_SECURE_PARTITION) {
-// 		STORAGE_GET_ONE_ARG
-// 		uint32_t sec_partition_id = arg0;
-
-// 		if (sec_partition_id >= NUM_PARTITIONS) {
-// 			STORAGE_SET_ONE_RET(ERR_INVALID)
-// 			return;
-// 		}
-
-// 		if (!sec_partitions[sec_partition_id].is_created) {
-// 			_SEC_HW_ERROR("%s: Error: secure partition does not exist\n", __func__);
-// 			STORAGE_SET_ONE_RET(ERR_EXIST)
-// 			return;
-// 		}
-
-// 		if (is_queue_set_bound && (bound_partition == (int) sec_partition_id)) {
-// 			_SEC_HW_ERROR("%s: Error: secure partition currently bound to a queue set\n", __func__);
-// 			STORAGE_SET_ONE_RET(ERR_INVALID)
-// 			return;
-// 		}
-// 		if (sec_partitions[sec_partition_id].is_locked) {
-// 			_SEC_HW_ERROR("%s: Error: can't delete a locked partition\n", __func__);
-// 			STORAGE_SET_ONE_RET(ERR_INVALID)
-// 			return;
-// 		}
-
-// 		sec_partitions[sec_partition_id].is_created = false;
-// 		/* wipe the create and lock files of the partition */
-// 		f_open(&filep2, sec_partitions[sec_partition_id].create_name, FA_CREATE_ALWAYS | FA_WRITE);
-// 		f_close(&filep2);
-// 		f_open(&filep2, sec_partitions[sec_partition_id].lock_name, FA_CREATE_ALWAYS | FA_WRITE);
-// 		f_close(&filep2);
-
-// 		STORAGE_SET_ONE_RET(0)
-// 	} else {
-// 		STORAGE_SET_ONE_RET(ERR_INVALID)
-// 		return;
-// 	}
-// }
-
-// /* FIXME: there's duplicate code between process_request and this function */
-// static void process_secure_request(uint8_t *buf)
-// {
-// 	FIL filep;
-// 	FRESULT result;
-// 	UINT NumBytesRead = 0, NumBytesWritten = 0;
-
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
-		DEBUG_STATUS_REGISTERS[14] =-1;
 		if (!is_queue_set_bound) {
 			_SEC_HW_ERROR("%s: Error: no partition is bound to queue set\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[14] =1;
 		int partition_id = bound_partition;
 
 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
@@ -475,14 +273,11 @@ static void process_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[14] =2;
 		if (partitions[partition_id].is_locked) {
 			_SEC_HW_ERROR("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[14] =3;
-		DEBUG_STATUS_REGISTERS[19] = partition_id;
 		result = f_open(&filep, partitions[partition_id].data_name, FA_READ | FA_WRITE);
 		if (result) {
 			_SEC_HW_ERROR("%s: Error: couldn't open %s for write\n", __func__, 
@@ -490,7 +285,6 @@ static void process_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[14] =4;
 		STORAGE_GET_TWO_ARGS
 		uint32_t start_block = arg0;
 		uint32_t num_blocks = arg1;
@@ -500,9 +294,8 @@ static void process_request(uint8_t *buf)
 			f_close(&filep);
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[14] =5;
 		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
-		result2 = f_lseek(&filep, seek_off);
+		f_lseek(&filep, seek_off);
 
 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
 		uint32_t size = 0;
@@ -518,12 +311,11 @@ static void process_request(uint8_t *buf)
 			if (bytes_read != MAILBOX_QUEUE_MSG_SIZE_LARGE &&
 				!handle_partial_message(buf, &queue_id, bytes_read))
 #endif
-			result3 = f_write(&filep, (const void*)data_buf, STORAGE_BLOCK_SIZE, &NumBytesWritten);
+			f_write(&filep, (const void*)data_buf, STORAGE_BLOCK_SIZE, &NumBytesWritten);
 			size += (uint32_t) NumBytesWritten;
 		}
-		DEBUG_STATUS_REGISTERS[18] = size;
 		STORAGE_SET_ONE_RET(size);
-		result4 = f_close(&filep);
+		f_close(&filep);
 	} else if (buf[0] == STORAGE_OP_READ) { /* read */
 		if (!is_queue_set_bound) {
 			_SEC_HW_ERROR("%s: Error: no partition is bound to queue set\n", __func__);
@@ -531,7 +323,6 @@ static void process_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[16] =1;
 		int partition_id = bound_partition;
 
 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
@@ -540,14 +331,14 @@ static void process_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[16] =2;
+
 		if (partitions[partition_id].is_locked) {
 			_SEC_HW_ERROR("%s: Error: partition is locked\n", __func__);
 			SEC_HW_DEBUG_HANG();
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[16] =3;
+
 		result = f_open(&filep, partitions[partition_id].data_name, FA_READ);
 		if (result) {
 			_SEC_HW_ERROR("%s: Error: couldn't open %s for read\n", __func__, partitions[partition_id].data_name);
@@ -555,7 +346,7 @@ static void process_request(uint8_t *buf)
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[16] =4;
+
 		STORAGE_GET_TWO_ARGS
 		uint32_t start_block = arg0;
 		uint32_t num_blocks = arg1;
@@ -566,18 +357,17 @@ static void process_request(uint8_t *buf)
 			f_close(&filep);
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[16] =5;
+
 		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
-		result2 = f_lseek(&filep, seek_off);
+		f_lseek(&filep, seek_off);
 		uint8_t data_buf[STORAGE_BLOCK_SIZE] = {0};
 		uint32_t size = 0;
 		for (uint32_t i = 0; i < num_blocks; i++) {
-			result3 = f_read(&filep, data_buf, STORAGE_BLOCK_SIZE, &NumBytesRead);
+			f_read(&filep, data_buf, STORAGE_BLOCK_SIZE, &NumBytesRead);
 			size += (uint32_t) NumBytesRead;
 			XMbox_WriteBlocking(&Mbox_storage_data_out, (u32*) data_buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		}
-		DEBUG_STATUS_REGISTERS[17] =size;
-		DEBUG_STATUS_REGISTERS[16] =6;
+
 		STORAGE_SET_ONE_RET(size);
 		f_close(&filep);
 	} else if (buf[0] == STORAGE_OP_SET_KEY) {
@@ -612,9 +402,7 @@ static void process_request(uint8_t *buf)
 		STORAGE_SET_ONE_RET(ret)
 	} else if (buf[0] == STORAGE_OP_UNLOCK) {
 		STORAGE_GET_ZERO_ARGS_DATA
-DEBUG_STATUS_REGISTERS[0] += 1;
-DEBUG_STATUS_REGISTERS[1] = 0;
-DEBUG_STATUS_REGISTERS[2] = 0;
+
 		if (data_size != STORAGE_KEY_SIZE) {
 			_SEC_HW_ERROR("%s: Error: incorrect key size (sent for unlocking)\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
@@ -632,13 +420,11 @@ DEBUG_STATUS_REGISTERS[2] = 0;
 		}
 
 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-DEBUG_STATUS_REGISTERS[1] = partition_id;
 			STORAGE_SET_ONE_RET(ERR_EXIST)
 			return;
 		}
 
 		if (partitions[partition_id].is_locked) {
-DEBUG_STATUS_REGISTERS[2] = 2;
 			STORAGE_SET_ONE_RET(ERR_FAULT)
 			return;
 		}
@@ -646,7 +432,6 @@ DEBUG_STATUS_REGISTERS[2] = 2;
 		bound_partition = partition_id;
 		is_queue_set_bound = true;
 
-DEBUG_STATUS_REGISTERS[2] = 3;
 		STORAGE_SET_ONE_RET(0)
 	} else if (buf[0] == STORAGE_OP_LOCK) {
 		if (!is_queue_set_bound) {
@@ -669,7 +454,6 @@ DEBUG_STATUS_REGISTERS[2] = 3;
 
 		STORAGE_SET_ONE_RET(0)
 	} else if (buf[0] == STORAGE_OP_WIPE) {
-		DEBUG_STATUS_REGISTERS[20] = 1;
 		if (!is_queue_set_bound) {
 			_SEC_HW_ERROR("%s: Error: no partition is bound to queue set\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
@@ -718,7 +502,6 @@ DEBUG_STATUS_REGISTERS[2] = 3;
 			STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[4] = 1;
 		uint32_t partition_size = arg0;
 
 		int partition_id = -1;
@@ -747,7 +530,6 @@ DEBUG_STATUS_REGISTERS[2] = 3;
 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[4] = 5;
 		f_lseek(&filep, 0);
 		uint32_t tag = 1;
 		f_write(&filep, (const void*)&tag, 4, &NumBytesWritten);
@@ -762,9 +544,7 @@ DEBUG_STATUS_REGISTERS[2] = 3;
 			}
 			return;
 		}
-		DEBUG_STATUS_REGISTERS[4] = 6;
 		partitions[partition_id].is_created = true;
-		DEBUG_STATUS_REGISTERS[3] = partition_id;
 		STORAGE_SET_TWO_RETS(0, partition_id)
 	} else if (buf[0] == STORAGE_OP_DELETE_SECURE_PARTITION) {
 		if (is_config_locked) {
@@ -799,7 +579,7 @@ DEBUG_STATUS_REGISTERS[2] = 3;
 		}
 
 		partitions[partition_id].is_created = false;
-// 		/* wipe the create and lock files of the partition */
+		/* wipe the create and lock files of the partition */
 		f_open(&filep2, partitions[partition_id].create_name, FA_CREATE_ALWAYS | FA_WRITE);
 		f_close(&filep2);
 		f_open(&filep2, partitions[partition_id].lock_name, FA_CREATE_ALWAYS | FA_WRITE);

@@ -91,7 +91,7 @@ int send_output(uint8_t *buf)
 int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
 	uint8_t opcode[2];
-	int is_keyboard = 0, is_os1 = 0, is_os2 = 0; 
+	int is_keyboard = 0, is_os1 = 0, is_os2 = 0, is_osu = 0; 
 	static uint8_t turn = Q_OS1;
 
 	sem_wait(&interrupt_input);
@@ -99,27 +99,28 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 	sem_getvalue(&interrupts[Q_KEYBOARD], &is_keyboard);
 	sem_getvalue(&interrupts[Q_OS1], &is_os1);
 	sem_getvalue(&interrupts[Q_OS2], &is_os2);
+	sem_getvalue(&interrupts[Q_OSU], &is_osu);
 	if (is_keyboard) {
 		sem_wait(&interrupts[Q_KEYBOARD]);
 		*queue_id = Q_KEYBOARD;
-	} else {
-		if (is_os1 && !is_os2) {
-			sem_wait(&interrupts[Q_OS1]);
-			*queue_id = Q_OS1;
+	} else if (is_os1 && !is_os2) {
+		sem_wait(&interrupts[Q_OS1]);
+		*queue_id = Q_OS1;
+		turn = Q_OS2;
+	} else if (is_os2 && !is_os1) {
+		sem_wait(&interrupts[Q_OS2]);
+		*queue_id = Q_OS2;
+		turn = Q_OS1;
+	} else if (is_os1 && is_os2) {
+		sem_wait(&interrupts[turn]);
+		*queue_id = turn;
+		if (turn == Q_OS1)
 			turn = Q_OS2;
-		} else if (is_os2 && !is_os1) {
-			sem_wait(&interrupts[Q_OS2]);
-			*queue_id = Q_OS2;
+		else
 			turn = Q_OS1;
-		} else { /* is_os1 && is_os2 */
-			sem_wait(&interrupts[turn]);
-			*queue_id = turn;
-			if (turn == Q_OS1)
-				turn = Q_OS2;
-			else
-				turn = Q_OS1;
-		}
-
+	} else if (is_osu) {
+		sem_wait(&interrupts[Q_OSU]);
+		*queue_id = Q_OSU;
 	}
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
@@ -176,6 +177,20 @@ int send_cmd_to_network(uint8_t *buf)
 	sem_wait(&interrupts[Q_NETWORK_CMD_OUT]);
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
+
+int send_cmd_to_untrusted(uint8_t *buf)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_UNTRUSTED;
+
+	sem_wait(&interrupts[Q_UNTRUSTED]);
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	return 0;
 }
@@ -277,13 +292,13 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_SERIAL_OUT]);
 				break;
-			case Q_STORAGE_IN_2:
-				sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
-				sem_post(&availables[Q_STORAGE_IN_2]);
+			case Q_STORAGE_CMD_IN:
+				sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_STORAGE_CMD_IN]);
 				break;
-			case Q_STORAGE_OUT_2:
-				sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
-				sem_post(&availables[Q_STORAGE_OUT_2]);
+			case Q_STORAGE_CMD_OUT:
+				sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
+				sem_post(&availables[Q_STORAGE_CMD_OUT]);
 				break;
 			case Q_STORAGE_DATA_IN:
 				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
@@ -320,7 +335,8 @@ static void *handle_mailbox_interrupts(void *data)
 		} else {
 			sem_post(&interrupts[interrupt]);
 			/* FIXME: we should use separate threads for these two */
-			if (interrupt == Q_KEYBOARD || interrupt == Q_OS1 || interrupt == Q_OS2)
+			if (interrupt == Q_KEYBOARD || interrupt == Q_OS1 ||
+			    interrupt == Q_OS2 || interrupt == Q_OSU)
 				sem_post(&interrupt_input);
 		}
 	}
@@ -332,14 +348,13 @@ int init_os_mailbox(void)
 	
 	sem_init(&interrupts[Q_OS1], 0, 0);
 	sem_init(&interrupts[Q_OS2], 0, 0);
+	sem_init(&interrupts[Q_OSU], 0, 0);
 	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
 	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
-	sem_init(&interrupts[Q_STORAGE_IN_2], 0, MAILBOX_QUEUE_SIZE);
-	sem_init(&interrupts[Q_STORAGE_OUT_2], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
@@ -347,6 +362,7 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_SENSOR], 0, 0);
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
 
 	sem_init(&availables[Q_KEYBOARD], 0, 1);
 	sem_init(&availables[Q_SERIAL_OUT], 0, 1);
@@ -354,8 +370,6 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_IN], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_OUT], 0, 1);
-	sem_init(&availables[Q_STORAGE_IN_2], 0, 1);
-	sem_init(&availables[Q_STORAGE_OUT_2], 0, 1);
 	sem_init(&availables[Q_NETWORK_DATA_IN], 0, 1);
 	sem_init(&availables[Q_NETWORK_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_IN], 0, 1);

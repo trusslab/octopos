@@ -108,8 +108,6 @@ struct partition {
 	bool is_locked;
 };
 
-//#define STORAGE_MAIN_PARTITION_SIZE	1000  /* num blocks */
-//#define STORAGE_SECURE_PARTITION_SIZE	100  /* num blocks */
 #define NUM_PARTITIONS		5
 
 

@@ -42,14 +42,6 @@ int command_pipe[2];
 #define SHELL_STATE_RUNNING_APP			1
 #define SHELL_STATE_APP_WAITING_FOR_INPUT	2
 
-// #ifdef 	ARCH_SEC_HW_OS
-// extern 	XIpiPsu 					ipi_pmu_inst;
-
-// #define RESP_AND_MSG_NUM_OFFSET		0x1U
-// #define IPI_HEADER_OFFSET			0x0U
-// #define IPI_HEADER					0x1E0000 /* 1E - Target Module ID */
-// #endif
-
 struct app *foreground_app = NULL;
 
 int shell_status = SHELL_STATE_WAITING_FOR_CMD;
@@ -182,7 +174,6 @@ static void process_input_line(char *line)
 	/* see if it's a background command (cmd &) */
 	next = strchr(cmd, '&');
 	if (next != NULL) {
-		_SEC_HW_ERROR("Background app");
 		bg = 1;
 		/* 'next' points to '&' */
 		*next = '\0';
@@ -211,7 +202,7 @@ static int num_chars = 0;
 void shell_process_input(char buf)
 {
 	/* Backspace */
-	if (buf == '\b') {
+	if (buf == '\b' && num_chars >= 1) {
 		/* Still print it, so that cursor goes back */
 		output_printf("%c", buf);
 		line[--num_chars] = '\0';

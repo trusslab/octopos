@@ -369,15 +369,7 @@ void write_to_storage_data_queue(uint8_t *buf)
 
 int send_cmd_to_untrusted(uint8_t *buf)
 {
-	// uint8_t opcode[2];
-
-	// opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	// opcode[1] = Q_UNTRUSTED;
-
-	// sem_wait(&interrupts[Q_UNTRUSTED]);
-	// write(fd_out, opcode, 2);
-	// write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-
+	//TODO: Implement
 	return 0;
 }
 

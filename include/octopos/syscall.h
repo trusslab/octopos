@@ -184,15 +184,6 @@
 	DESERIALIZE_32(&ret0, &buf[1]);			\
 	DESERIALIZE_32(&ret1, &buf[5]);			\
 
-// #define SYSCALL_GET_ONE_RET				\
-// 	uint32_t ret0;					\
-// 	ret0 = *((uint32_t *) &buf[1]);			\
-
-// #define SYSCALL_GET_TWO_RETS				\
-// 	uint32_t ret0, ret1;				\
-// 	ret0 = *((uint32_t *) &buf[1]);			\
-// 	ret1 = *((uint32_t *) &buf[5]);			\
-
 /* FIXME: are we sure data is big enough for the memcpy here? */
 #define SYSCALL_GET_ONE_RET_DATA(data)						\
 	uint32_t ret0;								\

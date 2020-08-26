@@ -1,5 +1,6 @@
 #ifndef ARCH_SEC_HW
 
+/* Based on https://courses.cs.washington.edu/courses/cse461/05au/lectures/server.c */
 /* A simple server in the internet domain using TCP */
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +27,12 @@ int main(int argc, char *argv[])
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) 
 		error("ERROR opening socket");
+	int enable = 1;
+	/* This will allow us to reuse the port:
+	 * https://stackoverflow.com/questions/24194961/how-do-i-use-setsockoptso-reuseaddr
+	 */
+	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+		error("setsockopt(SO_REUSEADDR) failed");
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	portno = 12345;
 	serv_addr.sin_family = AF_INET;
@@ -50,10 +57,8 @@ int main(int argc, char *argv[])
 	if (n < 0)
 		error("ERROR writing to socket");
 	close(newsockfd);
-	
 	close(sockfd);
 
 	return 0; 
 }
-
 #endif

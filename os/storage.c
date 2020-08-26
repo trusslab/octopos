@@ -153,7 +153,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 {
 	SYSCALL_GET_ONE_ARG
 	uint32_t count = arg0;
-	_SEC_HW_ERROR("[0] %d, %d", runtime_proc_id, count);
 
 	/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
@@ -172,7 +171,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 		return;
 	}
-	_SEC_HW_ERROR("[1]");
 
 	if (!is_partition_locked) {
 		int ret = lock_secure_storage();
@@ -182,7 +180,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 		is_partition_locked = true;
 	}
-	_SEC_HW_ERROR("[2]");
 
 	if (!is_storage_config_locked) {
 		int ret = lock_storage_config();
@@ -192,24 +189,23 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 		is_storage_config_locked = true;
 	}
-	_SEC_HW_ERROR("[3]");
 
-	// wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
-	// wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-	_SEC_HW_ERROR("[4]");
+#ifndef ARCH_SEC_HW
+	// FIXME: there is a bug in os, the semaphore is wrong
+	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+#endif
 
 	mark_queue_unavailable(Q_STORAGE_CMD_IN);
 	mark_queue_unavailable(Q_STORAGE_CMD_OUT);
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
-	_SEC_HW_ERROR("[5]");
 
 #ifdef ARCH_SEC_HW
 	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
-	_SEC_HW_ERROR("[6]");
 #else
 	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
 	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);

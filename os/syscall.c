@@ -137,8 +137,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 #ifdef ARCH_SEC_HW
 	_SEC_HW_DEBUG("syscall %d received from %d", syscall_nr, runtime_proc_id);
-	// for (int i = 0; i < MAILBOX_QUEUE_MSG_SIZE; i++)
-	// 	_SEC_HW_ERROR("%02X", buf[i]);
 #endif
 
 	switch (syscall_nr) {
