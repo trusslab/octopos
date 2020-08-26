@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <pthread.h>
-#ifndef ARCH_SEC_HW
+#ifndef ARCH_SEC_HW_STORAGE
 #include <semaphore.h>
 #else
 #include "arch/semaphore.h"
