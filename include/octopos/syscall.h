@@ -79,7 +79,6 @@
 	SERIALIZE_32(arg2, &buf[10])				\
 	SERIALIZE_32(arg3, &buf[14])				\
 
-/* FIXME: use SERIALIZE_XXX */
 #define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
@@ -92,7 +91,7 @@
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[0]) = syscall_nr;					\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
 	buf[2] = size;								\
 	memcpy(&buf[3], (uint8_t *) data, size);				\
 
@@ -108,8 +107,8 @@
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[0]) = syscall_nr;					\
-	*((uint32_t *) &buf[2]) = arg0;						\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SERIALIZE_32(arg0, &buf[2])					\
 	buf[6] = size;								\
 	memcpy(&buf[7], (uint8_t *) data, size);				\
 
@@ -125,9 +124,9 @@
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint16_t *) &buf[0]) = syscall_nr;					\
-	*((uint32_t *) &buf[2]) = arg0;						\
-	*((uint32_t *) &buf[6]) = arg1;						\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SERIALIZE_32(arg0, &buf[2])					\
+	SERIALIZE_32(arg1, &buf[6])					\
 	buf[10] = size;								\
 	memcpy(&buf[11], (uint8_t *) data, size);				\
 
@@ -178,12 +177,12 @@
 
 #define SYSCALL_GET_ONE_RET				\
 	uint32_t ret0;					\
-	ret0 = *((uint32_t *) &buf[1]);			\
+	DESERIALIZE_32(&ret0, &buf[1]);			\
 
 #define SYSCALL_GET_TWO_RETS				\
 	uint32_t ret0, ret1;				\
-	ret0 = *((uint32_t *) &buf[1]);			\
-	ret1 = *((uint32_t *) &buf[5]);			\
+	DESERIALIZE_32(&ret0, &buf[1]);			\
+	DESERIALIZE_32(&ret1, &buf[5]);			\
 
 /* FIXME: are we sure data is big enough for the memcpy here? */
 #define SYSCALL_GET_ONE_RET_DATA(data)						\

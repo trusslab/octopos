@@ -39,6 +39,7 @@
 #include <arch/mailbox_runtime.h>
 
 #ifdef ARCH_SEC_HW
+#include <runtime/storage_client.h>
 #include "xparameters.h"
 #include "arch/sec_hw.h"
 #include "xil_cache.h"
@@ -50,10 +51,12 @@
 #include "raw.h"
 #endif
 
+#ifdef ARCH_SEC_HW
 volatile int i = 0xDEADBEEF;
 extern unsigned char __datacopy;
 extern unsigned char __data_start;
 extern unsigned char __data_end;
+#endif
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -69,7 +72,10 @@ sem_t srq_sem;
 
 #ifdef ARCH_SEC_HW
 extern sem_t interrupt_change;
+/* This is to deal with the lack of nested interrupt support */
+_Bool async_syscall_mode = FALSE;
 #endif
+
 
 /* FIXME: there are a lot of repetition in these macros */
 #define IPC_SET_ZERO_ARGS_DATA(data, size)					\
@@ -181,6 +187,13 @@ void issue_syscall(uint8_t *buf)
 {
 	runtime_send_msg_on_queue(buf, q_os);
 
+#ifdef ARCH_SEC_HW
+if (async_syscall_mode) {
+	sleep(1);
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+	return;
+}
+#endif
 	/* wait for response */
 	wait_on_queue(q_runtime);
 	read_syscall_response(buf);
@@ -470,8 +483,6 @@ static int read_from_shell(char *data, int *data_size)
 	return (int) ret0;
 }
 
-#ifdef ARCH_UMODE
-
 static uint32_t open_file(char *filename, uint32_t mode)
 {
 	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
@@ -548,7 +559,6 @@ static int remove_file(char *filename)
 	return (int) ret0;
 }
 
-
 bool context_set = false;
 void *context_addr = NULL;
 uint32_t context_size = 0;
@@ -558,7 +568,6 @@ uint32_t context_tag = 0xDEADBEEF;
 static int set_up_context(void *addr, uint32_t size)
 {
 	uint8_t context_block[STORAGE_BLOCK_SIZE];
-
 	if (size > (STORAGE_BLOCK_SIZE - CONTEXT_TAG_SIZE)) {
 		printf("Error (%s): context size is too big.\n", __func__);
 		return ERR_INVALID;
@@ -567,7 +576,6 @@ static int set_up_context(void *addr, uint32_t size)
 	context_addr = addr;
 	context_size = size;
 	context_set = true;
-
 	/* Now, let's retrieve the context. */
 	int ret = request_secure_storage_access(200, 100);
 	if (ret) {
@@ -594,7 +602,6 @@ static int set_up_context(void *addr, uint32_t size)
 
 	return 0;
 }
-#endif
 
 bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
@@ -646,28 +653,6 @@ static int yield_secure_ipc(void)
 	uint8_t qid = secure_ipc_target_queue;
 	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
-
-#ifdef ARCH_SEC_HW
-	/* Before we change runtime queue access, we must
-	 * make sure the other side has done with its reading
-	 * or writing.
-	 */
-	char yield_msg[MAILBOX_QUEUE_MSG_SIZE] = "ADIOS";
-	int yield_msg_size = strlen(yield_msg) + 1;
-
-	IPC_SET_ZERO_ARGS_DATA(yield_msg, yield_msg_size)
-	runtime_send_msg_on_queue(buf, qid);
-
-	{
-		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-		runtime_recv_msg_from_queue(buf, q_runtime);
-		IPC_GET_ZERO_ARGS_DATA
-
-		int goodbye_received = memcmp(data, yield_msg, strlen(yield_msg));
-		_SEC_HW_ASSERT_NON_VOID(0 == goodbye_received)
-		_SEC_HW_DEBUG("ADIOS received from %d", qid);
-	}
-#endif
 
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
@@ -912,7 +897,6 @@ static void load_application(char *msg)
 		.read_char_from_secure_keyboard = read_char_from_secure_keyboard,
 		.write_to_shell = write_to_shell,
 		.read_from_shell = read_from_shell,
-#ifdef ARCH_UMODE
 		.open_file = open_file,
 		.write_to_file = write_to_file,
 		.read_from_file = read_from_file,
@@ -929,7 +913,6 @@ static void load_application(char *msg)
 		.write_to_secure_storage_block = write_to_secure_storage_block,
 		.read_from_secure_storage_block = read_from_secure_storage_block,
 		.set_up_context = set_up_context,
-#endif
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
@@ -993,7 +976,6 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
-#ifdef ARCH_UMODE
 void *store_context(void *data)
 {
 	uint8_t context_block[STORAGE_BLOCK_SIZE];
@@ -1003,6 +985,9 @@ void *store_context(void *data)
 		return NULL;
 	}
 
+#ifdef ARCH_SEC_HW
+	async_syscall_mode = true;
+#endif
 	int ret = request_secure_storage_access(200, 100);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
@@ -1017,12 +1002,14 @@ void *store_context(void *data)
 		printf("Error: couldn't write the context to secure storage.\n");
 
 	yield_secure_storage_access();
+#ifdef ARCH_SEC_HW
+	async_syscall_mode = false;
+#endif
 	still_running = false;
 	inform_os_of_pause();
 
 	return NULL;
 }
-#endif
 
 #ifdef ARCH_UMODE
 int main(int argc, char **argv)
@@ -1031,14 +1018,6 @@ int main()
 #endif
 {
 #ifdef ARCH_SEC_HW
-	// FIXME: Zephyr: rm this when microblaze doesn't use ddr for cache
-#if RUNTIME_ID == 1
-	Xil_ICacheEnable();
-	Xil_DCacheEnable();
-#endif /* RUNTIME_ID == 1 */
-
-#if RUNTIME_ID == 2
-//    _SEC_HW_ERROR("ENTERING MAIN");
 
 	unsigned char *dataCopyStart = &__datacopy;
 	unsigned char *dataStart = &__data_start;
@@ -1053,8 +1032,6 @@ int main()
 	}
 
 	i = 0;
-#endif /* RUNTIME_ID == 2 */
-
 #endif /* ARCH_SEC_HW */
 
 	int runtime_id = -1;

@@ -22,5 +22,6 @@ void queue_sync_getval(uint8_t queue_id, int *val);
 void wait_on_queue(uint8_t queue_id);
 void wait_for_app_load(void);
 void load_application_arch(char *msg, struct runtime_api *api);
+void mailbox_yield_to_previous_owner(uint8_t queue_id);
 
 #endif /* __SEC_HW_MAILBOX_RUNTIME_H */
