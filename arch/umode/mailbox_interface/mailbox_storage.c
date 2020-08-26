@@ -94,6 +94,8 @@ sem_t interrupts[NUM_QUEUES + 1];
 uint8_t config_key[STORAGE_KEY_SIZE];
 bool is_config_locked = false;
 
+pthread_t mailbox_thread;
+
 extern struct	partition partitions[NUM_PARTITIONS];
 extern uint32_t	partition_sizes[NUM_PARTITIONS]; 
 
@@ -696,8 +698,6 @@ void storage_event_loop(void)
 
 int init_storage(void)
 {
-	pthread_t mailbox_thread;
-
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
@@ -722,6 +722,8 @@ int init_storage(void)
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
 	}
+
+	return 0;
 }
 
 void close_storage(void)
