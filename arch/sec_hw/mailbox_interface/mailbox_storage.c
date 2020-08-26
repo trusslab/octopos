@@ -14,12 +14,83 @@
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox_owner_map.h"
 #include "arch/octopos_mbox.h"
+#include "arch/syscall.h"
 
 #include "octopos/mailbox.h"
 #include "octopos/storage.h"
 #include "octopos/error.h"
 
 #define HW_MAILBOX_BLOCKING
+
+
+#define STORAGE_SET_ONE_RET(ret0)	\
+	SERIALIZE_32(ret0, &buf[0])
+
+#define STORAGE_SET_TWO_RETS(ret0, ret1)	\
+	SERIALIZE_32(ret0, &buf[0])				\
+	SERIALIZE_32(ret1, &buf[4])
+
+/* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
+#define STORAGE_SET_ONE_RET_DATA(ret0, data, size)		\
+	*((uint32_t *) &buf[0]) = ret0;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 5;		\
+	if (max_size < 256 && size <= ((int) max_size)) {	\
+		buf[4] = (uint8_t) size;			\
+		memcpy(&buf[5], data, size);			\
+	} else {						\
+		printf("Error: invalid max_size or size\n");	\
+		buf[4] = 0;					\
+	}
+
+#define STORAGE_GET_ONE_ARG		\
+	uint32_t arg0;			\
+	arg0 = *((uint32_t *) &buf[1]); \
+
+#define STORAGE_GET_TWO_ARGS		\
+	uint32_t arg0, arg1;		\
+	arg0 = *((uint32_t *) &buf[1]); \
+	arg1 = *((uint32_t *) &buf[5]); \
+
+#define STORAGE_GET_THREE_ARGS		\
+	uint32_t arg0, arg1, arg2;	\
+	arg0 = *((uint32_t *) &buf[1]); \
+	arg1 = *((uint32_t *) &buf[5]); \
+	arg2 = *((uint32_t *) &buf[9]);\
+
+#define STORAGE_GET_ZERO_ARGS_DATA				\
+	uint8_t data_size, *data;				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;		\
+	if (max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		return;						\
+	}							\
+	data_size = buf[1];					\
+	if (data_size > max_size) {				\
+		printf("Error: size not supported\n");		\
+		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		return;						\
+	}							\
+	data = &buf[2];					\
+
+#define STORAGE_GET_ONE_ARG_DATA				\
+	uint32_t arg0;						\
+	uint8_t data_size, *data;				\
+	arg0 = *((uint32_t *) &buf[1]);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
+	if (max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		return;						\
+	}							\
+	data_size = buf[5];					\
+	if (data_size > max_size) {				\
+		printf("Error: size not supported\n");		\
+		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		return;						\
+	}							\
+	data = &buf[6];
+
 
 XIntc			intc;
 
