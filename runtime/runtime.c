@@ -324,7 +324,7 @@ void issue_syscall(uint8_t *buf)
 
 #ifdef ARCH_SEC_HW
 if (async_syscall_mode) {
-	usleep(10);
+	sleep(1);
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	return;
 }

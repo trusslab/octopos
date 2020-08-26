@@ -264,8 +264,10 @@ int yield_secure_storage_access(void)
 		return ERR_INVALID;
 	}
 
-	/* FIXME: what if lock fails? */
-	lock_secure_storage();
+	if (lock_secure_storage()) {
+		printf("%s: Error: fail to lock secure storage\n", __func__);
+		return ERR_FAULT;
+	}
 
 	has_access_to_secure_storage = false;
 
