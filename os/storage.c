@@ -1,4 +1,4 @@
-/* OctopOS storage client for the OS */
+/* OctopOS storage code for the OS */
 #include <arch/defines.h>
 #include <stdio.h>
 #include <stdlib.h>

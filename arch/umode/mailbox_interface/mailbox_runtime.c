@@ -46,6 +46,8 @@ sem_t interrupt_change;
 
 sem_t load_app_sem;
 
+pthread_spinlock_t mailbox_lock;
+
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
 {
 	uint8_t opcode[4];
@@ -54,7 +56,9 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	opcode[1] = queue_id;
 	opcode[2] = access;
 	opcode[3] = proc_id;
+	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 4);
+	pthread_spin_unlock(&mailbox_lock);	
 }
 
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
@@ -65,8 +69,10 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
 	opcode[1] = queue_id;
 	opcode[2] = access;
 	opcode[3] = count;
+	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 4);
 	read(fd_in, &ret, 1);
+	pthread_spin_unlock(&mailbox_lock);	
 
 	return (int) ret; 
 }
@@ -79,8 +85,10 @@ static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int que
 	opcode[1] = queue_id;
 	/* wait for message */
 	sem_wait(&interrupts[queue_id]);
+	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, queue_msg_size);
+	pthread_spin_unlock(&mailbox_lock);	
 }
 
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -90,8 +98,10 @@ static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 	sem_wait(&interrupts[queue_id]);
+	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, queue_msg_size);
+	pthread_spin_unlock(&mailbox_lock);	
 }
 
 void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id)
@@ -201,8 +211,10 @@ void runtime_core(void)
 
 			opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 			opcode[1] = q_runtime;
+			pthread_spin_lock(&mailbox_lock);
 			write(fd_out, opcode, 2);
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+			pthread_spin_unlock(&mailbox_lock);
 			if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
 				write_syscall_response(buf);
 				sem_post(&interrupts[interrupt]);
@@ -273,6 +285,8 @@ int init_runtime(int runtime_id)
 
 	sem_init(&load_app_sem, 0, 0);
 
+	pthread_spin_init(&mailbox_lock, PTHREAD_PROCESS_PRIVATE);
+
 	int ret = pthread_create(&app_thread, NULL, run_app, load_buf);
 	if (ret) {
 		printf("Error: couldn't launch the app thread\n");
@@ -294,7 +308,11 @@ void close_runtime(void)
 	/* FIXME: resetting the mailbox needs to be done automatically. */
 	uint8_t opcode[2];
 	opcode[0] = MAILBOX_OPCODE_RESET;
+	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 2);
+	pthread_spin_unlock(&mailbox_lock);	
+
+	pthread_spin_destroy(&mailbox_lock);
 
 	close(fd_out);
 	close(fd_in);
