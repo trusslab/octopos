@@ -186,9 +186,16 @@ static void send_packet(uint8_t *buf)
 		printf("%s: Error: packet size is not correct.\n", __func__);
 		return;
 	}
+	printf("%s [0.1]: pkb->pk_len = %d\n", __func__, pkb->pk_len);
 
 	/* check the IP addresses */
 	struct ip *iphdr = pkb2ip(pkb);
+	printf("%s [1]: ip_src = %#x, ip_dst = %#x\n", __func__, iphdr->ip_src, iphdr->ip_dst);
+	printf("%s [1.1]: ETH_HRD_SZ = %d\n", __func__, (int) ETH_HRD_SZ);
+	printf("%s [1.2]: IP_HRD_SZ = %d\n", __func__, (int) IP_HRD_SZ);
+	printf("%s [1.3]: TCP_HRD_SZ = %d\n", __func__, (int) TCP_HRD_SZ);
+	printf("%s [1.4]: ip_pro = %d\n", __func__, iphdr->ip_pro);
+	printf("%s [1.5]: ip_len = %d\n", __func__, iphdr->ip_len);
 	if ((saddr != iphdr->ip_src) || (daddr != iphdr->ip_dst)) {
 		printf("%s: Error: invalid src or dst IP addresses.\n", __func__);
 		return;
@@ -196,13 +203,32 @@ static void send_packet(uint8_t *buf)
 
 	/* check the port numbers */
 	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
-	if ((sport != tcphdr->src) || (dport != tcphdr->dst)) {
+	printf("%s [2]: tcphdr->src = %d, tcphdr->dst = %d\n", __func__, tcphdr->src, tcphdr->dst);
+	printf("%s [2.1]: tcphdr->seq = %d, tcphdr->ackn = %d\n", __func__, tcphdr->seq, tcphdr->ackn);
+	printf("%s [2.2]: tcphdr->reserved = %d, tcphdr->doff = %d\n", __func__, tcphdr->reserved, tcphdr->doff);
+	printf("%s [2.3]: tcphdr->fin = %d, tcphdr->syn = %d\n", __func__, tcphdr->fin, tcphdr->syn);
+	printf("%s [2.4]: tcphdr->rst = %d, tcphdr->psh = %d\n", __func__, tcphdr->rst, tcphdr->psh);
+	printf("%s [2.5]: tcphdr->ack = %d, tcphdr->urg = %d\n", __func__, tcphdr->ack, tcphdr->urg);
+	printf("%s [2.6]: tcphdr->ece = %d, tcphdr->cwr = %d\n", __func__, tcphdr->ece, tcphdr->cwr);
+	printf("%s [2.7]: tcphdr->window = %d, tcphdr->checksum = %d\n", __func__, tcphdr->window, tcphdr->checksum);
+	printf("%s [2.8]: tcphdr->urgptr = %d, tcphdr->data[0] = %d\n", __func__, tcphdr->urgptr, tcphdr->data[0]);
+	/* FIXME: check the src port too */
+	//if ((sport != tcphdr->src) || (dport != tcphdr->dst)) {
+	if (dport != tcphdr->dst) {
 		printf("%s: Error: invalid src or dst port numbers.\n", __func__);
 		return;
 	}
 
+	/* FIXME: remove */
+	/* print date */
+	int dsize = (pkb->pk_len - 54) - ((tcphdr->doff - 5) * 4);
+	int dindex = (tcphdr->doff - 5) * 4;
+	printf("%s [2.9]: dsize = %d, dindex = %d\n", __func__, dsize, dindex);
+	if (dsize) printf("%s [3]: data = %s\n", __func__, &tcphdr->data[dindex]);
+
 	tcp_init_pkb(pkb);
 	/* TCP checksum */
+	/* FIXME */
 	tcp_set_checksum(iphdr, tcphdr);
 
 	ip_send_out(pkb);
@@ -248,8 +274,12 @@ static void send_received_packet(uint8_t *buf, uint8_t queue_id)
 
 void tcp_in(struct pkbuf *pkb)
 {
+	printf("%s [0.1]: pkb->pk_len = %d\n", __func__, pkb->pk_len);
 	/* check the IP addresses */
 	struct ip *iphdr = pkb2ip(pkb);
+	printf("%s [1]: ip_src = %#x, ip_dst = %#x\n", __func__, iphdr->ip_src, iphdr->ip_dst);
+	printf("%s [1.1]: ip_pro = %d, ip checksum = %d\n", __func__, iphdr->ip_pro, iphdr->ip_cksum);
+	printf("%s [1.2]: ip_len = %d\n", __func__, iphdr->ip_len);
 	if ((daddr != iphdr->ip_src) || (saddr != iphdr->ip_dst)) {
 		printf("%s: Error: invalid src or dst IP addresses. Dropping the packet\n", __func__);
 		return;
@@ -257,10 +287,28 @@ void tcp_in(struct pkbuf *pkb)
 
 	/* check the port numbers */
 	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
-	if ((dport != tcphdr->src) || (sport != tcphdr->dst)) {
+	printf("%s [2]: tcphdr->src = %d, tcphdr->dst = %d\n", __func__, tcphdr->src, tcphdr->dst);
+	/* FIXME: check the source port too. */
+	//if ((dport != tcphdr->src) || (sport != tcphdr->dst)) {
+	if (dport != tcphdr->src) {
 		printf("%s: Error: invalid src or dst port numbers. Dropping the packet\n", __func__);
 		return;
 	}
+	printf("%s [2.1]: tcphdr->seq = %d, tcphdr->ackn = %d\n", __func__, tcphdr->seq, tcphdr->ackn);
+	printf("%s [2.2]: tcphdr->reserved = %d, tcphdr->doff = %d\n", __func__, tcphdr->reserved, tcphdr->doff);
+	printf("%s [2.3]: tcphdr->fin = %d, tcphdr->syn = %d\n", __func__, tcphdr->fin, tcphdr->syn);
+	printf("%s [2.4]: tcphdr->rst = %d, tcphdr->psh = %d\n", __func__, tcphdr->rst, tcphdr->psh);
+	printf("%s [2.5]: tcphdr->ack = %d, tcphdr->urg = %d\n", __func__, tcphdr->ack, tcphdr->urg);
+	printf("%s [2.6]: tcphdr->ece = %d, tcphdr->cwr = %d\n", __func__, tcphdr->ece, tcphdr->cwr);
+	printf("%s [2.7]: tcphdr->window = %d, tcphdr->checksum = %d\n", __func__, tcphdr->window, tcphdr->checksum);
+	printf("%s [2.8]: tcphdr->urgptr = %d, tcphdr->data[0] = %d\n", __func__, tcphdr->urgptr, tcphdr->data[0]);
+
+	/* FIXME: remove */
+	/* print date */
+	int dsize = (pkb->pk_len - 54) - ((tcphdr->doff - 5) * 4);
+	int dindex = (tcphdr->doff - 5) * 4;
+	printf("%s [2.9]: dsize = %d, dindex = %d\n", __func__, dsize, dindex);
+	if (dsize) printf("%s [3]: data = %s\n", __func__, &tcphdr->data[dindex]);
 
 	int size = pkb->pk_len + sizeof(*pkb);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);

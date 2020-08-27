@@ -61,7 +61,7 @@
 	   "shell_command":[
 		"cd arch/umode/untrusted_linux",
 		"sleep 1",
-		"./linux ubda=OpenSuse-12.1-amd64-root_fs mem=128M",
+		"./linux ubda=CentOS6.x-AMD64-root_fs mem=128M",
 		"test"
 	   ]
 	}

@@ -77,7 +77,7 @@ static void send_receive(struct runtime_api *api)
 	while ((len = api->read_from_socket(sock, buf, 512)) > 0) {
 		insecure_printf("%.*s\n", len, buf);
 	}
-	printf("%s [5]\n", __func__);
+	printf("%s [5]: len = %d\n", __func__, len);
 }
 
 extern "C" __attribute__ ((visibility ("default")))

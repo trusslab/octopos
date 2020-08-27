@@ -1,4 +1,4 @@
-/* octopos application runtime */
+/* octopos storage client */
 #ifndef CONFIG_UML /* Linux UML */
 #include <arch/defines.h>
 
@@ -22,7 +22,7 @@
 #else /* CONFIG_UML */
 #define UNTRUSTED_DOMAIN
 #include <linux/module.h>
-#include "runtime.h"
+#include <octopos/runtime/runtime.h>
 #include "storage_client.h"
 #endif /* CONFIG_UML */
 #include <octopos/mailbox.h>

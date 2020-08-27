@@ -19,6 +19,8 @@ static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 
 void tcp_send_out(struct tcp_sock *tsk, struct pkbuf *pkb, struct tcp_segment *seg)
 {
+	struct ip *iphdr = pkb2ip(pkb);
+        struct tcp *tcphdr = (struct tcp *)iphdr->ip_data;
 	unsigned int saddr, daddr;
 
 	if (seg) {
@@ -34,6 +36,7 @@ void tcp_send_out(struct tcp_sock *tsk, struct pkbuf *pkb, struct tcp_segment *s
 		free_pkb(pkb);
 		return;
 	}
+	tcp_set_checksum(iphdr, tcphdr);
 	ip_send_out(pkb);
 }
 

@@ -23,48 +23,69 @@
 /* check include/linux/miscdevice.h to make sure this is not taken. */
 #define OM_MINOR		243
 
-/* move to a header file */
+/* FIXME: move to a header file */
 void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size);
 void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size);
 int handle_mailbox_interrupts(void *data);
 int init_octopos_mailbox_interface(void);
 void close_octopos_mailbox_interface(void);
 
-/* FIXME: use the macros in syscall.h */
-#define SYSCALL_SET_ZERO_ARGS(syscall_nr)					\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	*((uint16_t *) &buf[0]) = syscall_nr;					\
+int fd_out, fd_in, fd_intr;
+struct semaphore interrupts[NUM_QUEUES + 1];
 
-#define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 3;				\
-	if (max_size >= 256) {							\
-		printk("Error (%s): max_size not supported\n", __func__);	\
-		return -EINVAL;							\
-	}									\
-	if (size > max_size) {							\
-		printk("Error (%s): size not supported\n", __func__);		\
-		return -EINVAL;							\
-	}									\
-	*((uint16_t *) &buf[0]) = syscall_nr;					\
-	buf[2] = size;								\
-	memcpy(&buf[3], (uint8_t *) data, size);				\
+struct semaphore cmd_sem;
+uint8_t cmd_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
 
-#define SYSCALL_GET_ONE_RET				\
-	uint32_t ret0;					\
-	ret0 = *((uint32_t *) &buf[1]);			\
+/* FIXME: very similar to the same queue in runtime.c */
+uint8_t **syscall_resp_queue;
+int srq_size;
+int srq_msg_size;
+int srq_head;
+int srq_tail;
+int srq_counter;
+struct semaphore srq_sem;
 
-static int issue_syscall(uint8_t *buf)
+/* FIXME: modified from the same functin in runtime.c */
+int write_syscall_response(uint8_t *buf)
+{
+	down(&srq_sem);
+
+	if (srq_counter >= srq_size) {
+		printk("Error: syscall response queue is full\n");
+		BUG();
+	}
+
+	srq_counter++;
+	memcpy(syscall_resp_queue[srq_tail], buf, srq_msg_size);
+	srq_tail = (srq_tail + 1) % srq_size;
+
+	return 0;
+}
+
+/* FIXME: modified from the same functin in runtime.c */
+static int read_syscall_response(uint8_t *buf)
+{
+	if (srq_counter <= 0) {
+		printk("Error: syscall response queue is empty\n");
+		BUG();
+	}
+
+	srq_counter--;
+	memcpy(buf, syscall_resp_queue[srq_head], srq_msg_size);
+	srq_head = (srq_head + 1) % srq_size;
+
+	up(&srq_sem);
+
+	return 0;
+}
+
+int issue_syscall(uint8_t *buf)
 {
 	send_msg_on_queue(buf, Q_OSU, MAILBOX_QUEUE_MSG_SIZE);
 
-	recv_msg_from_queue(buf, Q_UNTRUSTED, MAILBOX_QUEUE_MSG_SIZE);
-	if (buf[0] != RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
-		printk("Error: %s: received invalid message.\n", __func__);
-		return -EINVAL;
-	}
+	/* wait on queue */
+	down(&interrupts[Q_UNTRUSTED]);
+	read_syscall_response(buf);
 	
 	return 0;
 }
@@ -95,7 +116,6 @@ static int inform_os_of_termination(void)
 	return (int) ret0;
 }
 
-
 static int om_dev_open(struct inode *inode, struct file *filp)
 {
 	return 0;
@@ -104,23 +124,19 @@ static int om_dev_open(struct inode *inode, struct file *filp)
 static ssize_t om_dev_read(struct file *filp, char __user *buf, size_t size,
 			   loff_t *offp)
 {
-	uint8_t data[MAILBOX_QUEUE_MSG_SIZE];
 	int datasize, ret;
 
 	if (*offp != 0)
 		return 0;
   
-	recv_msg_from_queue(data, Q_UNTRUSTED, MAILBOX_QUEUE_MSG_SIZE);
-	if (data[0] != RUNTIME_QUEUE_EXEC_APP_TAG) {
-		printk("Error: %s: received invalid message.\n", __func__);
-		return -EINVAL;
-	}
+	/* wait for cmd */
+	down(&cmd_sem);
 
 	datasize = MAILBOX_QUEUE_MSG_SIZE - 1;
 	if (size < datasize)
 		datasize = size;
 	
-	ret = copy_to_user(buf, &data[1], datasize);
+	ret = copy_to_user(buf, cmd_buf, datasize);
 	*offp += (datasize - ret);
 
 	return (datasize - ret);
@@ -143,6 +159,7 @@ static ssize_t om_dev_write(struct file *filp, const char __user *buf, size_t si
 
 	ret = copy_from_user(data, buf, size);
 	*offp += (size - ret);
+
 	write_to_shell(data, size - ret);
 	inform_os_of_termination();
 
@@ -162,67 +179,205 @@ static struct miscdevice om_miscdev = {
 	&om_chrdev_ops,
 };
 
-int fd_out, fd_in, fd_intr;
-struct semaphore interrupts[NUM_QUEUES + 1];
-
 void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
-	uint8_t interrupt;
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
 	/* wait for message */
-	printk("%s [1]\n", __func__);
 	down(&interrupts[queue_id]);
-	printk("%s [2]\n", __func__);
 	os_write_file(fd_out, opcode, 2), 
-	printk("%s [3]\n", __func__);
 	os_read_file(fd_in, buf, queue_msg_size);
-	printk("%s [4]\n", __func__);
+}
+
+static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = queue_id;
+	os_write_file(fd_out, opcode, 2), 
+	os_read_file(fd_in, buf, queue_msg_size);
 }
 
 void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
-	uint8_t interrupt;
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
-	printk("%s [1]\n", __func__);
 	down(&interrupts[queue_id]);
-	printk("%s [2]\n", __func__);
 	os_write_file(fd_out, opcode, 2);
-	printk("%s [3]\n", __func__);
 	os_write_file(fd_out, buf, queue_msg_size);
-	printk("%s [4]\n", __func__);
+}
+
+/* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
+ * Rename and consolidate.
+ */
+void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id)
+{
+	return recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
+}
+
+/* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
+ * Rename and consolidate.
+ */
+void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id)
+{
+	return send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
+}
+
+/* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
+ * Rename and consolidate.
+ */
+void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
+{
+	return recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
+/* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
+ * Rename and consolidate.
+ */
+void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id)
+{
+	return send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
+/* FIXME: adapted from the same func in mailbox_runtime.c */
+void queue_sync_getval(uint8_t queue_id, int *val)
+{
+	*val = interrupts[queue_id].count;
+}
+
+/* FIXME: copied with no changes from the same func in runtime.c */
+/* Only to be used for queues that runtime writes to */
+/* FIXME: busy-waiting */
+void wait_until_empty(uint8_t queue_id, int queue_size)
+{
+	int left;
+
+	while (1) {
+		queue_sync_getval(queue_id, &left);
+		if (left == queue_size)
+			break;
+	}
+}
+
+/* FIXME: adapted from the same func in mailbox_runtime.c */
+void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+{
+	uint8_t opcode[4];
+
+	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
+	opcode[1] = queue_id;
+	opcode[2] = access;
+	opcode[3] = proc_id;
+	os_write_file(fd_out, opcode, 4);
+}
+
+/* FIXME: adapted from the same func in mailbox_runtime.c */
+int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
+{
+	uint8_t opcode[4], ret;
+
+	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
+	opcode[1] = queue_id;
+	opcode[2] = access;
+	opcode[3] = count;
+	os_write_file(fd_out, opcode, 4);
+	os_read_file(fd_in, &ret, 1);
+
+	return (int) ret;
+}
+
+/* FIXME: adapted from the same func in mailbox_runtime.c */
+void reset_queue_sync(uint8_t queue_id, int init_val)
+{
+	sema_init(&interrupts[queue_id], init_val);
+}
+
+/* FIXME: move somewhere else */
+void *tun_tcp_receive(void);
+
+static struct work_struct net_wq;
+int s_counter = 0;
+int w_counter = 0;
+
+static void net_receive_wq(struct work_struct *work)
+{
+	tun_tcp_receive();
+	w_counter++;
+	printf("%s [1] %d\n", __func__, w_counter);
 }
 
 static irqreturn_t om_interrupt(int irq, void *data)
 {
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t interrupt;
 	int n;
-	//printk("%s [1]\n", __func__);
 
 	while (true) {
 		n = os_read_file(fd_intr, &interrupt, 1);
+		printf("%s [1]: n = %d\n", __func__, n);
 		if (n != 1)
 			break;
-		//printk("%s [2]: interrupt = %d, n = %d\n", __func__, interrupt, n);
-		if (!(interrupt == Q_UNTRUSTED || interrupt == Q_OSU)) {
+		printf("%s [2]: interrupt = %d\n", __func__, interrupt);
+		if (interrupt == Q_UNTRUSTED) {
+			recv_msg_from_queue_no_wait(buf, Q_UNTRUSTED, MAILBOX_QUEUE_MSG_SIZE);
+			if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
+				write_syscall_response(buf);
+				up(&interrupts[Q_UNTRUSTED]);
+			} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
+				memcpy(cmd_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
+				up(&cmd_sem);
+			} else {
+				printk("Error: %s: received invalid message (%d).\n", __func__, buf[0]);
+				BUG();
+			}
+		} else if (interrupt == Q_OSU ||
+		    interrupt == Q_STORAGE_CMD_IN || interrupt == Q_STORAGE_CMD_OUT ||
+		    interrupt == Q_STORAGE_DATA_IN || interrupt == Q_STORAGE_DATA_OUT ||
+		    interrupt == Q_NETWORK_DATA_IN || interrupt == Q_NETWORK_DATA_OUT) {
+			if (interrupt == Q_NETWORK_DATA_OUT) {
+				s_counter++;
+				printf("%s [4]: schedule a work (%d)\n", __func__, s_counter);
+				schedule_work(&net_wq);
+			}
+			up(&interrupts[interrupt]);
+		} else if (interrupt > NUM_QUEUES && interrupt <= (2 * NUM_QUEUES)) {
+			/* ignore the ownership change interrupts */
+		} else {
 			printk("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			BUG();
 		}
-		//printk("%s [3]\n", __func__);
-		up(&interrupts[interrupt]);
-		//printk("%s [4]\n", __func__);
 	}
 	return IRQ_HANDLED;
 }
 
+/* FIXME: modified from runtime.c */
+static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
+{
+	int i;
+	uint8_t **messages = (uint8_t **) kmalloc(queue_size * sizeof(uint8_t *), GFP_KERNEL);
+	if (!messages) {
+		printk("Error: couldn't allocate memory for a queue\n");
+		BUG();
+	}
+	for (i = 0; i < queue_size; i++) {
+		messages[i] = (uint8_t *) kmalloc(msg_size, GFP_KERNEL);
+		if (!messages[i]) {
+			printk("Error: couldn't allocate memory for a queue\n");
+			BUG();
+		}
+	}
+
+	return messages;
+}
+
 static int __init om_init(void)
 {
-	int err, pid;
+	int err;
 
 	err = init_octopos_mailbox_interface();
 	if (err) {
@@ -261,10 +416,27 @@ static int __init om_init(void)
 		return err;
 	}
 
+	/* FIXME: is this needed? */
 	//sigio_broken(fd_intr, 1);
 
 	sema_init(&interrupts[Q_OSU], MAILBOX_QUEUE_SIZE);
 	sema_init(&interrupts[Q_UNTRUSTED], 0);
+	
+	sema_init(&cmd_sem, 0);
+
+	/* FIXME: very similar to runtime.c */
+	/* initialize syscall response queue */
+	/* FIXME: release memory on exit */
+	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+	srq_size = MAILBOX_QUEUE_SIZE;
+	srq_msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	srq_counter = 0;
+	srq_head = 0;
+	srq_tail = 0;
+
+	sema_init(&srq_sem, MAILBOX_QUEUE_SIZE);
+
+	INIT_WORK(&net_wq, net_receive_wq);
 
 	/* register char dev */
 	err = misc_register(&om_miscdev);
