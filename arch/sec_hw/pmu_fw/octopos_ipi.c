@@ -79,12 +79,11 @@ static void IpiExampleHandler(const XPfw_Module_t *ModPtr, u32 IpiNum, u32 SrcMa
 		switch(Payload[RESP_AND_MSG_NUM_OFFSET]) {
 		case OCTOPOS_PMU_RUNTIME_1:
 			_SEC_HW_DEBUG("PMU: Reset request on runtime 1");
-			// FIXME change to bit mask, sometimes need to reset more than one runtimes
-//			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0xC0000000U, 0xC0000000U);
-//			usleep(1);
-//			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0xC0000000U, 0x00000000U);
-//			usleep(1);
-//			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0xC0000000U, 0xC0000000U);
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x20000000U, 0x20000000U);
+			usleep(1);
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x20000000U, 0x00000000U);
+			usleep(1);
+			PSU_Mask_Write(GPIO_DATA_5_OFFSET, 0x20000000U, 0x20000000U);
 			_SEC_HW_DEBUG("PMU: Reset done");
 			break;
 		case OCTOPOS_PMU_RUNTIME_2:
@@ -97,7 +96,7 @@ static void IpiExampleHandler(const XPfw_Module_t *ModPtr, u32 IpiNum, u32 SrcMa
 			_SEC_HW_DEBUG("PMU: Reset done");
 			break;
 		default:
-			_SEC_HW_ERROR("PMU: Invalid reset target");
+			_SEC_HW_ERROR("PMU: Invalid reset target %d", Payload[RESP_AND_MSG_NUM_OFFSET]);
 			break;
 		}
 	}

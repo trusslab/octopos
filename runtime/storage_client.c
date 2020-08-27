@@ -38,19 +38,23 @@
 #define printf printk
 #endif
 
+#ifdef ARCH_SEC_HW
+extern _Bool async_syscall_mode;
+#endif
+
 /* FIXME: there are a lot of repetition in these macros (also see include/os/storage.h) */
 #define STORAGE_SET_TWO_ARGS(arg0, arg1)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint32_t *) &buf[1]) = arg0;				\
-	*((uint32_t *) &buf[5]) = arg1;				\
+	SERIALIZE_32(arg0, &buf[1])						\
+	SERIALIZE_32(arg1, &buf[5])						\
 
 #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint32_t *) &buf[1]) = arg0;				\
-	*((uint32_t *) &buf[5]) = arg1;				\
-	*((uint32_t *) &buf[9]) = arg2;				\
+	SERIALIZE_32(arg0, &buf[1])						\
+	SERIALIZE_32(arg1, &buf[5])						\
+	SERIALIZE_32(arg2, &buf[9])						\
 
 #define STORAGE_SET_ZERO_ARGS_DATA(data, size)					\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
@@ -79,8 +83,8 @@
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint32_t *) &buf[1]) = arg0;						\
-	*((uint32_t *) &buf[5]) = arg1;						\
+	SERIALIZE_32(arg0, &buf[1])						\
+	SERIALIZE_32(arg1, &buf[5])						\
 	buf[9] = size;								\
 	memcpy(&buf[10], (uint8_t *) data, size);				\
 
@@ -228,8 +232,17 @@ static int request_secure_storage_creation(uint8_t *returned_key, uint32_t size)
 
 static void yield_secure_storage_queues_access(void)
 {
+#ifdef ARCH_SEC_HW
+// FIXME: remove once we have nested interrupt. Context switch happens 
+// in interrupt context, and subsequent write/read intr will not be 
+// handled.
+if (!async_syscall_mode) {
+#endif
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+#ifdef ARCH_SEC_HW
+}
+#endif
 
 #ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
@@ -251,8 +264,10 @@ int yield_secure_storage_access(void)
 		return ERR_INVALID;
 	}
 
-	/* FIXME: what if lock fails? */
-	lock_secure_storage();
+	if (lock_secure_storage()) {
+		printf("%s: Error: fail to lock secure storage\n", __func__);
+		return ERR_FAULT;
+	}
 
 	has_access_to_secure_storage = false;
 
@@ -384,10 +399,17 @@ int delete_and_yield_secure_storage(void)
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
+#ifdef ARCH_SEC_HW
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+#else
 	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, P_OS);
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, P_OS);
+#endif
 
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_DELETE_SECURE_STORAGE)
 	issue_syscall(buf);

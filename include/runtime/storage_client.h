@@ -1,3 +1,7 @@
+#ifdef ARCH_SEC_HW
+#define bool _Bool
+#endif
+
 bool is_secure_storage_key_set(void);
 int set_up_secure_storage_key(uint8_t *key);
 int yield_secure_storage_access(void);
