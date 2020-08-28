@@ -298,7 +298,7 @@ void reset_queue_sync(uint8_t queue_id, int init_val)
 }
 
 /* FIXME: move somewhere else */
-void *tun_tcp_receive(void);
+void *ond_tcp_receive(void);
 
 static struct work_struct net_wq;
 int s_counter = 0;
@@ -306,7 +306,7 @@ int w_counter = 0;
 
 static void net_receive_wq(struct work_struct *work)
 {
-	tun_tcp_receive();
+	ond_tcp_receive();
 	w_counter++;
 	printf("%s [1] %d\n", __func__, w_counter);
 }
