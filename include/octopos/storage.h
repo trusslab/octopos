@@ -27,17 +27,4 @@
 #define STORAGE_BLOCK_SIZE	512  /* bytes */
 #endif
 
-/* partition information */
-struct partition {
-	uint32_t size; /* in blocks */
-	char data_name[256];
-	char create_name[256];
-	char lock_name[256];
-	bool is_created;
-	bool is_locked;
-};
-
-#define NUM_PARTITIONS		5
-
-
 #endif /* __STORAGE_OCTOPOS_CORE_H_ */
