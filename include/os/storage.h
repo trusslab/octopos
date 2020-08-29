@@ -7,20 +7,20 @@
 #define STORAGE_SET_ONE_ARG(arg0)				\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	SERIALIZE_32(arg0, &buf[1])			\
+	SERIALIZE_32(arg0, &buf[1])				\
 
 #define STORAGE_SET_TWO_ARGS(arg0, arg1)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	SERIALIZE_32(arg0, &buf[1])			\
-	SERIALIZE_32(arg1, &buf[5])			\
+	SERIALIZE_32(arg0, &buf[1])				\
+	SERIALIZE_32(arg1, &buf[5])				\
 
 #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	SERIALIZE_32(arg0, &buf[1])			\
-	SERIALIZE_32(arg1, &buf[5])			\
-	SERIALIZE_32(arg2, &buf[9])			\
+	SERIALIZE_32(arg0, &buf[1])				\
+	SERIALIZE_32(arg1, &buf[5])				\
+	SERIALIZE_32(arg2, &buf[9])				\
 
 #define STORAGE_SET_ZERO_ARGS_DATA(data, size)					\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
@@ -49,7 +49,7 @@
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	SERIALIZE_32(arg0, &buf[1])			\
+	SERIALIZE_32(arg0, &buf[1])						\
 	buf[5] = size;								\
 	memcpy(&buf[6], (uint8_t *) data, size);				\
 

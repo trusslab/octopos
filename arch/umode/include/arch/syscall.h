@@ -9,12 +9,12 @@
 	*((uint32_t *) buf_lr) = arg;				
 
 #define DESERIALIZE_16(arg_ptr, buf_lr)				\
-	{												\
+	{							\
 	*((uint16_t *) arg_ptr) = *((uint16_t *) buf_lr);	\
 	}
 
 #define DESERIALIZE_32(arg_ptr, buf_lr)				\
-	{												\
+	{							\
 	*((uint32_t *) arg_ptr) = *((uint32_t *) buf_lr);	\
 	}
 

@@ -46,8 +46,8 @@ extern _Bool async_syscall_mode;
 #define STORAGE_SET_TWO_ARGS(arg0, arg1)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	SERIALIZE_32(arg0, &buf[1])						\
-	SERIALIZE_32(arg1, &buf[5])						\
+	SERIALIZE_32(arg0, &buf[1])				\
+	SERIALIZE_32(arg1, &buf[5])				\
 
 #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\

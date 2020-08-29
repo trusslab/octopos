@@ -126,13 +126,21 @@ size_t fop_write(void *ptr, size_t size, size_t count, FIL *filep)
 		return 0;
 	}
 }
-#endif
+#else /* ARCH_SEC_HW_STORAGE */
 
-#define STORAGE_SET_ONE_RET(ret0)	\
+#define fop_open fopen
+#define fop_close fclose
+#define fop_seek fseek
+#define fop_read fread
+#define fop_write fwrite
+
+#endif /* ARCH_SEC_HW_STORAGE */
+
+#define STORAGE_SET_ONE_RET(ret0)		\
 	SERIALIZE_32(ret0, &buf[0])
 
 #define STORAGE_SET_TWO_RETS(ret0, ret1)	\
-	SERIALIZE_32(ret0, &buf[0])				\
+	SERIALIZE_32(ret0, &buf[0])		\
 	SERIALIZE_32(ret1, &buf[4])
 
 /* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
@@ -176,7 +184,7 @@ size_t fop_write(void *ptr, size_t size, size_t count, FIL *filep)
 		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		return;						\
 	}							\
-	data = &buf[2];					\
+	data = &buf[2];						\
 
 #define STORAGE_GET_ONE_ARG_DATA				\
 	uint32_t arg0;						\
@@ -194,7 +202,7 @@ size_t fop_write(void *ptr, size_t size, size_t count, FIL *filep)
 		STORAGE_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		return;						\
 	}							\
-	data = &buf[6];
+	data = &buf[6];						\
 
 /* partition information */
 struct partition {
