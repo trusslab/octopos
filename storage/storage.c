@@ -20,10 +20,12 @@
 #include "arch/syscall.h"
 
 #ifdef ARCH_SEC_HW_STORAGE
+#include "ff.h"
+#include "arch/sec_hw.h"
 #define FILE FIL
 #define	SEEK_SET	0
 
-FIL* fopen(const char *filename, const char *mode);
+FIL* fop_open(const char *filename, const char *mode)
 {
 	FIL* filep = (FIL*) malloc(sizeof(FIL));
 	BYTE _mode;
@@ -49,65 +51,80 @@ FIL* fopen(const char *filename, const char *mode);
 		return NULL;
 	}
 	
-	result = f_open(&filep, filename, _mode);
-	if (result == FR_OK)
+	result = f_open(filep, filename, _mode);
+	if (result == FR_OK) {
 		return filep;
-	else
+	} else {
 		return NULL;
+	}
 
 }
 
-int fclose(FIL *filep)
+int fop_close(FIL *filep)
 {
 	FRESULT result;
 
+	if (!filep) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_INVALID;
+	}
+
 	result = f_close(filep);
 	free(filep);
-	if (result == FR_OK)
+	if (result == FR_OK) {
 		return 0;
-	else
+	} else {
+		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
+	}
 }
 
-int fseek(FIL *filep, long int offset, int origin)
+int fop_seek(FIL *filep, long int offset, int origin)
 {
 	FRESULT result;
 
 	if (origin != SEEK_SET) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_INVALID;
 	}
 
 	result = f_lseek(filep, offset);
-	if (result == FR_OK)
+	if (result == FR_OK) {
 		return 0;
-	else
+	} else {
+		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
+	}
 }
 
-size_t fread(void *ptr, size_t size, size_t count, FIL *filep)
+size_t fop_read(void *ptr, size_t size, size_t count, FIL *filep)
 {
 	FRESULT result;
 	UINT NumBytesRead = 0;
 	UINT _size = size * count;
 
 	result = f_read(filep, ptr, _size, &NumBytesRead);
-	if (result == FR_OK) 
+	if (result == FR_OK) {
 		return (size_t) NumBytesRead;
-	else
+	} else {
+		SEC_HW_DEBUG_HANG();
 		return 0;
+	}
 }
 
-size_t fwrite(void *ptr, size_t size, size_t count, FIL *filep)
+size_t fop_write(void *ptr, size_t size, size_t count, FIL *filep)
 {
 	FRESULT result;
 	UINT NumBytesWrite = 0;
 	UINT _size = size * count;
 
 	result = f_write(filep, ptr, _size, &NumBytesWrite);
-	if (result == FR_OK) 
+	if (result == FR_OK) {
 		return (size_t) NumBytesWrite;
-	else
+	} else {
+		SEC_HW_DEBUG_HANG();
 		return 0;
+	}
 }
 #endif
 
@@ -219,70 +236,71 @@ void initialize_storage_space(void)
 		memset(partition->lock_name, 0x0, 256);
 		sprintf(partition->lock_name, "octopos_partition_%d_lock", suffix);
 
-		FILE *filep = fopen(partition->data_name, "r");
+		FILE *filep = fop_open(partition->data_name, "r");
 		if (!filep) {
 			/* create empty file */
-			FILE *filep2 = fopen(partition->data_name, "w");
+			FILE *filep2 = fop_open(partition->data_name, "w");
 			/* populate with zeros (so that first read doesn't return an error */
 			uint8_t zero_block[STORAGE_BLOCK_SIZE];
 			memset(zero_block, 0x0, STORAGE_BLOCK_SIZE);
-			fseek(filep2, 0, SEEK_SET);
+			fop_seek(filep2, 0, SEEK_SET);
 			for (uint32_t j = 0; j < partition->size; j++)
-				fwrite(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep2);
-			fclose(filep2);
+				fop_write(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep2);
+			fop_close(filep2);
+		} else {
+			fop_close(filep);
 		}
-		fclose(filep);
 
 		/* Is partition created? */
-		filep = fopen(partition->create_name, "r");
+		filep = fop_open(partition->create_name, "r");
 		if (!filep) {
 			/* create empty file */
-			FILE *filep2 = fopen(partition->create_name, "w");
-			fclose(filep2);
+			FILE *filep2 = fop_open(partition->create_name, "w");
+			fop_close(filep2);
 			/* Also wipe lock info (which should not have any valid key anyway. */
-			filep2 = fopen(partition->lock_name, "w");
-			fclose(filep2);
+			filep2 = fop_open(partition->lock_name, "w");
+			fop_close(filep2);
 			partition->is_locked = false;
 			continue;
 		}
 
-		fseek(filep, 0, SEEK_SET);
+		fop_seek(filep, 0, SEEK_SET);
 		uint32_t tag = 0;
-		uint32_t size = (uint32_t) fread(&tag, sizeof(uint8_t), 4, filep);
-		fclose(filep);
+		uint32_t size = (uint32_t) fop_read(&tag, sizeof(uint8_t), 4, filep);
+		fop_close(filep);
 		if (size == 4 && tag == 1) {
 			partition->is_created = true;
 		} else {
 			/* create empty file */
-			FILE *filep2 = fopen(partition->create_name, "w");
-			fclose(filep2);
+			FILE *filep2 = fop_open(partition->create_name, "w");
+			fop_close(filep2);
 			/* Also wipe any key info. This should not normally happen. */
-			filep2 = fopen(partition->lock_name, "w");
-			fclose(filep2);
+			filep2 = fop_open(partition->lock_name, "w");
+			fop_close(filep2);
 			partition->is_locked = false;
 			continue;
 		}
 
 		/* lock partitions that have an active key */
-		filep = fopen(partition->lock_name, "r");
+		filep = fop_open(partition->lock_name, "r");
 		if (!filep) {
 			/* create empty file */
-			FILE *filep2 = fopen(partition->lock_name, "w");
-			fclose(filep2);
+			FILE *filep2 = fop_open(partition->lock_name, "w");
+			fop_close(filep2);
 			partition->is_locked = false;
 			continue;
 		}
 
 		uint8_t key[STORAGE_KEY_SIZE];
-		fseek(filep, 0, SEEK_SET);
-		size = (uint32_t) fread(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
-		fclose(filep);
+		fop_seek(filep, 0, SEEK_SET);
+		size = (uint32_t) fop_read(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
+		fop_close(filep);
 		if (size == STORAGE_KEY_SIZE) {
 			partition->is_locked = true;
 		} else {
 			/* wipe lock file */
-			FILE *filep2 = fopen(partition->lock_name, "w");
-			fclose(filep2);
+			FILE *filep2 = fop_open(partition->lock_name, "w");
+			fop_close(filep2);
 			partition->is_locked = false;
 		}
 	}
@@ -294,19 +312,19 @@ void initialize_storage_space(void)
 
 static int set_partition_key(uint8_t *data, int partition_id)
 {
-	FILE *filep = fopen(partitions[partition_id].lock_name, "r+");
+	FILE *filep = fop_open(partitions[partition_id].lock_name, "r+");
 	if (!filep) {
 		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
 
-	fseek(filep, 0, SEEK_SET);
-	uint32_t size = (uint32_t) fwrite(data, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
-	fclose(filep);
+	fop_seek(filep, 0, SEEK_SET);
+	uint32_t size = (uint32_t) fop_write(data, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
+	fop_close(filep);
 	if (size < STORAGE_KEY_SIZE) {
 		/* make sure to delete what was written */
-		filep = fopen(partitions[partition_id].lock_name, "w");
-		fclose(filep);
+		filep = fop_open(partitions[partition_id].lock_name, "w");
+		fop_close(filep);
 		return ERR_FAULT;
 	}
 
@@ -315,27 +333,27 @@ static int set_partition_key(uint8_t *data, int partition_id)
 
 static int remove_partition_key(int partition_id)
 {
-	FILE *filep = fopen(partitions[partition_id].lock_name, "w");
+	FILE *filep = fop_open(partitions[partition_id].lock_name, "w");
 	if (!filep) {
 		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
-	fclose(filep);
+	fop_close(filep);
 	return 0;
 }
 
 static int unlock_partition(uint8_t *data, int partition_id)
 {
 	uint8_t key[STORAGE_KEY_SIZE];
-	FILE *filep = fopen(partitions[partition_id].lock_name, "r");
+	FILE *filep = fop_open(partitions[partition_id].lock_name, "r");
 	if (!filep) {
 		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
 		return ERR_FAULT;
 	}
 
-	fseek(filep, 0, SEEK_SET);
-	uint32_t size = (uint32_t) fread(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
-	fclose(filep);
+	fop_seek(filep, 0, SEEK_SET);
+	uint32_t size = (uint32_t) fop_read(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
+	fop_close(filep);
 	if (size != STORAGE_KEY_SIZE) {
 		/* TODO: if the key file is corrupted, then we might need to unlock, otherwise, we'll lose the partition. */
 		return ERR_FAULT;
@@ -358,15 +376,15 @@ static int wipe_partition(int partition_id)
 	uint8_t zero_buf[STORAGE_BLOCK_SIZE] = {0};
 	f_stat(partitions[partition_id].data_name, &finfo);
 #endif
-	FILE *filep = fopen(partitions[partition_id].data_name, "w");
+	FILE *filep = fop_open(partitions[partition_id].data_name, "w");
 	if (!filep) {
 		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].data_name);
 		return ERR_FAULT;
 	}
 #ifdef ARCH_SEC_HW_STORAGE
-	f_write(filep, (const void*)zero_buf, finfo.fsize, &NumBytesWritten;)
+	f_write(filep, (const void*)zero_buf, finfo.fsize, &NumBytesWritten);
 #endif
-	fclose(filep);
+	fop_close(filep);
 	return 0;
 }
 
@@ -396,7 +414,7 @@ void process_request(uint8_t *buf)
 			return;
 		}
 
-		filep = fopen(partitions[partition_id].data_name, "r+");
+		filep = fop_open(partitions[partition_id].data_name, "r+");
 		if (!filep) {
 			printf("%s: Error: couldn't open %s for write\n", __func__,
 						partitions[partition_id].data_name);
@@ -410,19 +428,19 @@ void process_request(uint8_t *buf)
 		if (start_block + num_blocks > partitions[partition_id].size) {
 			printf("%s: Error: invalid args\n", __func__);
 			STORAGE_SET_ONE_RET(0)
-			fclose(filep);
+			fop_close(filep);
 			return;
 		}
 		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
-		fseek(filep, seek_off, SEEK_SET);
+		fop_seek(filep, seek_off, SEEK_SET);
 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
 		uint32_t size = 0;
 		for (uint32_t i = 0; i < num_blocks; i++) {
 			read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
-			size += (uint32_t) fwrite(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
+			size += (uint32_t) fop_write(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 		}
 		STORAGE_SET_ONE_RET(size);
-		fclose(filep);
+		fop_close(filep);
 	} else if (buf[0] == STORAGE_OP_READ) { /* read */
 		if (!is_queue_set_bound) {
 			printf("%s: Error: no partition is bound to queue set\n", __func__);
@@ -444,7 +462,7 @@ void process_request(uint8_t *buf)
 			return;
 		}
 
-		filep = fopen(partitions[partition_id].data_name, "r");
+		filep = fop_open(partitions[partition_id].data_name, "r");
 		if (!filep) {
 			printf("%s: Error: couldn't open %s for read\n", __func__,
 						partitions[partition_id].data_name);
@@ -458,19 +476,19 @@ void process_request(uint8_t *buf)
 		if (start_block + num_blocks > partitions[partition_id].size) {
 			printf("%s: Error: invalid args\n", __func__);
 			STORAGE_SET_ONE_RET(0)
-			fclose(filep);
+			fop_close(filep);
 			return;
 		}
 		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
-		fseek(filep, seek_off, SEEK_SET);
+		fop_seek(filep, seek_off, SEEK_SET);
 		uint8_t data_buf[STORAGE_BLOCK_SIZE];
 		uint32_t size = 0;
 		for (uint32_t i = 0; i < num_blocks; i++) {
-			size += (uint32_t) fread(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
+			size += (uint32_t) fop_read(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 		}
 		STORAGE_SET_ONE_RET(size);
-		fclose(filep);
+		fop_close(filep);
 	} else if (buf[0] == STORAGE_OP_SET_KEY) {
 		if (!is_queue_set_bound) {
 			printf("%s: Error: no partition is bound to queue set\n", __func__);
@@ -628,22 +646,22 @@ void process_request(uint8_t *buf)
 			return;
 		}
 
-		filep = fopen(partitions[partition_id].create_name, "r+");
+		filep = fop_open(partitions[partition_id].create_name, "r+");
 		if (!filep) {
 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 			return;
 		}
 
-		fseek(filep, 0, SEEK_SET);
+		fop_seek(filep, 0, SEEK_SET);
 		uint32_t tag = 1;
-		uint32_t size = (uint32_t) fwrite(&tag, sizeof(uint8_t), 4, filep);
-		fclose(filep);
+		uint32_t size = (uint32_t) fop_write(&tag, sizeof(uint8_t), 4, filep);
+		fop_close(filep);
 		if (size != 4) {
 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 			if (size > 0) { /* partial write */
 				/* wipe the file */
-				FILE *filep2 = fopen(partitions[partition_id].create_name, "w");
-				fclose(filep2);
+				FILE *filep2 = fop_open(partitions[partition_id].create_name, "w");
+				fop_close(filep2);
 			}
 			return;
 		}
@@ -686,10 +704,10 @@ void process_request(uint8_t *buf)
 
 		partitions[partition_id].is_created = false;
 		/* wipe the create and lock files of the partition */
-		FILE *filep2 = fopen(partitions[partition_id].create_name, "w");
-		fclose(filep2);
-		filep2 = fopen(partitions[partition_id].lock_name, "w");
-		fclose(filep2);
+		FILE *filep2 = fop_open(partitions[partition_id].create_name, "w");
+		fop_close(filep2);
+		filep2 = fop_open(partitions[partition_id].lock_name, "w");
+		fop_close(filep2);
 		/* FIXME: do we need to wipe the partition content? */
 
 		STORAGE_SET_ONE_RET(0)

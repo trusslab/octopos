@@ -138,8 +138,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
 void storage_event_loop(void)
 {
-	u32 bytes_read;
-	uint8_t queue_id = 0;
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
@@ -277,7 +275,6 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
-
 	Status = XIntc_Connect(&intc, 
 		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_CTRL_FIXED_INTR,
 		(XInterruptHandler)handle_change_queue_interrupts, 
@@ -288,7 +285,6 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
-
 	Status = XIntc_Connect(&intc, 
 		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_CTRL_FIXED_INTR,
 		(XInterruptHandler)handle_change_queue_interrupts, 
@@ -298,7 +294,6 @@ int init_storage(void)
 			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_CTRL_FIXED_INTR);
 		return XST_FAILURE;
 	}
-
 
 	Status = XIntc_Connect(&intc, 
 		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL_FIXED_INTR,
@@ -346,7 +341,6 @@ int init_storage(void)
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
-
 	initialize_ramfs();
 	initialize_storage_space();
 
