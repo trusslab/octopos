@@ -160,4 +160,8 @@ int request_network_access(int count)
 	return 0;
 }
 
-
+void syscall_close_socket(void)
+{
+	SYSCALL_SET_ZERO_ARGS(SYSCALL_CLOSE_SOCKET)
+	issue_syscall(buf);
+}

@@ -68,12 +68,6 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 
-	/* Not supported for now as it can be a side channel */
-	if (requested_port) {
-		SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
-		return;
-	}
-
 	if (app->socket_created) {
 		printf("%s: Error: only support one socket per app (for now)\n", __func__);
 		SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
@@ -88,7 +82,14 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 
-	ret = get_unused_tcp_port(&sport);
+	if (requested_port) {
+		/* FIXME: check to see if port is available */
+		sport = requested_port;
+		ret = 0;
+	} else {
+		ret = get_unused_tcp_port(&sport);
+	}
+
 	if (ret) {
 		SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
 		return;

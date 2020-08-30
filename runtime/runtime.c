@@ -735,8 +735,7 @@ static void close_socket(struct socket *sock)
 	if (do_close)
 		_close(sock);
 
-	SYSCALL_SET_ZERO_ARGS(SYSCALL_CLOSE_SOCKET)
-	issue_syscall(buf);
+	syscall_close_socket();
 }
 
 //static int bind_socket(struct socket *sock, struct sock_addr *skaddr)

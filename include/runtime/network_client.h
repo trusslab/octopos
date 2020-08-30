@@ -58,6 +58,7 @@ int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
 		unsigned int daddr, unsigned short dport);
 int yield_network_access(void);
 int request_network_access(int count);
+void syscall_close_socket(void);
 
 int net_start_receive(void);
 void net_stop_receive(void);

@@ -301,14 +301,10 @@ void reset_queue_sync(uint8_t queue_id, int init_val)
 void *ond_tcp_receive(void);
 
 static struct work_struct net_wq;
-int s_counter = 0;
-int w_counter = 0;
 
 static void net_receive_wq(struct work_struct *work)
 {
 	ond_tcp_receive();
-	w_counter++;
-	printf("%s [1] %d\n", __func__, w_counter);
 }
 
 static irqreturn_t om_interrupt(int irq, void *data)
@@ -339,11 +335,8 @@ static irqreturn_t om_interrupt(int irq, void *data)
 		    interrupt == Q_STORAGE_CMD_IN || interrupt == Q_STORAGE_CMD_OUT ||
 		    interrupt == Q_STORAGE_DATA_IN || interrupt == Q_STORAGE_DATA_OUT ||
 		    interrupt == Q_NETWORK_DATA_IN || interrupt == Q_NETWORK_DATA_OUT) {
-			if (interrupt == Q_NETWORK_DATA_OUT) {
-				s_counter++;
-				printf("%s [4]: schedule a work (%d)\n", __func__, s_counter);
+			if (interrupt == Q_NETWORK_DATA_OUT)
 				schedule_work(&net_wq);
-			}
 			up(&interrupts[interrupt]);
 		} else if (interrupt > NUM_QUEUES && interrupt <= (2 * NUM_QUEUES)) {
 			/* ignore the ownership change interrupts */

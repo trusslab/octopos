@@ -212,9 +212,7 @@ static void send_packet(uint8_t *buf)
 	printf("%s [2.6]: tcphdr->ece = %d, tcphdr->cwr = %d\n", __func__, tcphdr->ece, tcphdr->cwr);
 	printf("%s [2.7]: tcphdr->window = %d, tcphdr->checksum = %d\n", __func__, tcphdr->window, tcphdr->checksum);
 	printf("%s [2.8]: tcphdr->urgptr = %d, tcphdr->data[0] = %d\n", __func__, tcphdr->urgptr, tcphdr->data[0]);
-	/* FIXME: check the src port too */
-	//if ((sport != tcphdr->src) || (dport != tcphdr->dst)) {
-	if (dport != tcphdr->dst) {
+	if ((sport != tcphdr->src) || (dport != tcphdr->dst)) {
 		printf("%s: Error: invalid src or dst port numbers.\n", __func__);
 		return;
 	}
@@ -288,9 +286,7 @@ void tcp_in(struct pkbuf *pkb)
 	/* check the port numbers */
 	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
 	printf("%s [2]: tcphdr->src = %d, tcphdr->dst = %d\n", __func__, tcphdr->src, tcphdr->dst);
-	/* FIXME: check the source port too. */
-	//if ((dport != tcphdr->src) || (sport != tcphdr->dst)) {
-	if (dport != tcphdr->src) {
+	if ((dport != tcphdr->src) || (sport != tcphdr->dst)) {
 		printf("%s: Error: invalid src or dst port numbers. Dropping the packet\n", __func__);
 		return;
 	}

@@ -130,9 +130,22 @@ static void ip_send_out_skb(struct sk_buff *skb)
 	free_pkb(pkb);
 }
 
+struct dst_entry *ond_dst_check(struct dst_entry *dst, __u32 cookie)
+{
+	return dst;
+}
+
+struct dst_ops ond_dst_ops = {
+	.check = ond_dst_check,
+};
+
 /* FIXME: get rid of globals */
 uint8_t *net_buf = NULL;
 struct net_device *g_dev;
+struct dst_entry g_dst_entry;
+//= {
+//	.ops = &ond_dst_ops,
+//};
 
 /* default: host order is little-endian */
 struct my_ip {
@@ -233,7 +246,10 @@ void *ond_tcp_receive(void)
 		BUG();
 	skb->len = len - 20; /* 20 being the IP header size */
 	skb->data_len = 0; /* 0 for linear data */
-	/* FIXME: need to check TCP checksum */
+	/* FIXME: need to check TCP checksum.
+	 * Debug notes: runs into problems at tcp_checksum_complete() in tcp_v4_do_rcv() and
+	 * in tcp_checksum_init() in tcp_v4_rcv().
+	 */
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 	skb_copy_to_linear_data(skb, pkb2ip(pkb), len);
@@ -261,12 +277,71 @@ void *ond_tcp_receive(void)
 	printk("%s [2.94]: skb->head = %#lx, skb->data = %#lx, skb->tail = %#lx, skb->end = %#lx\n",
 	       __func__, skb->head, skb->data, skb->tail, skb->end);
 	printk("%s [3.1]: skb->sk = %#lx\n", __func__, skb->sk);
+	printk("%s [4]: skb_dst(skb) = %#lx\n", __func__, skb_dst(skb));	
+	/* FIXME: this is a hack. Needed in __inet_lookup_skb() */
+	//dst_hold_safe(&g_dst_entry);
+	printk("%s [4.1]: g_dst_entry.__refcnt = %d\n", __func__, g_dst_entry.__refcnt);	
+	dst_hold(&g_dst_entry);
+	printk("%s [4.2]: g_dst_entry.__refcnt = %d\n", __func__, g_dst_entry.__refcnt);	
+	skb_dst_set(skb, &g_dst_entry);
+	printk("%s [4.3]: g_dst_entry.__refcnt = %d\n", __func__, g_dst_entry.__refcnt);	
+	printk("%s [5]: skb_dst(skb) = %#lx\n", __func__, skb_dst(skb));	
+	printk("%s [5.1]: g_dst_entry = %#lx\n", __func__, g_dst_entry);
 	
 	int ret = tcp_v4_rcv(skb);
-	printk("%s [4]: ret = %d\n", __func__, ret);
+	printk("%s [5.2]: g_dst_entry.__refcnt = %d\n", __func__, g_dst_entry.__refcnt);	
+	//dst_release(&g_dst_entry);
+	printk("%s [5.3]: g_dst_entry.__refcnt = %d\n", __func__, g_dst_entry.__refcnt);	
+	printk("%s [6]: ret = %d\n", __func__, ret);
 }
 
 bool octopos_net_access = false;
+
+int octopos_open_socket(__be32 daddr, __be32 saddr, __be16 dport, __be16 sport)
+{
+	unsigned int _saddr = 0;
+	unsigned short _sport = sport;
+	int ret;
+	//, dport = htons(12345);
+	//, daddr = 0x0200000a;
+
+	printk("%s [1]: daddr = %#x\n", __func__, daddr);
+	printk("%s [2]: dport = %d\n", __func__, dport);
+	printk("%s [3]: sport = %d\n", __func__, sport);
+	printk("%s [4]: saddr = %#x\n", __func__, saddr);
+
+	ret = syscall_allocate_tcp_socket(&_saddr, &_sport, (unsigned int) daddr, (unsigned short) dport);
+	if (ret) {
+		printk("Error: %s: couldn't register a TCP socket with octopos.\n", __func__);
+		return ret;
+	}
+	printk("%s [4]: _sport = %d\n", __func__, _sport);	
+	printk("%s [5]: _saddr = %#x\n", __func__, _saddr);	
+
+	if (_saddr != (unsigned int) saddr || _sport != (unsigned short) sport) {
+		printk("Error: %s: unexpected saddr or sport.\n", __func__);
+		syscall_close_socket();
+		return -EEXIST;
+	}
+	
+	if (!octopos_net_access) {
+		request_network_access(200);
+		octopos_net_access = true;
+	}
+
+	return 0;
+}
+
+void octopos_close_socket(struct sock *sk)
+{
+	printk("%s [1]\n", __func__);	
+	if (octopos_net_access) {
+		yield_network_access();
+		octopos_net_access = false;
+	}
+
+	syscall_close_socket();
+}
 
 static void __ond_detach(struct tun_file *tfile, bool clean)
 {
@@ -300,35 +375,48 @@ static int ond_net_close(struct net_device *dev)
 	return 0;
 }
 
+static struct work_struct net_x_wq;
+struct sk_buff *xmit_skb;
+
+static void net_xmit_wq(struct work_struct *work)
+{
+	//struct sk_buff *skb = g_skb;
+	
+}
+
 /* Net device start xmit */
 static netdev_tx_t ond_net_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	struct flow_dissector_key_ports ports;
-	int noff = skb_network_offset(skb);	
-	printk("%s [1]: noff = %d\n", __func__, noff);
-	int proto = -1;
-	struct iphdr *iph;
-	if (skb->protocol == htons(ETH_P_IP)) {
-		if (unlikely(!pskb_may_pull(skb, noff + sizeof(*iph))))
-			BUG();
-        iph = (const struct iphdr *)(skb->data + noff);
-        noff += iph->ihl << 2;
-	printk("%s [2]: noff = %d\n", __func__, noff);
-	printk("%s [2.1]: skb->data = %#x, skb->head = %#x, skb->network_header = %d(%#x)\n",
-		__func__, skb->data, skb->head, skb->network_header, skb->network_header);
-	printk("%s [2.2]: iph->tot_len = %d\n", __func__, iph->tot_len);
-        if (!ip_is_fragment(iph))
-                proto = iph->protocol;
-	} else 
-		BUG();
-	if (proto != IPPROTO_TCP)
-		BUG();
-	ports.ports = skb_flow_get_ports(skb, noff, proto);
-	printk("%s [3]: src port = %d, dst port = %d\n", __func__, ports.src, ports.dst);
-	if (!octopos_net_access) {
-		request_network_access(200);
-		octopos_net_access = true;
-	}
+	//xmit_skb = skb;
+	//schedule_work(&net_x_wq);
+
+	//struct flow_dissector_key_ports ports;
+	//int noff = skb_network_offset(skb);	
+	//printk("%s [1]: noff = %d\n", __func__, noff);
+	//int proto = -1;
+	//struct iphdr *iph;
+	//if (skb->protocol == htons(ETH_P_IP)) {
+	//	if (unlikely(!pskb_may_pull(skb, noff + sizeof(*iph))))
+	//		BUG();
+        //iph = (const struct iphdr *)(skb->data + noff);
+        //noff += iph->ihl << 2;
+	//printk("%s [2]: noff = %d\n", __func__, noff);
+	//printk("%s [2.1]: skb->data = %#x, skb->head = %#x, skb->network_header = %d(%#x)\n",
+	//	__func__, skb->data, skb->head, skb->network_header, skb->network_header);
+	//printk("%s [2.2]: iph->tot_len = %d\n", __func__, iph->tot_len);
+        //if (!ip_is_fragment(iph))
+        //        proto = iph->protocol;
+	//} else 
+	//	BUG();
+	//if (proto != IPPROTO_TCP)
+	//	BUG();
+	//ports.ports = skb_flow_get_ports(skb, noff, proto);
+	//printk("%s [3]: src port = %d, dst port = %d\n", __func__, ports.src, ports.dst);
+	//if (!octopos_net_access) {
+	//	request_network_access(200);
+	//	octopos_net_access = true;
+	//}
+
 	ip_send_out_skb(skb);
 	/* FIXME: when to yield? */
 	//yield_network_access();
@@ -484,6 +572,8 @@ static int ond_set_iff(void)
 
 	/* FIXME: use priv data */
 	g_dev = dev;
+	//g_dst_entry.dev = dev;
+	dst_init(&g_dst_entry, &ond_dst_ops, dev, 1, 0, DST_NOCOUNT);
 
 	return 0;
 
@@ -537,15 +627,7 @@ static int __init ond_init(void)
 		goto err_notifier;
 	}
 
-	/* FIXME */
-	unsigned int saddr = 0, daddr = 0x0200000a;
-	unsigned short sport = 0, dport = htons(12345);
-
-	ret = syscall_allocate_tcp_socket(&saddr, &sport, daddr, dport);
-	if (ret) {
-		printk("Error: %s: couldn't register a TCP socket with octopos.\n", __func__);
-		goto err_notifier;
-	}
+	INIT_WORK(&net_x_wq, net_xmit_wq);
 
 	net_buf = (uint8_t *) kmalloc(MAILBOX_QUEUE_MSG_SIZE_LARGE, GFP_KERNEL);
 	if (!net_buf) {
