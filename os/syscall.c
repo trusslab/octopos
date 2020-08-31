@@ -600,13 +600,11 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (!no_response) {
 			check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 		}
-#ifdef ARCH_UMODE
 		/* FIXME: use async interrupt processing instead. */
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
-#endif
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

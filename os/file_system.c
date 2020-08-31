@@ -143,14 +143,16 @@ static int remove_file_from_list(struct file *file)
 
 static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	wait_for_storage();
-
+	// wait_for_storage(); // FIXME: incorrect semaphore
+// _SEC_HW_ERROR("[1]");
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage_no_response(buf);
 	for (int i = 0; i < (int) num_blocks; i++)
 		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+// _SEC_HW_ERROR("[2]");
 	get_response_from_storage(buf);
+// _SEC_HW_ERROR("[3]");
 
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
@@ -271,12 +273,14 @@ static int remove_file_from_directory(struct file *file)
 				node->file->dir_data_off -= file_dir_info_size;
 		}
 	}
+_SEC_HW_ERROR("[1]");
 
 	/* decrement number of files */
 	(*((uint16_t *) &dir_data[4]))--;
 
 	dir_data_ptr -= file_dir_info_size;
 	flush_dir_data_to_storage();
+_SEC_HW_ERROR("[2]");
 
 	return 0;
 }
@@ -497,6 +501,8 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	return read_size;
 }
 
+#include "xil_io.h"
+
 uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
@@ -526,14 +532,19 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 		return 0;
 	}
 
-	wait_for_storage();
+	// wait_for_storage();
 
-	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	// wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 
+#ifndef ARCH_SEC_HW
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);
+#else
+	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
+							runtime_proc_id, (uint8_t) 4094);
+#endif
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
@@ -546,7 +557,9 @@ void file_system_write_file_blocks_late(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	/* FIXME: pretty inefficient. Why wait if we don't check the response? */
+		_SEC_HW_ERROR("late [1]");
 	get_response_from_storage(buf);
+		_SEC_HW_ERROR("late [2]");
 }
 
 uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
@@ -578,12 +591,17 @@ uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_block
 		return 0;
 	}
 
-	wait_for_storage();
+	// wait_for_storage();
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
+#ifndef ARCH_SEC_HW
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);
+#else
+	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
+							runtime_proc_id, (uint8_t) 4094);
+#endif
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
@@ -644,13 +662,15 @@ int file_system_remove_file(char *filename)
 		return ERR_INVALID;
 	}
 
-
+_SEC_HW_ERROR("[1]");
 	int ret = remove_file_from_directory(file);
 	if (ret)
 		return ERR_FAULT;
+_SEC_HW_ERROR("[2]");
 
 	release_file_blocks(file);
 	remove_file_from_list(file);
+_SEC_HW_ERROR("[3]");
 
 	return 0;
 }

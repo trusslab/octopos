@@ -71,6 +71,7 @@ int srq_counter;
 sem_t srq_sem;
 
 #ifdef ARCH_SEC_HW
+u32 DEBUG_REG[100] = {0};
 extern sem_t interrupt_change;
 /* This is to deal with the lack of nested interrupt support */
 _Bool async_syscall_mode = FALSE;
@@ -516,12 +517,15 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
 		return 0;
-
 	uint8_t queue_id = (uint8_t) ret0;
 
-	for (int i = 0; i < num_blocks; i++)
-		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
+	for (int i = 0; i < num_blocks; i++) {
+	// DEBUG_REG[i] = Xil_In32(0x44A34000);
+	// if (Xil_In32(0x44A34000) == 0xDEADBEEF || 
+		// ((u16) (Xil_In32(0x44A34000) >> 12 & 0xfff)) < 16) {while(1) {sleep(1);}}
 
+		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
+	}
 	return num_blocks;
 }
 
