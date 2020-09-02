@@ -13,9 +13,9 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd keyboard",
+		"cd loader",
 		"sleep 1",
-		"./keyboard"
+		"./loader ../keyboard/keyboard.so"
 	   ]
 	},{
 	   "shell_command":[
@@ -24,14 +24,14 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd arch/umode/mailbox",
-		"./mailbox"
+		"cd loader",
+		"./loader ../arch/umode/mailbox/mailbox.so"
 	   ]
 	},{
 	   "shell_command":[
-		"cd serial_out",
+		"cd loader",
 		"sleep 1",
-		"./serial_out"
+		"./loader ../serial_out/serial_out.so"
 	   ]
 	},{
 	   "shell_command":[
@@ -41,9 +41,9 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd storage",
+		"cd loader",
 		"sleep 1",
-		"./storage"
+		"./loader ../storage/storage.so"
 	   ]
 	},{
 		"shell_command": [
