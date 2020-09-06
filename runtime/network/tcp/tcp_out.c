@@ -5,15 +5,19 @@
 #include "ip.h"
 #include "tcp.h"
 
-/* sets the source and dest IP addresses, but these will be checked in the network service. */
 static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 			unsigned int saddr, unsigned int daddr)
 {
 	struct ip *iphdr = pkb2ip(pkb);
-	///* fill up part of ip head */
+	/* fill up part of ip head needed for TCP checksum.
+	 * These will be refilled/checked in the network service.
+	 */
+	/* FIXME: the ip_id is only set here. */
 	iphdr->ip_id = _htons(tcp_id);
 	iphdr->ip_dst = daddr;
 	iphdr->ip_src = saddr;
+	iphdr->ip_hlen = IP_HRD_SZ >> 2;
+	iphdr->ip_len = _htons(pkb->pk_len - ETH_HRD_SZ);
 	return 0;
 }
 

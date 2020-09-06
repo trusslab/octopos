@@ -74,7 +74,6 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 
-	/* FIXME: hard-coded */
 	uint32_t saddr, sport;
 	int ret = get_network_src_addr(&saddr);
 	if (ret) {

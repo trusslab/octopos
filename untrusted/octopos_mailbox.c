@@ -315,10 +315,8 @@ static irqreturn_t om_interrupt(int irq, void *data)
 
 	while (true) {
 		n = os_read_file(fd_intr, &interrupt, 1);
-		printf("%s [1]: n = %d\n", __func__, n);
 		if (n != 1)
 			break;
-		printf("%s [2]: interrupt = %d\n", __func__, interrupt);
 		if (interrupt == Q_UNTRUSTED) {
 			recv_msg_from_queue_no_wait(buf, Q_UNTRUSTED, MAILBOX_QUEUE_MSG_SIZE);
 			if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {

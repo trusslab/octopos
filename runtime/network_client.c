@@ -57,7 +57,6 @@ static int send_msg_to_network(uint8_t *buf)
 void ip_send_out(struct pkbuf *pkb)
 {
 	int size = pkb->pk_len + sizeof(*pkb);
-	printf("%s [1]: pkb->pk_len = %d\n", __func__, pkb->pk_len);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size)
 	send_msg_to_network(buf);
 }

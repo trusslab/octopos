@@ -30,3 +30,4 @@ In addition, here's where the files under untrusted/ map to in the Linux source 
   - octopos/untrusted/octopos_mailbox_interface_user.c -> untrusted_linux/arch/um/os-Linux/drivers/octopos_mailbox_interface_user.c
   - octopos/untrusted/octopos_blk_drv.c -> untrusted_linux/drivers/block/octopos_blk/octopos_blk_drv.c
   - octopos/untrusted/octopos_net.c -> untrusted_linux/drivers/net/octopos_net.c
+  - octopos/untrusted/octopos_net.h -> untrusted_linux/include/net/octopos_net.h
