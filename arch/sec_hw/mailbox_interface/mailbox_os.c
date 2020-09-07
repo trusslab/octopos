@@ -276,15 +276,12 @@ int check_avail_and_send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 		return ERR_INVALID;
 	}
 
-// _SEC_HW_ERROR("[1]");
 	int ret = is_queue_available(runtime_queue_id);
 	if (!ret) {
 		return ERR_AVAILABLE;
 	}
-// _SEC_HW_ERROR("[2]");
 
 	send_msg_to_runtime_queue(runtime_queue_id, buf);
-// _SEC_HW_ERROR("[3]");
 
 	return 0;
 }
@@ -328,7 +325,7 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	reg = octopos_mailbox_calc_quota_limit(reg, count * factor);
 	reg = octopos_mailbox_calc_owner(reg, OMboxIds[queue_id][proc_id]);
 
-	_SEC_HW_ERROR("Writing: %08x", reg); usleep(100);
+	_SEC_HW_DEBUG("Writing: %08x", reg); usleep(100);
 	_SEC_HW_DEBUG("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 
 	octopos_mailbox_set_status_reg(queue_ptr, reg);

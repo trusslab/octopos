@@ -86,6 +86,7 @@ _Bool			MBOX_PENDING_STA[NUM_QUEUES + 1] = {0};
 
 _Bool			runtime_inited = FALSE;
 _Bool			runtime_terminated = FALSE;
+_Bool			need_to_store_context = FALSE;
 
 int write_syscall_response(uint8_t *buf);
 int write_to_shell(char *data, int size);
@@ -369,11 +370,18 @@ void load_application_arch(char *msg, struct runtime_api *api)
 	((void(*)(struct runtime_api*))app_main)(api);
 }
 
+static void context_switch() __attribute__((noinline));
 static void context_switch()
 {
-	while(1)sleep(1);
+	int Status;
+	if (need_to_store_context) {
+		store_context(NULL);
+	}
+	
+	while(1) sleep(1);
 }
 
+static void context_switch_begin() __attribute__((noinline));
 static void context_switch_begin()
 {
 	context_switch();
@@ -413,7 +421,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
 		sem_post(&load_app_sem);
 	} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_CONTEXT_SWITCH_TAG");
-		store_context(NULL);
+		need_to_store_context = TRUE;
 		close_runtime();
 	} else {
 		_SEC_HW_ERROR("received invalid message (%d)", buf[0]);
