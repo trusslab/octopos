@@ -506,8 +506,6 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	return (int) ret0;
 }
 
-void mailbox_yield_to_previous_owner(uint8_t queue_id);
-
 static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
 {
 	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -519,23 +517,13 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 		return 0;
 	uint8_t queue_id = (uint8_t) ret0;
 
-	switch (queue_id) { // FIXME
-		case Q_STORAGE_DATA_OUT:
-			XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
-			break;
-
-		case Q_STORAGE_DATA_IN:
-			XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_STA | XMB_IX_ERR);
-			break;
-	}
-
 	for (int i = 0; i < num_blocks; i++)
 		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
 
+#ifdef ARCH_SEC_HW
 	usleep(100);
 	mailbox_yield_to_previous_owner(queue_id);
+#endif
 	return num_blocks;
 }
 
@@ -551,23 +539,13 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num
 
 	uint8_t queue_id = (uint8_t) ret0;
 
-	switch (queue_id) { // FIXME
-		case Q_STORAGE_DATA_OUT:
-			XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
-			break;
-
-		case Q_STORAGE_DATA_IN:
-			XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_STA | XMB_IX_ERR);
-			break;
-	}
-
 	for (int i = 0; i < num_blocks; i++)
 		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
 
+#ifdef ARCH_SEC_HW
 	usleep(100);
 	mailbox_yield_to_previous_owner(queue_id);
+#endif
 	return num_blocks;
 }
 
