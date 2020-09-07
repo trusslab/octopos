@@ -143,7 +143,8 @@ static int remove_file_from_list(struct file *file)
 
 static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	// wait_for_storage(); // FIXME: incorrect semaphore
+	wait_for_storage();
+
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage_no_response(buf);
@@ -525,9 +526,9 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 		return 0;
 	}
 
-	// wait_for_storage(); //FIXME
+	wait_for_storage();
 
-	// wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 
@@ -582,7 +583,7 @@ uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_block
 		return 0;
 	}
 
-	// wait_for_storage(); //FIXME
+	wait_for_storage();
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 

@@ -190,11 +190,8 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		is_storage_config_locked = true;
 	}
 
-#ifndef ARCH_SEC_HW
-	// FIXME: there is a bug in sec_hw mailbox_os, the semaphore is wrong
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-#endif
 
 	mark_queue_unavailable(Q_STORAGE_CMD_IN);
 	mark_queue_unavailable(Q_STORAGE_CMD_OUT);

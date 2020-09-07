@@ -450,7 +450,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
 			sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_SERIAL_OUT]);
-			sem_post(&interrupts[Q_SERIAL_OUT]);
 			_SEC_HW_DEBUG("Q_SERIAL_OUT = %d", interrupts[Q_SERIAL_OUT].count);
 		} else if (callback_ref == &Mbox_runtime1) {
 			/* Runtime 1 */
@@ -458,7 +457,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
 			sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_RUNTIME1]);
-			sem_post(&interrupts[Q_RUNTIME1]);
 			_SEC_HW_DEBUG("Q_RUNTIME1 = %d", interrupts[Q_RUNTIME1].count);
 		} else if (callback_ref == &Mbox_runtime2) {
 			/* Runtime 2 */
@@ -466,7 +464,6 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
 			sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_RUNTIME2]);
-			sem_post(&interrupts[Q_RUNTIME2]);
 			_SEC_HW_DEBUG("Q_RUNTIME2 = %d", interrupts[Q_RUNTIME2].count);
 		} else if (callback_ref == &Mbox_storage_data_in) {
 			/* Storage data in */
@@ -474,13 +471,11 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
 			sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 			sem_post(&availables[Q_STORAGE_DATA_IN]);
-			sem_post(&interrupts[Q_STORAGE_DATA_IN]);
 		} else if (callback_ref == &Mbox_storage_cmd_in) {
 			_SEC_HW_DEBUG("from Mbox_storage_cmd_in");
 			
 			sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_STORAGE_CMD_IN]);
-			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
 		}
 		
 	} else if (mask & XMB_IX_RTA) {
