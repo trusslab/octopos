@@ -31,7 +31,7 @@ XMbox			Mbox_storage_in_2,
 sem_t			interrupts[NUM_QUEUES + 1];
 
 XMbox*			Mbox_regs[NUM_QUEUES + 1];
-UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 static FATFS	fatfs;
 BYTE			work[FF_MAX_SS];

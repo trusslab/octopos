@@ -53,7 +53,7 @@ sem_t			availables[NUM_QUEUES + 1];
 cbuf_handle_t	cbuf_keyboard;
 
 XMbox*			Mbox_regs[NUM_QUEUES + 1];
-UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 int is_queue_available(uint8_t queue_id)
 {

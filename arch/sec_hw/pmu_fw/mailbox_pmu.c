@@ -10,7 +10,7 @@
 #include "mailbox_pmu.h"
 #include "octopos_pmu_common.h"
 
-UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 u32 octopos_mailbox_get_status_reg(UINTPTR base)
 {
