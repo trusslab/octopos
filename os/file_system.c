@@ -1,6 +1,5 @@
 /* OctopOS file system */
 #include <arch/defines.h>
-#ifdef ARCH_UMODE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +17,10 @@
 #include <arch/mailbox_os.h>
 
 #define MAX_FILENAME_SIZE	256
+
+#ifdef ARCH_SEC_HW
+#include <arch/sec_hw.h>
+#endif
 
 struct file {
 	char filename[MAX_FILENAME_SIZE];
@@ -529,8 +532,13 @@ uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_bloc
 
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 
+#ifndef ARCH_SEC_HW
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);
+#else
+	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
+							runtime_proc_id, (uint16_t) num_blocks);
+#endif
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
@@ -579,8 +587,13 @@ uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_block
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
+#ifndef ARCH_SEC_HW
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);
+#else
+	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
+							runtime_proc_id, (uint16_t) num_blocks);
+#endif
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
@@ -640,7 +653,6 @@ int file_system_remove_file(char *filename)
 		printf("Error: file to be removed does not exist\n");
 		return ERR_INVALID;
 	}
-
 
 	int ret = remove_file_from_directory(file);
 	if (ret)
@@ -729,4 +741,3 @@ void initialize_file_system(void)
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
 }
-#endif

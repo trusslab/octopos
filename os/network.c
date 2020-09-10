@@ -18,7 +18,6 @@
 #include <os/network.h>
 #include <arch/mailbox_os.h>
 
-#ifdef ARCH_UMODE
 static int network_set_up_socket(uint32_t saddr, uint32_t sport,
 				 uint32_t daddr, uint32_t dport)
 {
@@ -45,7 +44,6 @@ static int get_unused_tcp_port(uint32_t *sport)
 
 	return 0;
 }
-#endif
 
 void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 				    uint8_t *buf)

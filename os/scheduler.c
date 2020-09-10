@@ -254,7 +254,6 @@ static int remove_app_from_list(struct app *app, struct app_list_node **head, st
 
 		prev_node = node;
 	}
-
 	return ERR_EXIST;
 }
 
@@ -281,12 +280,14 @@ struct app *get_app(int app_id)
 
 static int add_app_to_ready_queue(struct app *app)
 {
-	return add_app_to_list(app, &ready_queue_head, &ready_queue_tail);
+	int result = add_app_to_list(app, &ready_queue_head, &ready_queue_tail);
+	return result;
 }
 
 static int remove_app_from_ready_queue(struct app *app)
 {
-	return remove_app_from_list(app, &ready_queue_head, &ready_queue_tail);
+	int result = remove_app_from_list(app, &ready_queue_head, &ready_queue_tail);
+	return result;
 }
 
 static struct app *get_app_from_ready_queue(void)
