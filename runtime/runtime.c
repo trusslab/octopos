@@ -520,10 +520,7 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 	for (int i = 0; i < num_blocks; i++)
 		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
 
-#ifdef ARCH_SEC_HW
-	usleep(100);
-	mailbox_yield_to_previous_owner(queue_id);
-#endif
+	// mailbox_yield_to_previous_owner(queue_id);
 	return num_blocks;
 }
 
@@ -542,10 +539,7 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num
 	for (int i = 0; i < num_blocks; i++)
 		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
 
-#ifdef ARCH_SEC_HW
-	usleep(100);
-	mailbox_yield_to_previous_owner(queue_id);
-#endif
+	// mailbox_yield_to_previous_owner(queue_id);
 	return num_blocks;
 }
 
