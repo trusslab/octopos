@@ -101,6 +101,9 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
 	_SEC_HW_DEBUG("Before yield: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+	/* This delay waits for the receiver to finish reading */
+	/* FIXME: replace with a reliable waiting mechanism */
+	usleep(100);
 	octopos_mailbox_deduct_and_set_owner(queue_ptr, P_PREVIOUS);
 
 	_SEC_HW_DEBUG("After yield: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
@@ -132,50 +135,6 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count
 		queue_ptr, 
 		MAX_OCTOPOS_MAILBOX_QUOTE - OCTOPOS_MAILBOX_MAX_TIME_DRIFT
 		);
-
-	switch (queue_id) {
-		case Q_KEYBOARD:
-			XMbox_SetReceiveThreshold(&Mbox_keyboard, MAILBOX_DEFAULT_RX_THRESHOLD);
-			XMbox_SetInterruptEnable(&Mbox_keyboard, XMB_IX_RTA | XMB_IX_ERR);
-			break;
-
-		case Q_SERIAL_OUT:
-			XMbox_SetSendThreshold(&Mbox_out, 0);
-			XMbox_SetInterruptEnable(&Mbox_out, XMB_IX_STA | XMB_IX_ERR);
-			break;
-
-		case Q_RUNTIME1:
-			XMbox_SetSendThreshold(&Mbox_Runtime1, 0);
-			XMbox_SetReceiveThreshold(&Mbox_Runtime1, MAILBOX_DEFAULT_RX_THRESHOLD);
-			XMbox_SetInterruptEnable(&Mbox_Runtime1, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
-			break;
-
-		case Q_RUNTIME2:
-			XMbox_SetSendThreshold(&Mbox_Runtime2, 0);
-			XMbox_SetReceiveThreshold(&Mbox_Runtime2, MAILBOX_DEFAULT_RX_THRESHOLD);
-			XMbox_SetInterruptEnable(&Mbox_Runtime2, XMB_IX_STA | XMB_IX_RTA | XMB_IX_ERR);
-			break;
-
-		case Q_STORAGE_DATA_OUT:
-			XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-			XMbox_SetInterruptEnable(&Mbox_storage_data_out, XMB_IX_RTA | XMB_IX_ERR);
-			break;
-
-		case Q_STORAGE_DATA_IN:
-			XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
-			XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_STA | XMB_IX_ERR);
-			break;
-
-		case Q_STORAGE_CMD_OUT:
-			XMbox_SetReceiveThreshold(&Mbox_storage_cmd_out, MAILBOX_DEFAULT_RX_THRESHOLD);
-			XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, XMB_IX_RTA | XMB_IX_ERR);
-			break;
-
-		case Q_STORAGE_CMD_IN:
-			XMbox_SetSendThreshold(&Mbox_storage_cmd_in, 0);
-			XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, XMB_IX_STA | XMB_IX_ERR);
-			break;
-	}
 
 	return result;
 }
