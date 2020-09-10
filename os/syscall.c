@@ -20,6 +20,9 @@
 #include <os/shell.h>
 #include <os/file_system.h>
 #include <os/storage.h>
+#ifndef ARCH_SEC_HW
+#include <os/network.h>
+#endif
 #include <arch/mailbox_os.h>
 
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
@@ -75,21 +78,6 @@
 	}							\
 	data = &buf[11];					\
 
-#define NETWORK_SET_FOUR_ARGS(arg0, arg1, arg2, arg3)			\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];				\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);			\
-	*((uint32_t *) &buf[0]) = arg0;					\
-	*((uint32_t *) &buf[4]) = arg1;					\
-	*((uint32_t *) &buf[8]) = arg2;					\
-	*((uint32_t *) &buf[12]) = arg3;				\
-
-#define NETWORK_GET_ONE_RET		\
-	uint32_t ret0;			\
-	ret0 = *((uint32_t *) &buf[0]); \
-
-/* FIXME: move to a header file */
-int send_cmd_to_network(uint8_t *buf);
-
 /* response for async syscalls */
 void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size)
 {
@@ -98,35 +86,6 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	/* FIXME: we need to send msg to runtime proc that issues the syscall */
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
-
-#ifdef ARCH_UMODE
-static int network_set_up_socket(uint32_t saddr, uint32_t sport,
-				 uint32_t daddr, uint32_t dport)
-{
-	NETWORK_SET_FOUR_ARGS(saddr, sport, daddr, dport)
-	send_cmd_to_network(buf);
-	NETWORK_GET_ONE_RET
-
-	return (int) ret0;
-}
-
-
-static int get_network_src_addr(uint32_t *saddr)
-{
-	/* FIXME: hard-coded */
-	*saddr = 0x0100000a;
-
-	return 0;
-}
-
-static int get_unused_tcp_port(uint32_t *sport)
-{
-	/* FIXME: hard-coded */
-	*sport = 128;
-
-	return 0;
-}
-#endif
 
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
 {
@@ -394,133 +353,15 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 #ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
-		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
-		if (!runtime_proc || !runtime_proc->app) {
-			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
-			break;
-		}
-		struct app *app = runtime_proc->app;
-
-		SYSCALL_GET_FOUR_ARGS
-		uint32_t protocol = arg0;
-		uint32_t requested_port = arg1;
-		uint32_t daddr = arg2;
-		uint32_t dport = arg3;
-
-		if (protocol != TCP_SOCKET) {
-			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
-			break;
-		}
-
-		/* Not supported for now as it can be a side channel */
-		if (requested_port) {
-			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
-			break;
-		}
-
-		if (app->socket_created) {
-			printf("%s: Error: only support one socket per app (for now)\n", __func__);
-			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
-			break;
-		}
-
-		/* FIXME: hard-coded */
-		uint32_t saddr, sport;
-		int ret = get_network_src_addr(&saddr);
-		if (ret) {
-			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
-			break;
-		}
-
-		ret = get_unused_tcp_port(&sport);
-		if (ret) {
-			SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
-			break;
-		}
-
-		app->socket_saddr = saddr;
-		app->socket_sport = sport;
-		app->socket_daddr = daddr;
-		app->socket_dport = dport;
-		app->socket_created = true;
-
-		SYSCALL_SET_TWO_RETS(saddr, sport)
+		handle_allocate_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
 	case SYSCALL_REQUEST_NETWORK_ACCESS: {
-		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
-		if (!runtime_proc || !runtime_proc->app) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-			break;
-		}
-
-		struct app *app = runtime_proc->app;
-		if (!app->socket_created) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
-
-		/* No more than 200 block reads/writes */
-		/* FIXME: hard-coded */
-		if (count > 200) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		int ret_in = is_queue_available(Q_NETWORK_DATA_IN);
-		int ret_out = is_queue_available(Q_NETWORK_DATA_OUT);
-		/* Or should we make this blocking? */
-		if (!ret_in || !ret_out) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
-			break;
-		}
-
-		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-
-		int ret = network_set_up_socket(app->socket_saddr, app->socket_sport,
-						app->socket_daddr, app->socket_dport);
-		if (ret) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-			break;
-		}
-
-		mark_queue_unavailable(Q_NETWORK_DATA_IN);
-		mark_queue_unavailable(Q_NETWORK_DATA_OUT);
-
-#ifdef ARCH_SEC_HW
-		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
-		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
-#else
-		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
-#endif
-
-		SYSCALL_SET_ONE_RET((uint32_t) 0)
+		handle_request_network_access_syscall(runtime_proc_id, buf);
 		break;
 	}
 	case SYSCALL_CLOSE_SOCKET: {
-		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
-		if (!runtime_proc || !runtime_proc->app) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-			break;
-		}
-
-		struct app *app = runtime_proc->app;
-		if (!app->socket_created) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		app->socket_created = false;
-		app->socket_saddr = 0;
-		app->socket_sport = 0;
-		app->socket_daddr = 0;
-		app->socket_dport = 0;
-
-		SYSCALL_SET_ONE_RET((uint32_t) 0)
+		handle_close_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
 #endif
@@ -560,7 +401,7 @@ static void handle_untrusted_syscall(uint8_t *buf)
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
-	/* FIXME: the next four are very similar to normal secure syscall handler */
+	/* FIXME: the next 7 are very similar to normal secure syscall handler */
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
 		inform_shell_of_termination(P_UNTRUSTED);
 		SYSCALL_SET_ONE_RET(0)
@@ -579,6 +420,20 @@ static void handle_untrusted_syscall(uint8_t *buf)
 		handle_delete_secure_storage_syscall(P_UNTRUSTED, buf);
 		break;
 	}
+#ifdef ARCH_UMODE
+	case SYSCALL_ALLOCATE_SOCKET: {
+		handle_allocate_socket_syscall(P_UNTRUSTED, buf);
+		break;
+	}
+	case SYSCALL_REQUEST_NETWORK_ACCESS: {
+		handle_request_network_access_syscall(P_UNTRUSTED, buf);
+		break;
+	}
+	case SYSCALL_CLOSE_SOCKET: {
+		handle_close_socket_syscall(P_UNTRUSTED, buf);
+		break;
+	}
+#endif
 	default:
 		printf("Error: invalid syscall\n");
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)

@@ -661,18 +661,18 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			allowed = true;
 	} else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS) {
 		if (queues[Q_NETWORK_DATA_IN].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
 			allowed = true;
 
-		if ((queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME2) &&
+		if ((queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME2 || queues[Q_NETWORK_DATA_IN].writer_id == P_UNTRUSTED) &&
 		    proc_id == P_OS && queues[Q_NETWORK_DATA_IN].access_count == 0)
 			allowed = true;
 	} else if (queue_id == Q_NETWORK_DATA_OUT && access == READ_ACCESS) {
 		if (queues[Q_NETWORK_DATA_OUT].reader_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
 			allowed = true;
 
-		if ((queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME2) &&
+		if ((queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_NETWORK_DATA_OUT].reader_id == P_UNTRUSTED) &&
 		    proc_id == P_OS &&
 		    queues[Q_NETWORK_DATA_OUT].access_count == 0)
 			allowed = true;
@@ -746,11 +746,11 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 		 queues[Q_STORAGE_DATA_OUT].reader_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS && 
-		 (queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME2) &&
+		 (queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME2 || queues[Q_NETWORK_DATA_IN].writer_id == P_UNTRUSTED) &&
 		 queues[Q_NETWORK_DATA_IN].writer_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_NETWORK_DATA_OUT && access == READ_ACCESS &&
-		 (queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME2) &&
+		 (queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_NETWORK_DATA_OUT].reader_id == P_UNTRUSTED) &&
 		 queues[Q_NETWORK_DATA_OUT].reader_id == requesting_proc_id && proc_id == P_OS)
 			allowed = true;
 	else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS &&
@@ -872,6 +872,7 @@ int main(int argc, char **argv)
 	pthread_t timer_thread;
 
 	initialize_processors();
+	/* FIXME: release memory allocated for queues on exit */
 	initialize_queues();
 
 	fd_set listen_fds;

@@ -368,6 +368,11 @@ void write_to_storage_data_queue(uint8_t *buf)
 		(u32*) buf);
 }
 
+int send_cmd_to_network(uint8_t *buf) 
+{
+	//TODO: Implement
+}
+
 int send_cmd_to_untrusted(uint8_t *buf)
 {
 	//TODO: Implement

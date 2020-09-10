@@ -45,8 +45,9 @@ else
 endif
 
 RUNTIME_OBJS =  runtime.o 						\
-		storage_client.o 						\
+		storage_client.o					\
 		../arch/umode/mailbox_interface/mailbox_runtime.o	\
+		network_client.o					\
 		network/socket/socket_obj.o				\
 		network/udp/udp_obj.o					\
 		network/tcp/tcp_obj.o					\
