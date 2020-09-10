@@ -20,7 +20,9 @@
 #include <os/shell.h>
 #include <os/file_system.h>
 #include <os/storage.h>
+#ifndef ARCH_SEC_HW
 #include <os/network.h>
+#endif
 #include <arch/mailbox_os.h>
 
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
@@ -107,10 +109,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-#ifdef ARCH_SEC_HW
-		_SEC_HW_DEBUG("arg0 = %d", count);
-#endif
-
 		int ret = is_queue_available(Q_SERIAL_OUT);
 		/* Or should we make this blocking? */
 		if (!ret) {
@@ -120,9 +118,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		/* ARCH_SEC_HW does not check on send queue availability
 		 * because it already blocks on send. */
-#ifndef ARCH_SEC_HW
 		wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
-#endif
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
@@ -138,10 +134,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
-
-#ifdef ARCH_SEC_HW
-		_SEC_HW_DEBUG("arg0 = %d", count);
-#endif
 
 		 /* No more than 100 characters */
 		 if (count > 100) {
@@ -218,7 +210,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 		break;
 	}
-#ifdef ARCH_UMODE
 	case SYSCALL_OPEN_FILE: {
 		SYSCALL_GET_ONE_ARG_DATA
 		uint32_t mode = arg0;
@@ -315,7 +306,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		handle_delete_secure_storage_syscall(runtime_proc_id, buf);
 		break;
 	}
-#endif
 	case SYSCALL_REQUEST_SECURE_IPC: {
 		SYSCALL_GET_TWO_ARGS
 		uint8_t target_runtime_queue_id = arg0;
@@ -389,7 +379,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	default:
 		printf("Error: invalid syscall\n");
 #ifdef ARCH_SEC_HW
-		_SEC_HW_DEBUG("invalid syscall, args: %s", buf);
+		_SEC_HW_ERROR("invalid syscall, args: %s", buf);
 #endif
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		break;
@@ -463,13 +453,11 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (!no_response) {
 			check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 		}
-#ifdef ARCH_UMODE
 		/* FIXME: use async interrupt processing instead. */
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
-#endif
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

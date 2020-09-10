@@ -54,12 +54,15 @@ static int send_msg_to_network(uint8_t *buf)
 	return 0;
 }
 
+#ifndef ARCH_SEC_HW
+// TODO: missing pkbuf definition
 void ip_send_out(struct pkbuf *pkb)
 {
 	int size = pkb->pk_len + sizeof(*pkb);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size)
 	send_msg_to_network(buf);
 }
+#endif
 
 uint8_t *ip_receive(uint8_t *buf, uint16_t *size)
 {
