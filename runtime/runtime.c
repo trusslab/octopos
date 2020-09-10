@@ -73,7 +73,9 @@ sem_t srq_sem;
 
 #ifdef ARCH_SEC_HW
 extern sem_t interrupt_change;
-/* This is to deal with the lack of nested interrupt support */
+/* FIXME: during context switch, we cannot receive any interrupt.
+ * This is an ad hoc solution before a solution is found.
+ */
 _Bool async_syscall_mode = FALSE;
 #endif
 
