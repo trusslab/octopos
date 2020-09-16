@@ -41,15 +41,15 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd loader",
+		"cd storage",
 		"sleep 1",
-		"./loader ../storage/storage.so"
+		"../loader/loader ./storage.so"
 	   ]
 	},{
 		"shell_command": [
 			"cd tpm",
 			"sleep 1",
-			"./tpm_monitor"
+			"./tpm"
 		]
 	},{
 	   "shell_command":[
