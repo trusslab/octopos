@@ -1,6 +1,3 @@
-#include <tss2/tss2_esys.h>
-#include <tss2/tss2_rc.h>
-
 /**
 * PCR No.    Allocation
 * ------------------------------------------------------
@@ -19,14 +16,8 @@
 * 23         Application specific
 */
 #define TPM_PCR_BANK(slot) (ESYS_TR_PCR0 + slot)
-#define TPM_PCR_DEFAULT_SLOT 15
+#define TPM_KNL_MEASUREMENT 8
+#define TPM_USR_MEASUREMENT 9
 
 #define TPM_INIT_ERR 0x01
 #define TPM_EXTD_ERR 0x02
-
-void pcr_read_single(uint8_t slot);
-void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues);
-void pcr_extend_data(uint8_t slot, char *data);
-void pcr_extend_file(uint8_t slot, char *path);
-
-void tpm_monitor_core(void);

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dlfcn.h>
-#include <tpm/tpm.h>
+// #include <arch/mailbox_tpm.h>
 
 void load(char *path, int _argc, char *_argv[]);
 
@@ -11,7 +11,7 @@ void load(char *path, int _argc, char *_argv[])
     void *handle;
     int (*fptr)(int, char **);
 
-    pcr_extend_file(TPM_PCR_DEFAULT_SLOT, path);
+    // send_measurement_to_queue((uint8_t *)path);
 
     handle = dlopen(path, RTLD_LAZY);
 

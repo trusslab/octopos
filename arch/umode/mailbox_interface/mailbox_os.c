@@ -328,6 +328,14 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_RUNTIME2]);
 				break;
+			case Q_TPM_DATA_IN:
+				sem_init(&interrupts[Q_TPM_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+				sem_post(&availables[Q_TPM_DATA_IN]);
+				break;
+			case Q_TPM_DATA_OUT:
+				sem_init(&interrupts[Q_TPM_DATA_OUT], 0, 0);
+				sem_post(&availables[Q_TPM_DATA_OUT]);
+				break;
 			default:
 				printf("%s: Error: unexpected ownership change interrupt.\n", __func__);
 				break;
@@ -363,6 +371,8 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_TPM_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_TPM_DATA_OUT], 0, 0);
 
 	sem_init(&availables[Q_KEYBOARD], 0, 1);
 	sem_init(&availables[Q_SERIAL_OUT], 0, 1);
@@ -377,6 +387,8 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_SENSOR], 0, 1);
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);
+	sem_init(&availables[Q_TPM_DATA_IN], 0, 1);
+	sem_init(&availables[Q_TPM_DATA_OUT], 0, 1);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {

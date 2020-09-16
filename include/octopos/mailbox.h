@@ -19,9 +19,10 @@
 #define	P_RUNTIME1		7
 #define	P_RUNTIME2		8
 #define P_UNTRUSTED		9
-#define NUM_PROCESSORS		9
-#define ALL_PROCESSORS		10
-#define INVALID_PROCESSOR	11
+#define P_TPM           10
+#define NUM_PROCESSORS  10
+#define ALL_PROCESSORS  11
+#define INVALID_PROCESSOR   12
 
 #define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */
 
@@ -43,7 +44,9 @@
 #define	Q_RUNTIME2		15
 #define	Q_OSU			16
 #define	Q_UNTRUSTED		17
-#define NUM_QUEUES		17
+#define Q_TPM_DATA_IN   18
+#define Q_TPM_DATA_OUT  19
+#define NUM_QUEUES		19
 
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64
@@ -76,6 +79,9 @@
 #define FIFO_UNTRUSTED_OUT	"/tmp/octopos_mailbox_untrusted_out"
 #define FIFO_UNTRUSTED_IN	"/tmp/octopos_mailbox_untrusted_in"
 #define FIFO_UNTRUSTED_INTR	"/tmp/octopos_mailbox_untrusted_intr"
+#define FIFO_TPM_OUT        "/tmp/octopos_mailbox_tpm_out"
+#define FIFO_TPM_IN         "/tmp/octopos_mailbox_tpm_in"
+#define FIFO_TPM_INTR       "/tmp/octopos_mailbox_tpm_intr"
 
 #define READ_ACCESS		0
 #define WRITE_ACCESS		1

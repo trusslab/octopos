@@ -1,10 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tss2/tss2_esys.h>
+#include <tss2/tss2_rc.h>
 #include <tpm/tpm.h>
+#include <octopos/mailbox.h>
+#include <arch/mailbox_tpm.h>
 
 
-void pcr_read_single(uint8_t slot)
+void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
+{
+	for (uint32_t i = 0; i < pcrValues->count; i++)
+	{
+		for (size_t j = 0; j < pcrValues->digests[i].size; j++)
+		{
+			fprintf(stdout, "%02x", pcrValues->digests[i].buffer[j]);
+		}
+		fprintf(stdout, "\n");
+	}
+}
+
+void pcr_read_single(int slot)
 {
 	ESYS_CONTEXT *context = NULL;
 	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
@@ -14,7 +30,7 @@ void pcr_read_single(uint8_t slot)
 		exit(1);
 	}
 
-	UINT32 pcrUpdateCounter;
+	uint32_t pcrUpdateCounter;
 	TPML_PCR_SELECTION *pcrSelectionOut = NULL;
 	TPML_DIGEST *pcrValues = NULL;
 	
@@ -28,7 +44,7 @@ void pcr_read_single(uint8_t slot)
         }
     };
 
-	UINT8 selection[4] = { 
+	uint8_t selection[4] = { 
 		0 | (1 << slot) % 256,
 		0 | (1 << (slot - 8)) % 256,
 		0 | (1 << (slot - 16)) % 256,
@@ -52,19 +68,7 @@ void pcr_read_single(uint8_t slot)
 	Esys_Finalize(&context);
 }
 
-void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
-{
-	for(uint32_t i = 0; i < pcrValues->count; i++)
-	{
-		for (size_t j = 0; j < pcrValues->digests[i].size; j++)
-		{
-			fprintf(stdout, "%02x", pcrValues->digests[i].buffer[j]);
-		}
-		fprintf(stdout, "\n");
-    }
-}
-
-void pcr_extend_data(uint8_t slot, char *data)
+void _tpm_data_measurement(int slot, char *data)
 {
 	ESYS_CONTEXT *context = NULL;
 	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
@@ -95,7 +99,7 @@ void pcr_extend_data(uint8_t slot, char *data)
 	}
 }
 
-void pcr_extend_file(uint8_t slot, char *path)
+void tpm_file_measurement(uint8_t slot, char *path)
 {
 	FILE *bin = fopen(path, "rb");
 	if (bin)
@@ -107,8 +111,38 @@ void pcr_extend_file(uint8_t slot, char *path)
 		fread(buffer, 1, bin_size, bin);
 		fclose(bin);
 
-		pcr_extend_data(slot, buffer);
+		_tpm_data_measurement(slot, buffer);
 
 		free(buffer);
 	}
+	else
+	{
+		fprintf(stderr, "File %s can not be opened.", path);
+	}
+}
+
+void tpm_measurement_core()
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+
+	while (1)
+	{
+		read_measurement_from_queue(buf);
+		tpm_file_measurement(TPM_USR_MEASUREMENT, (char *)buf);
+		fprintf(stdout, "SLOT %d CHANGED TO: ", TPM_USR_MEASUREMENT);
+		pcr_read_single(TPM_USR_MEASUREMENT);
+	}
+}
+
+int main(int argc, char const *argv[])
+{
+	int ret = init_tpm();
+	if (ret)
+		return ret;
+	
+	tpm_measurement_core();
+
+	close_tpm();
+	
+	return 0;
 }

@@ -18,7 +18,7 @@
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
-#include <tpm/tpm.h>
+#include <arch/mailbox_tpm.h>
 
 /* FIXME: also repeated in runtime.c */
 typedef int bool;
@@ -154,7 +154,7 @@ void load_application_arch(char *msg, struct runtime_api *api)
 	strcat(path, ".so");
 	printf("opening %s\n", path);
 
-	pcr_extend_file(TPM_PCR_DEFAULT_SLOT, path);
+	send_measurement_to_queue((uint8_t *)path);
 
 	app = dlopen(path, RTLD_LAZY);
 	if (!app) {

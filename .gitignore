@@ -11,3 +11,5 @@ keyboard/keyboard
 serial_out/serial_out
 applications/socket_client/socket_server
 arch/umode/mailbox/mailbox
+tpm/tpm
+loader/loader

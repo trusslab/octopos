@@ -46,12 +46,12 @@ endif
 
 RUNTIME_OBJS =  runtime.o 						            \
 		storage_client.o					                \
+		../arch/umode/mailbox_interface/mailbox_tpm.o       \
 		../arch/umode/mailbox_interface/mailbox_runtime.o	\
 		network/socket/socket_obj.o				            \
 		network/udp/udp_obj.o					            \
 		network/tcp/tcp_obj.o					            \
-		../util/network/lib_obj.o                           \
-		../tpm/tpm.o
+		../util/network/lib_obj.o                           
 
 
 umode:runtime
@@ -67,7 +67,6 @@ network/socket/socket_obj.o:network/socket/*.c
 	@make -C network/socket/
 ../util/network/lib_obj.o:../util/network/*.c
 	@make -C ../util/network/
-../tpm/tpm.o:../tpm/tpm.c
 
 clean:
 	find . -name *.o | xargs rm -f

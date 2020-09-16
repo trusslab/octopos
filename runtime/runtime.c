@@ -37,6 +37,7 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <arch/mailbox_runtime.h>
+#include <arch/mailbox_tpm.h>
 
 #ifdef ARCH_SEC_HW
 #include "xparameters.h"
@@ -901,6 +902,20 @@ static int request_network_access(int count)
 
 #endif
 
+static int handle_measurement_request(int count)
+{
+	reset_queue_sync(Q_TPM_DATA_IN, 0);
+
+	SYSCALL_SET_ONE_ARG(SYSCALL_MEASUREMENT, (uint32_t)count);
+
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int)ret0;
+	
+	return 0;
+}
+
 static void load_application(char *msg)
 {
 	struct runtime_api api = {
@@ -949,6 +964,8 @@ static void load_application(char *msg)
 		.yield_network_access = yield_network_access,
 #endif
 	};
+
+	handle_measurement_request(200);
 
 	load_application_arch(msg, &api);
 
