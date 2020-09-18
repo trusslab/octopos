@@ -9,6 +9,7 @@
 #include <semaphore.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <arch/mailbox.h>
 
 int fd_out, fd_in, fd_intr;
 sem_t interrupt_serial_out;
@@ -42,13 +43,11 @@ void get_chars_from_serial_out_queue(uint8_t *buf)
 
 void write_chars_to_serial_out(uint8_t *buf)
 {
-	printf("%s", buf);
+	fprintf(stderr, "%s", buf);
 
 	/* Delete character on backspace. */
 	if ((char) buf[0] == '\b')
-		printf(" \b");
-
-	fflush(NULL);
+		fprintf(stderr, " \b");
 }
 
 /* Initializes the serial_out (if needed) and its mailbox */

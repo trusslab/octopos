@@ -11,6 +11,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <arch/mailbox.h>
 
 int fd_out, fd_in, fd_intr;
 pthread_t mailbox_thread;

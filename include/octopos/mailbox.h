@@ -7,7 +7,7 @@
 #define	MAILBOX_OPCODE_WRITE_QUEUE		1
 #define	MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS	2
 #define	MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS	3
-#define	MAILBOX_OPCODE_RESET			4
+//#define	MAILBOX_OPCODE_RESET			4
 
 /* processor IDs */
 #define	P_OS			1
@@ -54,34 +54,6 @@
 #else
 #define MAILBOX_QUEUE_SIZE_LARGE	8
 #define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
-#endif
-
-#ifndef ARCH_SEC_HW
-#define FIFO_OS_OUT		"/tmp/octopos_mailbox_os_out"
-#define FIFO_OS_IN		"/tmp/octopos_mailbox_os_in"
-#define FIFO_OS_INTR		"/tmp/octopos_mailbox_os_intr"
-#define FIFO_KEYBOARD_OUT	"/tmp/octopos_mailbox_keyboard_out"
-#define FIFO_KEYBOARD_INTR	"/tmp/octopos_mailbox_keyboard_intr"
-#define FIFO_SENSOR		"/tmp/octopos_mailbox_sensor"
-#define FIFO_SENSOR_INTR	"/tmp/octopos_mailbox_sensor_intr"
-#define FIFO_SERIAL_OUT_OUT	"/tmp/octopos_mailbox_serial_out_out"
-#define FIFO_SERIAL_OUT_IN	"/tmp/octopos_mailbox_serial_out_in"
-#define FIFO_SERIAL_OUT_INTR	"/tmp/octopos_mailbox_serial_out_intr"
-#define FIFO_STORAGE_OUT	"/tmp/octopos_mailbox_storage_out"
-#define FIFO_STORAGE_IN		"/tmp/octopos_mailbox_storage_in"
-#define FIFO_STORAGE_INTR	"/tmp/octopos_mailbox_storage_intr"
-#define FIFO_NETWORK_OUT	"/tmp/octopos_mailbox_network_out"
-#define FIFO_NETWORK_IN		"/tmp/octopos_mailbox_network_in"
-#define FIFO_NETWORK_INTR	"/tmp/octopos_mailbox_network_intr"
-#define FIFO_RUNTIME1_OUT	"/tmp/octopos_mailbox_runtime1_out"
-#define FIFO_RUNTIME1_IN	"/tmp/octopos_mailbox_runtime1_in"
-#define FIFO_RUNTIME1_INTR	"/tmp/octopos_mailbox_runtime1_intr"
-#define FIFO_RUNTIME2_OUT	"/tmp/octopos_mailbox_runtime2_out"
-#define FIFO_RUNTIME2_IN	"/tmp/octopos_mailbox_runtime2_in"
-#define FIFO_RUNTIME2_INTR	"/tmp/octopos_mailbox_runtime2_intr"
-#define FIFO_UNTRUSTED_OUT	"/tmp/octopos_mailbox_untrusted_out"
-#define FIFO_UNTRUSTED_IN	"/tmp/octopos_mailbox_untrusted_in"
-#define FIFO_UNTRUSTED_INTR	"/tmp/octopos_mailbox_untrusted_intr"
 #endif
 
 #define READ_ACCESS		0

@@ -18,6 +18,7 @@
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <arch/mailbox.h>
 
 /* FIXME: also repeated in runtime.c */
 typedef int bool;
@@ -156,7 +157,7 @@ typedef void (*app_main_proc)(struct runtime_api *);
 void load_application_arch(char *msg, struct runtime_api *api)
 {
 	void *app;
-	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "../applications/bin/";
+	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "./applications/bin/";
 	app_main_proc app_main;
 
 	strcat(path, msg);
@@ -306,11 +307,11 @@ void close_runtime(void)
 	/* FIXME: free the memory allocated for srq */
 
 	/* FIXME: resetting the mailbox needs to be done automatically. */
-	uint8_t opcode[2];
-	opcode[0] = MAILBOX_OPCODE_RESET;
-	pthread_spin_lock(&mailbox_lock);	
-	write(fd_out, opcode, 2);
-	pthread_spin_unlock(&mailbox_lock);	
+	//uint8_t opcode[2];
+	//opcode[0] = MAILBOX_OPCODE_RESET;
+	//pthread_spin_lock(&mailbox_lock);	
+	//write(fd_out, opcode, 2);
+	//pthread_spin_unlock(&mailbox_lock);	
 
 	pthread_spin_destroy(&mailbox_lock);
 

@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #define UNTRUSTED_DOMAIN
-#include <octopos/mailbox.h>
+#include <octopos/mailbox_umode.h>
 
 int init_octopos_mailbox_interface(void)
 {

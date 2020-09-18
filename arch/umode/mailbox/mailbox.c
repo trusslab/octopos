@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <octopos/mailbox.h>
+#include <arch/mailbox.h>
+#include <arch/pmu.h>
 
 struct processor {
 	uint8_t processor_id;
@@ -303,6 +305,119 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
+static int is_queue_securely_delegated(uint8_t queue_id)
+{
+	switch (queue_id) {
+	case Q_KEYBOARD:
+		return (queues[Q_KEYBOARD].reader_id != P_OS);
+
+	case Q_SERIAL_OUT:
+		return (queues[Q_SERIAL_OUT].writer_id != P_OS);
+
+	case Q_STORAGE_DATA_IN:
+		return (queues[Q_STORAGE_DATA_IN].writer_id != P_OS);
+
+	case Q_STORAGE_DATA_OUT:
+		return (queues[Q_STORAGE_DATA_OUT].reader_id != P_OS);
+
+	case Q_STORAGE_CMD_IN:
+		return (queues[Q_STORAGE_CMD_IN].writer_id != P_OS);
+
+	case Q_STORAGE_CMD_OUT:
+		return (queues[Q_STORAGE_CMD_OUT].reader_id != P_OS);
+
+	case Q_NETWORK_DATA_IN:	
+		return (queues[Q_NETWORK_DATA_IN].writer_id != P_OS);
+
+	case Q_NETWORK_DATA_OUT:
+		return (queues[Q_NETWORK_DATA_OUT].reader_id != P_OS);
+
+	case Q_NETWORK_CMD_IN:
+		return (queues[Q_NETWORK_CMD_IN].writer_id != P_OS);
+
+	case Q_NETWORK_CMD_OUT:
+		return (queues[Q_NETWORK_CMD_OUT].reader_id != P_OS);
+
+	case Q_RUNTIME1:
+		return (queues[Q_RUNTIME1].writer_id != P_OS);
+
+	case Q_RUNTIME2:
+		return (queues[Q_RUNTIME2].writer_id != P_OS);
+
+	default:
+		return 0;
+	}
+}
+
+static int any_secure_delegations(void)
+{
+	return (is_queue_securely_delegated(Q_KEYBOARD) ||
+		is_queue_securely_delegated(Q_SERIAL_OUT) ||
+		is_queue_securely_delegated(Q_STORAGE_DATA_IN) ||
+		is_queue_securely_delegated(Q_STORAGE_DATA_OUT) ||
+		is_queue_securely_delegated(Q_STORAGE_CMD_IN) ||
+		is_queue_securely_delegated(Q_STORAGE_CMD_OUT) ||
+		is_queue_securely_delegated(Q_NETWORK_DATA_IN) ||
+		is_queue_securely_delegated(Q_NETWORK_DATA_OUT) ||
+		is_queue_securely_delegated(Q_NETWORK_CMD_IN) ||
+		is_queue_securely_delegated(Q_NETWORK_CMD_OUT) ||
+		is_queue_securely_delegated(Q_RUNTIME1) ||
+		is_queue_securely_delegated(Q_RUNTIME2));
+}
+
+static int does_proc_have_secure_io(uint8_t proc_id)
+{
+	return ((queues[Q_KEYBOARD].reader_id == proc_id) ||
+		(queues[Q_SERIAL_OUT].writer_id == proc_id) ||
+		(queues[Q_STORAGE_DATA_IN].writer_id == proc_id) ||
+		(queues[Q_STORAGE_DATA_OUT].reader_id == proc_id) ||
+		(queues[Q_STORAGE_CMD_IN].writer_id == proc_id) ||
+		(queues[Q_STORAGE_CMD_OUT].reader_id == proc_id) ||
+		(queues[Q_NETWORK_DATA_IN].writer_id == proc_id) ||
+		(queues[Q_NETWORK_DATA_OUT].reader_id == proc_id) ||
+		(queues[Q_NETWORK_CMD_IN].writer_id == proc_id) ||
+		(queues[Q_NETWORK_CMD_OUT].reader_id == proc_id));
+}
+
+static int does_proc_have_secure_delegatation(uint8_t proc_id)
+{
+	switch(proc_id) {
+	case P_KEYBOARD:
+		return is_queue_securely_delegated(Q_KEYBOARD);
+
+	case P_SERIAL_OUT:
+		return is_queue_securely_delegated(Q_SERIAL_OUT);
+
+	case P_STORAGE:
+		return (is_queue_securely_delegated(Q_STORAGE_DATA_IN) ||
+			is_queue_securely_delegated(Q_STORAGE_DATA_OUT) ||
+			is_queue_securely_delegated(Q_STORAGE_CMD_IN) ||
+			is_queue_securely_delegated(Q_STORAGE_CMD_OUT));
+
+	case P_NETWORK:
+		return (is_queue_securely_delegated(Q_NETWORK_DATA_IN) ||
+			is_queue_securely_delegated(Q_NETWORK_DATA_OUT) ||
+			is_queue_securely_delegated(Q_NETWORK_CMD_IN) ||
+			is_queue_securely_delegated(Q_NETWORK_CMD_OUT));
+
+	case P_RUNTIME1:
+		return (is_queue_securely_delegated(Q_RUNTIME1) ||
+			does_proc_have_secure_io(P_RUNTIME1) ||
+			/* secure IPC */
+			(queues[Q_RUNTIME2].writer_id == P_RUNTIME1));
+
+	case P_RUNTIME2:
+		return (is_queue_securely_delegated(Q_RUNTIME2) ||
+			does_proc_have_secure_io(P_RUNTIME2) ||
+			/* secure IPC */
+			(queues[Q_RUNTIME1].writer_id == P_RUNTIME2));
+
+	default:
+		printf("Error: %s: invalid processor ID (%d)\n", __func__, proc_id);
+		return 0;
+	}
+}
+
 static void initialize_queues(void)
 {
 	/* OS queue for runtime1 */
@@ -593,11 +708,16 @@ static void reset_queue(uint8_t queue_id)
 	queues[(int) queue_id].counter = 0;
 }
 
-static void reset_queue_full(uint8_t queue_id)
+static int reset_queue_full(uint8_t queue_id)
 {
+	if (is_queue_securely_delegated(queue_id))
+	    return -1;
+
 	reset_queue(queue_id);	
 	queues[(int) queue_id].access_count = 0;
 	queues[(int) queue_id].prev_owner = 0;
+
+	return 0;
 }
 
 /* FIXME: we also have a copy of these definitions in syscall.h */
@@ -870,10 +990,22 @@ int main(int argc, char **argv)
 {
 	uint8_t opcode[2], writer_id, reader_id, queue_id;
 	pthread_t timer_thread;
+	int fd_pmu_to_mailbox, fd_pmu_from_mailbox;
+	int delegation_allowed = 1;
+
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+	printf("%s: mailbox init\n", __func__);
 
 	initialize_processors();
 	/* FIXME: release memory allocated for queues on exit */
 	initialize_queues();
+
+	/* channel to PMU */
+	mkfifo(FIFO_PMU_TO_MAILBOX, 0666);
+	mkfifo(FIFO_PMU_FROM_MAILBOX, 0666);
+	fd_pmu_to_mailbox = open(FIFO_PMU_TO_MAILBOX, O_RDONLY);
+	fd_pmu_from_mailbox = open(FIFO_PMU_FROM_MAILBOX, O_WRONLY);
 
 	fd_set listen_fds;
 	int nfds;
@@ -895,6 +1027,8 @@ int main(int argc, char **argv)
 		nfds = processors[P_RUNTIME2].out_handle;
 	if (processors[P_UNTRUSTED].out_handle > nfds)
 		nfds = processors[P_UNTRUSTED].out_handle;
+	if (fd_pmu_to_mailbox > nfds)
+		nfds = fd_pmu_to_mailbox;
 
 	int pret = pthread_create(&timer_thread, NULL, run_timer, NULL);
 	if (pret) {
@@ -911,6 +1045,7 @@ int main(int argc, char **argv)
 		FD_SET(processors[P_RUNTIME1].out_handle, &listen_fds);
 		FD_SET(processors[P_RUNTIME2].out_handle, &listen_fds);
 		FD_SET(processors[P_UNTRUSTED].out_handle, &listen_fds);
+		FD_SET(fd_pmu_to_mailbox, &listen_fds);
 
 		if (select(nfds + 1, &listen_fds, NULL, NULL, NULL) < 0) {
 			printf("Error: select\n");
@@ -931,10 +1066,14 @@ int main(int argc, char **argv)
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				uint8_t opcode_rest[3];
-				memset(opcode_rest, 0x0, 3);
-				read(processors[P_OS].out_handle, opcode_rest, 3);
-				os_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2]);				
+				if (delegation_allowed) {
+					uint8_t opcode_rest[3];
+					memset(opcode_rest, 0x0, 3);
+					read(processors[P_OS].out_handle, opcode_rest, 3);
+					os_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2]);				
+				} else {
+					printf("Error: %s: Changing queue access not allowed (RUNTIME2).\n", __func__);
+				}
 			} else {
 				printf("Error: invalid opcode from OS\n");
 			}
@@ -980,34 +1119,20 @@ int main(int argc, char **argv)
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				uint8_t opcode_rest[2];
-				memset(opcode_rest, 0x0, 2);
-				read(processors[P_RUNTIME1].out_handle, opcode_rest, 2);
-				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME1);				
+				if (delegation_allowed) {
+					uint8_t opcode_rest[2];
+					memset(opcode_rest, 0x0, 2);
+					read(processors[P_RUNTIME1].out_handle, opcode_rest, 2);
+					runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME1);				
+				} else {
+					printf("Error: %s: Changing queue access not allowed (RUNTIME1).\n", __func__);
+				}
 			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
 				uint8_t opcode_rest[2];
 				memset(opcode_rest, 0x0, 2);
 				read(processors[P_RUNTIME1].out_handle, opcode_rest, 2);
 				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME1);				
 				write(processors[P_RUNTIME1].in_handle, &ret, 1);
-			/* FIXME: This should be triggered by the power management unit. */
-			} else if (opcode[0] == MAILBOX_OPCODE_RESET) {
-				close(processors[P_RUNTIME1].out_handle);
-				close(processors[P_RUNTIME1].in_handle);
-				close(processors[P_RUNTIME1].intr_handle);
-				remove(FIFO_RUNTIME1_OUT);
-				remove(FIFO_RUNTIME1_IN);
-				remove(FIFO_RUNTIME1_INTR);
-				
-				reset_queue_full(Q_RUNTIME1);
-				reset_queue_full(Q_OS1);
-
-				mkfifo(FIFO_RUNTIME1_OUT, 0666);
-				mkfifo(FIFO_RUNTIME1_IN, 0666);
-				mkfifo(FIFO_RUNTIME1_INTR, 0666);
-				processors[P_RUNTIME1].out_handle = open(FIFO_RUNTIME1_OUT, O_RDWR);
-				processors[P_RUNTIME1].in_handle = open(FIFO_RUNTIME1_IN, O_RDWR);
-				processors[P_RUNTIME1].intr_handle = open(FIFO_RUNTIME1_INTR, O_RDWR);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
@@ -1027,34 +1152,20 @@ int main(int argc, char **argv)
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				uint8_t opcode_rest[2];
-				memset(opcode_rest, 0x0, 2);
-				read(processors[P_RUNTIME2].out_handle, opcode_rest, 2);
-				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME2);				
+				if (delegation_allowed) {
+					uint8_t opcode_rest[2];
+					memset(opcode_rest, 0x0, 2);
+					read(processors[P_RUNTIME2].out_handle, opcode_rest, 2);
+					runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME2);				
+				} else {
+					printf("Error: %s: Changing queue access not allowed (RUNTIME2).\n", __func__);
+				}
 			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
 				uint8_t opcode_rest[2];
 				memset(opcode_rest, 0x0, 2);
 				read(processors[P_RUNTIME2].out_handle, opcode_rest, 2);
 				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME2);				
 				write(processors[P_RUNTIME2].in_handle, &ret, 1);
-			/* FIXME: This should be triggered by the power management unit. */
-			} else if (opcode[0] == MAILBOX_OPCODE_RESET) {
-				close(processors[P_RUNTIME2].out_handle);
-				close(processors[P_RUNTIME2].in_handle);
-				close(processors[P_RUNTIME2].intr_handle);
-				remove(FIFO_RUNTIME2_OUT);
-				remove(FIFO_RUNTIME2_IN);
-				remove(FIFO_RUNTIME2_INTR);
-				
-				reset_queue_full(Q_RUNTIME2);
-				reset_queue_full(Q_OS2);
-
-				mkfifo(FIFO_RUNTIME2_OUT, 0666);
-				mkfifo(FIFO_RUNTIME2_IN, 0666);
-				mkfifo(FIFO_RUNTIME2_INTR, 0666);
-				processors[P_RUNTIME2].out_handle = open(FIFO_RUNTIME2_OUT, O_RDWR);
-				processors[P_RUNTIME2].in_handle = open(FIFO_RUNTIME2_IN, O_RDWR);
-				processors[P_RUNTIME2].intr_handle = open(FIFO_RUNTIME2_INTR, O_RDWR);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
@@ -1124,10 +1235,48 @@ int main(int argc, char **argv)
 				printf("Error: invalid opcode from untrusted\n");
 			}
 		}
+
+		if (FD_ISSET(fd_pmu_to_mailbox, &listen_fds)) {
+			uint8_t pmu_mailbox_buf[PMU_MAILBOX_BUF_SIZE];
+			int len = read(fd_pmu_to_mailbox, pmu_mailbox_buf, PMU_MAILBOX_BUF_SIZE);
+			if (len != PMU_MAILBOX_BUF_SIZE) {
+				printf("Error: %s: invalid command size from the PMU (%d)\n",
+				       __func__, len);
+				continue;
+			}
+
+			if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_PAUSE_DELEGATION) {
+				uint32_t cmd_ret = 0;
+				delegation_allowed = 0;
+				write(fd_pmu_from_mailbox, &cmd_ret, 4);
+			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_RESUME_DELEGATION) {
+				uint32_t cmd_ret = 0;
+				delegation_allowed = 1;
+				write(fd_pmu_from_mailbox, &cmd_ret, 4);
+			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_TERMINATE_CHECK) {
+				uint32_t cmd_ret = (uint32_t) any_secure_delegations();
+				write(fd_pmu_from_mailbox, &cmd_ret, 4);
+			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_RESET_QUEUE) {
+				uint32_t cmd_ret = (uint32_t) reset_queue_full(pmu_mailbox_buf[1]);
+				write(fd_pmu_from_mailbox, &cmd_ret, 4);
+			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_RESET_PROC_CHECK) {
+				uint32_t cmd_ret =
+					(uint32_t) does_proc_have_secure_delegatation(pmu_mailbox_buf[1]);
+				write(fd_pmu_from_mailbox, &cmd_ret, 4);
+			} else {
+				printf("Error: %s: invalid command from the PMU (%d)\n",
+				       __func__, pmu_mailbox_buf[0]);
+			}
+		}
 	}	
 
 	pthread_cancel(timer_thread);
 	pthread_join(timer_thread, NULL);
 
+	close(fd_pmu_from_mailbox);
+	close(fd_pmu_to_mailbox);
+	remove(FIFO_PMU_FROM_MAILBOX);
+	remove(FIFO_PMU_TO_MAILBOX);
+	
 	close_processors();
 }

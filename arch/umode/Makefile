@@ -1,4 +1,4 @@
-DIRS := mailbox 
+DIRS := mailbox pmu emulator
 LINUX_DIR := untrusted_linux 
 
 .PHONY: umode

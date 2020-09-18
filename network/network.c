@@ -16,6 +16,7 @@
 #include <network/lib.h>
 #include <network/ip.h>
 #include <network/tcp.h>
+#include <arch/mailbox.h>
 
 #define NETWORK_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
@@ -305,6 +306,10 @@ int main(int argc, char **argv)
 	uint8_t opcode[2];
 	pthread_t mailbox_thread;
 	int is_data_queue = 0;
+
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+	printf("%s: network init\n", __func__);
 
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
