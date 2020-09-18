@@ -18,6 +18,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
+#include <octopos/mailbox_umode.h>
 
 #define OM_MODULE_NAME "octopos_mailbox"
 /* check include/linux/miscdevice.h to make sure this is not taken. */

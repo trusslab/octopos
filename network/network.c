@@ -16,6 +16,7 @@
 #include <network/lib.h>
 #include <network/ip.h>
 #include <network/tcp.h>
+#include <arch/mailbox.h>
 
 #define NETWORK_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \

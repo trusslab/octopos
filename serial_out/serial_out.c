@@ -1,4 +1,5 @@
 /* octopos serial output code */
+#include <stdio.h>
 #include <stdint.h>
 #include <octopos/mailbox.h>
 #include <arch/mailbox_serial_out.h>
@@ -21,6 +22,10 @@ static int serial_out_core(void)
 
 int main(int argc, char **argv)
 {
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+	printf("%s [1]: serial_out init\n", __func__);
+
 	int ret = init_serial_out();
 	if (ret)
 		return ret;

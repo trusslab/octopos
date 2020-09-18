@@ -7,15 +7,11 @@
       "panes": [
 	{
 	   "shell_command":[
-		"cd os",
-		"sleep 2",
-		"./os"
+		"arch/umode/emulator/log_view -o"
 	   ]
 	},{
 	   "shell_command":[
-		"cd keyboard",
-		"sleep 1",
-		"./keyboard"
+		"arch/umode/emulator/log_view -k"
 	   ]
 	},{
 	   "shell_command":[
@@ -24,26 +20,19 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd arch/umode/mailbox",
-		"./mailbox"
+		"arch/umode/emulator/log_view -m"
 	   ]
 	},{
 	   "shell_command":[
-		"cd serial_out",
-		"sleep 1",
-		"./serial_out"
+		"arch/umode/emulator/log_view -u"
 	   ]
 	},{
 	   "shell_command":[
-		"cd runtime",
-		"sleep 1",
-		"while true; do ./runtime 1; done"
+		"arch/umode/emulator/log_view -1"
 	   ]
 	},{
 	   "shell_command":[
-		"cd storage",
-		"sleep 1",
-		"./storage"
+		"arch/umode/emulator/log_view -s"
 	   ]
 	},{
 	   "shell_command":[
@@ -53,9 +42,7 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd runtime",
-		"sleep 1",
-		"while true; do ./runtime 2; done"
+		"arch/umode/emulator/log_view -2"
 	   ]
 	},{
 	   "shell_command":[
@@ -63,6 +50,14 @@
 		"sleep 1",
 		"./linux ubda=CentOS6.x-AMD64-root_fs mem=128M",
 		"test"
+	   ]
+	},{
+	   "shell_command":[
+		"arch/umode/emulator/log_view -p"
+	   ]
+	},{
+	   "shell_command":[
+		"arch/umode/pmu/pmu"
 	   ]
 	}
       ],

@@ -926,6 +926,9 @@ int main()
 
 	int runtime_id = -1;
 
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
 		exit(-1);
@@ -940,6 +943,7 @@ int main()
 #else
 	runtime_id = RUNTIME_ID;
 #endif
+	printf("%s [1]: runtime%d init\n", __func__, runtime_id);
 
 	if (runtime_id < 1 || runtime_id > 2) {
 		printf("Error: invalid runtime ID.\n");

@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <octopos/mailbox.h>
+#include <arch/mailbox.h>
 
 struct processor {
 	uint8_t processor_id;
@@ -870,6 +871,10 @@ int main(int argc, char **argv)
 {
 	uint8_t opcode[2], writer_id, reader_id, queue_id;
 	pthread_t timer_thread;
+
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+	printf("%s [1]: mailbox init\n", __func__);
 
 	initialize_processors();
 	/* FIXME: release memory allocated for queues on exit */

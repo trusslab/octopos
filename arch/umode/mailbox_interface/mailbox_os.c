@@ -18,6 +18,7 @@
 #include <os/shell.h>
 #include <os/file_system.h>
 #include <os/syscall.h>
+#include <arch/mailbox.h>
 
 int fd_out, fd_in, fd_intr;
 pthread_t mailbox_thread;

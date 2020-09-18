@@ -5,16 +5,15 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <termios.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <arch/mailbox.h>
 
 int fd_out, fd_intr;
 sem_t interrupt_keyboard;
 pthread_t mailbox_thread;
-struct termios orig;
 
 static void *handle_mailbox_interrupts(void *data)
 {
@@ -37,6 +36,8 @@ uint8_t read_char_from_keyboard(void)
 	/* A backspace key press is returned as a delete. We fix it here. */
 	if (c == 127)
 		c = '\b';
+	
+	printf("%s [1]: %c\n", __func__, c);
 
 	return (uint8_t) c;
 }
@@ -72,28 +73,11 @@ int init_keyboard(void)
 		return -1;
 	}
 
-	/*
-	 * put tty in raw mode.
-	 * see here:
-	 * https://www.unix.com/programming/3690-how-programm-tty-devices-under-unix-platform.html#post12226
-	 */
-        struct termios now;
-        setvbuf(stdout, NULL, _IONBF ,0);
-
-	tcgetattr(0, &orig);
-        now=orig;
-        now.c_lflag &= ~(ISIG|ICANON|ECHO);
-        now.c_cc[VMIN]=1;
-        now.c_cc[VTIME]=2;
-        tcsetattr(0, TCSANOW, &now);
-
 	return 0;
 }
 
 void close_keyboard(void)
 {
-	tcsetattr(0, TCSANOW, &orig);
-
 	pthread_cancel(mailbox_thread);
 	pthread_join(mailbox_thread, NULL);
 
