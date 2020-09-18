@@ -26,21 +26,24 @@
 #define FIFO_RUNTIME1_LOG	"/tmp/octopos_runtime1_log"
 #define FIFO_RUNTIME2_LOG	"/tmp/octopos_runtime2_log"
 #define FIFO_STORAGE_LOG	"/tmp/octopos_storage_log"
+#define FIFO_NETWORK_LOG	"/tmp/octopos_network_log"
+#define FIFO_UNTRUSTED_LOG	"/tmp/octopos_untrusted_log"
 #define FIFO_PMU_LOG		"/tmp/octopos_pmu_log"
 
 int fd_os_out, fd_os_in, fd_mailbox_out, fd_mailbox_in;
 int fd_mailbox_log, fd_os_log, fd_keyboard_log, fd_serial_out_log,
-    fd_runtime1_log, fd_runtime2_log, fd_storage_log, fd_pmu_log;
-int fd_keyboard, fd_serial_out;
+    fd_runtime1_log, fd_runtime2_log, fd_storage_log, fd_network_log,
+    fd_untrusted_log, fd_pmu_log;
+int fd_keyboard, fd_serial_out, fd_untrusted_in, fd_untrusted_out;
 
 struct termios orig;
 
 static int start_proc(char *path, char *const args[], int fd_log,
-		      int is_input, int is_output, int is_storage)
+		      int is_input, int is_output, int is_storage, int is_untrusted)
 {
 	int pipe_fds[2];
 
-	if (is_input || is_output)
+	if (is_input || is_output || is_untrusted)
 		pipe(pipe_fds);
 
 	pid_t pid = fork();
@@ -56,6 +59,10 @@ static int start_proc(char *path, char *const args[], int fd_log,
 		} else if (is_output) {
 			close(pipe_fds[1]);
 			fd_serial_out = pipe_fds[0];
+		} else if (is_untrusted) {
+			close(pipe_fds[0]);
+			//fd_untrusted_out = pipe_fds[0];
+			fd_untrusted_in = pipe_fds[1];
 		}
 
 		return pid;
@@ -68,9 +75,15 @@ static int start_proc(char *path, char *const args[], int fd_log,
 			dup2(pipe_fds[1], 2);
 		} else if (is_storage) {
 			chdir("./storage");
+		} else if (is_untrusted) {
+			dup2(fd_log, 2);
+			dup2(fd_log, 1);
+			//dup2(pipe_fds[1], 1);
+			dup2(pipe_fds[0], 0);
 		}
 
-		dup2(fd_log, 1);
+		if (!is_untrusted)
+			dup2(fd_log, 1);
 		execv(path, args);
 		exit(0);
 		return 0;
@@ -81,28 +94,28 @@ static int start_mailbox_proc(void)
 {
 	char *const args[] = {(char *) "mailbox", NULL};
 	char path[] = "./arch/umode/mailbox/mailbox";
-	return start_proc(path, args, fd_mailbox_log, 0, 0, 0);
+	return start_proc(path, args, fd_mailbox_log, 0, 0, 0, 0);
 }
 
 static int start_os_proc(void)
 {
 	char *const args[] = {(char *) "os", NULL};
 	char path[] = "./os/os";
-	return start_proc(path, args, fd_os_log, 0, 0, 0);
+	return start_proc(path, args, fd_os_log, 0, 0, 0, 0);
 }
 
 static int start_keyboard_proc(void)
 {
 	char *const args[] = {(char *) "keyboard", NULL};
 	char path[] = "./keyboard/keyboard";
-	return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
+	return start_proc(path, args, fd_keyboard_log, 1, 0, 0, 0);
 }
 
 static int start_serial_out_proc(void)
 {
 	char *const args[] = {(char *) "serial_out", NULL};
 	char path[] = "./serial_out/serial_out";
-	return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
+	return start_proc(path, args, fd_serial_out_log, 0, 1, 0, 0);
 }
 
 static int start_runtime_proc(char *runtime_id)
@@ -120,14 +133,30 @@ static int start_runtime_proc(char *runtime_id)
 		return ERR_INVALID;
 	}
 
-	return start_proc(path, args, fd_log, 0, 0, 0);
+	return start_proc(path, args, fd_log, 0, 0, 0, 0);
 }
 
 static int start_storage_proc(void)
 {
 	char *const args[] = {(char *) "storage", NULL};
 	char path[] = "./storage";
-	return start_proc(path, args, fd_storage_log, 0, 0, 1);
+	return start_proc(path, args, fd_storage_log, 0, 0, 1, 0);
+}
+
+static int start_network_proc(void)
+{
+	char *const args[] = {(char *) "network", NULL};
+	char path[] = "./network/network";
+	return start_proc(path, args, fd_network_log, 0, 0, 0, 0);
+}
+
+static int start_untrusted_proc(void)
+{
+	char *const args[] = {(char *) "linux",
+		(char *) "ubda=./arch/umode/untrusted_linux/CentOS6.x-AMD64-root_fs",
+		(char *) "mem=128M", NULL};
+	char path[] = "./arch/umode/untrusted_linux/linux";
+	return start_proc(path, args, fd_untrusted_log, 0, 0, 0, 1);
 }
 
 static void sig_handler (int sig)
@@ -138,8 +167,14 @@ static void sig_handler (int sig)
 int main(int argc, char **argv)
 {
 	pid_t mailbox_pid, os_pid, keyboard_pid, serial_out_pid,
-	      runtime1_pid, runtime2_pid, storage_pid;
-	//int fds[2];
+	      runtime1_pid, runtime2_pid, storage_pid, network_pid,
+	      untrusted_pid;
+	fd_set r_fds;
+	char buffer[1024];
+	int len;
+
+	sigset_t emptyset, blockset;
+	struct sigaction sa;
 
 	/*
 	 * put tty in raw mode.
@@ -168,6 +203,8 @@ int main(int argc, char **argv)
 	mkfifo(FIFO_RUNTIME1_LOG, 0666);
 	mkfifo(FIFO_RUNTIME2_LOG, 0666);
 	mkfifo(FIFO_STORAGE_LOG, 0666);
+	mkfifo(FIFO_NETWORK_LOG, 0666);
+	mkfifo(FIFO_UNTRUSTED_LOG, 0666);
 	mkfifo(FIFO_PMU_LOG, 0666);
 
 	//fd_os_out = open(FIFO_PMU_OS_OUT, O_WRONLY);
@@ -182,6 +219,8 @@ int main(int argc, char **argv)
 	fd_runtime1_log = open(FIFO_RUNTIME1_LOG, O_RDWR);
 	fd_runtime2_log = open(FIFO_RUNTIME2_LOG, O_RDWR);
 	fd_storage_log = open(FIFO_STORAGE_LOG, O_RDWR);
+	fd_network_log = open(FIFO_NETWORK_LOG, O_RDWR);
+	fd_untrusted_log = open(FIFO_UNTRUSTED_LOG, O_RDWR);
 	fd_pmu_log = open(FIFO_PMU_LOG, O_RDWR);
 
 	dup2(fd_pmu_log, 1);
@@ -194,17 +233,16 @@ int main(int argc, char **argv)
 	runtime1_pid = start_runtime_proc((char *) "1");
 	runtime2_pid = start_runtime_proc((char *) "2");
 	storage_pid = start_storage_proc();
+	//network_pid = start_network_proc();
+	untrusted_pid = start_untrusted_proc();
 
-	fd_set rfds;
-	char buffer[1024];
-	int len;
+	sleep(15);
+	printf("%s [2]\n", __func__);
+	write(fd_untrusted_in, "root\n", sizeof("root\n"));
 
 	/* see here for how to use pselect:
 	 * https://lwn.net/Articles/176911/ 
 	 */
-	sigset_t emptyset, blockset;
-	struct sigaction sa;
-
         sigemptyset(&blockset);
         sigaddset(&blockset, SIGCHLD);
         sigprocmask(SIG_BLOCK, &blockset, NULL);
@@ -217,19 +255,21 @@ int main(int argc, char **argv)
         sigemptyset(&emptyset);
 
 	while (1) {
-		int ret;
-		FD_ZERO(&rfds);
-		FD_SET(fd_serial_out, &rfds); 
-		FD_SET(0, &rfds); 
-		printf("%s [2]\n", __func__);
-		ret = pselect(fd_serial_out + 1, &rfds, NULL, NULL, NULL, &emptyset);
-		printf("%s [3]\n", __func__);
+		int ret, max_fd;
+		FD_ZERO(&r_fds);
+		FD_SET(fd_serial_out, &r_fds); 
+		FD_SET(0, &r_fds); 
+		FD_SET(fd_untrusted_out, &r_fds); 
+		max_fd = fd_serial_out;
+		if (fd_untrusted_out > fd_serial_out)
+			max_fd = fd_untrusted_out;
+		ret = pselect(max_fd + 1, &r_fds, NULL, NULL, NULL, &emptyset);
 		if (ret < 0 && errno == EINTR) { /* signal */
-			printf("%s [4]\n", __func__);
 			int status;
 			char proc_name[64];
 			pid_t pid = wait(&status);
 			if (pid == mailbox_pid) {
+				/* FIXME: doesn't really work. Need testing. */
 				printf("Error: %s: mailbox terminated! Terminating...", __func__);
 				goto err;
 			} else if (pid == os_pid) {
@@ -250,51 +290,61 @@ int main(int argc, char **argv)
 			} else if (pid == storage_pid) {
 				sprintf(proc_name, "Storage");
 				storage_pid = start_storage_proc();
+			} else if (pid == network_pid) {
+				sprintf(proc_name, "Network");
+				network_pid = start_network_proc();
+			} else if (pid == untrusted_pid) {
+				sprintf(proc_name, "Untrusted");
+				network_pid = start_untrusted_proc();
 			} else {
 				printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 				continue;
 			}
 			printf("%s processor terminated (%d) and restarted\n", proc_name, status);
-		} else if (FD_ISSET(fd_serial_out, &rfds)) {
-			printf("%s [3.1]\n", __func__);
+		}
+		
+		if (FD_ISSET(fd_serial_out, &r_fds)) {
 			len = read(fd_serial_out, buffer, sizeof(buffer));
 			write(2, buffer, len);
-		} else if (FD_ISSET(0, &rfds)) {
-			printf("%s [3.2]\n", __func__);
+		}
+		
+		if (FD_ISSET(0, &r_fds)) {
 			len = read(0, buffer, sizeof(buffer));
 			write(fd_keyboard, buffer, len);
 		}
+		
+		if (FD_ISSET(fd_untrusted_out, &r_fds)) {
+			len = read(fd_untrusted_out, buffer, sizeof(buffer));
+			//printf("%s [3]: len = %d\n", __func__, len);
+			//if (!strcmp(buffer, "localhost login: ")) {
+			if (len <= 0)
+				continue;
+
+			write(fd_untrusted_log, buffer, len);
+			if (len == 17) {
+				printf("%s [3]: login detected\n", __func__);
+				sleep(3);
+				write(fd_untrusted_in, "root\n", sizeof("root\n"));
+			}
+		}
 	}
 
-	//while (1) {
-	//	int status;
-	//	char proc_name[64];
-	//	pid_t pid = wait(&status);
-	//	if (pid == os_pid) {
-	//		sprintf(proc_name, "OS");
-	//	} else if (pid == keyboard_pid) {
-	//		sprintf(proc_name, "Keyboard");
-	//	} else if (pid == serial_out_pid) {
-	//		sprintf(proc_name, "Serial Out");
-	//	} else if (pid == runtime1_pid) {
-	//		sprintf(proc_name, "Runtime1");
-	//	} else if (pid == runtime2_pid) {
-	//		sprintf(proc_name, "Runtime2");
-	//	} else if (pid == storage_pid) {
-	//		sprintf(proc_name, "Storage");
-	//	} else {
-	//		printf("Error: %s: unknown pid (%d)\n", __func__, pid);
-	//		continue;
-	//	}
-
-	//	printf("%s processor terminated (%d)\n", proc_name, status);
-	//}
-	
-	printf("%s [7]\n", __func__);
-
 err:
+	printf("%s [7]\n", __func__);
+	kill(network_pid, SIGKILL);
+	kill(untrusted_pid, SIGKILL);
+	kill(storage_pid, SIGKILL);
+	kill(runtime2_pid, SIGKILL);
+	kill(runtime1_pid, SIGKILL);
+	kill(serial_out_pid, SIGKILL);
+	kill(keyboard_pid, SIGKILL);
+	kill(os_pid, SIGKILL);
+	kill(mailbox_pid, SIGKILL);
+
 	/* No more pmu logs after this. */
 	close(fd_pmu_log);
+	close(fd_untrusted_log);
+	close(fd_network_log);
 	close(fd_storage_log);
 	close(fd_runtime1_log);
 	close(fd_runtime2_log);
@@ -309,6 +359,8 @@ err:
 	//close(fd_os_out);
 	
 	remove(FIFO_PMU_LOG);
+	remove(FIFO_UNTRUSTED_LOG);
+	remove(FIFO_NETWORK_LOG);
 	remove(FIFO_STORAGE_LOG);
 	remove(FIFO_RUNTIME1_LOG);
 	remove(FIFO_RUNTIME2_LOG);

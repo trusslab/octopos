@@ -18,6 +18,8 @@
 #define FIFO_RUNTIME1_LOG	"/tmp/octopos_runtime1_log"
 #define FIFO_RUNTIME2_LOG	"/tmp/octopos_runtime2_log"
 #define FIFO_STORAGE_LOG	"/tmp/octopos_storage_log"
+#define FIFO_NETWORK_LOG	"/tmp/octopos_network_log"
+#define FIFO_UNTRUSTED_LOG	"/tmp/octopos_untrusted_log"
 #define FIFO_PMU_LOG		"/tmp/octopos_pmu_log"
 
 #define READ_SIZE	256
@@ -33,7 +35,7 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	opt = getopt(argc, argv, "moku12sp");
+	opt = getopt(argc, argv, "mokl12snup");
 	switch (opt) {
 	case 'm':
 		mkfifo(FIFO_MAILBOX_LOG, 0666);
@@ -50,7 +52,7 @@ int main(int argc, char **argv)
 		fd_log = open(FIFO_KEYBOARD_LOG, O_RDONLY);
 		printf("Keyboard processor logs:\n");
 		break;
-	case 'u':
+	case 'l':
 		mkfifo(FIFO_SERIAL_OUT_LOG, 0666);
 		fd_log = open(FIFO_SERIAL_OUT_LOG, O_RDONLY);
 		printf("Serial Out processor logs:\n");
@@ -69,6 +71,16 @@ int main(int argc, char **argv)
 		mkfifo(FIFO_STORAGE_LOG, 0666);
 		fd_log = open(FIFO_STORAGE_LOG, O_RDONLY);
 		printf("Storage processor logs:\n");
+		break;
+	case 'n': 
+		mkfifo(FIFO_NETWORK_LOG, 0666);
+		fd_log = open(FIFO_NETWORK_LOG, O_RDONLY);
+		printf("Network processor logs:\n");
+		break;
+	case 'u': 
+		mkfifo(FIFO_UNTRUSTED_LOG, 0666);
+		fd_log = open(FIFO_UNTRUSTED_LOG, O_RDONLY);
+		printf("Untrusted processor logs:\n");
 		break;
 	case 'p': 
 		mkfifo(FIFO_PMU_LOG, 0666);
@@ -105,7 +117,7 @@ int main(int argc, char **argv)
 	case 'k':
 		remove(FIFO_KEYBOARD_LOG);
 		break;
-	case 'u':
+	case 'l':
 		remove(FIFO_SERIAL_OUT_LOG);
 		break;
 	case '1':
@@ -116,6 +128,12 @@ int main(int argc, char **argv)
 		break;
 	case 's': 
 		remove(FIFO_STORAGE_LOG);
+		break;
+	case 'n': 
+		remove(FIFO_NETWORK_LOG);
+		break;
+	case 'u': 
+		remove(FIFO_UNTRUSTED_LOG);
 		break;
 	case 'p': 
 		remove(FIFO_PMU_LOG);

@@ -307,6 +307,10 @@ int main(int argc, char **argv)
 	pthread_t mailbox_thread;
 	int is_data_queue = 0;
 
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+	printf("%s [1]: network init\n", __func__);
+
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, 0);

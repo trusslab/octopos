@@ -24,7 +24,7 @@
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -u"
+		"arch/umode/emulator/log_view -l"
 	   ]
 	},{
 	   "shell_command":[
@@ -36,9 +36,7 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd network",
-		"sleep 1",
-		"sudo ./network"
+		"arch/umode/emulator/log_view -n"
 	   ]
 	},{
 	   "shell_command":[
@@ -46,10 +44,7 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd arch/umode/untrusted_linux",
-		"sleep 1",
-		"./linux ubda=CentOS6.x-AMD64-root_fs mem=128M",
-		"test"
+		"arch/umode/emulator/log_view -u"
 	   ]
 	},{
 	   "shell_command":[
@@ -57,7 +52,7 @@
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/pmu/pmu"
+		"sudo arch/umode/pmu/pmu"
 	   ]
 	}
       ],
