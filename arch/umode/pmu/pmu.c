@@ -34,7 +34,7 @@ int fd_os_out, fd_os_in, fd_mailbox_out, fd_mailbox_in;
 int fd_mailbox_log, fd_os_log, fd_keyboard_log, fd_serial_out_log,
     fd_runtime1_log, fd_runtime2_log, fd_storage_log, fd_network_log,
     fd_untrusted_log, fd_pmu_log;
-int fd_keyboard, fd_serial_out, fd_untrusted_in, fd_untrusted_out;
+int fd_keyboard, fd_serial_out, fd_untrusted_in;// fd_untrusted_out;
 
 struct termios orig;
 
@@ -60,8 +60,8 @@ static int start_proc(char *path, char *const args[], int fd_log,
 			close(pipe_fds[1]);
 			fd_serial_out = pipe_fds[0];
 		} else if (is_untrusted) {
-			close(pipe_fds[0]);
 			//fd_untrusted_out = pipe_fds[0];
+			close(pipe_fds[0]);
 			fd_untrusted_in = pipe_fds[1];
 		}
 
@@ -77,13 +77,11 @@ static int start_proc(char *path, char *const args[], int fd_log,
 			chdir("./storage");
 		} else if (is_untrusted) {
 			dup2(fd_log, 2);
-			dup2(fd_log, 1);
 			//dup2(pipe_fds[1], 1);
 			dup2(pipe_fds[0], 0);
 		}
 
-		if (!is_untrusted)
-			dup2(fd_log, 1);
+		dup2(fd_log, 1);
 		execv(path, args);
 		exit(0);
 		return 0;
@@ -172,6 +170,7 @@ int main(int argc, char **argv)
 	fd_set r_fds;
 	char buffer[1024];
 	int len;
+	int untrusted_init = 0;
 
 	sigset_t emptyset, blockset;
 	struct sigaction sa;
@@ -233,12 +232,12 @@ int main(int argc, char **argv)
 	runtime1_pid = start_runtime_proc((char *) "1");
 	runtime2_pid = start_runtime_proc((char *) "2");
 	storage_pid = start_storage_proc();
-	//network_pid = start_network_proc();
+	network_pid = start_network_proc();
 	untrusted_pid = start_untrusted_proc();
 
-	sleep(15);
-	printf("%s [2]\n", __func__);
-	write(fd_untrusted_in, "root\n", sizeof("root\n"));
+	//sleep(15);
+	//printf("%s [2]\n", __func__);
+	//write(fd_untrusted_in, "root\n", sizeof("root\n"));
 
 	/* see here for how to use pselect:
 	 * https://lwn.net/Articles/176911/ 
@@ -253,17 +252,19 @@ int main(int argc, char **argv)
         sigaction(SIGCHLD, &sa, NULL);
     
         sigemptyset(&emptyset);
+	
 
 	while (1) {
-		int ret, max_fd;
+		int ret;
 		FD_ZERO(&r_fds);
 		FD_SET(fd_serial_out, &r_fds); 
 		FD_SET(0, &r_fds); 
-		FD_SET(fd_untrusted_out, &r_fds); 
-		max_fd = fd_serial_out;
-		if (fd_untrusted_out > fd_serial_out)
-			max_fd = fd_untrusted_out;
-		ret = pselect(max_fd + 1, &r_fds, NULL, NULL, NULL, &emptyset);
+		//FD_SET(fd_untrusted_out, &r_fds); 
+		//max_fd = fd_serial_out;
+		//if (fd_untrusted_out > fd_serial_out)
+		//	max_fd = fd_untrusted_out;
+		printf("%s [2]\n", __func__);
+		ret = pselect(fd_serial_out + 1, &r_fds, NULL, NULL, NULL, &emptyset);
 		if (ret < 0 && errno == EINTR) { /* signal */
 			int status;
 			char proc_name[64];
@@ -301,31 +302,43 @@ int main(int argc, char **argv)
 				continue;
 			}
 			printf("%s processor terminated (%d) and restarted\n", proc_name, status);
-		}
-		
-		if (FD_ISSET(fd_serial_out, &r_fds)) {
-			len = read(fd_serial_out, buffer, sizeof(buffer));
-			write(2, buffer, len);
-		}
-		
-		if (FD_ISSET(0, &r_fds)) {
-			len = read(0, buffer, sizeof(buffer));
-			write(fd_keyboard, buffer, len);
-		}
-		
-		if (FD_ISSET(fd_untrusted_out, &r_fds)) {
-			len = read(fd_untrusted_out, buffer, sizeof(buffer));
-			//printf("%s [3]: len = %d\n", __func__, len);
-			//if (!strcmp(buffer, "localhost login: ")) {
-			if (len <= 0)
-				continue;
-
-			write(fd_untrusted_log, buffer, len);
-			if (len == 17) {
-				printf("%s [3]: login detected\n", __func__);
-				sleep(3);
-				write(fd_untrusted_in, "root\n", sizeof("root\n"));
+		} else {
+			if (FD_ISSET(fd_serial_out, &r_fds)) {
+				len = read(fd_serial_out, buffer, sizeof(buffer));
+				write(2, buffer, len);
 			}
+			
+			if (FD_ISSET(0, &r_fds)) {
+				len = read(0, buffer, sizeof(buffer));
+				if (!untrusted_init && len == 1 && buffer[0] == '@') {
+					printf("%s [3]: initializing untrusted\n", __func__);
+					untrusted_init = 1;
+					char cmd1[] = "root\n";
+					char cmd2[] = "ip link set octopos_net up\n";
+					char cmd3[] = "ip addr add 10.0.0.1/24 dev octopos_net\n";
+					char cmd4[] = "while true; do source /dev/octopos_mailbox | xargs echo \"@\" > /dev/octopos_mailbox; done\n";
+					write(fd_untrusted_in, cmd1, sizeof(cmd1));
+					sleep(1);
+					write(fd_untrusted_in, cmd2, sizeof(cmd2));
+					write(fd_untrusted_in, cmd3, sizeof(cmd3));
+					write(fd_untrusted_in, cmd4, sizeof(cmd4));
+				}
+				write(fd_keyboard, buffer, len);
+			}
+			
+			//if (FD_ISSET(fd_untrusted_out, &r_fds)) {
+			//	len = read(fd_untrusted_out, buffer, sizeof(buffer));
+			//	printf("%s [3]: len = %d\n", __func__, len);
+			//	//if (!strcmp(buffer, "localhost login: ")) {
+			//	if (len <= 0)
+			//		continue;
+
+			//	write(fd_untrusted_log, buffer, len);
+			//	if (len == 17) {
+			//		printf("%s [3]: login detected\n", __func__);
+			//		write(fd_untrusted_in, "root\n", sizeof("root\n"));
+			//	}
+			//}
 		}
 	}
 
