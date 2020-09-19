@@ -7,48 +7,58 @@
       "panes": [
 	{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -o"
+		"arch/umode/emulator/log_view -o",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -k"
+		"arch/umode/emulator/log_view -k",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"cd applications/socket_client",
-		"while true; do ./socket_server; done"
+		"arch/umode/emulator/log_view -v",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -m"
+		"arch/umode/emulator/log_view -m",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -l"
+		"arch/umode/emulator/log_view -l",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -1"
+		"arch/umode/emulator/log_view -1",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -s"
+		"arch/umode/emulator/log_view -s",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -n"
+		"arch/umode/emulator/log_view -n",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -2"
+		"arch/umode/emulator/log_view -2",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -u"
+		"arch/umode/emulator/log_view -u",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[
-		"arch/umode/emulator/log_view -p"
+		"arch/umode/emulator/log_view -p",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[

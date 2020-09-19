@@ -8,19 +8,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <arch/mailbox.h>
-
-/* FIXME: move somewhere else */
-#define FIFO_MAILBOX_LOG	"/tmp/octopos_mailbox_log"
-#define FIFO_OS_LOG		"/tmp/octopos_os_log"
-#define FIFO_KEYBOARD_LOG	"/tmp/octopos_keyboard_log"
-#define FIFO_SERIAL_OUT_LOG	"/tmp/octopos_serial_out_log"
-#define FIFO_RUNTIME1_LOG	"/tmp/octopos_runtime1_log"
-#define FIFO_RUNTIME2_LOG	"/tmp/octopos_runtime2_log"
-#define FIFO_STORAGE_LOG	"/tmp/octopos_storage_log"
-#define FIFO_NETWORK_LOG	"/tmp/octopos_network_log"
-#define FIFO_UNTRUSTED_LOG	"/tmp/octopos_untrusted_log"
-#define FIFO_PMU_LOG		"/tmp/octopos_pmu_log"
+#include <arch/pmu.h>
 
 #define READ_SIZE	256
 
@@ -35,7 +23,7 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	opt = getopt(argc, argv, "mokl12snup");
+	opt = getopt(argc, argv, "mokl12snupv");
 	switch (opt) {
 	case 'm':
 		mkfifo(FIFO_MAILBOX_LOG, 0666);
@@ -87,6 +75,11 @@ int main(int argc, char **argv)
 		fd_log = open(FIFO_PMU_LOG, O_RDONLY);
 		printf("PMU logs:\n");
 		break;
+	case 'v': 
+		mkfifo(FIFO_SOCKET_SERVER_LOG, 0666);
+		fd_log = open(FIFO_SOCKET_SERVER_LOG, O_RDONLY);
+		printf("Socket server logs:\n");
+		break;
 	default:
 		printf("Error: %s: Command not supported\n", __func__);
 		exit(-1);
@@ -96,11 +89,8 @@ int main(int argc, char **argv)
 
 	while (1) {
 		ret = read(fd_log, buffer, READ_SIZE);
-		if (ret < 0 || ret > READ_SIZE)
+		if (ret <= 0 || ret > READ_SIZE)
 			break;
-
-		if (ret == 0)
-			continue;
 
 		write(1, buffer, ret);
 	}
@@ -137,6 +127,9 @@ int main(int argc, char **argv)
 		break;
 	case 'p': 
 		remove(FIFO_PMU_LOG);
+		break;
+	case 'v': 
+		remove(FIFO_SOCKET_SERVER_LOG);
 		break;
 	default:
 		printf("Error: %s: Command not supported\n", __func__);

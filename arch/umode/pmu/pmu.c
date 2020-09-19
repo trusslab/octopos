@@ -11,30 +11,13 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <octopos/error.h>
-#include <arch/mailbox.h>
+#include <arch/pmu.h>
 
-/* FIXME: move somewhere else */
-#define FIFO_PMU_OS_OUT		"/tmp/octopos_pmu_os_out"
-#define FIFO_PMU_OS_IN		"/tmp/octopos_pmu_os_in"
-#define FIFO_PMU_MAILBOX_OUT	"/tmp/octopos_pmu_mailbox_out"
-#define FIFO_PMU_MAILBOX_IN	"/tmp/octopos_pmu_mailbox_in"
-
-#define FIFO_MAILBOX_LOG	"/tmp/octopos_mailbox_log"
-#define FIFO_OS_LOG		"/tmp/octopos_os_log"
-#define FIFO_KEYBOARD_LOG	"/tmp/octopos_keyboard_log"
-#define FIFO_SERIAL_OUT_LOG	"/tmp/octopos_serial_out_log"
-#define FIFO_RUNTIME1_LOG	"/tmp/octopos_runtime1_log"
-#define FIFO_RUNTIME2_LOG	"/tmp/octopos_runtime2_log"
-#define FIFO_STORAGE_LOG	"/tmp/octopos_storage_log"
-#define FIFO_NETWORK_LOG	"/tmp/octopos_network_log"
-#define FIFO_UNTRUSTED_LOG	"/tmp/octopos_untrusted_log"
-#define FIFO_PMU_LOG		"/tmp/octopos_pmu_log"
-
-int fd_os_out, fd_os_in, fd_mailbox_out, fd_mailbox_in;
+int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
 int fd_mailbox_log, fd_os_log, fd_keyboard_log, fd_serial_out_log,
     fd_runtime1_log, fd_runtime2_log, fd_storage_log, fd_network_log,
-    fd_untrusted_log, fd_pmu_log;
-int fd_keyboard, fd_serial_out, fd_untrusted_in;// fd_untrusted_out;
+    fd_untrusted_log, fd_pmu_log, fd_socket_server_log;
+int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
 struct termios orig;
 
@@ -157,6 +140,13 @@ static int start_untrusted_proc(void)
 	return start_proc(path, args, fd_untrusted_log, 0, 0, 0, 1);
 }
 
+static int start_socket_server_proc(void)
+{
+	char *const args[] = {(char *) "socket_server", NULL};
+	char path[] = "./applications/socket_client/socket_server";
+	return start_proc(path, args, fd_socket_server_log, 0, 0, 0, 0);
+}
+
 static void sig_handler (int sig)
 {
 	printf("%s [1]\n", __func__);
@@ -166,11 +156,12 @@ int main(int argc, char **argv)
 {
 	pid_t mailbox_pid, os_pid, keyboard_pid, serial_out_pid,
 	      runtime1_pid, runtime2_pid, storage_pid, network_pid,
-	      untrusted_pid;
+	      untrusted_pid, socket_server_pid;
 	fd_set r_fds;
 	char buffer[1024];
-	int len;
+	int len, status;
 	int untrusted_init = 0;
+	uint8_t pmu_os_buf[PMU_OS_BUF_SIZE];
 
 	sigset_t emptyset, blockset;
 	struct sigaction sa;
@@ -190,8 +181,8 @@ int main(int argc, char **argv)
         now.c_cc[VTIME]=2;
         tcsetattr(0, TCSANOW, &now);
 	
-	//mkfifo(FIFO_PMU_OS_OUT, 0666);
-	//mkfifo(FIFO_PMU_OS_IN, 0666);
+	mkfifo(FIFO_PMU_TO_OS, 0666);
+	mkfifo(FIFO_PMU_FROM_OS, 0666);
 	//mkfifo(FIFO_PMU_MAILBOX_OUT, 0666);
 	//mkfifo(FIFO_PMU_MAILBOX_IN, 0666);
 
@@ -205,9 +196,10 @@ int main(int argc, char **argv)
 	mkfifo(FIFO_NETWORK_LOG, 0666);
 	mkfifo(FIFO_UNTRUSTED_LOG, 0666);
 	mkfifo(FIFO_PMU_LOG, 0666);
+	mkfifo(FIFO_SOCKET_SERVER_LOG, 0666);
 
-	//fd_os_out = open(FIFO_PMU_OS_OUT, O_WRONLY);
-	//fd_os_in = open(FIFO_PMU_OS_IN, O_RDONLY);
+	fd_pmu_to_os = open(FIFO_PMU_TO_OS, O_RDWR);
+	fd_pmu_from_os = open(FIFO_PMU_FROM_OS, O_RDWR);
 	//fd_mailbox_out = open(FIFO_PMU_MAILBOX_OUT, O_WRONLY);
 	//fd_mailbox_in = open(FIFO_PMU_MAILBOX_IN, O_RDONLY);
 
@@ -221,6 +213,7 @@ int main(int argc, char **argv)
 	fd_network_log = open(FIFO_NETWORK_LOG, O_RDWR);
 	fd_untrusted_log = open(FIFO_UNTRUSTED_LOG, O_RDWR);
 	fd_pmu_log = open(FIFO_PMU_LOG, O_RDWR);
+	fd_socket_server_log = open(FIFO_SOCKET_SERVER_LOG, O_RDWR);
 
 	dup2(fd_pmu_log, 1);
 	printf("%s [1]: PMU init\n", __func__);
@@ -234,6 +227,10 @@ int main(int argc, char **argv)
 	storage_pid = start_storage_proc();
 	network_pid = start_network_proc();
 	untrusted_pid = start_untrusted_proc();
+	/* Socket server is not part of OctopOS.
+	 * We start it here since it's useful for testing.
+	 */
+	socket_server_pid = start_socket_server_proc();
 
 	//sleep(15);
 	//printf("%s [2]\n", __func__);
@@ -255,18 +252,18 @@ int main(int argc, char **argv)
 	
 
 	while (1) {
-		int ret;
+		int ret, max_fd;
 		FD_ZERO(&r_fds);
 		FD_SET(fd_serial_out, &r_fds); 
 		FD_SET(0, &r_fds); 
 		//FD_SET(fd_untrusted_out, &r_fds); 
-		//max_fd = fd_serial_out;
-		//if (fd_untrusted_out > fd_serial_out)
-		//	max_fd = fd_untrusted_out;
+		FD_SET(fd_pmu_from_os, &r_fds); 
+		max_fd = fd_serial_out;
+		if (fd_pmu_from_os > fd_serial_out)
+			max_fd = fd_pmu_from_os;
 		printf("%s [2]\n", __func__);
-		ret = pselect(fd_serial_out + 1, &r_fds, NULL, NULL, NULL, &emptyset);
+		ret = pselect(max_fd + 1, &r_fds, NULL, NULL, NULL, &emptyset);
 		if (ret < 0 && errno == EINTR) { /* signal */
-			int status;
 			char proc_name[64];
 			pid_t pid = wait(&status);
 			if (pid == mailbox_pid) {
@@ -296,7 +293,10 @@ int main(int argc, char **argv)
 				network_pid = start_network_proc();
 			} else if (pid == untrusted_pid) {
 				sprintf(proc_name, "Untrusted");
-				network_pid = start_untrusted_proc();
+				untrusted_pid = start_untrusted_proc();
+			} else if (pid == socket_server_pid) {
+				sprintf(proc_name, "Socket Server");
+				socket_server_pid = start_socket_server_proc();
 			} else {
 				printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 				continue;
@@ -339,23 +339,69 @@ int main(int argc, char **argv)
 			//		write(fd_untrusted_in, "root\n", sizeof("root\n"));
 			//	}
 			//}
+
+			if (FD_ISSET(fd_pmu_from_os, &r_fds)) {
+				printf("%s [4]: shutting down\n", __func__);
+				len = read(fd_pmu_from_os, pmu_os_buf, PMU_OS_BUF_SIZE);
+				if (pmu_os_buf[0] == PMU_OS_CMD_SHUTDOWN) {
+					uint32_t cmd_ret = 0;
+					write(fd_pmu_to_os, &cmd_ret, 4);
+					goto err;
+				} else {
+					printf("Error: %s: invalid command from the OS (%d)\n",
+					       __func__, pmu_os_buf[0]);
+				}
+			}
 		}
 	}
 
 err:
 	printf("%s [7]\n", __func__);
-	kill(network_pid, SIGKILL);
+
+	/* Halt the untrusted domain.
+	 * We send the halt cmd to it in case it wasn't listening
+	 * on the mailbox for the cmd sent from the OS.
+	 */
+	char cmd1[] = "root\n";
+	char cmd2[] = "halt\n";
+	write(fd_untrusted_in, cmd1, sizeof(cmd1));
+	sleep(1);
+	write(fd_untrusted_in, cmd2, sizeof(cmd2));
+	sleep(10);
 	kill(untrusted_pid, SIGKILL);
+	waitpid(untrusted_pid, &status, 0);
+
+	/* Shut down the rest */
+	kill(socket_server_pid, SIGKILL);
+	waitpid(socket_server_pid, &status, 0);
+
+	kill(network_pid, SIGKILL);
+	waitpid(network_pid, &status, 0);
+	
 	kill(storage_pid, SIGKILL);
+	waitpid(storage_pid, &status, 0);
+	
 	kill(runtime2_pid, SIGKILL);
+	waitpid(runtime2_pid, &status, 0);
+	
 	kill(runtime1_pid, SIGKILL);
+	waitpid(runtime1_pid, &status, 0);
+	
 	kill(serial_out_pid, SIGKILL);
+	waitpid(serial_out_pid, &status, 0);
+	
 	kill(keyboard_pid, SIGKILL);
+	waitpid(keyboard_pid, &status, 0);
+	
 	kill(os_pid, SIGKILL);
+	waitpid(os_pid, &status, 0);
+	
 	kill(mailbox_pid, SIGKILL);
+	waitpid(mailbox_pid, &status, 0);
 
 	/* No more pmu logs after this. */
 	close(fd_pmu_log);
+	close(fd_socket_server_log);
 	close(fd_untrusted_log);
 	close(fd_network_log);
 	close(fd_storage_log);
@@ -368,9 +414,10 @@ err:
 
 	//close(fd_mailbox_in);
 	//close(fd_mailbox_out);
-	//close(fd_os_in);
-	//close(fd_os_out);
+	close(fd_pmu_from_os);
+	close(fd_pmu_to_os);
 	
+	remove(FIFO_SOCKET_SERVER_LOG);
 	remove(FIFO_PMU_LOG);
 	remove(FIFO_UNTRUSTED_LOG);
 	remove(FIFO_NETWORK_LOG);
@@ -384,8 +431,8 @@ err:
 	
 	//remove(FIFO_PMU_MAILBOX_IN);
 	//remove(FIFO_PMU_MAILBOX_OUT);
-	//remove(FIFO_PMU_OS_IN);
-	//remove(FIFO_PMU_OS_OUT);
+	remove(FIFO_PMU_FROM_OS);
+	remove(FIFO_PMU_TO_OS);
 
 	tcsetattr(0, TCSANOW, &orig);
 

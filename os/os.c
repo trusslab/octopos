@@ -1,4 +1,4 @@
-/* OctopOS OS mailbox interface */
+/* OctopOS OS */
 
 #include <stdio.h>
 #include <stdint.h>
@@ -11,6 +11,7 @@
 #include <os/syscall.h>
 #include <os/storage.h>
 #include <arch/mailbox_os.h>
+#include <arch/pmu.h> 
 #include <arch/defines.h>
 
 static void distribute_input(void)
@@ -47,6 +48,8 @@ int main()
 	int ret = init_os_mailbox();
 	if (ret)
 		return ret;
+
+	connect_to_pmu();
 
 	initialize_shell();
 	initialize_storage();

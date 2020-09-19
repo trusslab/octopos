@@ -24,6 +24,7 @@
 #include <os/scheduler.h>
 #include <os/syscall.h>
 #include <arch/mailbox_os.h>
+#include <arch/pmu.h> 
 #include <arch/defines.h>
 
 #ifdef 	ARCH_SEC_HW
@@ -351,7 +352,7 @@ int app_read_from_shell(struct app *app)
 
 void initialize_shell(void)
 {
-	output_printf("octopos shell: Type 'exit' or send EOF to exit.\r\n");
+	output_printf("OctopOS shell.\r\n");
 	/* Print the command prompt */
 	output_printf("octopos$> ");
 }
@@ -362,8 +363,21 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 {
 	split(cmd);
 	if (args[0] != NULL) {
-		if (strcmp(args[0], "exit") == 0) 
-			exit(0);
+		if (strcmp(args[0], "halt") == 0) {
+			/* send a halt cmd to untrusted in case it's listening */
+			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+			memcpy(&buf[1], "halt\n", 5);
+			send_cmd_to_untrusted(buf);
+
+			/* send a shutdown cmd to PMU */
+			/* FIXME: there is a race condition here.
+			 * Our halt cmd sent to the untrusted domain might trigger the PMU
+			 * to reboot it before PMU receives the shutdown cmd.
+			 */
+			pmu_shutdown();
+			return 0;
+		}
 		n += 1;
 		return command(input, first, last, double_pipe, bg);
 	}

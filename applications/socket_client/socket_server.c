@@ -24,6 +24,10 @@ int main(int argc, char *argv[])
 	struct sockaddr_in serv_addr, cli_addr;
 	int n;
 	
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+	printf("%s [1]: socket_server init\n", __func__);
+	
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) 
 		error("ERROR opening socket");
