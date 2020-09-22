@@ -51,9 +51,15 @@
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64
 
+#ifdef ARCH_SEC_HW
+#define MAILBOX_QUEUE_SIZE_LARGE	MAILBOX_QUEUE_SIZE
+#define MAILBOX_QUEUE_MSG_SIZE_LARGE	MAILBOX_QUEUE_MSG_SIZE
+#else
 #define MAILBOX_QUEUE_SIZE_LARGE	8
 #define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
+#endif
 
+#ifndef ARCH_SEC_HW
 #define FIFO_OS_OUT		"/tmp/octopos_mailbox_os_out"
 #define FIFO_OS_IN		"/tmp/octopos_mailbox_os_in"
 #define FIFO_OS_INTR		"/tmp/octopos_mailbox_os_intr"
@@ -82,6 +88,7 @@
 #define FIFO_TPM_OUT        "/tmp/octopos_mailbox_tpm_out"
 #define FIFO_TPM_IN         "/tmp/octopos_mailbox_tpm_in"
 #define FIFO_TPM_INTR       "/tmp/octopos_mailbox_tpm_intr"
+#endif
 
 #define READ_ACCESS		0
 #define WRITE_ACCESS		1

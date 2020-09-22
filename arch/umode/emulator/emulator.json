@@ -24,8 +24,8 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd loader",
-		"./loader ../arch/umode/mailbox/mailbox.so"
+		"cd arch/umode/mailbox/",
+		"./mailbox"
 	   ]
 	},{
 	   "shell_command":[
@@ -67,7 +67,7 @@
 	   "shell_command":[
 		"cd arch/umode/untrusted_linux",
 		"sleep 1",
-		"./linux ubda=OpenSuse-12.1-amd64-root_fs mem=128M",
+		"./linux ubda=CentOS6.x-AMD64-root_fs mem=128M",
 		"test"
 	   ]
 	}

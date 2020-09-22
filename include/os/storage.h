@@ -1,22 +1,26 @@
+#ifndef _OS_INCLUDE_STORAGE_H_
+#define _OS_INCLUDE_STORAGE_H_
+
 #define PARTITION_SIZE		1000 /* blocks */
+#include <arch/syscall.h>
 
 #define STORAGE_SET_ONE_ARG(arg0)				\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint32_t *) &buf[1]) = arg0;				\
+	SERIALIZE_32(arg0, &buf[1])				\
 
 #define STORAGE_SET_TWO_ARGS(arg0, arg1)			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint32_t *) &buf[1]) = arg0;				\
-	*((uint32_t *) &buf[5]) = arg1;				\
+	SERIALIZE_32(arg0, &buf[1])				\
+	SERIALIZE_32(arg1, &buf[5])				\
 
 #define STORAGE_SET_THREE_ARGS(arg0, arg1, arg2)		\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
-	*((uint32_t *) &buf[1]) = arg0;				\
-	*((uint32_t *) &buf[5]) = arg1;				\
-	*((uint32_t *) &buf[9]) = arg2;				\
+	SERIALIZE_32(arg0, &buf[1])				\
+	SERIALIZE_32(arg1, &buf[5])				\
+	SERIALIZE_32(arg2, &buf[9])				\
 
 #define STORAGE_SET_ZERO_ARGS_DATA(data, size)					\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
@@ -33,7 +37,6 @@
 	buf[1] = size;								\
 	memcpy(&buf[2], (uint8_t *) data, size);				\
 
-
 #define STORAGE_SET_ONE_ARG_DATA(arg0, data, size)				\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
@@ -46,7 +49,7 @@
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\
-	*((uint32_t *) &buf[1]) = arg0;						\
+	SERIALIZE_32(arg0, &buf[1])						\
 	buf[5] = size;								\
 	memcpy(&buf[6], (uint8_t *) data, size);				\
 
@@ -74,7 +77,6 @@
 	}									\
 	memcpy(data, &buf[5], _size);						\
 
-
 void wait_for_storage(void);
 void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 						    uint8_t *buf);
@@ -83,3 +85,5 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
 					  uint8_t *buf);
 void initialize_storage(void);
+
+#endif /* _OS_INCLUDE_STORAGE_H_ */

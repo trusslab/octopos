@@ -23,7 +23,11 @@ int sem_wait_impatient_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_
 
 int sem_wait_impatient_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf);
 
+int sem_wait_impatient_receive_buf_large(sem_t *sem, XMbox *InstancePtr, uint8_t* buf);
+
 int sem_wait_impatient_send(sem_t *sem, XMbox *InstancePtr, u32* buf);
+
+int sem_wait_impatient_send_large(sem_t *sem, XMbox *InstancePtr, u32* buf);
 
 XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...);
 
