@@ -9,6 +9,7 @@
 #define FIFO_PMU_FROM_OS	"/tmp/octopos_pmu_from_os"
 #define PMU_OS_BUF_SIZE		1
 #define PMU_OS_CMD_SHUTDOWN	1
+#define PMU_OS_CMD_REBOOT	2
 
 #define FIFO_PMU_TO_MAILBOX	"/tmp/octopos_pmu_to_mailbox"
 #define FIFO_PMU_FROM_MAILBOX	"/tmp/octopos_pmu_from_mailbox"
@@ -26,6 +27,7 @@
 #define FIFO_SOCKET_SERVER_LOG	"/tmp/octopos_socket_server_log"
 
 int pmu_shutdown(void);
+int pmu_reboot(void);
 void connect_to_pmu(void);
 
 #endif

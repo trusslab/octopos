@@ -33,6 +33,23 @@ int pmu_shutdown(void)
 	return 0;
 }
 
+int pmu_reboot(void)
+{
+	uint8_t buf[PMU_OS_BUF_SIZE];
+	uint32_t ret;
+
+	buf[0] = PMU_OS_CMD_REBOOT;
+	write(fd_pmu_from_os, buf, PMU_OS_BUF_SIZE);
+	read(fd_pmu_to_os, &ret, 4);
+
+	if (ret) {
+		printf("Error: %s: reboot failed (%d)\n", __func__, (int) ret);
+		return (int) ret;
+	}
+ 
+	return 0;
+}
+
 void connect_to_pmu(void)
 {
 	mkfifo(FIFO_PMU_TO_OS, 0666);

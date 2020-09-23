@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <termios.h>
 #include <errno.h>
+#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -14,12 +15,21 @@
 #include <arch/pmu.h>
 
 int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
+
 int fd_mailbox_log, fd_os_log, fd_keyboard_log, fd_serial_out_log,
     fd_runtime1_log, fd_runtime2_log, fd_storage_log, fd_network_log,
     fd_untrusted_log, fd_pmu_log, fd_socket_server_log;
+
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
+pid_t mailbox_pid, os_pid, keyboard_pid, serial_out_pid,
+      runtime1_pid, runtime2_pid, storage_pid, network_pid,
+      untrusted_pid, socket_server_pid;
+
 struct termios orig;
+
+int do_reboot = 1;
+int num_running_procs = 0;
 
 static int start_proc(char *path, char *const args[], int fd_log,
 		      int is_input, int is_output, int is_storage, int is_untrusted)
@@ -47,6 +57,8 @@ static int start_proc(char *path, char *const args[], int fd_log,
 			close(pipe_fds[0]);
 			fd_untrusted_in = pipe_fds[1];
 		}
+	
+		num_running_procs++;
 
 		return pid;
 	} else {
@@ -147,24 +159,145 @@ static int start_socket_server_proc(void)
 	return start_proc(path, args, fd_socket_server_log, 0, 0, 0, 0);
 }
 
-static void sig_handler (int sig)
+static void start_all_procs(void)
 {
-	printf("%s [1]\n", __func__);
+	mailbox_pid = start_mailbox_proc();
+	os_pid = start_os_proc();
+	keyboard_pid = start_keyboard_proc();
+	serial_out_pid = start_serial_out_proc();
+	runtime1_pid = start_runtime_proc((char *) "1");
+	runtime2_pid = start_runtime_proc((char *) "2");
+	storage_pid = start_storage_proc();
+	network_pid = start_network_proc();
+	untrusted_pid = start_untrusted_proc();
+	/* Socket server is not part of OctopOS.
+	 * We start it here since it's useful for testing.
+	 */
+	socket_server_pid = start_socket_server_proc();
 }
+
+static void halt_all_procs(void)
+{
+	/* Halt the untrusted domain.
+	 * We send the halt cmd to it in case it wasn't listening
+	 * on the mailbox for the cmd sent from the OS.
+	 */
+	char cmd1[] = "root\n";
+	char cmd2[] = "halt\n";
+	write(fd_untrusted_in, cmd1, sizeof(cmd1));
+	sleep(1);
+	write(fd_untrusted_in, cmd2, sizeof(cmd2));
+	//sleep(10);
+	//kill(untrusted_pid, SIGKILL);
+	//waitpid(untrusted_pid, &status, 0);
+
+	/* Shut down the rest */
+	kill(socket_server_pid, SIGKILL);
+	//waitpid(socket_server_pid, &status, 0);
+
+	kill(network_pid, SIGKILL);
+	//waitpid(network_pid, &status, 0);
+	
+	kill(storage_pid, SIGKILL);
+	//waitpid(storage_pid, &status, 0);
+	
+	kill(runtime2_pid, SIGKILL);
+	//waitpid(runtime2_pid, &status, 0);
+	
+	kill(runtime1_pid, SIGKILL);
+	//waitpid(runtime1_pid, &status, 0);
+	
+	kill(serial_out_pid, SIGKILL);
+	//waitpid(serial_out_pid, &status, 0);
+	
+	kill(keyboard_pid, SIGKILL);
+	//waitpid(keyboard_pid, &status, 0);
+	
+	kill(os_pid, SIGKILL);
+	//waitpid(os_pid, &status, 0);
+	
+	kill(mailbox_pid, SIGKILL);
+	//waitpid(mailbox_pid, &status, 0);
+}
+
+static void *proc_reboot_handler(void *data)
+{
+	char proc_name[64];
+	int wstatus;
+
+	while (do_reboot || num_running_procs) {
+		pid_t pid = wait(&wstatus);
+		printf("%d\n", wstatus);
+		//if (!(WIFEXITED(wstatus) || WIFSIGNALED(wstatus)))
+		//	continue;
+		if (!(wstatus == 0 || wstatus == 9))
+			continue;
+		num_running_procs--;
+		if (pid == mailbox_pid) {
+			sprintf(proc_name, "Mailbox");
+			if (do_reboot)
+				mailbox_pid = start_mailbox_proc();
+		} else if (pid == os_pid) {
+			sprintf(proc_name, "OS processor");
+			if (do_reboot)
+				os_pid = start_os_proc();
+		} else if (pid == keyboard_pid) {
+			sprintf(proc_name, "Keyboard processor");
+			if (do_reboot)
+				keyboard_pid = start_keyboard_proc();
+		} else if (pid == serial_out_pid) {
+			sprintf(proc_name, "Serial Out processor");
+			if (do_reboot)
+				serial_out_pid = start_serial_out_proc();
+		} else if (pid == runtime1_pid) {
+			sprintf(proc_name, "Runtime1 processor");
+			if (do_reboot)
+				runtime1_pid = start_runtime_proc((char *) "1");
+		} else if (pid == runtime2_pid) {
+			sprintf(proc_name, "Runtime2 processor");
+			if (do_reboot)
+				runtime2_pid = start_runtime_proc((char *) "2");
+		} else if (pid == storage_pid) {
+			sprintf(proc_name, "Storage processor");
+			if (do_reboot)
+				storage_pid = start_storage_proc();
+		} else if (pid == network_pid) {
+			sprintf(proc_name, "Network processor");
+			if (do_reboot)
+				network_pid = start_network_proc();
+		} else if (pid == untrusted_pid) {
+			sprintf(proc_name, "Untrusted processor");
+			if (do_reboot)
+				untrusted_pid = start_untrusted_proc();
+		} else if (pid == socket_server_pid) {
+			sprintf(proc_name, "Socket Server processor");
+			if (do_reboot)
+				socket_server_pid = start_socket_server_proc();
+		} else {
+			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
+			continue;
+		}
+		printf("%s terminated (%d)%s\n", proc_name, wstatus, do_reboot ? " and restarted" : "");
+	}
+	
+	return NULL;
+}
+
+//static void sig_handler(int sig)
+//{
+//	printf("%s [1]\n", __func__);
+//}
 
 int main(int argc, char **argv)
 {
-	pid_t mailbox_pid, os_pid, keyboard_pid, serial_out_pid,
-	      runtime1_pid, runtime2_pid, storage_pid, network_pid,
-	      untrusted_pid, socket_server_pid;
 	fd_set r_fds;
 	char buffer[1024];
-	int len, status;
+	int ret, len;
 	int untrusted_init = 0;
 	uint8_t pmu_os_buf[PMU_OS_BUF_SIZE];
-
-	sigset_t emptyset, blockset;
-	struct sigaction sa;
+	pthread_t reboot_thread;
+	//sigset_t emptyset, blockset;
+	//struct sigaction sa;
 
 	/*
 	 * put tty in raw mode.
@@ -218,41 +351,34 @@ int main(int argc, char **argv)
 	dup2(fd_pmu_log, 1);
 	printf("%s [1]: PMU init\n", __func__);
 
-	mailbox_pid = start_mailbox_proc();
-	os_pid = start_os_proc();
-	keyboard_pid = start_keyboard_proc();
-	serial_out_pid = start_serial_out_proc();
-	runtime1_pid = start_runtime_proc((char *) "1");
-	runtime2_pid = start_runtime_proc((char *) "2");
-	storage_pid = start_storage_proc();
-	network_pid = start_network_proc();
-	untrusted_pid = start_untrusted_proc();
-	/* Socket server is not part of OctopOS.
-	 * We start it here since it's useful for testing.
-	 */
-	socket_server_pid = start_socket_server_proc();
+	ret = pthread_create(&reboot_thread, NULL, proc_reboot_handler, NULL);
+	if (ret) {
+		printf("Error: couldn't launch the reboot thread\n");
+		goto err_close;
+	}
+
+	start_all_procs();
 
 	//sleep(15);
 	//printf("%s [2]\n", __func__);
 	//write(fd_untrusted_in, "root\n", sizeof("root\n"));
 
-	/* see here for how to use pselect:
-	 * https://lwn.net/Articles/176911/ 
-	 */
-        sigemptyset(&blockset);
-        sigaddset(&blockset, SIGCHLD);
-        sigprocmask(SIG_BLOCK, &blockset, NULL);
+	///* see here for how to use pselect:
+	// * https://lwn.net/Articles/176911/ 
+	// */
+        //sigemptyset(&blockset);
+        //sigaddset(&blockset, SIGCHLD);
+        //sigprocmask(SIG_BLOCK, &blockset, NULL);
 
-        sa.sa_handler = sig_handler;
-        sa.sa_flags = 0;
-	sigemptyset(&sa.sa_mask);
-        sigaction(SIGCHLD, &sa, NULL);
+        //sa.sa_handler = sig_handler;
+        //sa.sa_flags = 0;
+	//sigemptyset(&sa.sa_mask);
+        //sigaction(SIGCHLD, &sa, NULL);
     
-        sigemptyset(&emptyset);
-	
+        //sigemptyset(&emptyset);
 
 	while (1) {
-		int ret, max_fd;
+		int max_fd;
 		FD_ZERO(&r_fds);
 		FD_SET(fd_serial_out, &r_fds); 
 		FD_SET(0, &r_fds); 
@@ -261,143 +387,79 @@ int main(int argc, char **argv)
 		max_fd = fd_serial_out;
 		if (fd_pmu_from_os > fd_serial_out)
 			max_fd = fd_pmu_from_os;
-		printf("%s [2]\n", __func__);
-		ret = pselect(max_fd + 1, &r_fds, NULL, NULL, NULL, &emptyset);
-		if (ret < 0 && errno == EINTR) { /* signal */
-			char proc_name[64];
-			pid_t pid = wait(&status);
-			if (pid == mailbox_pid) {
-				/* FIXME: doesn't really work. Need testing. */
-				printf("Error: %s: mailbox terminated! Terminating...", __func__);
-				goto err;
-			} else if (pid == os_pid) {
-				sprintf(proc_name, "OS");
-				os_pid = start_os_proc();
-			} else if (pid == keyboard_pid) {
-				sprintf(proc_name, "Keyboard");
-				keyboard_pid = start_keyboard_proc();
-			} else if (pid == serial_out_pid) {
-				sprintf(proc_name, "Serial Out");
-				serial_out_pid = start_serial_out_proc();
-			} else if (pid == runtime1_pid) {
-				sprintf(proc_name, "Runtime1");
-				runtime1_pid = start_runtime_proc((char *) "1");
-			} else if (pid == runtime2_pid) {
-				sprintf(proc_name, "Runtime2");
-				runtime2_pid = start_runtime_proc((char *) "2");
-			} else if (pid == storage_pid) {
-				sprintf(proc_name, "Storage");
-				storage_pid = start_storage_proc();
-			} else if (pid == network_pid) {
-				sprintf(proc_name, "Network");
-				network_pid = start_network_proc();
-			} else if (pid == untrusted_pid) {
-				sprintf(proc_name, "Untrusted");
-				untrusted_pid = start_untrusted_proc();
-			} else if (pid == socket_server_pid) {
-				sprintf(proc_name, "Socket Server");
-				socket_server_pid = start_socket_server_proc();
-			} else {
-				printf("Error: %s: unknown pid (%d)\n", __func__, pid);
-				continue;
-			}
-			printf("%s processor terminated (%d) and restarted\n", proc_name, status);
-		} else {
-			if (FD_ISSET(fd_serial_out, &r_fds)) {
-				len = read(fd_serial_out, buffer, sizeof(buffer));
-				write(2, buffer, len);
-			}
-			
-			if (FD_ISSET(0, &r_fds)) {
-				len = read(0, buffer, sizeof(buffer));
-				if (!untrusted_init && len == 1 && buffer[0] == '@') {
-					printf("%s [3]: initializing untrusted\n", __func__);
-					untrusted_init = 1;
-					char cmd1[] = "root\n";
-					char cmd2[] = "ip link set octopos_net up\n";
-					char cmd3[] = "ip addr add 10.0.0.1/24 dev octopos_net\n";
-					char cmd4[] = "while true; do source /dev/octopos_mailbox | xargs echo \"@\" > /dev/octopos_mailbox; done\n";
-					write(fd_untrusted_in, cmd1, sizeof(cmd1));
-					sleep(1);
-					write(fd_untrusted_in, cmd2, sizeof(cmd2));
-					write(fd_untrusted_in, cmd3, sizeof(cmd3));
-					write(fd_untrusted_in, cmd4, sizeof(cmd4));
-				}
-				write(fd_keyboard, buffer, len);
-			}
-			
-			//if (FD_ISSET(fd_untrusted_out, &r_fds)) {
-			//	len = read(fd_untrusted_out, buffer, sizeof(buffer));
-			//	printf("%s [3]: len = %d\n", __func__, len);
-			//	//if (!strcmp(buffer, "localhost login: ")) {
-			//	if (len <= 0)
-			//		continue;
+		//ret = pselect(max_fd + 1, &r_fds, NULL, NULL, NULL, &emptyset);
+		ret = select(max_fd + 1, &r_fds, NULL, NULL, NULL);
+		//if (ret < 0 && errno == EINTR) { /* signal */
+		//	char proc_name[64];
+		//	int status;
+		//	printf("%s [2]\n", __func__);
+		//	
+		//} else {
 
-			//	write(fd_untrusted_log, buffer, len);
-			//	if (len == 17) {
-			//		printf("%s [3]: login detected\n", __func__);
-			//		write(fd_untrusted_in, "root\n", sizeof("root\n"));
-			//	}
-			//}
+		if (FD_ISSET(fd_serial_out, &r_fds)) {
+			len = read(fd_serial_out, buffer, sizeof(buffer));
+			write(2, buffer, len);
+		}
+		
+		if (FD_ISSET(0, &r_fds)) {
+			len = read(0, buffer, sizeof(buffer));
+			if (!untrusted_init && len == 1 && buffer[0] == '@') {
+				printf("%s [3]: initializing untrusted\n", __func__);
+				untrusted_init = 1;
+				char cmd1[] = "root\n";
+				char cmd2[] = "ip link set octopos_net up\n";
+				char cmd3[] = "ip addr add 10.0.0.1/24 dev octopos_net\n";
+				char cmd4[] = "while true; do source /dev/octopos_mailbox | xargs echo \"@\" > /dev/octopos_mailbox; done\n";
+				write(fd_untrusted_in, cmd1, sizeof(cmd1));
+				sleep(1);
+				write(fd_untrusted_in, cmd2, sizeof(cmd2));
+				write(fd_untrusted_in, cmd3, sizeof(cmd3));
+				write(fd_untrusted_in, cmd4, sizeof(cmd4));
+			}
+			write(fd_keyboard, buffer, len);
+		}
+		
+		//if (FD_ISSET(fd_untrusted_out, &r_fds)) {
+		//	len = read(fd_untrusted_out, buffer, sizeof(buffer));
+		//	printf("%s [3]: len = %d\n", __func__, len);
+		//	//if (!strcmp(buffer, "localhost login: ")) {
+		//	if (len <= 0)
+		//		continue;
 
-			if (FD_ISSET(fd_pmu_from_os, &r_fds)) {
+		//	write(fd_untrusted_log, buffer, len);
+		//	if (len == 17) {
+		//		printf("%s [3]: login detected\n", __func__);
+		//		write(fd_untrusted_in, "root\n", sizeof("root\n"));
+		//	}
+		//}
+
+		if (FD_ISSET(fd_pmu_from_os, &r_fds)) {
+			len = read(fd_pmu_from_os, pmu_os_buf, PMU_OS_BUF_SIZE);
+			if (pmu_os_buf[0] == PMU_OS_CMD_SHUTDOWN) {
 				printf("%s [4]: shutting down\n", __func__);
-				len = read(fd_pmu_from_os, pmu_os_buf, PMU_OS_BUF_SIZE);
-				if (pmu_os_buf[0] == PMU_OS_CMD_SHUTDOWN) {
-					uint32_t cmd_ret = 0;
-					write(fd_pmu_to_os, &cmd_ret, 4);
-					goto err;
-				} else {
-					printf("Error: %s: invalid command from the OS (%d)\n",
-					       __func__, pmu_os_buf[0]);
-				}
+				uint32_t cmd_ret = 0;
+				do_reboot = 0;
+				halt_all_procs();
+				write(fd_pmu_to_os, &cmd_ret, 4);
+				goto err_join;
+			} else if (pmu_os_buf[0] == PMU_OS_CMD_REBOOT) {
+				printf("%s [5]: rebooting\n", __func__);
+				uint32_t cmd_ret = 0;
+				halt_all_procs();
+				write(fd_pmu_to_os, &cmd_ret, 4);
+			} else {
+				printf("Error: %s: invalid command from the OS (%d)\n",
+				       __func__, pmu_os_buf[0]);
 			}
 		}
 	}
 
-err:
+err_join:
+	printf("%s [6]\n", __func__);
+	pthread_join(reboot_thread, NULL);
+
+err_close:
 	printf("%s [7]\n", __func__);
-
-	/* Halt the untrusted domain.
-	 * We send the halt cmd to it in case it wasn't listening
-	 * on the mailbox for the cmd sent from the OS.
-	 */
-	char cmd1[] = "root\n";
-	char cmd2[] = "halt\n";
-	write(fd_untrusted_in, cmd1, sizeof(cmd1));
-	sleep(1);
-	write(fd_untrusted_in, cmd2, sizeof(cmd2));
-	sleep(10);
-	kill(untrusted_pid, SIGKILL);
-	waitpid(untrusted_pid, &status, 0);
-
-	/* Shut down the rest */
-	kill(socket_server_pid, SIGKILL);
-	waitpid(socket_server_pid, &status, 0);
-
-	kill(network_pid, SIGKILL);
-	waitpid(network_pid, &status, 0);
-	
-	kill(storage_pid, SIGKILL);
-	waitpid(storage_pid, &status, 0);
-	
-	kill(runtime2_pid, SIGKILL);
-	waitpid(runtime2_pid, &status, 0);
-	
-	kill(runtime1_pid, SIGKILL);
-	waitpid(runtime1_pid, &status, 0);
-	
-	kill(serial_out_pid, SIGKILL);
-	waitpid(serial_out_pid, &status, 0);
-	
-	kill(keyboard_pid, SIGKILL);
-	waitpid(keyboard_pid, &status, 0);
-	
-	kill(os_pid, SIGKILL);
-	waitpid(os_pid, &status, 0);
-	
-	kill(mailbox_pid, SIGKILL);
-	waitpid(mailbox_pid, &status, 0);
 
 	/* No more pmu logs after this. */
 	close(fd_pmu_log);

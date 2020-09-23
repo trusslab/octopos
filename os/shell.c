@@ -364,6 +364,8 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 	split(cmd);
 	if (args[0] != NULL) {
 		if (strcmp(args[0], "halt") == 0) {
+			int ret;
+
 			/* send a halt cmd to untrusted in case it's listening */
 			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
@@ -375,7 +377,44 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			 * Our halt cmd sent to the untrusted domain might trigger the PMU
 			 * to reboot it before PMU receives the shutdown cmd.
 			 */
-			pmu_shutdown();
+			ret = pmu_shutdown();
+			if (ret)
+				output_printf("Couldn't shut down\nn");
+			return 0;
+		} else if (strcmp(args[0], "reboot") == 0) {
+			int ret;
+
+			/* Send a halt cmd to untrusted in case it's listening.
+			 * Will be automatically rebooted by the PMU.
+			 */
+			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+			memcpy(&buf[1], "halt\n", 5);
+			send_cmd_to_untrusted(buf);
+
+			/* set the state of runtime procs to resetting */
+			ret = sched_runtime_reset(P_RUNTIME1);
+			if (ret) {
+				output_printf("Runtime1 busy. Can't reboot.\n");
+				goto reboot_out;
+			}
+
+			ret = sched_runtime_reset(P_RUNTIME2);
+			if (ret) {
+				output_printf("Runtime2 busy. Can't reboot.\n");
+				sched_runtime_ready(P_RUNTIME1);
+				goto reboot_out;
+			}
+
+			printf("%s [1]\n", __func__);
+			/* send a reboot cmd to PMU */
+			ret = pmu_reboot();
+			printf("%s [2]\n", __func__);
+			if (ret)
+				output_printf("Couldn't reboot all processors\n");
+reboot_out:
+			output_printf("octopos$> ");
+			printf("%s [3]\n", __func__);
 			return 0;
 		}
 		n += 1;

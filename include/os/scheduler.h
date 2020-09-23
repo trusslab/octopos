@@ -61,4 +61,5 @@ bool is_valid_runtime_queue_id(int queue_id);
 uint8_t get_runtime_proc_id(uint8_t runtime_queue_id);
 void sched_next_app(void);
 int sched_runtime_ready(uint8_t runtime_proc_id);
+int sched_runtime_reset(uint8_t runtime_proc_id);
 void initialize_scheduler(void);
