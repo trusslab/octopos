@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <octopos/mailbox.h>
 #include <octopos/error.h>
 #include <arch/pmu.h>
 
@@ -30,6 +31,70 @@ struct termios orig;
 
 int do_reboot = 1;
 int num_running_procs = 0;
+
+int mailbox_ready = 0;
+
+static int mailbox_simple_cmd(uint8_t cmd)
+{
+	uint8_t buf[PMU_MAILBOX_BUF_SIZE];
+	uint32_t ret;
+	int len;
+
+	if (!mailbox_ready)
+		return 0;
+
+	buf[0] = cmd;
+
+	write(fd_pmu_to_mailbox, buf, PMU_MAILBOX_BUF_SIZE);
+	len = read(fd_pmu_from_mailbox, &ret, 4);
+
+	if (len != 4)
+		return ERR_FAULT;
+
+	return (int) ret;
+}
+
+static int mailbox_cmd_arg(uint8_t cmd, uint8_t arg)
+{
+	uint8_t buf[PMU_MAILBOX_BUF_SIZE];
+	uint32_t ret;
+	int len;
+
+	if (!mailbox_ready)
+		return 0;
+
+	buf[0] = cmd;
+	buf[1] = arg;
+
+	write(fd_pmu_to_mailbox, buf, PMU_MAILBOX_BUF_SIZE);
+	len = read(fd_pmu_from_mailbox, &ret, 4);
+
+	if (len != 4)
+		return ERR_FAULT;
+
+	return (int) ret;
+}
+
+static int mailbox_pause_delegation(void)
+{
+	return mailbox_simple_cmd(PMU_MAILBOX_CMD_PAUSE_DELEGATION);
+}
+
+static int mailbox_resume_delegation(void)
+{
+	return mailbox_simple_cmd(PMU_MAILBOX_CMD_RESUME_DELEGATION);
+}
+
+/* Returns 0 if allowed */
+static int mailbox_terminate_allowed(void)
+{
+	return mailbox_simple_cmd(PMU_MAILBOX_CMD_TERMINATE_CHECK);
+}
+
+static int mailbox_reset_queue(uint8_t queue_id)
+{
+	return mailbox_cmd_arg(PMU_MAILBOX_CMD_RESET_QUEUE, queue_id);
+}
 
 static int start_proc(char *path, char *const args[], int fd_log,
 		      int is_input, int is_output, int is_storage, int is_untrusted)
@@ -85,9 +150,14 @@ static int start_proc(char *path, char *const args[], int fd_log,
 
 static int start_mailbox_proc(void)
 {
+	int ret;
+
 	char *const args[] = {(char *) "mailbox", NULL};
 	char path[] = "./arch/umode/mailbox/mailbox";
-	return start_proc(path, args, fd_mailbox_log, 0, 0, 0, 0);
+	ret = start_proc(path, args, fd_mailbox_log, 0, 0, 0, 0);
+	mailbox_ready = 1;
+
+	return ret;
 }
 
 static int start_os_proc(void)
@@ -178,6 +248,8 @@ static void start_all_procs(void)
 
 static void halt_all_procs(void)
 {
+	mailbox_ready = 0;
+
 	/* Halt the untrusted domain.
 	 * We send the halt cmd to it in case it wasn't listening
 	 * on the mailbox for the cmd sent from the OS.
@@ -223,7 +295,7 @@ static void halt_all_procs(void)
 static void *proc_reboot_handler(void *data)
 {
 	char proc_name[64];
-	int wstatus;
+	int wstatus, ret = 0;
 
 	while (do_reboot || num_running_procs) {
 		pid_t pid = wait(&wstatus);
@@ -239,36 +311,132 @@ static void *proc_reboot_handler(void *data)
 				mailbox_pid = start_mailbox_proc();
 		} else if (pid == os_pid) {
 			sprintf(proc_name, "OS processor");
-			if (do_reboot)
+			if (do_reboot) {
+				ret = mailbox_reset_queue(Q_OS1);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_OS1\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_OS2);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_OS2\n", __func__);
+					goto print;
+				}
+
+				mailbox_reset_queue(Q_OSU);
+
 				os_pid = start_os_proc();
+			}
 		} else if (pid == keyboard_pid) {
 			sprintf(proc_name, "Keyboard processor");
-			if (do_reboot)
+			if (do_reboot) {
+				ret = mailbox_reset_queue(Q_KEYBOARD);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_KEYBOARD\n", __func__);
+					goto print;
+				}
+
 				keyboard_pid = start_keyboard_proc();
+			}
 		} else if (pid == serial_out_pid) {
 			sprintf(proc_name, "Serial Out processor");
-			if (do_reboot)
+			if (do_reboot) {
+				ret = mailbox_reset_queue(Q_SERIAL_OUT);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_SERIAL_OUT\n", __func__);
+					goto print;
+				}
+
 				serial_out_pid = start_serial_out_proc();
+			}
 		} else if (pid == runtime1_pid) {
 			sprintf(proc_name, "Runtime1 processor");
-			if (do_reboot)
+			if (do_reboot) {
+				ret = mailbox_reset_queue(Q_RUNTIME1);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_RUNTIME1\n", __func__);
+					goto print;
+				}
+
 				runtime1_pid = start_runtime_proc((char *) "1");
+			}
 		} else if (pid == runtime2_pid) {
 			sprintf(proc_name, "Runtime2 processor");
-			if (do_reboot)
+			if (do_reboot) {
+				ret = mailbox_reset_queue(Q_RUNTIME2);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_RUNTIME2\n", __func__);
+					goto print;
+				}
+
 				runtime2_pid = start_runtime_proc((char *) "2");
+			}
 		} else if (pid == storage_pid) {
 			sprintf(proc_name, "Storage processor");
-			if (do_reboot)
+			if (do_reboot) {
+				ret = mailbox_reset_queue(Q_STORAGE_DATA_IN);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_STORAGE_DATA_IN\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_STORAGE_DATA_OUT);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_STORAGE_DATA_OUT\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_STORAGE_CMD_IN);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_STORAGE_CMD_IN\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_STORAGE_CMD_OUT);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_STORAGE_CMD_OUT\n", __func__);
+					goto print;
+				}
+
 				storage_pid = start_storage_proc();
+			}
 		} else if (pid == network_pid) {
 			sprintf(proc_name, "Network processor");
-			if (do_reboot)
+			if (do_reboot) {
+				ret = mailbox_reset_queue(Q_NETWORK_DATA_IN);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_NETWORK_DATA_IN\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_NETWORK_DATA_OUT);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_NETWORK_DATA_OUT\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_NETWORK_CMD_IN);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_NETWORK_CMD_IN\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_NETWORK_CMD_OUT);
+				if (ret) {
+					printf("Error: %s: couldn't reset Q_NETWORK_CMD_OUT\n", __func__);
+					goto print;
+				}
+
 				network_pid = start_network_proc();
+			}
 		} else if (pid == untrusted_pid) {
 			sprintf(proc_name, "Untrusted processor");
-			if (do_reboot)
+			if (do_reboot) {
+				mailbox_reset_queue(Q_UNTRUSTED);
+
 				untrusted_pid = start_untrusted_proc();
+			}
 		} else if (pid == socket_server_pid) {
 			sprintf(proc_name, "Socket Server processor");
 			if (do_reboot)
@@ -277,7 +445,9 @@ static void *proc_reboot_handler(void *data)
 			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 			continue;
 		}
-		printf("%s terminated (%d)%s\n", proc_name, wstatus, do_reboot ? " and restarted" : "");
+
+print:
+		printf("%s terminated (%d)%s\n", proc_name, wstatus, (do_reboot && !ret) ? " and restarted" : "");
 	}
 	
 	return NULL;
@@ -294,7 +464,6 @@ int main(int argc, char **argv)
 	char buffer[1024];
 	int ret, len;
 	int untrusted_init = 0;
-	uint8_t pmu_os_buf[PMU_OS_BUF_SIZE];
 	pthread_t reboot_thread;
 	//sigset_t emptyset, blockset;
 	//struct sigaction sa;
@@ -316,8 +485,8 @@ int main(int argc, char **argv)
 	
 	mkfifo(FIFO_PMU_TO_OS, 0666);
 	mkfifo(FIFO_PMU_FROM_OS, 0666);
-	//mkfifo(FIFO_PMU_MAILBOX_OUT, 0666);
-	//mkfifo(FIFO_PMU_MAILBOX_IN, 0666);
+	mkfifo(FIFO_PMU_TO_MAILBOX, 0666);
+	mkfifo(FIFO_PMU_FROM_MAILBOX, 0666);
 
 	mkfifo(FIFO_MAILBOX_LOG, 0666);
 	mkfifo(FIFO_OS_LOG, 0666);
@@ -333,8 +502,8 @@ int main(int argc, char **argv)
 
 	fd_pmu_to_os = open(FIFO_PMU_TO_OS, O_RDWR);
 	fd_pmu_from_os = open(FIFO_PMU_FROM_OS, O_RDWR);
-	//fd_mailbox_out = open(FIFO_PMU_MAILBOX_OUT, O_WRONLY);
-	//fd_mailbox_in = open(FIFO_PMU_MAILBOX_IN, O_RDONLY);
+	fd_pmu_to_mailbox = open(FIFO_PMU_TO_MAILBOX, O_RDWR);
+	fd_pmu_from_mailbox = open(FIFO_PMU_FROM_MAILBOX, O_RDWR);
 
 	fd_mailbox_log = open(FIFO_MAILBOX_LOG, O_RDWR);
 	fd_os_log = open(FIFO_OS_LOG, O_RDWR);
@@ -385,10 +554,10 @@ int main(int argc, char **argv)
 		//FD_SET(fd_untrusted_out, &r_fds); 
 		FD_SET(fd_pmu_from_os, &r_fds); 
 		max_fd = fd_serial_out;
-		if (fd_pmu_from_os > fd_serial_out)
+		if (fd_pmu_from_os > max_fd)
 			max_fd = fd_pmu_from_os;
 		//ret = pselect(max_fd + 1, &r_fds, NULL, NULL, NULL, &emptyset);
-		ret = select(max_fd + 1, &r_fds, NULL, NULL, NULL);
+		select(max_fd + 1, &r_fds, NULL, NULL, NULL);
 		//if (ret < 0 && errno == EINTR) { /* signal */
 		//	char proc_name[64];
 		//	int status;
@@ -434,19 +603,48 @@ int main(int argc, char **argv)
 		//}
 
 		if (FD_ISSET(fd_pmu_from_os, &r_fds)) {
+			uint8_t pmu_os_buf[PMU_OS_BUF_SIZE];
 			len = read(fd_pmu_from_os, pmu_os_buf, PMU_OS_BUF_SIZE);
+			if (len != PMU_OS_BUF_SIZE) {
+				printf("Error: %s: invalid command size from the OS (%d)\n",
+				       __func__, len);
+				continue;
+			}
+
 			if (pmu_os_buf[0] == PMU_OS_CMD_SHUTDOWN) {
 				printf("%s [4]: shutting down\n", __func__);
 				uint32_t cmd_ret = 0;
-				do_reboot = 0;
-				halt_all_procs();
-				write(fd_pmu_to_os, &cmd_ret, 4);
-				goto err_join;
+				mailbox_pause_delegation();
+				ret = mailbox_terminate_allowed();
+				if (!ret) {
+					/* allowed */
+					do_reboot = 0;
+					halt_all_procs();
+					//write(fd_pmu_to_os, &cmd_ret, 4);
+					goto err_join;
+				} else {
+					/* not allowed */
+					cmd_ret = (uint32_t) ERR_PERMISSION;
+					mailbox_resume_delegation();
+					write(fd_pmu_to_os, &cmd_ret, 4);
+				}
 			} else if (pmu_os_buf[0] == PMU_OS_CMD_REBOOT) {
 				printf("%s [5]: rebooting\n", __func__);
 				uint32_t cmd_ret = 0;
-				halt_all_procs();
-				write(fd_pmu_to_os, &cmd_ret, 4);
+				mailbox_pause_delegation();
+				ret = mailbox_terminate_allowed();
+				if (!ret) {
+					/* allowed */
+					printf("%s [5.1]\n", __func__);
+					halt_all_procs();
+					//write(fd_pmu_to_os, &cmd_ret, 4);
+				} 
+				else {
+					/* not allowed */
+					cmd_ret = (uint32_t) ERR_PERMISSION;
+					mailbox_resume_delegation();
+					write(fd_pmu_to_os, &cmd_ret, 4);
+				}
 			} else {
 				printf("Error: %s: invalid command from the OS (%d)\n",
 				       __func__, pmu_os_buf[0]);
@@ -474,8 +672,8 @@ err_close:
 	close(fd_os_log);
 	close(fd_mailbox_log);
 
-	//close(fd_mailbox_in);
-	//close(fd_mailbox_out);
+	close(fd_pmu_from_mailbox);
+	close(fd_pmu_to_mailbox);
 	close(fd_pmu_from_os);
 	close(fd_pmu_to_os);
 	
@@ -491,8 +689,8 @@ err_close:
 	remove(FIFO_OS_LOG);
 	remove(FIFO_MAILBOX_LOG);
 	
-	//remove(FIFO_PMU_MAILBOX_IN);
-	//remove(FIFO_PMU_MAILBOX_OUT);
+	remove(FIFO_PMU_FROM_MAILBOX);
+	remove(FIFO_PMU_TO_MAILBOX);
 	remove(FIFO_PMU_FROM_OS);
 	remove(FIFO_PMU_TO_OS);
 

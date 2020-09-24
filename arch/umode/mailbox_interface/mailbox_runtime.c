@@ -307,11 +307,11 @@ void close_runtime(void)
 	/* FIXME: free the memory allocated for srq */
 
 	/* FIXME: resetting the mailbox needs to be done automatically. */
-	uint8_t opcode[2];
-	opcode[0] = MAILBOX_OPCODE_RESET;
-	pthread_spin_lock(&mailbox_lock);	
-	write(fd_out, opcode, 2);
-	pthread_spin_unlock(&mailbox_lock);	
+	//uint8_t opcode[2];
+	//opcode[0] = MAILBOX_OPCODE_RESET;
+	//pthread_spin_lock(&mailbox_lock);	
+	//write(fd_out, opcode, 2);
+	//pthread_spin_unlock(&mailbox_lock);	
 
 	pthread_spin_destroy(&mailbox_lock);
 

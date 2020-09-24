@@ -13,6 +13,11 @@
 
 #define FIFO_PMU_TO_MAILBOX	"/tmp/octopos_pmu_to_mailbox"
 #define FIFO_PMU_FROM_MAILBOX	"/tmp/octopos_pmu_from_mailbox"
+#define PMU_MAILBOX_BUF_SIZE			2
+#define PMU_MAILBOX_CMD_PAUSE_DELEGATION	1
+#define PMU_MAILBOX_CMD_RESUME_DELEGATION	2
+#define PMU_MAILBOX_CMD_TERMINATE_CHECK		3
+#define PMU_MAILBOX_CMD_RESET_QUEUE		4
 
 #define FIFO_MAILBOX_LOG	"/tmp/octopos_mailbox_log"
 #define FIFO_OS_LOG		"/tmp/octopos_os_log"

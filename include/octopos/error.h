@@ -6,3 +6,4 @@
 #define ERR_MEMORY	-6
 #define ERR_FOUND	-7
 #define ERR_AVAILABLE	-8
+#define ERR_PERMISSION	-9

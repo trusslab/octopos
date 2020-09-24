@@ -503,23 +503,23 @@ int sched_runtime_ready(uint8_t runtime_proc_id)
 	return 0;
 }
 
-int sched_runtime_reset(uint8_t runtime_proc_id)
-{
-	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
-	if (!runtime_proc) {
-		printf("%s: Error: invalid runtime proc id %d\n", __func__, runtime_proc_id);
-		return ERR_INVALID;
-	}
-
-	if (runtime_proc->state != RUNTIME_PROC_IDLE) {
-		printf("%s: Error: invalid runtime proc state\n", __func__);
-		return ERR_INVALID;
-	}
-
-	runtime_proc->state = RUNTIME_PROC_RESETTING;
-
-	return 0;
-}
+//int sched_runtime_reset(uint8_t runtime_proc_id)
+//{
+//	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+//	if (!runtime_proc) {
+//		printf("%s: Error: invalid runtime proc id %d\n", __func__, runtime_proc_id);
+//		return ERR_INVALID;
+//	}
+//
+//	if (runtime_proc->state != RUNTIME_PROC_IDLE) {
+//		printf("%s: Error: invalid runtime proc state\n", __func__);
+//		return ERR_INVALID;
+//	}
+//
+//	runtime_proc->state = RUNTIME_PROC_RESETTING;
+//
+//	return 0;
+//}
 
 void initialize_scheduler(void)
 {

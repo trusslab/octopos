@@ -379,7 +379,9 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			 */
 			ret = pmu_shutdown();
 			if (ret)
-				output_printf("Couldn't shut down\nn");
+				output_printf("Couldn't shut down\n");
+
+			output_printf("octopos$> ");
 			return 0;
 		} else if (strcmp(args[0], "reboot") == 0) {
 			int ret;
@@ -392,19 +394,19 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			memcpy(&buf[1], "halt\n", 5);
 			send_cmd_to_untrusted(buf);
 
-			/* set the state of runtime procs to resetting */
-			ret = sched_runtime_reset(P_RUNTIME1);
-			if (ret) {
-				output_printf("Runtime1 busy. Can't reboot.\n");
-				goto reboot_out;
-			}
+			///* set the state of runtime procs to resetting */
+			//ret = sched_runtime_reset(P_RUNTIME1);
+			//if (ret) {
+			//	output_printf("Runtime1 busy. Can't reboot.\n");
+			//	goto reboot_out;
+			//}
 
-			ret = sched_runtime_reset(P_RUNTIME2);
-			if (ret) {
-				output_printf("Runtime2 busy. Can't reboot.\n");
-				sched_runtime_ready(P_RUNTIME1);
-				goto reboot_out;
-			}
+			//ret = sched_runtime_reset(P_RUNTIME2);
+			//if (ret) {
+			//	output_printf("Runtime2 busy. Can't reboot.\n");
+			//	sched_runtime_ready(P_RUNTIME1);
+			//	goto reboot_out;
+			//}
 
 			printf("%s [1]\n", __func__);
 			/* send a reboot cmd to PMU */
@@ -412,7 +414,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			printf("%s [2]\n", __func__);
 			if (ret)
 				output_printf("Couldn't reboot all processors\n");
-reboot_out:
+//reboot_out:
 			output_printf("octopos$> ");
 			printf("%s [3]\n", __func__);
 			return 0;
