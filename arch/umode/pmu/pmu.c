@@ -85,8 +85,8 @@ static int mailbox_resume_delegation(void)
 	return mailbox_simple_cmd(PMU_MAILBOX_CMD_RESUME_DELEGATION);
 }
 
-/* Returns 0 if allowed */
-static int mailbox_terminate_allowed(void)
+/* Returns 0 if termination allowed */
+static int mailbox_terminate_check(void)
 {
 	return mailbox_simple_cmd(PMU_MAILBOX_CMD_TERMINATE_CHECK);
 }
@@ -95,6 +95,13 @@ static int mailbox_reset_queue(uint8_t queue_id)
 {
 	return mailbox_cmd_arg(PMU_MAILBOX_CMD_RESET_QUEUE, queue_id);
 }
+
+/* Returns 0 if processor reset allowed */
+static int mailbox_proc_reset_check(uint8_t proc_id)
+{
+	return mailbox_cmd_arg(PMU_MAILBOX_CMD_RESET_PROC_CHECK, proc_id);
+}
+
 
 static int start_proc(char *path, char *const args[], int fd_log,
 		      int is_input, int is_output, int is_storage, int is_untrusted)
@@ -246,47 +253,89 @@ static void start_all_procs(void)
 	socket_server_pid = start_socket_server_proc();
 }
 
+static void halt_proc(uint8_t proc_id)
+{
+	switch (proc_id) {
+	case P_KEYBOARD:
+		kill(keyboard_pid, SIGKILL);
+		//waitpid(keyboard_pid, &status, 0);
+		break;
+
+	case P_SERIAL_OUT:
+		kill(serial_out_pid, SIGKILL);
+		//waitpid(serial_out_pid, &status, 0);
+		break;
+
+	case P_STORAGE:
+		kill(storage_pid, SIGKILL);
+		//waitpid(storage_pid, &status, 0);
+		break;
+
+	case P_NETWORK:
+		kill(network_pid, SIGKILL);
+		//waitpid(network_pid, &status, 0);
+		break;
+
+	case P_RUNTIME1:
+		kill(runtime1_pid, SIGKILL);
+		//waitpid(runtime1_pid, &status, 0);
+		break;
+
+	case P_RUNTIME2:
+		kill(runtime2_pid, SIGKILL);
+		//waitpid(runtime2_pid, &status, 0);
+		break;
+
+	case P_OS:
+		kill(os_pid, SIGKILL);
+		//waitpid(os_pid, &status, 0);
+		break;
+
+	case P_UNTRUSTED: {
+		/* Halt the untrusted domain.
+		 * We send the halt cmd to it in case it wasn't listening
+		 * on the mailbox for the cmd sent from the OS.
+		 */
+		char cmd1[] = "root\n";
+		char cmd2[] = "halt\n";
+		write(fd_untrusted_in, cmd1, sizeof(cmd1));
+		sleep(1);
+		write(fd_untrusted_in, cmd2, sizeof(cmd2));
+		//sleep(10);
+		//kill(untrusted_pid, SIGKILL);
+		//waitpid(untrusted_pid, &status, 0);
+		break;
+		}
+
+	default:
+		printf("Error: %s: invalid processor ID (%d)\n", __func__, proc_id);
+		break;
+	}
+}
+
 static void halt_all_procs(void)
 {
 	mailbox_ready = 0;
 
-	/* Halt the untrusted domain.
-	 * We send the halt cmd to it in case it wasn't listening
-	 * on the mailbox for the cmd sent from the OS.
-	 */
-	char cmd1[] = "root\n";
-	char cmd2[] = "halt\n";
-	write(fd_untrusted_in, cmd1, sizeof(cmd1));
-	sleep(1);
-	write(fd_untrusted_in, cmd2, sizeof(cmd2));
-	//sleep(10);
-	//kill(untrusted_pid, SIGKILL);
-	//waitpid(untrusted_pid, &status, 0);
+	halt_proc(P_UNTRUSTED);	
 
 	/* Shut down the rest */
 	kill(socket_server_pid, SIGKILL);
 	//waitpid(socket_server_pid, &status, 0);
 
-	kill(network_pid, SIGKILL);
-	//waitpid(network_pid, &status, 0);
+	halt_proc(P_NETWORK);
 	
-	kill(storage_pid, SIGKILL);
-	//waitpid(storage_pid, &status, 0);
+	halt_proc(P_STORAGE);
 	
-	kill(runtime2_pid, SIGKILL);
-	//waitpid(runtime2_pid, &status, 0);
+	halt_proc(P_RUNTIME2);
 	
-	kill(runtime1_pid, SIGKILL);
-	//waitpid(runtime1_pid, &status, 0);
+	halt_proc(P_RUNTIME1);
 	
-	kill(serial_out_pid, SIGKILL);
-	//waitpid(serial_out_pid, &status, 0);
+	halt_proc(P_SERIAL_OUT);
 	
-	kill(keyboard_pid, SIGKILL);
-	//waitpid(keyboard_pid, &status, 0);
+	halt_proc(P_KEYBOARD);
 	
-	kill(os_pid, SIGKILL);
-	//waitpid(os_pid, &status, 0);
+	halt_proc(P_OS);
 	
 	kill(mailbox_pid, SIGKILL);
 	//waitpid(mailbox_pid, &status, 0);
@@ -615,7 +664,7 @@ int main(int argc, char **argv)
 				printf("%s [4]: shutting down\n", __func__);
 				uint32_t cmd_ret = 0;
 				mailbox_pause_delegation();
-				ret = mailbox_terminate_allowed();
+				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
 					do_reboot = 0;
@@ -632,7 +681,7 @@ int main(int argc, char **argv)
 				printf("%s [5]: rebooting\n", __func__);
 				uint32_t cmd_ret = 0;
 				mailbox_pause_delegation();
-				ret = mailbox_terminate_allowed();
+				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
 					printf("%s [5.1]\n", __func__);
@@ -645,6 +694,34 @@ int main(int argc, char **argv)
 					mailbox_resume_delegation();
 					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
+			} else if (pmu_os_buf[0] == PMU_OS_CMD_RESET_PROC) {
+				uint32_t cmd_ret = 0;
+				uint8_t proc_id = pmu_os_buf[1];
+				if (proc_id == P_UNTRUSTED ||
+				    proc_id == P_OS) {
+					halt_proc(proc_id);
+				} else if (proc_id == P_KEYBOARD ||
+					   proc_id == P_SERIAL_OUT ||
+					   proc_id == P_STORAGE ||
+					   proc_id == P_NETWORK ||
+					   proc_id == P_RUNTIME1 ||
+					   proc_id == P_RUNTIME2) {
+					mailbox_pause_delegation();
+					ret = mailbox_proc_reset_check(proc_id);
+					if (!ret) {
+						/* allowed */
+						halt_proc(proc_id);
+					} else {
+						/* not allowed */
+						cmd_ret = (uint32_t) ERR_PERMISSION;
+					}
+					mailbox_resume_delegation();
+				} else {
+					printf("Error: %s: invalid processor ID (%d)\n",
+					       __func__, proc_id);
+					cmd_ret = (uint32_t) ERR_INVALID;
+				}
+				write(fd_pmu_to_os, &cmd_ret, 4);
 			} else {
 				printf("Error: %s: invalid command from the OS (%d)\n",
 				       __func__, pmu_os_buf[0]);

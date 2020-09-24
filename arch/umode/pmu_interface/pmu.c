@@ -50,6 +50,26 @@ int pmu_reboot(void)
 	return 0;
 }
 
+int pmu_reset_proc(uint8_t proc_id)
+{
+	uint8_t buf[PMU_OS_BUF_SIZE];
+	uint32_t ret;
+
+	buf[0] = PMU_OS_CMD_RESET_PROC;
+	buf[1] = proc_id;
+	write(fd_pmu_from_os, buf, PMU_OS_BUF_SIZE);
+	read(fd_pmu_to_os, &ret, 4);
+
+	if (ret) {
+		printf("Error: %s: reset proc %d failed (%d)\n",
+		       __func__, proc_id, (int) ret);
+		return (int) ret;
+	}
+ 
+	return 0;
+}
+
+
 void connect_to_pmu(void)
 {
 	mkfifo(FIFO_PMU_TO_OS, 0666);

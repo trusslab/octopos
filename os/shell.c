@@ -394,20 +394,6 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			memcpy(&buf[1], "halt\n", 5);
 			send_cmd_to_untrusted(buf);
 
-			///* set the state of runtime procs to resetting */
-			//ret = sched_runtime_reset(P_RUNTIME1);
-			//if (ret) {
-			//	output_printf("Runtime1 busy. Can't reboot.\n");
-			//	goto reboot_out;
-			//}
-
-			//ret = sched_runtime_reset(P_RUNTIME2);
-			//if (ret) {
-			//	output_printf("Runtime2 busy. Can't reboot.\n");
-			//	sched_runtime_ready(P_RUNTIME1);
-			//	goto reboot_out;
-			//}
-
 			printf("%s [1]\n", __func__);
 			/* send a reboot cmd to PMU */
 			ret = pmu_reboot();
@@ -417,6 +403,31 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 //reboot_out:
 			output_printf("octopos$> ");
 			printf("%s [3]\n", __func__);
+			return 0;
+		} else if (strcmp(args[0], "reset") == 0) {
+			int ret;
+			uint8_t proc_id = (uint8_t) atoi(args[1]);
+			printf("%s [4]: proc_id = %d\n", __func__, proc_id);
+
+			if (proc_id == P_UNTRUSTED) {
+				uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+				buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+				memcpy(&buf[1], "halt\n", 5);
+				send_cmd_to_untrusted(buf);
+			}
+
+			ret = pmu_reset_proc(proc_id);
+			if (ret) {
+				output_printf("Couldn't reset proc %d\n", proc_id);
+			} else {
+				/* set the state of runtime procs to resetting */
+				if (proc_id == P_RUNTIME1)
+					sched_runtime_reset(P_RUNTIME1);
+				else if (proc_id == P_RUNTIME2)
+					sched_runtime_reset(P_RUNTIME2);
+			}
+
+			output_printf("octopos$> ");
 			return 0;
 		}
 		n += 1;

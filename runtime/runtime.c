@@ -549,6 +549,8 @@ static int set_up_context(void *addr, uint32_t size)
 		return ret;
 	}
 
+	while (1)
+		sleep(10);
 
 	uint32_t rret = read_from_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
 	if (rret != (context_size + CONTEXT_TAG_SIZE)) {

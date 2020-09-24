@@ -305,45 +305,117 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
-static int any_secure_access(void)
+static int is_queue_securely_delegated(uint8_t queue_id)
 {
-	if (queues[Q_KEYBOARD].reader_id != P_OS)
-		return 1;
+	switch (queue_id) {
+	case Q_KEYBOARD:
+		return (queues[Q_KEYBOARD].reader_id != P_OS);
 
-	if (queues[Q_SERIAL_OUT].writer_id != P_OS)
-		return 1;
+	case Q_SERIAL_OUT:
+		return (queues[Q_SERIAL_OUT].writer_id != P_OS);
 
-	if (queues[Q_STORAGE_DATA_IN].writer_id != P_OS)
-		return 1;
+	case Q_STORAGE_DATA_IN:
+		return (queues[Q_STORAGE_DATA_IN].writer_id != P_OS);
 
-	if (queues[Q_STORAGE_DATA_OUT].reader_id != P_OS)
-		return 1;
+	case Q_STORAGE_DATA_OUT:
+		return (queues[Q_STORAGE_DATA_OUT].reader_id != P_OS);
 
-	if (queues[Q_STORAGE_CMD_IN].writer_id != P_OS)
-		return 1;
+	case Q_STORAGE_CMD_IN:
+		return (queues[Q_STORAGE_CMD_IN].writer_id != P_OS);
 
-	if (queues[Q_STORAGE_CMD_OUT].reader_id != P_OS)
-		return 1;
+	case Q_STORAGE_CMD_OUT:
+		return (queues[Q_STORAGE_CMD_OUT].reader_id != P_OS);
 
-	if (queues[Q_NETWORK_DATA_IN].writer_id != P_OS)
-		return 1;
+	case Q_NETWORK_DATA_IN:	
+		return (queues[Q_NETWORK_DATA_IN].writer_id != P_OS);
 
-	if (queues[Q_NETWORK_DATA_OUT].reader_id != P_OS)
-		return 1;
+	case Q_NETWORK_DATA_OUT:
+		return (queues[Q_NETWORK_DATA_OUT].reader_id != P_OS);
 
-	if (queues[Q_NETWORK_CMD_IN].writer_id != P_OS)
-		return 1;
+	case Q_NETWORK_CMD_IN:
+		return (queues[Q_NETWORK_CMD_IN].writer_id != P_OS);
 
-	if (queues[Q_NETWORK_CMD_OUT].reader_id != P_OS)
-		return 1;
+	case Q_NETWORK_CMD_OUT:
+		return (queues[Q_NETWORK_CMD_OUT].reader_id != P_OS);
 
-	if (queues[Q_RUNTIME1].writer_id != P_OS)
-		return 1;
+	case Q_RUNTIME1:
+		return (queues[Q_RUNTIME1].writer_id != P_OS);
 
-	if (queues[Q_RUNTIME2].writer_id != P_OS)
-		return 1;
+	case Q_RUNTIME2:
+		return (queues[Q_RUNTIME2].writer_id != P_OS);
 
-	return 0;
+	default:
+		return 0;
+	}
+}
+
+static int any_secure_delegations(void)
+{
+	return (is_queue_securely_delegated(Q_KEYBOARD) ||
+		is_queue_securely_delegated(Q_SERIAL_OUT) ||
+		is_queue_securely_delegated(Q_STORAGE_DATA_IN) ||
+		is_queue_securely_delegated(Q_STORAGE_DATA_OUT) ||
+		is_queue_securely_delegated(Q_STORAGE_CMD_IN) ||
+		is_queue_securely_delegated(Q_STORAGE_CMD_OUT) ||
+		is_queue_securely_delegated(Q_NETWORK_DATA_IN) ||
+		is_queue_securely_delegated(Q_NETWORK_DATA_OUT) ||
+		is_queue_securely_delegated(Q_NETWORK_CMD_IN) ||
+		is_queue_securely_delegated(Q_NETWORK_CMD_OUT) ||
+		is_queue_securely_delegated(Q_RUNTIME1) ||
+		is_queue_securely_delegated(Q_RUNTIME2));
+}
+
+static int does_proc_have_secure_io(uint8_t proc_id)
+{
+	return ((queues[Q_KEYBOARD].reader_id == proc_id) ||
+		(queues[Q_SERIAL_OUT].writer_id == proc_id) ||
+		(queues[Q_STORAGE_DATA_IN].writer_id == proc_id) ||
+		(queues[Q_STORAGE_DATA_OUT].reader_id == proc_id) ||
+		(queues[Q_STORAGE_CMD_IN].writer_id == proc_id) ||
+		(queues[Q_STORAGE_CMD_OUT].reader_id == proc_id) ||
+		(queues[Q_NETWORK_DATA_IN].writer_id == proc_id) ||
+		(queues[Q_NETWORK_DATA_OUT].reader_id == proc_id) ||
+		(queues[Q_NETWORK_CMD_IN].writer_id == proc_id) ||
+		(queues[Q_NETWORK_CMD_OUT].reader_id == proc_id));
+}
+
+static int does_proc_have_secure_delegatation(uint8_t proc_id)
+{
+	switch(proc_id) {
+	case P_KEYBOARD:
+		return is_queue_securely_delegated(Q_KEYBOARD);
+
+	case P_SERIAL_OUT:
+		return is_queue_securely_delegated(Q_SERIAL_OUT);
+
+	case P_STORAGE:
+		return (is_queue_securely_delegated(Q_STORAGE_DATA_IN) ||
+			is_queue_securely_delegated(Q_STORAGE_DATA_OUT) ||
+			is_queue_securely_delegated(Q_STORAGE_CMD_IN) ||
+			is_queue_securely_delegated(Q_STORAGE_CMD_OUT));
+
+	case P_NETWORK:
+		return (is_queue_securely_delegated(Q_NETWORK_DATA_IN) ||
+			is_queue_securely_delegated(Q_NETWORK_DATA_OUT) ||
+			is_queue_securely_delegated(Q_NETWORK_CMD_IN) ||
+			is_queue_securely_delegated(Q_NETWORK_CMD_OUT));
+
+	case P_RUNTIME1:
+		return (is_queue_securely_delegated(Q_RUNTIME1) ||
+			does_proc_have_secure_io(P_RUNTIME1) ||
+			/* secure IPC */
+			(queues[Q_RUNTIME2].writer_id == P_RUNTIME1));
+
+	case P_RUNTIME2:
+		return (is_queue_securely_delegated(Q_RUNTIME2) ||
+			does_proc_have_secure_io(P_RUNTIME2) ||
+			/* secure IPC */
+			(queues[Q_RUNTIME1].writer_id == P_RUNTIME2));
+
+	default:
+		printf("Error: %s: invalid processor ID (%d)\n", __func__, proc_id);
+		return 0;
+	}
 }
 
 static void initialize_queues(void)
@@ -636,12 +708,17 @@ static void reset_queue(uint8_t queue_id)
 	queues[(int) queue_id].counter = 0;
 }
 
-static void reset_queue_full(uint8_t queue_id)
+static int reset_queue_full(uint8_t queue_id)
 {
+	if (is_queue_securely_delegated(queue_id))
+	    return -1;
+
 	printf("%s [1]: reset queue %d\n", __func__, queue_id);
 	reset_queue(queue_id);	
 	queues[(int) queue_id].access_count = 0;
 	queues[(int) queue_id].prev_owner = 0;
+
+	return 0;
 }
 
 /* FIXME: we also have a copy of these definitions in syscall.h */
@@ -1217,12 +1294,16 @@ int main(int argc, char **argv)
 				write(fd_pmu_from_mailbox, &cmd_ret, 4);
 			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_TERMINATE_CHECK) {
 				printf("%s [5]: mailbox terminate check\n", __func__);
-				uint32_t cmd_ret = (uint32_t) any_secure_access();
+				uint32_t cmd_ret = (uint32_t) any_secure_delegations();
 				write(fd_pmu_from_mailbox, &cmd_ret, 4);
 			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_RESET_QUEUE) {
 				printf("%s [5]: mailbox reset queue\n", __func__);
-				uint32_t cmd_ret = 0;
-				reset_queue_full(pmu_mailbox_buf[1]);
+				uint32_t cmd_ret = (uint32_t) reset_queue_full(pmu_mailbox_buf[1]);
+				write(fd_pmu_from_mailbox, &cmd_ret, 4);
+			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_RESET_PROC_CHECK) {
+				printf("%s [5]: mailbox reset proc check\n", __func__);
+				uint32_t cmd_ret =
+					(uint32_t) does_proc_have_secure_delegatation(pmu_mailbox_buf[1]);
 				write(fd_pmu_from_mailbox, &cmd_ret, 4);
 			} else {
 				printf("Error: %s: invalid command from the PMU (%d)\n",
