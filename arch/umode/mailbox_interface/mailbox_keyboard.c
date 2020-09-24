@@ -37,8 +37,6 @@ uint8_t read_char_from_keyboard(void)
 	if (c == 127)
 		c = '\b';
 	
-	printf("%s [1]: %c\n", __func__, c);
-
 	return (uint8_t) c;
 }
 

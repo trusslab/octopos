@@ -713,7 +713,6 @@ static int reset_queue_full(uint8_t queue_id)
 	if (is_queue_securely_delegated(queue_id))
 	    return -1;
 
-	printf("%s [1]: reset queue %d\n", __func__, queue_id);
 	reset_queue(queue_id);	
 	queues[(int) queue_id].access_count = 0;
 	queues[(int) queue_id].prev_owner = 0;
@@ -996,7 +995,7 @@ int main(int argc, char **argv)
 
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s [1]: mailbox init\n", __func__);
+	printf("%s: mailbox init\n", __func__);
 
 	initialize_processors();
 	/* FIXME: release memory allocated for queues on exit */
@@ -1134,24 +1133,6 @@ int main(int argc, char **argv)
 				read(processors[P_RUNTIME1].out_handle, opcode_rest, 2);
 				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME1);				
 				write(processors[P_RUNTIME1].in_handle, &ret, 1);
-			/* FIXME: This should be triggered by the power management unit. */
-			//} else if (opcode[0] == MAILBOX_OPCODE_RESET) {
-			//	close(processors[P_RUNTIME1].out_handle);
-			//	close(processors[P_RUNTIME1].in_handle);
-			//	close(processors[P_RUNTIME1].intr_handle);
-			//	remove(FIFO_RUNTIME1_OUT);
-			//	remove(FIFO_RUNTIME1_IN);
-			//	remove(FIFO_RUNTIME1_INTR);
-			//	
-			//	reset_queue_full(Q_RUNTIME1);
-			//	reset_queue_full(Q_OS1);
-
-			//	mkfifo(FIFO_RUNTIME1_OUT, 0666);
-			//	mkfifo(FIFO_RUNTIME1_IN, 0666);
-			//	mkfifo(FIFO_RUNTIME1_INTR, 0666);
-			//	processors[P_RUNTIME1].out_handle = open(FIFO_RUNTIME1_OUT, O_RDWR);
-			//	processors[P_RUNTIME1].in_handle = open(FIFO_RUNTIME1_IN, O_RDWR);
-			//	processors[P_RUNTIME1].intr_handle = open(FIFO_RUNTIME1_INTR, O_RDWR);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
@@ -1185,24 +1166,6 @@ int main(int argc, char **argv)
 				read(processors[P_RUNTIME2].out_handle, opcode_rest, 2);
 				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME2);				
 				write(processors[P_RUNTIME2].in_handle, &ret, 1);
-			/* FIXME: This should be triggered by the power management unit. */
-			//} else if (opcode[0] == MAILBOX_OPCODE_RESET) {
-			//	close(processors[P_RUNTIME2].out_handle);
-			//	close(processors[P_RUNTIME2].in_handle);
-			//	close(processors[P_RUNTIME2].intr_handle);
-			//	remove(FIFO_RUNTIME2_OUT);
-			//	remove(FIFO_RUNTIME2_IN);
-			//	remove(FIFO_RUNTIME2_INTR);
-			//	
-			//	reset_queue_full(Q_RUNTIME2);
-			//	reset_queue_full(Q_OS2);
-
-			//	mkfifo(FIFO_RUNTIME2_OUT, 0666);
-			//	mkfifo(FIFO_RUNTIME2_IN, 0666);
-			//	mkfifo(FIFO_RUNTIME2_INTR, 0666);
-			//	processors[P_RUNTIME2].out_handle = open(FIFO_RUNTIME2_OUT, O_RDWR);
-			//	processors[P_RUNTIME2].in_handle = open(FIFO_RUNTIME2_IN, O_RDWR);
-			//	processors[P_RUNTIME2].intr_handle = open(FIFO_RUNTIME2_INTR, O_RDWR);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
@@ -1283,25 +1246,20 @@ int main(int argc, char **argv)
 			}
 
 			if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_PAUSE_DELEGATION) {
-				printf("%s [4]: mailbox pause delegation\n", __func__);
 				uint32_t cmd_ret = 0;
 				delegation_allowed = 0;
 				write(fd_pmu_from_mailbox, &cmd_ret, 4);
 			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_RESUME_DELEGATION) {
-				printf("%s [5]: mailbox resume delegation\n", __func__);
 				uint32_t cmd_ret = 0;
 				delegation_allowed = 1;
 				write(fd_pmu_from_mailbox, &cmd_ret, 4);
 			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_TERMINATE_CHECK) {
-				printf("%s [5]: mailbox terminate check\n", __func__);
 				uint32_t cmd_ret = (uint32_t) any_secure_delegations();
 				write(fd_pmu_from_mailbox, &cmd_ret, 4);
 			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_RESET_QUEUE) {
-				printf("%s [5]: mailbox reset queue\n", __func__);
 				uint32_t cmd_ret = (uint32_t) reset_queue_full(pmu_mailbox_buf[1]);
 				write(fd_pmu_from_mailbox, &cmd_ret, 4);
 			} else if (pmu_mailbox_buf[0] == PMU_MAILBOX_CMD_RESET_PROC_CHECK) {
-				printf("%s [5]: mailbox reset proc check\n", __func__);
 				uint32_t cmd_ret =
 					(uint32_t) does_proc_have_secure_delegatation(pmu_mailbox_buf[1]);
 				write(fd_pmu_from_mailbox, &cmd_ret, 4);

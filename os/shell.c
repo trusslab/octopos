@@ -394,22 +394,21 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			memcpy(&buf[1], "halt\n", 5);
 			send_cmd_to_untrusted(buf);
 
-			printf("%s [1]\n", __func__);
 			/* send a reboot cmd to PMU */
 			ret = pmu_reboot();
-			printf("%s [2]\n", __func__);
 			if (ret)
 				output_printf("Couldn't reboot all processors\n");
-//reboot_out:
+
 			output_printf("octopos$> ");
-			printf("%s [3]\n", __func__);
 			return 0;
 		} else if (strcmp(args[0], "reset") == 0) {
 			int ret;
 			uint8_t proc_id = (uint8_t) atoi(args[1]);
-			printf("%s [4]: proc_id = %d\n", __func__, proc_id);
 
 			if (proc_id == P_UNTRUSTED) {
+				/* Send a halt cmd to untrusted in case it's listening.
+				* Will be automatically rebooted by the PMU.
+				*/
 				uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 				buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
 				memcpy(&buf[1], "halt\n", 5);

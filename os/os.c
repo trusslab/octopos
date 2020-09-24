@@ -43,7 +43,7 @@ int main()
 {
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s [1]: OS init\n", __func__);
+	printf("%s: OS init\n", __func__);
 
 	int ret = init_os_mailbox();
 	if (ret)

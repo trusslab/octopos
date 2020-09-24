@@ -44,7 +44,6 @@ void get_chars_from_serial_out_queue(uint8_t *buf)
 void write_chars_to_serial_out(uint8_t *buf)
 {
 	fprintf(stderr, "%s", buf);
-	printf("%s [1]: %s\n", __func__, buf);
 
 	/* Delete character on backspace. */
 	if ((char) buf[0] == '\b')

@@ -774,7 +774,7 @@ int main(int argc, char **argv)
 {
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s [1]: storage init\n", __func__);
+	printf("%s: storage init\n", __func__);
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error: storage data queue msg size must be equal to storage block size\n");

@@ -125,7 +125,6 @@ static int start_proc(char *path, char *const args[], int fd_log,
 			close(pipe_fds[1]);
 			fd_serial_out = pipe_fds[0];
 		} else if (is_untrusted) {
-			//fd_untrusted_out = pipe_fds[0];
 			close(pipe_fds[0]);
 			fd_untrusted_in = pipe_fds[1];
 		}
@@ -144,7 +143,6 @@ static int start_proc(char *path, char *const args[], int fd_log,
 			chdir("./storage");
 		} else if (is_untrusted) {
 			dup2(fd_log, 2);
-			//dup2(pipe_fds[1], 1);
 			dup2(pipe_fds[0], 0);
 		}
 
@@ -258,37 +256,30 @@ static void halt_proc(uint8_t proc_id)
 	switch (proc_id) {
 	case P_KEYBOARD:
 		kill(keyboard_pid, SIGKILL);
-		//waitpid(keyboard_pid, &status, 0);
 		break;
 
 	case P_SERIAL_OUT:
 		kill(serial_out_pid, SIGKILL);
-		//waitpid(serial_out_pid, &status, 0);
 		break;
 
 	case P_STORAGE:
 		kill(storage_pid, SIGKILL);
-		//waitpid(storage_pid, &status, 0);
 		break;
 
 	case P_NETWORK:
 		kill(network_pid, SIGKILL);
-		//waitpid(network_pid, &status, 0);
 		break;
 
 	case P_RUNTIME1:
 		kill(runtime1_pid, SIGKILL);
-		//waitpid(runtime1_pid, &status, 0);
 		break;
 
 	case P_RUNTIME2:
 		kill(runtime2_pid, SIGKILL);
-		//waitpid(runtime2_pid, &status, 0);
 		break;
 
 	case P_OS:
 		kill(os_pid, SIGKILL);
-		//waitpid(os_pid, &status, 0);
 		break;
 
 	case P_UNTRUSTED: {
@@ -301,9 +292,6 @@ static void halt_proc(uint8_t proc_id)
 		write(fd_untrusted_in, cmd1, sizeof(cmd1));
 		sleep(1);
 		write(fd_untrusted_in, cmd2, sizeof(cmd2));
-		//sleep(10);
-		//kill(untrusted_pid, SIGKILL);
-		//waitpid(untrusted_pid, &status, 0);
 		break;
 		}
 
@@ -321,7 +309,6 @@ static void halt_all_procs(void)
 
 	/* Shut down the rest */
 	kill(socket_server_pid, SIGKILL);
-	//waitpid(socket_server_pid, &status, 0);
 
 	halt_proc(P_NETWORK);
 	
@@ -338,7 +325,6 @@ static void halt_all_procs(void)
 	halt_proc(P_OS);
 	
 	kill(mailbox_pid, SIGKILL);
-	//waitpid(mailbox_pid, &status, 0);
 }
 
 static void *proc_reboot_handler(void *data)
@@ -348,9 +334,6 @@ static void *proc_reboot_handler(void *data)
 
 	while (do_reboot || num_running_procs) {
 		pid_t pid = wait(&wstatus);
-		printf("%d\n", wstatus);
-		//if (!(WIFEXITED(wstatus) || WIFSIGNALED(wstatus)))
-		//	continue;
 		if (!(wstatus == 0 || wstatus == 9))
 			continue;
 		num_running_procs--;
@@ -502,11 +485,6 @@ print:
 	return NULL;
 }
 
-//static void sig_handler(int sig)
-//{
-//	printf("%s [1]\n", __func__);
-//}
-
 int main(int argc, char **argv)
 {
 	fd_set r_fds;
@@ -514,8 +492,6 @@ int main(int argc, char **argv)
 	int ret, len;
 	int untrusted_init = 0;
 	pthread_t reboot_thread;
-	//sigset_t emptyset, blockset;
-	//struct sigaction sa;
 
 	/*
 	 * put tty in raw mode.
@@ -567,7 +543,7 @@ int main(int argc, char **argv)
 	fd_socket_server_log = open(FIFO_SOCKET_SERVER_LOG, O_RDWR);
 
 	dup2(fd_pmu_log, 1);
-	printf("%s [1]: PMU init\n", __func__);
+	printf("%s: PMU init\n", __func__);
 
 	ret = pthread_create(&reboot_thread, NULL, proc_reboot_handler, NULL);
 	if (ret) {
@@ -577,42 +553,16 @@ int main(int argc, char **argv)
 
 	start_all_procs();
 
-	//sleep(15);
-	//printf("%s [2]\n", __func__);
-	//write(fd_untrusted_in, "root\n", sizeof("root\n"));
-
-	///* see here for how to use pselect:
-	// * https://lwn.net/Articles/176911/ 
-	// */
-        //sigemptyset(&blockset);
-        //sigaddset(&blockset, SIGCHLD);
-        //sigprocmask(SIG_BLOCK, &blockset, NULL);
-
-        //sa.sa_handler = sig_handler;
-        //sa.sa_flags = 0;
-	//sigemptyset(&sa.sa_mask);
-        //sigaction(SIGCHLD, &sa, NULL);
-    
-        //sigemptyset(&emptyset);
-
 	while (1) {
 		int max_fd;
 		FD_ZERO(&r_fds);
 		FD_SET(fd_serial_out, &r_fds); 
 		FD_SET(0, &r_fds); 
-		//FD_SET(fd_untrusted_out, &r_fds); 
 		FD_SET(fd_pmu_from_os, &r_fds); 
 		max_fd = fd_serial_out;
 		if (fd_pmu_from_os > max_fd)
 			max_fd = fd_pmu_from_os;
-		//ret = pselect(max_fd + 1, &r_fds, NULL, NULL, NULL, &emptyset);
 		select(max_fd + 1, &r_fds, NULL, NULL, NULL);
-		//if (ret < 0 && errno == EINTR) { /* signal */
-		//	char proc_name[64];
-		//	int status;
-		//	printf("%s [2]\n", __func__);
-		//	
-		//} else {
 
 		if (FD_ISSET(fd_serial_out, &r_fds)) {
 			len = read(fd_serial_out, buffer, sizeof(buffer));
@@ -622,7 +572,6 @@ int main(int argc, char **argv)
 		if (FD_ISSET(0, &r_fds)) {
 			len = read(0, buffer, sizeof(buffer));
 			if (!untrusted_init && len == 1 && buffer[0] == '@') {
-				printf("%s [3]: initializing untrusted\n", __func__);
 				untrusted_init = 1;
 				char cmd1[] = "root\n";
 				char cmd2[] = "ip link set octopos_net up\n";
@@ -637,20 +586,6 @@ int main(int argc, char **argv)
 			write(fd_keyboard, buffer, len);
 		}
 		
-		//if (FD_ISSET(fd_untrusted_out, &r_fds)) {
-		//	len = read(fd_untrusted_out, buffer, sizeof(buffer));
-		//	printf("%s [3]: len = %d\n", __func__, len);
-		//	//if (!strcmp(buffer, "localhost login: ")) {
-		//	if (len <= 0)
-		//		continue;
-
-		//	write(fd_untrusted_log, buffer, len);
-		//	if (len == 17) {
-		//		printf("%s [3]: login detected\n", __func__);
-		//		write(fd_untrusted_in, "root\n", sizeof("root\n"));
-		//	}
-		//}
-
 		if (FD_ISSET(fd_pmu_from_os, &r_fds)) {
 			uint8_t pmu_os_buf[PMU_OS_BUF_SIZE];
 			len = read(fd_pmu_from_os, pmu_os_buf, PMU_OS_BUF_SIZE);
@@ -661,7 +596,7 @@ int main(int argc, char **argv)
 			}
 
 			if (pmu_os_buf[0] == PMU_OS_CMD_SHUTDOWN) {
-				printf("%s [4]: shutting down\n", __func__);
+				printf("%s: shutting down\n", __func__);
 				uint32_t cmd_ret = 0;
 				mailbox_pause_delegation();
 				ret = mailbox_terminate_check();
@@ -669,7 +604,6 @@ int main(int argc, char **argv)
 					/* allowed */
 					do_reboot = 0;
 					halt_all_procs();
-					//write(fd_pmu_to_os, &cmd_ret, 4);
 					goto err_join;
 				} else {
 					/* not allowed */
@@ -678,15 +612,13 @@ int main(int argc, char **argv)
 					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
 			} else if (pmu_os_buf[0] == PMU_OS_CMD_REBOOT) {
-				printf("%s [5]: rebooting\n", __func__);
+				printf("%s: rebooting\n", __func__);
 				uint32_t cmd_ret = 0;
 				mailbox_pause_delegation();
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
-					printf("%s [5.1]\n", __func__);
 					halt_all_procs();
-					//write(fd_pmu_to_os, &cmd_ret, 4);
 				} 
 				else {
 					/* not allowed */
@@ -730,11 +662,9 @@ int main(int argc, char **argv)
 	}
 
 err_join:
-	printf("%s [6]\n", __func__);
 	pthread_join(reboot_thread, NULL);
 
 err_close:
-	printf("%s [7]\n", __func__);
 
 	/* No more pmu logs after this. */
 	close(fd_pmu_log);

@@ -24,7 +24,7 @@ int main(int argc, char **argv)
 {
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s [1]: serial_out init\n", __func__);
+	printf("%s: serial_out init\n", __func__);
 
 	int ret = init_serial_out();
 	if (ret)
