@@ -62,8 +62,8 @@
 	   ]
 	},{
 	   "shell_command":[
-		"cd tpm",
-		"./tpm"
+		"arch/umode/emulator/log_view -t",
+		"exit"
 	   ]
 	},{
 	   "shell_command":[

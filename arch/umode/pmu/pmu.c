@@ -17,13 +17,13 @@
 
 int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
 
-int fd_mailbox_log, fd_os_log, fd_keyboard_log, fd_serial_out_log,
-    fd_runtime1_log, fd_runtime2_log, fd_storage_log, fd_network_log,
-    fd_untrusted_log, fd_pmu_log, fd_socket_server_log;
+int fd_mailbox_log, fd_tpm_log, fd_os_log, fd_keyboard_log,
+    fd_serial_out_log, fd_runtime1_log, fd_runtime2_log, fd_storage_log,
+    fd_network_log, fd_untrusted_log, fd_pmu_log, fd_socket_server_log;
 
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
-pid_t mailbox_pid, os_pid, keyboard_pid, serial_out_pid,
+pid_t mailbox_pid, tpm_pid, os_pid, keyboard_pid, serial_out_pid,
       runtime1_pid, runtime2_pid, storage_pid, network_pid,
       untrusted_pid, socket_server_pid;
 
@@ -165,6 +165,17 @@ static int start_mailbox_proc(void)
 	return ret;
 }
 
+static int start_tpm_proc(void)
+{
+	int ret;
+
+	char *const args[] = {(char *) "tpm", NULL};
+	char path[] = "./tpm/tpm";
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0, 0);
+
+	return ret;
+}
+
 static int start_os_proc(void)
 {
 	char *const args[] = {(char *) "os", NULL};
@@ -237,6 +248,7 @@ static int start_socket_server_proc(void)
 static void start_all_procs(void)
 {
 	mailbox_pid = start_mailbox_proc();
+	tpm_pid = start_tpm_proc();
 	os_pid = start_os_proc();
 	keyboard_pid = start_keyboard_proc();
 	serial_out_pid = start_serial_out_proc();
@@ -324,6 +336,8 @@ static void halt_all_procs(void)
 	
 	halt_proc(P_OS);
 	
+	kill(tpm_pid, SIGKILL);
+
 	kill(mailbox_pid, SIGKILL);
 }
 
@@ -341,6 +355,10 @@ static void *proc_reboot_handler(void *data)
 			sprintf(proc_name, "Mailbox");
 			if (do_reboot)
 				mailbox_pid = start_mailbox_proc();
+		} else if (pid == tpm_pid) {
+			sprintf(proc_name, "TPM");
+			if (do_reboot)
+				tpm_pid = start_tpm_proc();
 		} else if (pid == os_pid) {
 			sprintf(proc_name, "OS processor");
 			if (do_reboot) {
@@ -514,6 +532,7 @@ int main(int argc, char **argv)
 	mkfifo(FIFO_PMU_FROM_MAILBOX, 0666);
 
 	mkfifo(FIFO_MAILBOX_LOG, 0666);
+	mkfifo(FIFO_TPM_LOG, 0666);
 	mkfifo(FIFO_OS_LOG, 0666);
 	mkfifo(FIFO_KEYBOARD_LOG, 0666);
 	mkfifo(FIFO_SERIAL_OUT_LOG, 0666);
@@ -531,6 +550,7 @@ int main(int argc, char **argv)
 	fd_pmu_from_mailbox = open(FIFO_PMU_FROM_MAILBOX, O_RDWR);
 
 	fd_mailbox_log = open(FIFO_MAILBOX_LOG, O_RDWR);
+	fd_tpm_log = open(FIFO_TPM_LOG, O_RDWR);
 	fd_os_log = open(FIFO_OS_LOG, O_RDWR);
 	fd_keyboard_log = open(FIFO_KEYBOARD_LOG, O_RDWR);
 	fd_serial_out_log = open(FIFO_SERIAL_OUT_LOG, O_RDWR);
@@ -677,6 +697,7 @@ err_close:
 	close(fd_serial_out_log);
 	close(fd_keyboard_log);
 	close(fd_os_log);
+	close(fd_tpm_log);
 	close(fd_mailbox_log);
 
 	close(fd_pmu_from_mailbox);
@@ -694,6 +715,7 @@ err_close:
 	remove(FIFO_SERIAL_OUT_LOG);
 	remove(FIFO_KEYBOARD_LOG);
 	remove(FIFO_OS_LOG);
+	remove(FIFO_TPM_LOG);
 	remove(FIFO_MAILBOX_LOG);
 	
 	remove(FIFO_PMU_FROM_MAILBOX);

@@ -22,6 +22,7 @@
 #define PMU_MAILBOX_CMD_RESET_PROC_CHECK	5
 
 #define FIFO_MAILBOX_LOG	"/tmp/octopos_mailbox_log"
+#define FIFO_TPM_LOG		"/tmp/octopos_tpm_log"
 #define FIFO_OS_LOG		"/tmp/octopos_os_log"
 #define FIFO_KEYBOARD_LOG	"/tmp/octopos_keyboard_log"
 #define FIFO_SERIAL_OUT_LOG	"/tmp/octopos_serial_out_log"

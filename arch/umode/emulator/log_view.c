@@ -23,12 +23,17 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	opt = getopt(argc, argv, "mokl12snupv");
+	opt = getopt(argc, argv, "mtokl12snupv");
 	switch (opt) {
 	case 'm':
 		mkfifo(FIFO_MAILBOX_LOG, 0666);
 		fd_log = open(FIFO_MAILBOX_LOG, O_RDONLY);
 		printf("Mailbox logs:\n");
+		break;
+	case 't':
+		mkfifo(FIFO_TPM_LOG, 0666);
+		fd_log = open(FIFO_TPM_LOG, O_RDONLY);
+		printf("TPM logs:\n");
 		break;
 	case 'o':
 		mkfifo(FIFO_OS_LOG, 0666);
@@ -100,6 +105,9 @@ int main(int argc, char **argv)
 	switch (opt) {
 	case 'm':
 		remove(FIFO_MAILBOX_LOG);
+		break;
+	case 't':
+		remove(FIFO_TPM_LOG);
 		break;
 	case 'o':
 		remove(FIFO_OS_LOG);

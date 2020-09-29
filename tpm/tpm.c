@@ -106,6 +106,10 @@ void tpm_measurement_core()
 
 int main(int argc, char const *argv[])
 {
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+	printf("%s: TPM init\n", __func__);
+
 	int ret = init_tpm();
 	if (ret)
 		return ret;
