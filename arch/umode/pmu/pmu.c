@@ -174,15 +174,15 @@ static int start_os_proc(void)
 
 static int start_keyboard_proc(void)
 {
-	char *const args[] = {(char *) "keyboard", NULL};
-	char path[] = "./keyboard/keyboard";
+	char *const args[] = {(char *) "loader", (char *) "./keyboard/keyboard.so", NULL};
+	char path[] = "./loader/loader";
 	return start_proc(path, args, fd_keyboard_log, 1, 0, 0, 0);
 }
 
 static int start_serial_out_proc(void)
 {
-	char *const args[] = {(char *) "serial_out", NULL};
-	char path[] = "./serial_out/serial_out";
+	char *const args[] = {(char *) "loader", (char *) "./serial_out/serial_out.so", NULL};
+	char path[] = "./loader/loader";
 	return start_proc(path, args, fd_serial_out_log, 0, 1, 0, 0);
 }
 
@@ -206,8 +206,8 @@ static int start_runtime_proc(char *runtime_id)
 
 static int start_storage_proc(void)
 {
-	char *const args[] = {(char *) "storage", NULL};
-	char path[] = "./storage";
+	char *const args[] = {(char *) "loader", (char *) "./storage.so", NULL};
+	char path[] = "../loader/loader";
 	return start_proc(path, args, fd_storage_log, 0, 0, 1, 0);
 }
 

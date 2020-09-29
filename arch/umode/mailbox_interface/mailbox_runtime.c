@@ -169,12 +169,14 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		printf("Error: couldn't open app.\n");
 		return;
 	}
-	
+
 	app_main = (app_main_proc) dlsym(app, "app_main");
 	if (!app_main) {
 		printf("Error: couldn't find app_main symbol.\n");
 		return;
 	}
+
+	runtime_send_msg_on_queue_large((uint8_t *)path, Q_TPM_DATA_IN);
 
 	(*app_main)(api);
 }
@@ -199,9 +201,14 @@ void runtime_core(void)
 			printf("Error: invalid interrupt (%d)\n", interrupt);
 			exit(-1);
 		} else if (interrupt > NUM_QUEUES) {
-			if ((interrupt - NUM_QUEUES) == change_queue) {
+			if ((interrupt - NUM_QUEUES) == change_queue)
+			{
 				sem_post(&interrupt_change);
 				sem_post(&interrupts[q_runtime]);
+			}
+			else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN)
+			{
+				sem_post(&interrupts[Q_TPM_DATA_IN]);
 			}
 
 			/* ignore the rest */
@@ -283,6 +290,7 @@ int init_runtime(int runtime_id)
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
+	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
 
 	sem_init(&load_app_sem, 0, 0);
 
@@ -305,13 +313,6 @@ void close_runtime(void)
 	pthread_join(app_thread, NULL);
 
 	/* FIXME: free the memory allocated for srq */
-
-	/* FIXME: resetting the mailbox needs to be done automatically. */
-	//uint8_t opcode[2];
-	//opcode[0] = MAILBOX_OPCODE_RESET;
-	//pthread_spin_lock(&mailbox_lock);	
-	//write(fd_out, opcode, 2);
-	//pthread_spin_unlock(&mailbox_lock);	
 
 	pthread_spin_destroy(&mailbox_lock);
 

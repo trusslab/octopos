@@ -7,21 +7,23 @@
 #define	MAILBOX_OPCODE_WRITE_QUEUE		1
 #define	MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS	2
 #define	MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS	3
-//#define	MAILBOX_OPCODE_RESET			4
+/* FIXME: needed? */
+#define MAILBOX_OPCODE_ATTEST_TPM_ACCESS	4
 
 /* processor IDs */
 #define	P_OS			1
 #define	P_KEYBOARD		2
-#define	P_SERIAL_OUT		3
+#define	P_SERIAL_OUT	3
 #define	P_STORAGE		4
 #define	P_NETWORK		5
 #define	P_SENSOR		6
 #define	P_RUNTIME1		7
 #define	P_RUNTIME2		8
 #define P_UNTRUSTED		9
-#define NUM_PROCESSORS		9
-#define ALL_PROCESSORS		10
-#define INVALID_PROCESSOR	11
+#define P_TPM			10
+#define NUM_PROCESSORS	10
+#define ALL_PROCESSORS	11
+#define INVALID_PROCESSOR	12
 
 #define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */
 
@@ -43,7 +45,9 @@
 #define	Q_RUNTIME2		15
 #define	Q_OSU			16
 #define	Q_UNTRUSTED		17
-#define NUM_QUEUES		17
+#define Q_TPM_DATA_IN	18
+#define Q_TPM_DATA_OUT	19
+#define NUM_QUEUES		19
 
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64

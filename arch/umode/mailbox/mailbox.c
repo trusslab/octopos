@@ -40,8 +40,8 @@ struct queue {
 	uint8_t prev_owner;
 };
 
-struct processor processors[NUM_PROCESSORS];
-struct queue queues[NUM_QUEUES];
+struct processor processors[NUM_PROCESSORS + 1];
+struct queue queues[NUM_QUEUES + 1];
 
 static void send_interrupt(struct processor *proc, uint8_t queue_id)
 {
@@ -93,6 +93,11 @@ static void untrusted_send_interrupt(uint8_t queue_id)
 	send_interrupt(&processors[P_UNTRUSTED], queue_id);
 }
 
+static void tpm_send_interrupt(uint8_t queue_id)
+{
+	send_interrupt(&processors[P_TPM], queue_id);
+}
+
 static void initialize_processors(void)
 {
 	/* initialize connections to the processors */
@@ -120,6 +125,9 @@ static void initialize_processors(void)
 	mkfifo(FIFO_UNTRUSTED_OUT, 0666);
 	mkfifo(FIFO_UNTRUSTED_IN, 0666);
 	mkfifo(FIFO_UNTRUSTED_INTR, 0666);
+	mkfifo(FIFO_TPM_OUT, 0666);
+	mkfifo(FIFO_TPM_IN, 0666);
+	mkfifo(FIFO_TPM_INTR, 0666);
 
 	/* initialize processor objects */
 	/* OS processor */
@@ -183,6 +191,13 @@ static void initialize_processors(void)
 	processors[P_UNTRUSTED].out_handle = open(FIFO_UNTRUSTED_OUT, O_RDWR);
 	processors[P_UNTRUSTED].in_handle = open(FIFO_UNTRUSTED_IN, O_RDWR);
 	processors[P_UNTRUSTED].intr_handle = open(FIFO_UNTRUSTED_INTR, O_RDWR);
+
+	/* tpm processor */
+	processors[P_TPM].processor_id = P_TPM;
+	processors[P_TPM].send_interrupt = tpm_send_interrupt;
+	processors[P_TPM].out_handle = open(FIFO_TPM_OUT, O_RDWR);
+	processors[P_TPM].in_handle = open(FIFO_TPM_IN, O_RDWR);
+	processors[P_TPM].intr_handle = open(FIFO_TPM_INTR, O_RDWR);
 }
 
 static void close_processors(void)
@@ -191,6 +206,7 @@ static void close_processors(void)
 	close(processors[P_OS].in_handle);
 	close(processors[P_OS].intr_handle);
 	close(processors[P_KEYBOARD].out_handle);
+	close(processors[P_KEYBOARD].intr_handle);
 	close(processors[P_SERIAL_OUT].out_handle);
 	close(processors[P_SERIAL_OUT].in_handle);
 	close(processors[P_SERIAL_OUT].intr_handle);
@@ -209,6 +225,9 @@ static void close_processors(void)
 	close(processors[P_UNTRUSTED].out_handle);
 	close(processors[P_UNTRUSTED].in_handle);
 	close(processors[P_UNTRUSTED].intr_handle);
+	close(processors[P_TPM].out_handle);
+	close(processors[P_TPM].in_handle);
+	close(processors[P_TPM].intr_handle);
 
 	remove(FIFO_OS_OUT);
 	remove(FIFO_OS_IN);
@@ -233,6 +252,9 @@ static void close_processors(void)
 	remove(FIFO_UNTRUSTED_OUT);
 	remove(FIFO_UNTRUSTED_IN);
 	remove(FIFO_UNTRUSTED_INTR);
+	remove(FIFO_TPM_OUT);
+	remove(FIFO_TPM_IN);
+	remove(FIFO_TPM_INTR);
 }
 
 static int write_queue(struct queue *queue, int out_handle)
@@ -653,6 +675,35 @@ static void initialize_queues(void)
 	queues[Q_UNTRUSTED].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_UNTRUSTED].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+
+	/* tpm queue */
+	queues[Q_TPM_DATA_IN].queue_id = Q_TPM_DATA_IN;
+	queues[Q_TPM_DATA_IN].queue_type = QUEUE_TYPE_FIXED_READER;
+	queues[Q_TPM_DATA_IN].head = 0;
+	queues[Q_TPM_DATA_IN].tail = 0;
+	queues[Q_TPM_DATA_IN].counter = 0;
+	queues[Q_TPM_DATA_IN].reader_id = P_TPM;
+	queues[Q_TPM_DATA_IN].writer_id = P_OS;
+	queues[Q_TPM_DATA_IN].access_count = 0;
+	queues[Q_TPM_DATA_IN].prev_owner = 0;
+	queues[Q_TPM_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
+	queues[Q_TPM_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
+	queues[Q_TPM_DATA_IN].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+	queues[Q_TPM_DATA_OUT].queue_id = Q_TPM_DATA_OUT;
+	queues[Q_TPM_DATA_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
+	queues[Q_TPM_DATA_OUT].head = 0;
+	queues[Q_TPM_DATA_OUT].tail = 0;
+	queues[Q_TPM_DATA_OUT].counter = 0;
+	queues[Q_TPM_DATA_OUT].reader_id = P_OS;
+	queues[Q_TPM_DATA_OUT].writer_id = P_TPM;
+	queues[Q_TPM_DATA_OUT].access_count = 0;
+	queues[Q_TPM_DATA_OUT].prev_owner = 0;
+	queues[Q_TPM_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
+	queues[Q_TPM_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
+	queues[Q_TPM_DATA_OUT].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -814,8 +865,22 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 		    proc_id == P_OS &&
 		    queues[Q_RUNTIME2].access_count == 0)
 			allowed = true;
+	} else if (queue_id == Q_TPM_DATA_IN && access == WRITE_ACCESS) {
+		if (queues[Q_TPM_DATA_IN].writer_id == P_OS &&
+			(proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 ||
+				proc_id == P_KEYBOARD || proc_id == P_STORAGE ||
+				proc_id == P_SERIAL_OUT))
+			allowed = true;
+
+		if ((queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME1 ||
+			 queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME2 ||
+			 queues[Q_TPM_DATA_IN].writer_id == P_KEYBOARD ||
+			 queues[Q_TPM_DATA_IN].writer_id == P_STORAGE ||
+			 queues[Q_TPM_DATA_IN].writer_id == P_SERIAL_OUT) &&
+			proc_id == P_OS && queues[Q_TPM_DATA_IN].access_count == 0)
+			allowed = true;
 	}
-	
+
 	if (!allowed) {		
 		printf("Error: invalid config option by os\n");
 		return;
@@ -887,8 +952,12 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS &&
 		 requesting_proc_id == P_RUNTIME2 && proc_id == P_OS)
 			allowed = true;
+	else if (queue_id == Q_TPM_DATA_IN && access == WRITE_ACCESS &&
+			 (queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME2) &&
+			 queues[Q_TPM_DATA_IN].writer_id == requesting_proc_id && proc_id == P_OS)
+		allowed = true;
 	
-	if (!allowed) {		
+	if (!allowed) {
 		printf("Error: invalid config option by runtime (might not be an error in case of secure IPC)\n");
 		return;
 	}
@@ -1027,6 +1096,8 @@ int main(int argc, char **argv)
 		nfds = processors[P_RUNTIME2].out_handle;
 	if (processors[P_UNTRUSTED].out_handle > nfds)
 		nfds = processors[P_UNTRUSTED].out_handle;
+	if (processors[P_TPM].out_handle > nfds)
+		nfds = processors[P_TPM].out_handle;
 	if (fd_pmu_to_mailbox > nfds)
 		nfds = fd_pmu_to_mailbox;
 
@@ -1045,6 +1116,7 @@ int main(int argc, char **argv)
 		FD_SET(processors[P_RUNTIME1].out_handle, &listen_fds);
 		FD_SET(processors[P_RUNTIME2].out_handle, &listen_fds);
 		FD_SET(processors[P_UNTRUSTED].out_handle, &listen_fds);
+		FD_SET(processors[P_TPM].out_handle, &listen_fds);
 		FD_SET(fd_pmu_to_mailbox, &listen_fds);
 
 		if (select(nfds + 1, &listen_fds, NULL, NULL, NULL) < 0) {
@@ -1100,6 +1172,11 @@ int main(int argc, char **argv)
 				queue_id = opcode[1];
 				writer_id = INVALID_PROCESSOR;
 				handle_read_queue(queue_id, reader_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
+				writer_id = P_SERIAL_OUT;
+				queue_id = opcode[1];
+				reader_id = INVALID_PROCESSOR;
+				handle_write_queue(queue_id, writer_id);
 			} else {
 				printf("Error: invalid opcode from serial_out\n");
 			}
@@ -1233,6 +1310,24 @@ int main(int argc, char **argv)
 				write(processors[P_UNTRUSTED].in_handle, &ret, 1);
 			} else {
 				printf("Error: invalid opcode from untrusted\n");
+			}
+		}
+
+		if (FD_ISSET(processors[P_TPM].out_handle, &listen_fds)) {
+			memset(opcode, 0x0, 2);
+			read(processors[P_TPM].out_handle, opcode, 2);
+			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
+				reader_id = P_TPM;
+				queue_id = opcode[1];
+				writer_id = INVALID_PROCESSOR;
+				handle_read_queue(queue_id, reader_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
+				writer_id = P_TPM;
+				queue_id = opcode[1];
+				reader_id = INVALID_PROCESSOR;
+				handle_write_queue(queue_id, writer_id);
+			} else {
+				printf("Error: invalid opcode from tpm\n");
 			}
 		}
 

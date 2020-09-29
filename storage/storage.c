@@ -782,6 +782,7 @@ int main(int argc, char **argv)
 	}
 
 	init_storage();
+	write_data_to_queue((uint8_t *) "../storage/storage.so", Q_TPM_DATA_IN);
 	storage_event_loop();
 	close_storage();
 }

@@ -776,6 +776,16 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 
 #endif
 
+static int request_runtime_extend(int count)
+{
+	reset_queue_sync(Q_TPM_DATA_IN, 0);
+
+	SYSCALL_SET_ONE_ARG(SYSCALL_MEASUREMENT, (uint32_t)count);
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int)ret0;
+}
+
 static void load_application(char *msg)
 {
 	struct runtime_api api = {
@@ -823,6 +833,7 @@ static void load_application(char *msg)
 #endif
 	};
 
+
 	load_application_arch(msg, &api);
 
 	return;
@@ -840,7 +851,9 @@ void *run_app(void *load_buf)
 	}
 	wait_for_app_load();
 	
+	request_runtime_extend(200);
 	load_application((char *) load_buf);
+	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, P_OS);
 	still_running = false;
 	inform_os_of_termination();
 

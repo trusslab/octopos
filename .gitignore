@@ -3,13 +3,12 @@
 *.swo
 *.so
 storage/octopos_partition*
-storage/storage
 runtime/runtime
 os/os
 network/network
-keyboard/keyboard
-serial_out/serial_out
 applications/socket_client/socket_server
 arch/umode/mailbox/mailbox
 arch/umode/pmu/pmu
 arch/umode/emulator/log_view
+tpm/tpm
+loader/loader

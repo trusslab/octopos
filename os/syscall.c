@@ -375,6 +375,32 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		*no_response = true;
 		break;
 	}
+	case SYSCALL_MEASUREMENT: {
+		SYSCALL_GET_ONE_ARG
+		uint32_t count = arg0;
+
+		/* No more than 200 characters */
+		if (count > 200)
+		{
+			SYSCALL_SET_ONE_RET((uint32_t)ERR_INVALID)
+			break;
+		}
+
+		int ret = is_queue_available(Q_TPM_DATA_IN);
+		/* Or should we make this blocking? */
+		if (!ret)
+		{
+			SYSCALL_SET_ONE_RET((uint32_t)ERR_AVAILABLE)
+			break;
+		}
+
+		mark_queue_unavailable(Q_TPM_DATA_IN);
+
+		mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t)count);
+
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
 
 	default:
 		printf("Error: invalid syscall\n");
