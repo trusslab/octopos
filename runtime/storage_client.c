@@ -244,23 +244,15 @@ if (!async_syscall_mode) {
 }
 #endif
 
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
-#else
-	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, P_OS);
-#endif
 }
 
 int yield_secure_storage_access(void)
 {
 	if (!has_access_to_secure_storage) {
-		printf("%s: Error: secure storage has not been set up\n", __func__);
 		return ERR_INVALID;
 	}
 
@@ -292,29 +284,25 @@ static int request_secure_storage_queues_access(int count)
 		return (int) ret0;
 
 	/* FIXME: if any of the attetations fail, we should yield the other ones */
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN,
-					WRITE_ACCESS, count);
+	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure storage cmd write access\n", __func__);
 		return ERR_FAULT;
 	}
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT,
-					READ_ACCESS, count);
+	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT, (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure storage cmd read access\n", __func__);
 		return ERR_FAULT;
 	}
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN,
-					WRITE_ACCESS, count);
+	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN, (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure storage data write access\n", __func__);
 		return ERR_FAULT;
 	}
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT,
-					READ_ACCESS, count);
+	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT, (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure storage data read access\n", __func__);
 		return ERR_FAULT;
@@ -399,17 +387,10 @@ int delete_and_yield_secure_storage(void)
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
-#else
-	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, P_OS);
-#endif
 
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_DELETE_SECURE_STORAGE)
 	issue_syscall(buf);

@@ -10,6 +10,7 @@
 #include <os/file_system.h>
 #include <os/syscall.h>
 #include <os/storage.h>
+#include <os/boot.h>
 #include <arch/mailbox_os.h>
 #include <arch/pmu.h> 
 #include <arch/defines.h>
@@ -49,17 +50,15 @@ int main()
 	if (ret)
 		return ret;
 	
-	release_tpm_writer(P_SERIAL_OUT);
-	release_tpm_writer(P_STORAGE);
-	release_tpm_writer(P_KEYBOARD);
-
 	connect_to_pmu();
 
-	initialize_shell();
-	initialize_storage();
+	uint32_t partition_size = initialize_storage();
 #ifdef ARCH_UMODE
-	initialize_file_system();
+	initialize_file_system(partition_size);
 #endif
+	help_boot_procs(1);
+
+	initialize_shell();
 
 	initialize_scheduler();
 

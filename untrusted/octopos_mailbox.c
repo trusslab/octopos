@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/uaccess.h>
 #include <linux/semaphore.h>
+#include <linux/timer.h>
 #include <init.h>
 #include <irq_kern.h>
 #include <os.h>
@@ -45,6 +46,50 @@ int srq_head;
 int srq_tail;
 int srq_counter;
 struct semaphore srq_sem;
+
+//struct semaphore mailbox_lock;
+spinlock_t mailbox_lock;
+
+limit_t queue_limits[NUM_QUEUES + 1];
+timeout_t queue_timeouts[NUM_QUEUES + 1];
+void (*queue_timeout_update_callbacks[NUM_QUEUES + 1])(uint8_t queue_id,
+						       timeout_t timeout);
+
+static struct timer_list timer;
+
+void callback_timer(struct timer_list *_timer)
+{
+	int i;
+
+	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
+	
+	for (i = 1; i <= NUM_QUEUES; i++) {
+		if (queue_timeouts[i] &&
+		    (queue_timeouts[i] != MAILBOX_NO_TIMEOUT_VAL)) {
+			queue_timeouts[i]--;
+			if (queue_timeout_update_callbacks[i])
+				(*queue_timeout_update_callbacks[i])(i, queue_timeouts[i]);
+		}
+	}
+
+}
+
+void register_timeout_update_callback(uint8_t queue_id,
+				      void (*callback)(uint8_t, timeout_t))
+{
+	if (queue_id < 1 || queue_id > NUM_QUEUES) {
+		printk("Error: %s: invalid queue id (%d)\n", __func__, queue_id);
+		return;
+	}
+
+	if (queue_timeout_update_callbacks[queue_id]) {
+		printk("Error: %s: queue timeout update callback for queue %d is already "
+		       "registered\n", __func__, queue_id);
+		return;
+	}
+
+	queue_timeout_update_callbacks[queue_id] = callback;
+}
 
 /* FIXME: modified from the same functin in runtime.c */
 int write_syscall_response(uint8_t *buf)
@@ -148,23 +193,39 @@ static ssize_t om_dev_write(struct file *filp, const char __user *buf, size_t si
 {
 	char data[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
+	size_t per_msg_size = MAILBOX_QUEUE_MSG_SIZE - 3;
+	ssize_t total_size = 0;
 
+	/* We're informing the OS of termination.
+	 * Therefore, we'll have to finish everything in
+	 * this function. Won't be able to send more later.
+	 */
 	if (*offp != 0)
 		return 0;
-  
-	if (size > MAILBOX_QUEUE_MSG_SIZE) {
-		printk("Error: %s: invalid size (%d). Can't be larger than %d.\n",
-		       __func__, (int) size, MAILBOX_QUEUE_MSG_SIZE);
-		return -EINVAL;
+ 
+	while (size > 0) {
+
+		if (size < per_msg_size)
+			per_msg_size = size;
+
+		size -= per_msg_size;
+
+		ret = copy_from_user(data, buf + total_size, per_msg_size);
+		*offp += (per_msg_size - ret);
+
+		write_to_shell(data, per_msg_size - ret);
+
+		total_size += (per_msg_size - ret);
+
+		if (ret) {
+			printk("Error: %s: copy_from_user failed to fully copy. Won't continue.\n", __func__);
+			break;
+		}
 	}
 
-	ret = copy_from_user(data, buf, size);
-	*offp += (size - ret);
-
-	write_to_shell(data, size - ret);
 	inform_os_of_termination();
 
-	return (size - ret);
+	return total_size;
 }
 
 static const struct file_operations om_chrdev_ops = {
@@ -183,34 +244,43 @@ static struct miscdevice om_miscdev = {
 void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
 	/* wait for message */
 	down(&interrupts[queue_id]);
+	spin_lock_irqsave(&mailbox_lock, flags);
 	os_write_file(fd_out, opcode, 2), 
 	os_read_file(fd_in, buf, queue_msg_size);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
 static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
+	spin_lock_irqsave(&mailbox_lock, flags);
 	os_write_file(fd_out, opcode, 2), 
 	os_read_file(fd_in, buf, queue_msg_size);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
 void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 	down(&interrupts[queue_id]);
+	spin_lock_irqsave(&mailbox_lock, flags);
 	os_write_file(fd_out, opcode, 2);
 	os_write_file(fd_out, buf, queue_msg_size);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
 /* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
@@ -266,36 +336,69 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
-	uint8_t opcode[4];
+	uint8_t opcode[2];
+	unsigned long flags;
 
-	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
+	queue_limits[queue_id] = 0;
+	queue_timeouts[queue_id] = 0;
+
+	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = proc_id;
-	os_write_file(fd_out, opcode, 4);
+	spin_lock_irqsave(&mailbox_lock, flags);
+	os_write_file(fd_out, opcode, 2);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
-int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 {
-	uint8_t opcode[4], ret;
+	uint8_t opcode[2];
+	mailbox_state_reg_t state;
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = count;
-	os_write_file(fd_out, opcode, 4);
-	os_read_file(fd_in, &ret, 1);
+	spin_lock_irqsave(&mailbox_lock, flags);
+	os_write_file(fd_out, opcode, 2);
+	os_read_file(fd_in, &state, sizeof(mailbox_state_reg_t));
+	spin_unlock_irqrestore(&mailbox_lock, flags);
 
-	return (int) ret;
+	if (state.limit && (state.limit != MAILBOX_NO_LIMIT_VAL))
+		queue_limits[queue_id] = state.limit;
+
+	if (state.timeout && (state.timeout != MAILBOX_NO_TIMEOUT_VAL))
+		queue_timeouts[queue_id] = state.timeout;
+
+	if (state.limit == count)
+		return 1;
+	else
+		return 0;
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
 void reset_queue_sync(uint8_t queue_id, int init_val)
 {
 	sema_init(&interrupts[queue_id], init_val);
+}
+
+limit_t get_queue_limit(uint8_t queue_id)
+{
+	return queue_limits[queue_id];
+}
+
+timeout_t get_queue_timeout(uint8_t queue_id)
+{
+	return queue_timeouts[queue_id];
+}
+
+void decrement_queue_limit(uint8_t queue_id, limit_t count)
+{
+	if (queue_limits[queue_id] <= count)
+		queue_limits[queue_id] = 0;
+	else
+		queue_limits[queue_id] -= count;
 }
 
 /* FIXME: move somewhere else */
@@ -430,6 +533,15 @@ static int __init om_init(void)
 
 	INIT_WORK(&net_wq, net_receive_wq);
 
+	spin_lock_init(&mailbox_lock);
+
+	memset(queue_limits, 0x0, sizeof(queue_limits));
+	memset(queue_timeouts, 0x0, sizeof(queue_timeouts));
+	memset(queue_timeout_update_callbacks, 0x0, sizeof(queue_timeout_update_callbacks));
+
+	timer_setup(&timer, callback_timer, 0);
+	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
+
 	/* register char dev */
 	err = misc_register(&om_miscdev);
 	if (err) {
@@ -448,6 +560,8 @@ static void cleanup(void)
 
 static void __exit om_cleanup(void)
 {
+	del_timer(&timer);
+
 	os_close_file(fd_out);
 	os_close_file(fd_in);
 	os_close_file(fd_intr);

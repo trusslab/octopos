@@ -214,11 +214,12 @@ struct partition {
 	bool is_locked;
 };
 
-#define NUM_PARTITIONS		5
+#define NUM_PARTITIONS		6
 
 /* FIXME: determine partitions and their sizes dynamically. */
 struct partition partitions[NUM_PARTITIONS];
-uint32_t partition_sizes[NUM_PARTITIONS] = {1000, 2048, 100, 100, 100};
+uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
+	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100};
 
 bool is_queue_set_bound = false;
 int bound_partition = -1;
@@ -229,6 +230,9 @@ bool is_config_locked = false;
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 void initialize_storage_space(void)
 {
+#ifdef ARCH_UMODE
+	chdir("./storage");
+#endif
 	for (int i = 0; i < NUM_PARTITIONS; i++) {
 		struct partition *partition;
 		int suffix = i;
@@ -782,7 +786,6 @@ int main(int argc, char **argv)
 	}
 
 	init_storage();
-	write_data_to_queue((uint8_t *) "./storage.so", Q_TPM_DATA_IN);
 	storage_event_loop();
 	close_storage();
 }

@@ -1,3 +1,6 @@
+#ifndef _OCTOPOS_MAILBOX_H_
+#define _OCTOPOS_MAILBOX_H_
+
 #ifndef UNTRUSTED_DOMAIN
 #include <arch/defines.h>
 #endif
@@ -5,15 +8,16 @@
 /* mailbox opcodes */
 #define	MAILBOX_OPCODE_READ_QUEUE		0
 #define	MAILBOX_OPCODE_WRITE_QUEUE		1
-#define	MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS	2
-#define	MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS	3
-/* FIXME: needed? */
-#define MAILBOX_OPCODE_ATTEST_TPM_ACCESS	4
+#define	MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS	2
+#define	MAILBOX_OPCODE_YIELD_QUEUE_ACCESS	3
+#define	MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS	4
+#define	MAILBOX_OPCODE_DISABLE_QUEUE_DELEGATION	5
+#define	MAILBOX_OPCODE_ENABLE_QUEUE_DELEGATION	6
 
 /* processor IDs */
 #define	P_OS			1
 #define	P_KEYBOARD		2
-#define	P_SERIAL_OUT	3
+#define	P_SERIAL_OUT		3
 #define	P_STORAGE		4
 #define	P_NETWORK		5
 #define	P_SENSOR		6
@@ -21,8 +25,8 @@
 #define	P_RUNTIME2		8
 #define P_UNTRUSTED		9
 #define P_TPM			10
-#define NUM_PROCESSORS	10
-#define ALL_PROCESSORS	11
+#define NUM_PROCESSORS		10
+#define ALL_PROCESSORS		11
 #define INVALID_PROCESSOR	12
 
 #define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */
@@ -45,8 +49,8 @@
 #define	Q_RUNTIME2		15
 #define	Q_OSU			16
 #define	Q_UNTRUSTED		17
-#define Q_TPM_DATA_IN	18
-#define Q_TPM_DATA_OUT	19
+#define Q_TPM_IN		18
+#define Q_TPM_OUT		19
 #define NUM_QUEUES		19
 
 #define MAILBOX_QUEUE_SIZE		4
@@ -60,12 +64,40 @@
 #define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
 #endif
 
-#define READ_ACCESS		0
-#define WRITE_ACCESS		1
+typedef struct {
+	unsigned owner:8; /* Proc with current access to the non-fixed end of a queue. */
+	unsigned limit:12;
+	unsigned timeout:12;
+
+#ifdef ARCH_SEC_HW
+	operator int() const{
+		return (owner << 24) + (limit << 12) + timeout;
+	}
+#endif
+} mailbox_state_reg_t;
+
+/* FIXME: these are also defined in octopos/runtime.h */
+typedef uint32_t limit_t;
+typedef uint32_t timeout_t;
+
+#define MAILBOX_NO_LIMIT_VAL			0xFFF
+#define MAILBOX_NO_TIMEOUT_VAL			0xFFF
+/* FIXME: these are also defined in octopos/runtime.h */
+#define MAILBOX_MAX_LIMIT_VAL			0xFFE
+#define MAILBOX_MAX_TIMEOUT_VAL			0xFFE
+#define MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL	2
+#define MAILBOX_DEFAULT_TIMEOUT_VAL		6
 
 /* FIXME: move somewhere else */
 #ifdef UNTRUSTED_DOMAIN
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id);
-int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count);
+void mailbox_yield_to_previous_owner(uint8_t queue_id);
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count);
 void reset_queue_sync(uint8_t queue_id, int init_val);
+limit_t get_queue_limit(uint8_t queue_id);
+timeout_t get_queue_timeout(uint8_t queue_id);
+void decrement_queue_limit(uint8_t queue_id, limit_t count);
+void register_timeout_update_callback(uint8_t queue_id,
+				      void (*callback)(uint8_t, timeout_t));
 #endif
+
+#endif /* _OCTOPOS_MAILBOX_H_ */

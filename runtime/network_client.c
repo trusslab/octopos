@@ -105,13 +105,8 @@ int yield_network_access(void)
 
 	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
-#else
-	mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, P_OS);
-	mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, P_OS);
-#endif
 	
 	return 0;
 }
@@ -133,15 +128,13 @@ int request_network_access(int count)
 		return (int) ret0;
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
-	int attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN,
-					WRITE_ACCESS, count);
+	int attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN, (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest network write access\n", __func__);
 		return ERR_FAULT;
 	}
 
-	attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_OUT,
-					READ_ACCESS, count);
+	attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_OUT, (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest network read access\n", __func__);
 		return ERR_FAULT;
@@ -151,8 +144,8 @@ int request_network_access(int count)
 	if (ret) {
 		printf("Error: set_up_receive failed\n");
 		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-		mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, P_OS);
-		mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, P_OS);
+		mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
+		mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
 		return ERR_FAULT;
 	}
 

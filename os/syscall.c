@@ -23,6 +23,7 @@
 #ifndef ARCH_SEC_HW
 #include <os/network.h>
 #endif
+#include <os/boot.h>
 #include <arch/mailbox_os.h>
 
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
@@ -122,11 +123,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
-#ifdef ARCH_SEC_HW
-		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
-#else
-		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-#endif
+		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id, (limit_t) count,
+				MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -150,22 +148,21 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
-#ifdef ARCH_SEC_HW
-		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint16_t) count);
-#else
-		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
-#endif
+		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id, (limit_t) count,
+				MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
 		inform_shell_of_termination(runtime_proc_id);
+		*late_processing = SYSCALL_INFORM_OS_OF_TERMINATION;
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_INFORM_OS_OF_PAUSE: {
 		inform_shell_of_pause(runtime_proc_id);
+		*late_processing = SYSCALL_INFORM_OS_OF_PAUSE;
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -375,28 +372,31 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		*no_response = true;
 		break;
 	}
-	case SYSCALL_MEASUREMENT: {
+	case SYSCALL_REQUEST_TPM_ACCESS: {
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
 
-		/* No more than 200 characters */
-		if (count > 200)
+		/* FIXME: if no other count values are used,
+		 * then it shouldn't be an input parameter.
+		 */
+		if (count != 1)
 		{
-			SYSCALL_SET_ONE_RET((uint32_t)ERR_INVALID)
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
 
-		int ret = is_queue_available(Q_TPM_DATA_IN);
+		int ret = is_queue_available(Q_TPM_IN);
 		/* Or should we make this blocking? */
 		if (!ret)
 		{
-			SYSCALL_SET_ONE_RET((uint32_t)ERR_AVAILABLE)
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
 
-		mark_queue_unavailable(Q_TPM_DATA_IN);
+		mark_queue_unavailable(Q_TPM_IN);
 
-		mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t)count);
+		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id, (limit_t) count,
+				MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -483,7 +483,10 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
-			file_system_read_file_blocks_late();
+		      file_system_read_file_blocks_late();
+		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
+			 late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
+			reset_proc(runtime_proc_id);
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

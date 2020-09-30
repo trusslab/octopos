@@ -23,9 +23,6 @@ static void *handle_mailbox_interrupts(void *data)
 		read(fd_intr, &interrupt, 1);
 		if (interrupt == Q_KEYBOARD) {
 			sem_post(&interrupt_keyboard);
-		} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
-			sem_post(&interrupt_tpm);
-		} else if (interrupt == Q_TPM_DATA_IN) {
 		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
@@ -61,9 +58,6 @@ void put_char_on_keyboard_queue(uint8_t kchar)
 /* Initializes the keyboard and its mailbox */
 int init_keyboard(void)
 {
-	mkfifo(FIFO_KEYBOARD_OUT, 0666);
-	mkfifo(FIFO_KEYBOARD_INTR, 0666);
-
 	fd_out = open(FIFO_KEYBOARD_OUT, O_WRONLY);
 	fd_intr = open(FIFO_KEYBOARD_INTR, O_RDONLY);
 
@@ -87,17 +81,6 @@ void close_keyboard(void)
 	close(fd_intr);
 	close(fd_out);
 	remove(FIFO_KEYBOARD_INTR);
+	remove(FIFO_KEYBOARD_IN);
 	remove(FIFO_KEYBOARD_OUT);
-}
-
-void send_ext_request_to_queue(uint8_t* buf)
-{
-	uint8_t opcode[2];
-
-	sem_wait(&interrupt_tpm);
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_TPM_DATA_IN;
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }

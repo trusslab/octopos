@@ -30,8 +30,6 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	send_ext_request_to_queue((uint8_t *) argv[0]);
-
 	serial_out_core();
 
 	close_serial_out();

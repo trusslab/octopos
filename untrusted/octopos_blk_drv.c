@@ -24,12 +24,34 @@
 #include <linux/backing-dev.h>
 
 #include <linux/uaccess.h>
+#define UNTRUSTED_DOMAIN
+#include <octopos/mailbox.h>
+#include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include "storage_client.h" 
 
 struct request_queue	*obd_queue = NULL;
 struct gendisk		*obd_disk = NULL;
 
+struct mutex obd_lock;
+
+static struct work_struct yield_wq;
+
+static void obd_yield_storage_queues(struct work_struct *work)
+{
+	mutex_lock(&obd_lock);
+	yield_secure_storage_access();
+	mutex_unlock(&obd_lock);
+}
+
+/*
+ * Will be called in the interrupt context.
+ */
+void obd_queue_timeout_update(uint8_t queue_id, timeout_t timeout)
+{
+	if (timeout <= MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL)
+		schedule_work(&yield_wq);
+}
 /*
  * Process a single bvec of a bio.
  */
@@ -38,27 +60,57 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 {
 	void *mem;
 	int ret;
+	unsigned int num_blocks;
+	uint8_t data_queue = (op_is_write(op)) ? Q_STORAGE_DATA_IN : Q_STORAGE_DATA_OUT;
 
-	if (len % 512)
+	if (len % STORAGE_BLOCK_SIZE)
 		BUG();
 
-	ret = request_secure_storage_access(200, 2048);
-	if (ret) {
-		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
-		return ret;
+	num_blocks = len / STORAGE_BLOCK_SIZE;
+
+	mutex_lock(&obd_lock);
+	/* FIXME: we need to keep separate counts for each storage queue. */
+	if (get_queue_limit(data_queue) < num_blocks ||
+	    /* The +1 is because we need to send and receive one message on the cmd
+	     * queues for the upcoming read/write.
+	     */
+	    get_queue_limit(Q_STORAGE_CMD_IN) < (STORAGE_CLIENT_MIN_CMD_LIMIT + 1) ||
+	    get_queue_limit(Q_STORAGE_CMD_OUT) < (STORAGE_CLIENT_MIN_CMD_LIMIT + 1) ||
+	    get_queue_timeout(data_queue) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
+	    get_queue_timeout(Q_STORAGE_CMD_IN) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
+	    get_queue_timeout(Q_STORAGE_CMD_OUT) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL) {
+
+		/* FIXME: we don't need to yield if it already expired.
+		 * We currently have to do this since we're not dealing
+		 * with the storage queues separately.
+		 * 
+		 * This can create a warning in the mailbox (umode) 
+		 */
+		yield_secure_storage_access();
+
+		ret = request_secure_storage_access(MAILBOX_MAX_LIMIT_VAL,
+						    STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE);
+		if (ret) {
+			printk("Error (%s): Failed to get secure access to storage.\n", __func__);
+			return ret;
+		}
 	}
+
+	decrement_queue_limit(data_queue, num_blocks);
+	decrement_queue_limit(Q_STORAGE_CMD_IN, 1);
+	decrement_queue_limit(Q_STORAGE_CMD_OUT, 1);
 
 	mem = kmap_atomic(page);
 	if (!op_is_write(op)) {
-		read_secure_storage_blocks(mem + off, sector, len / 512);
+		read_secure_storage_blocks(mem + off, sector, num_blocks);
 		flush_dcache_page(page);
 	} else {
 		flush_dcache_page(page);
-		write_secure_storage_blocks(mem + off, sector, len / 512);
+		write_secure_storage_blocks(mem + off, sector, num_blocks);
 	}
 	kunmap_atomic(mem);
 
-	yield_secure_storage_access();
+	mutex_unlock(&obd_lock);
 
 	return 0;
 }
@@ -115,7 +167,8 @@ static const struct block_device_operations obd_fops = {
 /*
  * And now the modules code and kernel interface.
  */
-unsigned long obd_size = 1024;
+unsigned long obd_size =
+	(STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE * STORAGE_BLOCK_SIZE) / 1024;
 module_param(obd_size, ulong, 0444);
 MODULE_PARM_DESC(obd_size, "Size of the partition (in kB) requested from the "
 		 "OctopOS storage service.");
@@ -182,6 +235,11 @@ static int __init obd_init(void)
 	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
 	int i;
 
+	for (i = 0; i < STORAGE_KEY_SIZE; i++)
+		secure_storage_key[i] = i + 2;
+
+	set_up_secure_storage_key(secure_storage_key);
+
 	if (register_blkdev(OCTOPOS_BLK_MAJOR, "octopos_blk"))
 		return -EIO;
 
@@ -195,15 +253,19 @@ static int __init obd_init(void)
 	obd_disk->queue = obd_queue;
 	add_disk(obd_disk);
 
+	mutex_init(&obd_lock);
+
+	register_timeout_update_callback(Q_STORAGE_CMD_IN, obd_queue_timeout_update);
+	register_timeout_update_callback(Q_STORAGE_CMD_OUT, obd_queue_timeout_update);
+	register_timeout_update_callback(Q_STORAGE_DATA_IN, obd_queue_timeout_update);
+	register_timeout_update_callback(Q_STORAGE_DATA_OUT, obd_queue_timeout_update);
+
+	INIT_WORK(&yield_wq, obd_yield_storage_queues);
+
 	blk_register_region(MKDEV(OCTOPOS_BLK_MAJOR, 0), 1UL << MINORBITS,
 				  THIS_MODULE, obd_probe, NULL, NULL);
 
 	pr_info("obd: module loaded\n");
-
-	for (i = 0; i < STORAGE_KEY_SIZE; i++)
-		secure_storage_key[i] = i + 2;
-
-	set_up_secure_storage_key(secure_storage_key);
 
 	return 0;
 
@@ -227,4 +289,3 @@ static void __exit obd_exit(void)
 
 module_init(obd_init);
 module_exit(obd_exit);
-
