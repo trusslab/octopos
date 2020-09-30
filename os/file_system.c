@@ -14,6 +14,7 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <os/storage.h>
+#include <os/file_system.h>
 #include <arch/mailbox_os.h>
 
 #define MAX_FILENAME_SIZE	256
@@ -44,9 +45,6 @@ struct file_list_node {
 struct file_list_node *file_list_head = NULL;
 struct file_list_node *file_list_tail = NULL;
 
-/* FIXME: too small */
-#define DIR_DATA_NUM_BLOCKS	2 //16
-#define DIR_DATA_SIZE		DIR_DATA_NUM_BLOCKS * STORAGE_BLOCK_SIZE
 uint8_t dir_data[DIR_DATA_SIZE];
 int dir_data_ptr = 0;
 
@@ -328,10 +326,6 @@ static void release_file_blocks(struct file *file)
 	/* No op */
 }
 
-/* file open modes */
-#define FILE_OPEN_MODE		0
-#define FILE_OPEN_CREATE_MODE	1
-
 uint32_t file_system_open_file(char *filename, uint32_t mode)
 {
 	struct file *file = NULL;
@@ -465,6 +459,7 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 		return 0;
 	}
 
+	printf("%s [1]: file->num_blocks = %d\n", __func__, file->num_blocks);
 	if ((file->num_blocks * STORAGE_BLOCK_SIZE) - offset < size) {
 		printf("%s: Error: invalid size/offset\n", __func__);
 		return 0;
@@ -683,8 +678,8 @@ void initialize_file_system(void)
 	}
 
 	/* wipe dir */
-	memset(dir_data, 0x0, DIR_DATA_SIZE);
-	flush_dir_data_to_storage();
+	//memset(dir_data, 0x0, DIR_DATA_SIZE);
+	//flush_dir_data_to_storage();
 	//exit(-1);
 
 	/* read the directory */
@@ -693,6 +688,7 @@ void initialize_file_system(void)
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
+		printf("%s [1]: existing dir\n", __func__);
 		/* retrieve file info */
 		uint16_t num_files = *((uint16_t *) &dir_data[4]);
 		dir_data_ptr = 6;
@@ -725,6 +721,7 @@ void initialize_file_system(void)
 			add_file_to_list(file);
 		}
 	} else {
+		printf("%s [1]: new dir\n", __func__);
 		/* initialize signature */
 		dir_data[0] = '$';
 		dir_data[1] = '%';

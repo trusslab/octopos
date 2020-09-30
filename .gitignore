@@ -12,3 +12,4 @@ arch/umode/pmu/pmu
 arch/umode/emulator/log_view
 tpm/tpm
 loader/loader
+installer/installer
