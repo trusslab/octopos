@@ -272,8 +272,11 @@ void wait_for_storage(void)
 	}
 }
 
-void initialize_storage(void)
+uint32_t initialize_storage(void)
 {
+	/* FIXME: hard-coded. */
+	uint32_t partition_size = 1000;
+
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		os_storage_key[i] = i + 3;
 
@@ -288,7 +291,7 @@ void initialize_storage(void)
 	if (unlock_ret == ERR_EXIST) {
 		int unused_partition_id;
 		int create_ret = storage_create_secure_partition(os_storage_key,
-						&unused_partition_id, 1000);
+						&unused_partition_id, partition_size);
 		if (create_ret) {
 			printf("Error (%s): couldn't initialize the storage partition for the OS.\n",
 											__func__);
@@ -306,4 +309,6 @@ void initialize_storage(void)
 		exit(-1);
 	}
 	is_partition_locked = false;
+
+	return partition_size;
 }

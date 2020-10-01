@@ -56,9 +56,9 @@ int main()
 	connect_to_pmu();
 
 	initialize_shell();
-	initialize_storage();
+	uint32_t partition_size = initialize_storage();
 #ifdef ARCH_UMODE
-	initialize_file_system();
+	initialize_file_system(partition_size);
 #endif
 
 	initialize_scheduler();

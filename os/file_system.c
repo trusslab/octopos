@@ -23,11 +23,15 @@
 #include <arch/sec_hw.h>
 #endif
 
+/* FIXME: hard-coded */
+uint32_t partition_num_blocks = 0;
+
 struct file {
 	char filename[MAX_FILENAME_SIZE];
-	int start_block;
-	int num_blocks;
-	int dir_data_off;
+	uint32_t start_block; /* First block of file in the partition */
+	uint32_t num_blocks;
+	uint32_t size; /* in bytes */
+	uint32_t dir_data_off;
 	bool opened;
 };
 
@@ -139,50 +143,50 @@ static int remove_file_from_list(struct file *file)
 	return ERR_EXIST;
 }
 
-static int write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
+static uint32_t write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
 	wait_for_storage();
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage_no_response(buf);
-	for (int i = 0; i < (int) num_blocks; i++)
+	for (uint32_t i = 0; i < num_blocks; i++)
 		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
 	get_response_from_storage(buf);
 
 	STORAGE_GET_ONE_RET
-	return (int) ret0;
+	return ret0;
 }
 
-static int read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
+static uint32_t read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
 	wait_for_storage();
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
-	for (int i = 0; i < (int) num_blocks; i++)
+	for (uint32_t i = 0; i < num_blocks; i++)
 		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
 	get_response_from_storage(buf);
 
 	STORAGE_GET_ONE_RET
-	return (int) ret0;
+	return ret0;
 }
 
-static int read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
+static uint32_t read_from_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t read_size)
 {
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 
 	if (block_offset + read_size > STORAGE_BLOCK_SIZE)
 		return 0;
 
-	int ret = read_blocks(buf, block_num, 1);
+	uint32_t ret = read_blocks(buf, block_num, 1);
 	if (ret != STORAGE_BLOCK_SIZE)
 		return 0;
 
 	memcpy(data, buf + block_offset, read_size);
 
-	return (int) read_size;
+	return read_size;
 }
 
 static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
@@ -201,9 +205,12 @@ static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offs
 
 	memcpy(buf + block_offset, data, write_size);
 
-	int ret = write_blocks(buf, block_num, 1);
+	uint32_t ret = write_blocks(buf, block_num, 1);
 
-	return (int) ret;
+	if (ret >= write_size)
+		return write_size;
+	else
+		return ret;
 }
 
 static void flush_dir_data_to_storage(void)
@@ -279,46 +286,106 @@ static int remove_file_from_directory(struct file *file)
 	return 0;
 }
 
-/* FIXME: inefficient and slow */
-static int alloc_blocks_for_file(struct file *file)
+static int expand_existing_file(struct file *file, uint32_t needed_blocks)
 {
-	int start_block = DIR_DATA_NUM_BLOCKS;
-	int num_blocks = 100; /* FIXME: fixed for now */
-	bool found = false;
+	/* Figure out if we have enough empty blocks to allocate.
+	 * The empty blocks must be at the end of the file blocks.
+	 */
+	bool found = true;
 
-	/* FIXME: hard-coded the partition size */
-	while ((start_block + num_blocks) <= 1000) {
-		bool used = false;
-		for (struct file_list_node *node = file_list_head; node;
-		     node = node->next) {
-			if (node->file->start_block == start_block) {
-				used = true;
-				break;
-			}
-		}
-
-		if (!used) {
-			found = true;
+	for (struct file_list_node *node = file_list_head; node;
+	     node = node->next) {
+		if ((node->file->start_block >= (file->start_block + file->num_blocks)) &&
+		    (node->file->start_block < (file->start_block + file->num_blocks + needed_blocks))) {
+			found = false;
 			break;
 		}
-
-		start_block += num_blocks;
 	}
 
 	if (found) {
-		file->start_block = start_block;
-		file->num_blocks = num_blocks;
-		/* zero them out */
-		/* FIXME: use one command to zero out all blocks */
+		if (file->start_block + file->num_blocks + needed_blocks >= partition_num_blocks)
+			return ERR_FOUND;
+
+		/* zero out the new blocks */
 		uint8_t zero_buf[STORAGE_BLOCK_SIZE];
 		memset(zero_buf, 0x0, STORAGE_BLOCK_SIZE);
-		for (int i = 0; i < num_blocks; i++) {
-			write_blocks(zero_buf, start_block + i, 1);
+		for (uint32_t i = 0; i < needed_blocks; i++) {
+			write_blocks(zero_buf, file->start_block + file->num_blocks + i, 1);
 		}
+
+		file->num_blocks += needed_blocks;
+		
 		return 0;
 	} else {
 		return ERR_FOUND;
 	}
+}
+
+static int expand_empty_file(struct file *file, uint32_t needed_blocks)
+{
+	/* Figure out if we have enough empty blocks to allocate.
+	 * We will allocate space only after the last file.
+	 */
+	uint32_t start_block = DIR_DATA_NUM_BLOCKS;
+
+	for (struct file_list_node *node = file_list_head; node;
+	     node = node->next) {
+		if (node->file->start_block >= start_block)
+				start_block = node->file->start_block + node->file->num_blocks;
+	}
+
+	if (start_block + needed_blocks >= partition_num_blocks)
+		return ERR_FOUND;
+
+	/* zero out the new blocks */
+	uint8_t zero_buf[STORAGE_BLOCK_SIZE];
+	memset(zero_buf, 0x0, STORAGE_BLOCK_SIZE);
+	for (uint32_t i = 0; i < needed_blocks; i++) {
+		write_blocks(zero_buf, start_block + i, 1);
+	}
+
+	file->start_block = start_block;
+	file->num_blocks = needed_blocks;
+
+	return 0;
+}
+
+/*
+ * @size: the overall size needed for the file to be expanded to.
+ */
+static int expand_file_size(struct file *file, uint32_t size)
+{
+	bool empty_file;
+	uint32_t needed_size, needed_blocks;
+	int ret = 0;
+
+	if (file->size >= size)
+		return 0;
+
+	/* Figure out how many more blocks we need */
+	if (file->size == 0) {
+		empty_file = true;
+		needed_size = size;
+	} else {
+		empty_file = false;
+		needed_size = size - file->size;
+	}
+	printf("%s [1]: needed_size = %d\n", __func__, needed_size);
+
+	needed_blocks = needed_size / STORAGE_BLOCK_SIZE;
+	if (needed_size % STORAGE_BLOCK_SIZE)
+		needed_blocks++;
+	printf("%s [2]: needed_blocks = %d\n", __func__, needed_blocks);
+
+	if (empty_file)
+		ret = expand_empty_file(file, needed_blocks);
+	else
+		ret = expand_existing_file(file, needed_blocks);
+
+	if (!ret)
+		file->size = size;
+
+	return ret;
 }
 
 static void release_file_blocks(struct file *file)
@@ -352,13 +419,11 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 		strcpy(file->filename, filename);
 
-		int ret = alloc_blocks_for_file(file);
-		if (ret) {
-			free(file);
-			return (uint32_t) 0;
-		}
+		file->start_block = 0;
+		file->num_blocks = 0;
+		file->size = 0;
 
-		ret = add_file_to_directory(file);
+		int ret = add_file_to_directory(file);
 		if (ret) {
 			release_file_blocks(file);
 			free(file);
@@ -391,7 +456,11 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 	return (uint32_t) 0;
 }
 
-int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
+/*
+ * This API allows growing the file size, but only if there is enough empty blocks
+ * right after the last file block in the partition.
+ */
+uint32_t file_system_write_to_file(uint32_t fd, uint8_t *data, uint32_t size, uint32_t offset)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
@@ -408,23 +477,40 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 		printf("%s: Error: file not opened!\n", __func__);
 		return 0;
 	}
+	printf("%s [0.1]: offset = %d\n", __func__, offset);
+	printf("%s [0.2]: size = %d\n", __func__, size);
+	printf("%s [1]: file->size = %d\n", __func__, file->size);
+	printf("%s [2]: file->start_block = %d\n", __func__, file->start_block);
+	printf("%s [3]: file->num_blocks = %d\n", __func__, file->num_blocks);
 
-	if ((file->num_blocks * STORAGE_BLOCK_SIZE) - offset < size) {
-		printf("%s: Error: invalid size/offset\n", __func__);
+	if (file->size < (offset + size)) {
+		/* Try to expand the file size */
+		expand_file_size(file, offset + size);
+	}
+
+	if (offset >= file->size) {
 		return 0;
 	}
 
-	int block_num = offset / STORAGE_BLOCK_SIZE;
-	int block_offset = offset % STORAGE_BLOCK_SIZE;
-	int written_size = 0;
-	int next_write_size = STORAGE_BLOCK_SIZE - block_offset;
+	/* partial write */
+	if (file->size < (offset + size)) {
+		size = file->size - offset; 
+	}
+
+	uint32_t block_num = offset / STORAGE_BLOCK_SIZE;
+	uint32_t block_offset = offset % STORAGE_BLOCK_SIZE;
+	uint32_t written_size = 0;
+	uint32_t next_write_size = STORAGE_BLOCK_SIZE - block_offset;
 	if (next_write_size > size)
 		next_write_size = size;
-	int ret = 0;
+	uint32_t ret = 0;
 
 	while (written_size < size) {
-		ret = write_to_block(&data[written_size], (uint32_t) file->start_block + block_num,
-				(uint32_t) block_offset, (uint32_t) next_write_size);
+		printf("%s [4]: written_size = %d\n", __func__, written_size);
+		printf("%s [4.1]: next_write_size = %d\n", __func__, next_write_size);
+		ret = write_to_block(&data[written_size], file->start_block + block_num,
+				block_offset, next_write_size);
+		printf("%s [4.2]: ret = %d\n", __func__, ret);
 		if (ret != next_write_size) {
 			written_size += ret;
 			break;
@@ -437,11 +523,12 @@ int file_system_write_to_file(uint32_t fd, uint8_t *data, int size, int offset)
 		else
 			next_write_size = (size - written_size);
 	}
+	printf("%s [5]: written_size = %d\n", __func__, written_size);
 
 	return written_size;
 }
 
-int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
+uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, uint32_t offset)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
@@ -460,22 +547,29 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	}
 
 	printf("%s [1]: file->num_blocks = %d\n", __func__, file->num_blocks);
-	if ((file->num_blocks * STORAGE_BLOCK_SIZE) - offset < size) {
-		printf("%s: Error: invalid size/offset\n", __func__);
+
+	if (offset >= file->size) {
 		return 0;
 	}
 
-	int block_num = offset / STORAGE_BLOCK_SIZE;
-	int block_offset = offset % STORAGE_BLOCK_SIZE;
-	int read_size = 0;
-	int next_read_size = STORAGE_BLOCK_SIZE - block_offset;
+	/* partial read */
+	if (file->size < (offset + size)) {
+		size = file->size - offset; 
+	}
+
+	uint32_t block_num = offset / STORAGE_BLOCK_SIZE;
+	uint32_t block_offset = offset % STORAGE_BLOCK_SIZE;
+	uint32_t read_size = 0;
+	uint32_t next_read_size = STORAGE_BLOCK_SIZE - block_offset;
 	if (next_read_size > size)
 		next_read_size = size;
-	int ret = 0;
+	uint32_t ret = 0;
 
 	while (read_size < size) {
-		ret = read_from_block(&data[read_size], (uint32_t) file->start_block + block_num,
-				(uint32_t) block_offset, (uint32_t) next_read_size);
+		printf("%s [2]: next_read_size = %d\n", __func__, next_read_size);
+		ret = read_from_block(&data[read_size], file->start_block + block_num,
+				block_offset, next_read_size);
+		printf("%s [3]: ret = %d\n", __func__, ret);
 		if (ret != next_read_size) {
 			read_size += ret;
 			break;
@@ -488,11 +582,16 @@ int file_system_read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 		else
 			next_read_size = (size - read_size);
 	}
+	printf("%s [4]: read_size = %d\n", __func__, read_size);
 
 	return read_size;
 }
 
-uint8_t file_system_write_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
+/*
+ * @start_block: the first file block to write.
+ * This API doesn't allow growing the file size.
+ */
+uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_t num_blocks, uint8_t runtime_proc_id)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
@@ -549,7 +648,10 @@ void file_system_write_file_blocks_late(void)
 	get_response_from_storage(buf);
 }
 
-uint8_t file_system_read_file_blocks(uint32_t fd, int start_block, int num_blocks, uint8_t runtime_proc_id)
+/*
+ * @start_block: the first file block to read.
+ */
+uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t num_blocks, uint8_t runtime_proc_id)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
@@ -659,7 +761,7 @@ int file_system_remove_file(char *filename)
 	return 0;
 }
 
-void initialize_file_system(void)
+void initialize_file_system(uint32_t _partition_num_blocks)
 {
 	/* initialize fd bitmap */
 	if (MAX_NUM_FD % 8) {
@@ -676,6 +778,8 @@ void initialize_file_system(void)
 		printf("Error (file system): storage data queue msg size must be equal to storage block size\n");
 		exit(-1);
 	}
+
+	partition_num_blocks = _partition_num_blocks;
 
 	/* wipe dir */
 	//memset(dir_data, 0x0, DIR_DATA_SIZE);

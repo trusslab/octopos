@@ -145,7 +145,7 @@ int main(int argc, char **argv)
 
 	total_blocks += DIR_DATA_NUM_BLOCKS;
 
-	initialize_file_system();
+	initialize_file_system(1000);
 
 	fd = file_system_open_file((char *) "keyboard", FILE_OPEN_CREATE_MODE); 
 	if (fd == 0) {
@@ -199,12 +199,9 @@ int main(int argc, char **argv)
 
 	offset = 0;
 
-	for (int i = 0; i < 28; i++) {
+	while (1) {
 		printf("%s [4]: offset = %d\n", __func__, offset);
-		if (i == 27)
-			_size = file_system_read_from_file(fd, buf, 408, offset);
-		else
-			_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE, offset);
+		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE, offset);
 		printf("%s [5]: _size = %d\n", __func__, _size);
 		if (_size == 0)
 			break;
