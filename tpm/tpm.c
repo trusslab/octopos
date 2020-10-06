@@ -98,9 +98,9 @@ void tpm_measurement_core()
 
 	while (1) {
 		read_ext_request_from_queue(buf);
-		//tpm_directly_extend(TPM_USR_MEASUREMENT, (char *)buf);
+		tpm_directly_extend(TPM_USR_MEASUREMENT, (char *)buf);
 		fprintf(stdout, "SLOT %d CHANGED TO: ", TPM_USR_MEASUREMENT);
-		//pcr_read_single(TPM_USR_MEASUREMENT);
+		pcr_read_single(TPM_USR_MEASUREMENT);
 	}
 }
 
