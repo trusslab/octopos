@@ -23,9 +23,10 @@ int fd_mailbox_log, fd_tpm_log, fd_os_log, fd_keyboard_log,
 
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
-pid_t mailbox_pid, tpm_pid, os_pid, keyboard_pid, serial_out_pid,
-      runtime1_pid, runtime2_pid, storage_pid, network_pid,
-      untrusted_pid, socket_server_pid;
+pid_t mailbox_pid, tpm_pid, tpm_server_pid, tpm2_abrmd_pid,
+      os_pid, keyboard_pid, serial_out_pid, runtime1_pid,
+      runtime2_pid, storage_pid, network_pid, untrusted_pid,
+      socket_server_pid;
 
 struct termios orig;
 
@@ -104,7 +105,8 @@ static int mailbox_proc_reset_check(uint8_t proc_id)
 
 
 static int start_proc(char *path, char *const args[], int fd_log,
-		      int is_input, int is_output, int is_storage, int is_untrusted)
+		      int is_input, int is_output, int is_storage,
+		      int is_untrusted)
 {
 	int pipe_fds[2];
 
@@ -136,14 +138,18 @@ static int start_proc(char *path, char *const args[], int fd_log,
 		if (is_input) {
 			close(pipe_fds[1]);
 			dup2(pipe_fds[0], 0);
+			dup2(fd_log, 2);
 		} else if (is_output) {
 			close(pipe_fds[0]);
 			dup2(pipe_fds[1], 2);
 		} else if (is_storage) {
 			chdir("./storage");
-		} else if (is_untrusted) {
 			dup2(fd_log, 2);
+		} else if (is_untrusted) {
 			dup2(pipe_fds[0], 0);
+			dup2(fd_log, 2);
+		} else {
+			dup2(fd_log, 2);
 		}
 
 		dup2(fd_log, 1);
@@ -161,6 +167,31 @@ static int start_mailbox_proc(void)
 	char path[] = "./arch/umode/mailbox/mailbox";
 	ret = start_proc(path, args, fd_mailbox_log, 0, 0, 0, 0);
 	mailbox_ready = 1;
+
+	return ret;
+}
+
+static int start_tpm_server_proc(void)
+{
+	int ret;
+
+	char *const args[] = {(char *) "tpm_server", NULL};
+	char path[] = "./external/ibmtpm1637/tpm_server";
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0, 0);
+
+	return ret;
+}
+
+static int start_tpm2_abrmd_proc(void)
+{
+	int ret;
+
+	/* FIXME: run as tss user (sudo -u tss ...) and remove --allow-root.
+	 * see docs/tpm.rst */
+	char *const args[] = {(char *) "tpm2-abrmd", (char *) "--tcti=mssim",
+			      (char *) "--allow-root", NULL};
+	char path[] = "/usr/local/sbin/tpm2-abrmd";
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0, 0);
 
 	return ret;
 }
@@ -248,6 +279,8 @@ static int start_socket_server_proc(void)
 static void start_all_procs(void)
 {
 	mailbox_pid = start_mailbox_proc();
+	tpm_server_pid = start_tpm_server_proc();
+	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
 	tpm_pid = start_tpm_proc();
 	os_pid = start_os_proc();
 	keyboard_pid = start_keyboard_proc();
@@ -337,6 +370,8 @@ static void halt_all_procs(void)
 	halt_proc(P_OS);
 	
 	kill(tpm_pid, SIGKILL);
+	kill(tpm2_abrmd_pid, SIGKILL);
+	kill(tpm_server_pid, SIGKILL);
 
 	kill(mailbox_pid, SIGKILL);
 }
@@ -345,6 +380,7 @@ static void *proc_reboot_handler(void *data)
 {
 	char proc_name[64];
 	int wstatus, ret = 0;
+	int reboot_exception = 0;
 
 	while (do_reboot || num_running_procs) {
 		pid_t pid = wait(&wstatus);
@@ -357,8 +393,19 @@ static void *proc_reboot_handler(void *data)
 				mailbox_pid = start_mailbox_proc();
 		} else if (pid == tpm_pid) {
 			sprintf(proc_name, "TPM");
-			if (do_reboot)
+			if (do_reboot) {
+				tpm_server_pid = start_tpm_server_proc();
+				tpm2_abrmd_pid = start_tpm2_abrmd_proc();
 				tpm_pid = start_tpm_proc();
+			}
+		} else if (pid == tpm_server_pid) {
+			/* do nothing */
+			sprintf(proc_name, "TPM_server");
+			reboot_exception = 1;
+		} else if (pid == tpm2_abrmd_pid) {
+			/* do nothing */
+			sprintf(proc_name, "TPM_abrmd");
+			reboot_exception = 1;
 		} else if (pid == os_pid) {
 			sprintf(proc_name, "OS processor");
 			if (do_reboot) {
@@ -497,7 +544,8 @@ static void *proc_reboot_handler(void *data)
 		}
 
 print:
-		printf("%s terminated (%d)%s\n", proc_name, wstatus, (do_reboot && !ret) ? " and restarted" : "");
+		printf("%s terminated (%d)%s\n", proc_name, wstatus,
+		       (do_reboot && !reboot_exception && !ret) ? " and restarted" : "");
 	}
 	
 	return NULL;
