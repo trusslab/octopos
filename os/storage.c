@@ -65,8 +65,11 @@ static int unlock_secure_storage(uint8_t *key)
 {
 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
 	buf[0] = STORAGE_OP_UNLOCK;
+	printf("%s [1]\n", __func__);
 	send_msg_to_storage_no_response(buf);
+	printf("%s [2]\n", __func__);
 	get_response_from_storage(buf);
+	printf("%s [3]\n", __func__);
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
@@ -262,10 +265,12 @@ void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
 
+#ifdef ROLE_OS	
 	ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
+#endif
 
 	ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
@@ -287,6 +292,7 @@ void wait_for_storage(void)
 
 uint32_t initialize_storage(void)
 {
+	printf("%s [1]\n", __func__);
 	/* FIXME: hard-coded. */
 	uint32_t partition_size = 2000;
 
@@ -300,9 +306,11 @@ uint32_t initialize_storage(void)
 	set_storage_config_key(os_storage_config_key);
 #endif
 
+	printf("%s [2]\n", __func__);
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
 	int unlock_ret = unlock_secure_storage(os_storage_key);
+	printf("%s [3]\n", __func__);
 	if (unlock_ret == ERR_EXIST) {
 		int unused_partition_id;
 		int create_ret = storage_create_secure_partition(os_storage_key,

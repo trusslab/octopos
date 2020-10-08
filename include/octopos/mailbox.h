@@ -13,7 +13,7 @@
 /* processor IDs */
 #define	P_OS			1
 #define	P_KEYBOARD		2
-#define	P_SERIAL_OUT	3
+#define	P_SERIAL_OUT		3
 #define	P_STORAGE		4
 #define	P_NETWORK		5
 #define	P_SENSOR		6
@@ -21,8 +21,8 @@
 #define	P_RUNTIME2		8
 #define P_UNTRUSTED		9
 #define P_TPM			10
-#define NUM_PROCESSORS	10
-#define ALL_PROCESSORS	11
+#define NUM_PROCESSORS		10
+#define ALL_PROCESSORS		11
 #define INVALID_PROCESSOR	12
 
 #define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */

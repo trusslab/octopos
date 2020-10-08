@@ -402,6 +402,7 @@ static int wipe_partition(int partition_id)
 void process_request(uint8_t *buf)
 {
 	FILE *filep = NULL;
+	printf("%s [1]\n", __func__);
 
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
@@ -531,6 +532,7 @@ void process_request(uint8_t *buf)
 		uint32_t ret = (uint32_t) set_partition_key(data, partition_id);
 		STORAGE_SET_ONE_RET(ret)
 	} else if (buf[0] == STORAGE_OP_UNLOCK) {
+		printf("%s [2]\n", __func__);
 		STORAGE_GET_ZERO_ARGS_DATA
 		if (data_size != STORAGE_KEY_SIZE) {
 			printf("%s: Error: incorrect key size (sent for unlocking)\n", __func__);
@@ -784,8 +786,14 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	printf("%s [1]\n", __func__);
 	init_storage();
-	write_data_to_queue((uint8_t *) "../loader/storage.so", Q_TPM_DATA_IN);
+	printf("%s [2]\n", __func__);
+	/* FIXME */
+	//write_data_to_queue((uint8_t *) "./loader/storage.so", Q_TPM_DATA_IN);
+	printf("%s [3]\n", __func__);
 	storage_event_loop();
+	printf("%s [4]\n", __func__);
 	close_storage();
+	printf("%s [5]\n", __func__);
 }

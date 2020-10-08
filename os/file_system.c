@@ -117,6 +117,7 @@ static int add_file_to_list(struct file *file)
 	return 0;
 }
 
+#ifdef ROLE_OS
 static int remove_file_from_list(struct file *file)
 {
 	struct file_list_node *prev_node = NULL;
@@ -146,7 +147,9 @@ static int remove_file_from_list(struct file *file)
 
 	return ERR_EXIST;
 }
+#endif
 
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 static uint32_t write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
 	wait_for_storage();
@@ -161,17 +164,24 @@ static uint32_t write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_b
 	STORAGE_GET_ONE_RET
 	return ret0;
 }
+#endif /* ROLE_OS || ROLE_INSTALLER */
 
 static uint32_t read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
+	printf("%s [1]\n", __func__);
 	wait_for_storage();
+	printf("%s [2]\n", __func__);
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
+	printf("%s [3]\n", __func__);
 	send_msg_to_storage_no_response(buf);
+	printf("%s [4]: num_blocks = %d\n", __func__, num_blocks);
 	for (uint32_t i = 0; i < num_blocks; i++)
 		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+	printf("%s [5]\n", __func__);
 	get_response_from_storage(buf);
+	printf("%s [6]\n", __func__);
 
 	STORAGE_GET_ONE_RET
 	return ret0;
@@ -193,6 +203,7 @@ static uint32_t read_from_block(uint8_t *data, uint32_t block_num, uint32_t bloc
 	return read_size;
 }
 
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offset, uint32_t write_size)
 {
 	uint8_t buf[STORAGE_BLOCK_SIZE];
@@ -221,12 +232,14 @@ static void flush_dir_data_to_storage(void)
 {
 	write_blocks(dir_data, 0, DIR_DATA_NUM_BLOCKS);
 }
+#endif /* ROLE_OS || ROLE_INSTALLER */
 
 static void read_dir_data_from_storage(void)
 {
 	read_blocks(dir_data, 0, DIR_DATA_NUM_BLOCKS);
 }
 
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 static int update_file_in_directory(struct file *file)
 {
 	int dir_data_off = file->dir_data_off;
@@ -272,7 +285,9 @@ static int add_file_to_directory(struct file *file)
 
 	return 0;
 }
+#endif /* ROLE_OS || ROLE_INSTALLER */
 
+#ifdef ROLE_OS
 static int remove_file_from_directory(struct file *file)
 {
 	int filename_size = *((uint16_t *) &dir_data[file->dir_data_off]);
@@ -304,7 +319,9 @@ static int remove_file_from_directory(struct file *file)
 
 	return 0;
 }
+#endif /* ROLE_OS */
 
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 static int expand_existing_file(struct file *file, uint32_t needed_blocks)
 {
 	/* Figure out if we have enough empty blocks to allocate.
@@ -417,11 +434,16 @@ static void release_file_blocks(struct file *file)
 {
 	/* No op */
 }
+#endif /* ROLE_OS || ROLE_INSTALLER */
 
 uint32_t file_system_open_file(char *filename, uint32_t mode)
 {
 	struct file *file = NULL;
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 	if (!(mode == FILE_OPEN_MODE || mode == FILE_OPEN_CREATE_MODE)) {
+#else
+	if (!(mode == FILE_OPEN_MODE)) {
+#endif
 		printf("Error: invalid mode for opening a file\n");
 		return (uint32_t) 0;
 	}
@@ -437,6 +459,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		}
 	}
 
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 	if (file == NULL && mode == FILE_OPEN_CREATE_MODE) {
 		file = (struct file *) malloc(sizeof(struct file));
 		if (!file)
@@ -457,6 +480,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 		add_file_to_list(file);
 	}
+#endif /* ROLE_OS || ROLE_INSTALLER */
 
 	if (file) {
 		int ret = get_unused_fd();
@@ -481,6 +505,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 	return (uint32_t) 0;
 }
 
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 /*
  * This API allows growing the file size, but only if there is enough empty blocks
  * right after the last file block in the partition.
@@ -552,6 +577,7 @@ uint32_t file_system_write_to_file(uint32_t fd, uint8_t *data, uint32_t size, ui
 
 	return written_size;
 }
+#endif /* ROLE_OS || ROLE_INSTALLER */
 
 uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, uint32_t offset)
 {
@@ -758,6 +784,7 @@ int file_system_close_file(uint32_t fd)
 	return 0;
 }
 
+#ifdef ROLE_OS
 int file_system_remove_file(char *filename)
 {
 	struct file *file = NULL;
@@ -787,26 +814,29 @@ int file_system_remove_file(char *filename)
 
 	return 0;
 }
+#endif /* ROLE_OS */
 
 void initialize_file_system(uint32_t _partition_num_blocks)
 {
+	printf("%s [1]\n", __func__);
 	/* initialize fd bitmap */
 	if (MAX_NUM_FD % 8) {
 		printf("%s: Error: MAX_NUM_FD must be divisible by 8\n", __func__);
 		_exit(-1);
 	}
+	printf("%s [2]\n", __func__);
 
 	fd_bitmap[0] = 0x00000001; /* fd 0 is error */
 	for (int i = 1; i < (MAX_NUM_FD / 8); i++)
 		fd_bitmap[i] = 0;
 
-
-#ifdef ROLE_OS
+#if defined(ROLE_OS) || defined(ROLE_LOADER_OS) 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (file system): storage data queue msg size must be equal to storage block size\n");
 		exit(-1);
 	}
 #endif
+	printf("%s [3]\n", __func__);
 
 	partition_num_blocks = _partition_num_blocks;
 
@@ -817,6 +847,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 
 	/* read the directory */
 	read_dir_data_from_storage();
+	printf("%s [4]\n", __func__);
 
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
@@ -856,6 +887,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			add_file_to_list(file);
 		}
 	} else {
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 		printf("%s [1]: new dir\n", __func__);
 		/* initialize signature */
 		dir_data[0] = '$';
@@ -868,6 +900,9 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 		dir_data_ptr = 6;
 		/* update the directory in storage */
 		flush_dir_data_to_storage();
+#else
+		printf("%s: Error: didn't find a directory\n", __func__);
+#endif
 	}
 
 	for (int i = 0; i < MAX_NUM_FD; i++)
@@ -876,6 +911,8 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 
 void close_file_system(void)
 {
+#if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 	/* Not currently useful as we flush on every update. */
 	flush_dir_data_to_storage();
+#endif
 }
