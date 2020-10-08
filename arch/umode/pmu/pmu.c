@@ -105,8 +105,7 @@ static int mailbox_proc_reset_check(uint8_t proc_id)
 
 
 static int start_proc(char *path, char *const args[], int fd_log,
-		      int is_input, int is_output, int is_storage,
-		      int is_untrusted)
+		      int is_input, int is_output, int is_untrusted)
 {
 	int pipe_fds[2];
 
@@ -142,9 +141,6 @@ static int start_proc(char *path, char *const args[], int fd_log,
 		} else if (is_output) {
 			close(pipe_fds[0]);
 			dup2(pipe_fds[1], 2);
-		} else if (is_storage) {
-			chdir("./storage");
-			dup2(fd_log, 2);
 		} else if (is_untrusted) {
 			dup2(pipe_fds[0], 0);
 			dup2(fd_log, 2);
@@ -165,7 +161,7 @@ static int start_mailbox_proc(void)
 
 	char *const args[] = {(char *) "mailbox", NULL};
 	char path[] = "./arch/umode/mailbox/mailbox";
-	ret = start_proc(path, args, fd_mailbox_log, 0, 0, 0, 0);
+	ret = start_proc(path, args, fd_mailbox_log, 0, 0, 0);
 	mailbox_ready = 1;
 
 	return ret;
@@ -177,7 +173,7 @@ static int start_tpm_server_proc(void)
 
 	char *const args[] = {(char *) "tpm_server", NULL};
 	char path[] = "./external/ibmtpm1637/tpm_server";
-	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0, 0);
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
 	return ret;
 }
@@ -191,7 +187,7 @@ static int start_tpm2_abrmd_proc(void)
 	char *const args[] = {(char *) "tpm2-abrmd", (char *) "--tcti=mssim",
 			      (char *) "--allow-root", NULL};
 	char path[] = "/usr/local/sbin/tpm2-abrmd";
-	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0, 0);
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
 	return ret;
 }
@@ -202,30 +198,32 @@ static int start_tpm_proc(void)
 
 	char *const args[] = {(char *) "tpm", NULL};
 	char path[] = "./tpm/tpm";
-	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0, 0);
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
 	return ret;
 }
 
 static int start_os_proc(void)
 {
-	char *const args[] = {(char *) "os", NULL};
-	char path[] = "./os/os";
-	return start_proc(path, args, fd_os_log, 0, 0, 0, 0);
+	char *const args[] = {(char *) "loader_os", (char *) "os.so", NULL};
+	char path[] = "./loader/loader_os";
+	return start_proc(path, args, fd_os_log, 0, 0, 0);
 }
 
 static int start_keyboard_proc(void)
 {
-	char *const args[] = {(char *) "loader", (char *) "./keyboard/keyboard.so", NULL};
-	char path[] = "./loader/loader";
-	return start_proc(path, args, fd_keyboard_log, 1, 0, 0, 0);
+	//char *const args[] = {(char *) "loader", (char *) "keyboard.so", NULL};
+	//char path[] = "./loader/loader";
+	//return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
+	return 0;
 }
 
 static int start_serial_out_proc(void)
 {
-	char *const args[] = {(char *) "loader", (char *) "./serial_out/serial_out.so", NULL};
-	char path[] = "./loader/loader";
-	return start_proc(path, args, fd_serial_out_log, 0, 1, 0, 0);
+	//char *const args[] = {(char *) "loader", (char *) "serial_out.so", NULL};
+	//char path[] = "./loader/loader";
+	//return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
+	return 0;
 }
 
 static int start_runtime_proc(char *runtime_id)
@@ -243,21 +241,21 @@ static int start_runtime_proc(char *runtime_id)
 		return ERR_INVALID;
 	}
 
-	return start_proc(path, args, fd_log, 0, 0, 0, 0);
+	return start_proc(path, args, fd_log, 0, 0, 0);
 }
 
 static int start_storage_proc(void)
 {
-	char *const args[] = {(char *) "loader", (char *) "./storage.so", NULL};
-	char path[] = "../loader/loader";
-	return start_proc(path, args, fd_storage_log, 0, 0, 1, 0);
+	char *const args[] = {(char *) "loader_storage", (char *) "storage.so", NULL};
+	char path[] = "./loader/loader_storage";
+	return start_proc(path, args, fd_storage_log, 0, 0, 0);
 }
 
 static int start_network_proc(void)
 {
 	char *const args[] = {(char *) "network", NULL};
 	char path[] = "./network/network";
-	return start_proc(path, args, fd_network_log, 0, 0, 0, 0);
+	return start_proc(path, args, fd_network_log, 0, 0, 0);
 }
 
 static int start_untrusted_proc(void)
@@ -266,14 +264,14 @@ static int start_untrusted_proc(void)
 		(char *) "ubda=./arch/umode/untrusted_linux/CentOS6.x-AMD64-root_fs",
 		(char *) "mem=128M", NULL};
 	char path[] = "./arch/umode/untrusted_linux/linux";
-	return start_proc(path, args, fd_untrusted_log, 0, 0, 0, 1);
+	return start_proc(path, args, fd_untrusted_log, 0, 0, 1);
 }
 
 static int start_socket_server_proc(void)
 {
 	char *const args[] = {(char *) "socket_server", NULL};
 	char path[] = "./applications/socket_client/socket_server";
-	return start_proc(path, args, fd_socket_server_log, 0, 0, 0, 0);
+	return start_proc(path, args, fd_socket_server_log, 0, 0, 0);
 }
 
 static void start_all_procs(void)

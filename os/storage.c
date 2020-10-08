@@ -1,4 +1,8 @@
-/* OctopOS storage code for the OS */
+/* OctopOS storage code for the OS
+ *
+ * This file is used the OS and its loader.
+ * We use macros ROLE_... to specialize, i.e., to compile only the needed code for each.
+ */
 #include <arch/defines.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +24,8 @@
 
 uint8_t os_storage_key[STORAGE_KEY_SIZE];
 bool is_partition_locked = true;
+
+#ifdef ROLE_OS
 uint8_t os_storage_config_key[STORAGE_KEY_SIZE];
 bool is_storage_config_locked = false;
 
@@ -52,6 +58,7 @@ static int lock_storage_config(void)
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
+#endif /* ROLE_OS */
 
 /* FIXME: modified from runtime/storage_client.c */
 static int unlock_secure_storage(uint8_t *key)
@@ -64,6 +71,7 @@ static int unlock_secure_storage(uint8_t *key)
 	return (int) ret0;
 }
 
+#ifdef ROLE_OS
 /* FIXME: modified from runtime/storage_client.c */
 static int lock_secure_storage(void)
 {
@@ -74,6 +82,7 @@ static int lock_secure_storage(void)
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
+#endif
 
 static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id,
 					   uint32_t partition_size)
@@ -91,6 +100,7 @@ static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id,
 	return 0;
 }
 
+#ifdef ROLE_OS
 static int storage_delete_secure_partition(int partition_id)
 {
 	STORAGE_SET_ONE_ARG(partition_id) 
@@ -235,6 +245,7 @@ void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
 
 	SYSCALL_SET_ONE_RET(0)
 }
+#endif /* ROLE_OS */
 
 /*
  * Check that all queues are available and that the partition is unlocked.
@@ -261,10 +272,12 @@ void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
 
+#ifdef ROLE_OS
 	if (is_storage_config_locked) {
 		unlock_storage_config(os_storage_config_key);
 		is_storage_config_locked = false;
 	}
+#endif
 
 	if (is_partition_locked) {
 		unlock_secure_storage(os_storage_key);
@@ -275,15 +288,17 @@ void wait_for_storage(void)
 uint32_t initialize_storage(void)
 {
 	/* FIXME: hard-coded. */
-	uint32_t partition_size = 1000;
+	uint32_t partition_size = 2000;
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		os_storage_key[i] = i + 3;
 
+#ifdef ROLE_OS
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		os_storage_config_key[i] = i + 4;
 
 	set_storage_config_key(os_storage_config_key);
+#endif
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */

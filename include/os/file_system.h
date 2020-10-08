@@ -19,5 +19,6 @@ void file_system_read_file_blocks_late(void);
 int file_system_close_file(uint32_t fd);
 int file_system_remove_file(char *filename);
 void initialize_file_system(uint32_t _partition_num_blocks);
+void close_file_system(void);
 
 #endif

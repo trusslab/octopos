@@ -64,6 +64,7 @@ void wait_for_queue_availability(uint8_t queue_id)
 	sem_wait(&availables[queue_id]);
 }
 
+#ifdef ROLE_OS
 void mark_queue_unavailable(uint8_t queue_id)
 {
 	sem_init(&availables[queue_id], 0, 0);
@@ -220,6 +221,7 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	opcode[4] = count;
 	write(fd_out, opcode, 5);
 }
+#endif /* ROLE_OS */
 
 int send_msg_to_storage_no_response(uint8_t *buf)
 {
@@ -269,6 +271,14 @@ void write_to_storage_data_queue(uint8_t *buf)
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
+#ifdef ROLE_OS
+void release_tpm_writer(uint8_t proc_id)
+{
+	wait_for_queue_availability(Q_TPM_DATA_IN);
+	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, proc_id, 1);
+}
+#endif
+
 static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
@@ -276,15 +286,18 @@ static void *handle_mailbox_interrupts(void *data)
 	while (1) {
 		read(fd_intr, &interrupt, 1);
 		if (interrupt == 0) {
+#ifdef ROLE_OS
 			/* timer interrupt */
 			update_timer_ticks();
 			sched_next_app();
+#endif
 		} else if (interrupt > (2 * NUM_QUEUES)) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
 		} else if (interrupt > NUM_QUEUES) {
 			/* FIXME: some of the cases can be merged together */
 			switch ((interrupt - NUM_QUEUES)) {
+#ifdef ROLE_OS
 			case Q_KEYBOARD:
 				sem_init(&interrupts[Q_KEYBOARD], 0, 0);
 				sem_post(&availables[Q_KEYBOARD]);
@@ -293,6 +306,7 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_SERIAL_OUT]);
 				break;
+#endif
 			case Q_STORAGE_CMD_IN:
 				sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_STORAGE_CMD_IN]);
@@ -301,14 +315,17 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
 				sem_post(&availables[Q_STORAGE_CMD_OUT]);
 				break;
+#ifdef ROLE_OS
 			case Q_STORAGE_DATA_IN:
 				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 				sem_post(&availables[Q_STORAGE_DATA_IN]);
 				break;
+#endif
 			case Q_STORAGE_DATA_OUT:
 				sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_STORAGE_DATA_OUT]);
 				break;
+#ifdef ROLE_OS
 			case Q_NETWORK_DATA_IN:
 				sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 				sem_post(&availables[Q_NETWORK_DATA_IN]);
@@ -337,16 +354,19 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_TPM_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_TPM_DATA_OUT]);
 				break;
+#endif
 			default:
 				printf("%s: Error: unexpected ownership change interrupt.\n", __func__);
 				break;
 			}
 		} else {
 			sem_post(&interrupts[interrupt]);
+#ifdef ROLE_OS
 			/* FIXME: we should use separate threads for these two */
 			if (interrupt == Q_KEYBOARD || interrupt == Q_OS1 ||
 				interrupt == Q_OS2 || interrupt == Q_OSU)
 				sem_post(&interrupt_input);
+#endif
 		}
 	}
 }
@@ -355,15 +375,18 @@ int init_os_mailbox(void)
 {
 	intialize_channels();
 	
+#ifdef ROLE_OS
 	sem_init(&interrupts[Q_OS1], 0, 0);
 	sem_init(&interrupts[Q_OS2], 0, 0);
 	sem_init(&interrupts[Q_OSU], 0, 0);
 	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
 	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+#endif
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
+#ifdef ROLE_OS
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
@@ -378,9 +401,11 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_KEYBOARD], 0, 1);
 	sem_init(&availables[Q_SERIAL_OUT], 0, 1);
 	sem_init(&availables[Q_STORAGE_DATA_IN], 0, 1);
+#endif
 	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_IN], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_OUT], 0, 1);
+#ifdef ROLE_OS
 	sem_init(&availables[Q_NETWORK_DATA_IN], 0, 1);
 	sem_init(&availables[Q_NETWORK_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_IN], 0, 1);
@@ -390,6 +415,7 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_RUNTIME2], 0, 1);
 	sem_init(&availables[Q_TPM_DATA_IN], 0, 1);
 	sem_init(&availables[Q_TPM_DATA_OUT], 0, 1);
+#endif
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
@@ -406,10 +432,4 @@ void close_os_mailbox(void)
 	pthread_join(mailbox_thread, NULL);
 
 	close_channels();
-}	
-
-void release_tpm_writer(uint8_t proc_id)
-{
-	wait_for_queue_availability(Q_TPM_DATA_IN);
-	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, proc_id, 1);
 }

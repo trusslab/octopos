@@ -30,7 +30,7 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	send_ext_request_to_queue((uint8_t *) argv[0]);
+	send_ext_request_to_queue((uint8_t *) "./loader/serial_out.so");
 
 	serial_out_core();
 

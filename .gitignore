@@ -11,5 +11,6 @@ arch/umode/mailbox/mailbox
 arch/umode/pmu/pmu
 arch/umode/emulator/log_view
 tpm/tpm
-loader/loader
+loader/loader_storage
+loader/loader_os
 installer/installer

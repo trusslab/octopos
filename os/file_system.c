@@ -1,4 +1,8 @@
-/* OctopOS file system */
+/* OctopOS file system
+ *
+ * This file is used the OS, the installer, and the loader for storage.
+ * We use macros ROLE_... to specialize, i.e., to compile only the needed code for each.
+ */
 #include <arch/defines.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,8 +15,8 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
-#include <octopos/storage.h>
 #include <octopos/error.h>
+#include <octopos/storage.h>
 #include <os/storage.h>
 #include <os/file_system.h>
 #include <arch/mailbox_os.h>
@@ -223,33 +227,48 @@ static void read_dir_data_from_storage(void)
 	read_blocks(dir_data, 0, DIR_DATA_NUM_BLOCKS);
 }
 
-static int add_file_to_directory(struct file *file)
+static int update_file_in_directory(struct file *file)
 {
+	int dir_data_off = file->dir_data_off;
+
 	int filename_size = strlen(file->filename);
 	if (filename_size > MAX_FILENAME_SIZE)
 		return ERR_INVALID;
 
-	if ((dir_data_ptr + filename_size + 7) > DIR_DATA_SIZE)
+	if ((dir_data_off + filename_size + 15) > DIR_DATA_SIZE)
 		return ERR_MEMORY;
 
-	int dir_data_off = dir_data_ptr;
-	*((uint16_t *) &dir_data[dir_data_ptr]) = filename_size;
-	dir_data_ptr += 2;
+	*((uint16_t *) &dir_data[dir_data_off]) = filename_size;
+	dir_data_off += 2;
 
-	strcpy((char *) &dir_data[dir_data_ptr], file->filename);
-	dir_data_ptr = dir_data_ptr + filename_size + 1;
+	strcpy((char *) &dir_data[dir_data_off], file->filename);
+	dir_data_off += (filename_size + 1);
 
-	*((uint16_t *) &dir_data[dir_data_ptr]) = file->start_block;
-	dir_data_ptr += 2;
-	*((uint16_t *) &dir_data[dir_data_ptr]) = file->num_blocks;
-	dir_data_ptr += 2;
+	*((uint32_t *) &dir_data[dir_data_off]) = file->start_block;
+	dir_data_off += 4;
+	*((uint32_t *) &dir_data[dir_data_off]) = file->num_blocks;
+	dir_data_off += 4;
+	*((uint32_t *) &dir_data[dir_data_off]) = file->size;
 
+	return 0;
+}
+
+static int add_file_to_directory(struct file *file)
+{
+	file->dir_data_off = dir_data_ptr;
+
+	int ret = update_file_in_directory(file);
+	if (ret) {
+		printf("Error: %s: couldn't update file info in directory\n", __func__);
+		return ret;
+	}
+
+	dir_data_ptr += (strlen(file->filename) + 15);
+	
 	/* increment number of files */
 	(*((uint16_t *) &dir_data[4]))++;
 
 	flush_dir_data_to_storage();
-
-	file->dir_data_off = dir_data_off;
 
 	return 0;
 }
@@ -258,7 +277,7 @@ static int remove_file_from_directory(struct file *file)
 {
 	int filename_size = *((uint16_t *) &dir_data[file->dir_data_off]);
 
-	int file_dir_info_size = filename_size + 7;
+	int file_dir_info_size = filename_size + 15;
 	if ((file->dir_data_off + file_dir_info_size) > DIR_DATA_SIZE)
 		return ERR_FAULT;
 
@@ -382,8 +401,14 @@ static int expand_file_size(struct file *file, uint32_t size)
 	else
 		ret = expand_existing_file(file, needed_blocks);
 
-	if (!ret)
+	if (!ret) {
 		file->size = size;
+		ret = update_file_in_directory(file);
+		if (ret)
+			/* FIXME: the dir is not consistent with the in-memory file info. */
+			printf("Error: %s: couldn't update file info in directory.\n", __func__);
+		flush_dir_data_to_storage();
+	}
 
 	return ret;
 }
@@ -587,6 +612,7 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, u
 	return read_size;
 }
 
+#ifdef ROLE_OS
 /*
  * @start_block: the first file block to write.
  * This API doesn't allow growing the file size.
@@ -705,6 +731,7 @@ void file_system_read_file_blocks_late(void)
 	/* FIXME: pretty inefficient. Why wait if we don't check the response? */
 	get_response_from_storage(buf);
 }
+#endif /* ROLE_OS */
 
 int file_system_close_file(uint32_t fd)
 {
@@ -774,10 +801,12 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 		fd_bitmap[i] = 0;
 
 
+#ifdef ROLE_OS
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (file system): storage data queue msg size must be equal to storage block size\n");
 		exit(-1);
 	}
+#endif
 
 	partition_num_blocks = _partition_num_blocks;
 
@@ -802,9 +831,9 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			if ((dir_data_ptr + 2) > DIR_DATA_SIZE)
 				break;
 			int filename_size = *((uint16_t *) &dir_data[dir_data_ptr]);
-			dir_data_ptr += 2;
-			if ((dir_data_ptr + filename_size + 5) > DIR_DATA_SIZE)
+			if ((dir_data_ptr + filename_size + 15) > DIR_DATA_SIZE)
 				break;
+			dir_data_ptr += 2;
 
 			if (filename_size > MAX_FILENAME_SIZE)
 				break;
@@ -817,10 +846,12 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			dir_data_ptr = dir_data_ptr + filename_size + 1;
 
 			file->dir_data_off = dir_data_off;
-			file->start_block = *((uint16_t *) &dir_data[dir_data_ptr]);
-			dir_data_ptr += 2;
-			file->num_blocks = *((uint16_t *) &dir_data[dir_data_ptr]);
-			dir_data_ptr += 2;
+			file->start_block = *((uint32_t *) &dir_data[dir_data_ptr]);
+			dir_data_ptr += 4;
+			file->num_blocks = *((uint32_t *) &dir_data[dir_data_ptr]);
+			dir_data_ptr += 4;
+			file->size = *((uint32_t *) &dir_data[dir_data_ptr]);
+			dir_data_ptr += 4;
 
 			add_file_to_list(file);
 		}
@@ -841,4 +872,10 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
+}
+
+void close_file_system(void)
+{
+	/* Not currently useful as we flush on every update. */
+	flush_dir_data_to_storage();
 }
