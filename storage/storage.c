@@ -402,7 +402,7 @@ static int wipe_partition(int partition_id)
 void process_request(uint8_t *buf)
 {
 	FILE *filep = NULL;
-	printf("%s [1]\n", __func__);
+	printf("%s [1]: buf[0] = %d\n", __func__, buf[0]);
 
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
@@ -725,6 +725,7 @@ void process_request(uint8_t *buf)
 
 		STORAGE_SET_ONE_RET(0)
 	} else if (buf[0] == STORAGE_OP_SET_CONFIG_KEY) {
+		printf("%s [3]\n", __func__);
 		if (is_config_locked) {
 			printf("%s: Error: config is locked (set config key op)\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)

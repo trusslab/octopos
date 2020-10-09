@@ -13,4 +13,5 @@ arch/umode/emulator/log_view
 tpm/tpm
 loader/loader_storage
 loader/loader_os
+loader/loader_other
 installer/installer

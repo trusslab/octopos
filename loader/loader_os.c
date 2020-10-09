@@ -19,7 +19,6 @@
  * When booting the OS, the loader reads the OS image
  * by communicating with the storage service using the
  * storage mailboxes.
- *
  */
 int copy_file_from_boot_partition(char *filename, char *path)
 {

@@ -705,6 +705,7 @@ void file_system_write_file_blocks_late(void)
  */
 uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t num_blocks, uint8_t runtime_proc_id)
 {
+	printf("%s [1]\n", __func__);
 	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
@@ -740,6 +741,7 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
 							runtime_proc_id, (uint8_t) num_blocks);
 #else
+	printf("%s [2]\n", __func__);
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
 							runtime_proc_id, (uint16_t) num_blocks);
 #endif
@@ -756,6 +758,28 @@ void file_system_read_file_blocks_late(void)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	/* FIXME: pretty inefficient. Why wait if we don't check the response? */
 	get_response_from_storage(buf);
+}
+
+uint32_t file_system_get_file_num_blocks(uint32_t fd)
+{
+	if (fd == 0 || fd >= MAX_NUM_FD) {
+		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		return 0;
+	}
+
+	struct file *file = file_array[fd];
+	if (!file) {
+		printf("%s: Error: invalid fd\n", __func__);
+		return 0;
+	}
+
+	if (!file->opened) {
+		printf("%s: Error: file not opened!\n", __func__);
+		return 0;
+	}
+
+
+	return file->num_blocks;
 }
 #endif /* ROLE_OS */
 

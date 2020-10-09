@@ -67,6 +67,7 @@ static void *handle_mailbox_interrupts(void *data)
 	while (1) {
 		read(fd_intr, &interrupt, 1);
 
+		/* FIXME: Do we need the TPM interrupts here? */
 		if (interrupt > 0 && interrupt <= NUM_QUEUES && interrupt != Q_TPM_DATA_IN) {
 			sem_post(&interrupts[interrupt]);
 		} else if (interrupt == Q_TPM_DATA_IN) {

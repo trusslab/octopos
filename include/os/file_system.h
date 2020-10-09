@@ -16,6 +16,7 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_
 void file_system_write_file_blocks_late(void);
 uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t num_blocks, uint8_t runtime_proc_id);
 void file_system_read_file_blocks_late(void);
+uint32_t file_system_get_file_num_blocks(uint32_t fd);
 int file_system_close_file(uint32_t fd);
 int file_system_remove_file(char *filename);
 void initialize_file_system(uint32_t _partition_num_blocks);

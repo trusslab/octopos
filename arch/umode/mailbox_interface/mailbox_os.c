@@ -29,13 +29,18 @@ sem_t availables[NUM_QUEUES + 1];
 
 static int intialize_channels(void)
 {
+	printf("%s [1]\n", __func__);
+#ifdef ROLE_LOADER_OS
 	mkfifo(FIFO_OS_OUT, 0666);
 	mkfifo(FIFO_OS_IN, 0666);
 	mkfifo(FIFO_OS_INTR, 0666);
+#endif
+	printf("%s [2]\n", __func__);
 
 	fd_out = open(FIFO_OS_OUT, O_WRONLY);
 	fd_in = open(FIFO_OS_IN, O_RDONLY);
 	fd_intr = open(FIFO_OS_INTR, O_RDONLY);
+	printf("%s [3]\n", __func__);
 
 	return 0;
 }
@@ -46,9 +51,11 @@ static void close_channels(void)
 	close(fd_in);
 	close(fd_intr);
 
+#ifdef ROLE_OS
 	remove(FIFO_OS_OUT);
 	remove(FIFO_OS_IN);
 	remove(FIFO_OS_INTR);
+#endif
 }
 
 int is_queue_available(uint8_t queue_id)
@@ -373,7 +380,9 @@ static void *handle_mailbox_interrupts(void *data)
 
 int init_os_mailbox(void)
 {
+	printf("%s [1]\n", __func__);
 	intialize_channels();
+	printf("%s [2]\n", __func__);
 	
 #ifdef ROLE_OS
 	sem_init(&interrupts[Q_OS1], 0, 0);
@@ -416,12 +425,14 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_TPM_DATA_IN], 0, 1);
 	sem_init(&availables[Q_TPM_DATA_OUT], 0, 1);
 #endif
+	printf("%s [3]\n", __func__);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
 	}
+	printf("%s [4]\n", __func__);
 
 	return 0;
 }

@@ -1,0 +1,219 @@
+/* OctopOS loader for processors other than storage and OS */
+
+#include <stdio.h>
+#include <string.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <dlfcn.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <sys/stat.h>
+#include <octopos/storage.h>
+#include <octopos/mailbox.h>
+#include <os/file_system.h>
+#include <os/storage.h>
+#include <arch/mailbox.h>
+
+int fd_out, fd_in, fd_intr;
+pthread_t mailbox_thread;
+
+ /* Not all will be used */
+sem_t interrupts[NUM_QUEUES + 1];
+sem_t availables[NUM_QUEUES + 1];
+
+/* FIXME: adapted from the same func in mailbox_runtime.c */
+static uint8_t mailbox_get_queue_access_count(uint8_t queue_id, uint8_t access)
+{
+	uint8_t opcode[3], count;
+
+	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
+	opcode[1] = queue_id;
+	opcode[2] = access;
+	write(fd_out, opcode, 3);
+	read(fd_in, &count, 1);
+
+	return count;
+}
+
+/* FIXME: copied from mailbox_os.c */
+void read_from_storage_data_queue(uint8_t *buf)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = Q_STORAGE_DATA_OUT;
+	sem_wait(&interrupts[Q_STORAGE_DATA_OUT]);
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
+
+/* FIXME: adapted from the same function in mailbox_storage.c */
+static void *handle_mailbox_interrupts(void *data)
+{
+	uint8_t interrupt;
+
+	while (1) {
+		printf("%s [1]\n", __func__);
+		read(fd_intr, &interrupt, 1);
+		printf("%s [2]: interrupt = %d\n", __func__, interrupt);
+
+		/* FIXME: check the TPM interrupt logic */
+		//if (interrupt > 0 && interrupt <= NUM_QUEUES && interrupt != Q_TPM_DATA_IN) {
+		if (interrupt == Q_STORAGE_DATA_OUT) {
+			sem_post(&interrupts[interrupt]);
+		} else if ((interrupt - NUM_QUEUES) == Q_STORAGE_DATA_OUT) {
+			sem_post(&availables[Q_STORAGE_DATA_OUT]);
+		//} else if (interrupt == Q_TPM_DATA_IN) {
+		//} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
+		//	sem_post(&interrupts[Q_TPM_DATA_IN]);
+		} else {
+			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
+			exit(-1);
+		}
+	}
+}
+
+int init_mailbox(int keyboard)
+{
+	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
+	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
+	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 0);
+
+	/* FIXME */
+	if (keyboard) {
+		printf("%s [1]: keyboard\n", __func__);
+		mkfifo(FIFO_KEYBOARD_OUT, 0666);
+		mkfifo(FIFO_KEYBOARD_IN, 0666);
+		mkfifo(FIFO_KEYBOARD_INTR, 0666);
+
+		fd_out = open(FIFO_KEYBOARD_OUT, O_WRONLY);
+		fd_in = open(FIFO_KEYBOARD_IN, O_RDONLY);
+		fd_intr = open(FIFO_KEYBOARD_INTR, O_RDONLY);
+	} else {
+		printf("%s [2]: serial_out\n", __func__);
+		mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
+		mkfifo(FIFO_SERIAL_OUT_IN, 0666);
+		mkfifo(FIFO_SERIAL_OUT_INTR, 0666);
+
+		fd_out = open(FIFO_SERIAL_OUT_OUT, O_WRONLY);
+		fd_in = open(FIFO_SERIAL_OUT_IN, O_RDONLY);
+		fd_intr = open(FIFO_SERIAL_OUT_INTR, O_RDONLY);
+	}
+
+	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	if (ret) {
+		printf("Error: couldn't launch the mailbox thread\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+void close_mailbox_thread(void)
+{	
+	pthread_cancel(mailbox_thread);
+	pthread_join(mailbox_thread, NULL);
+}
+
+void close_mailbox(void)
+{	
+	close(fd_out);
+	close(fd_in);
+	close(fd_intr);
+
+	//remove(FIFO_KEYBOARD_OUT);
+	//remove(FIFO_KEYBOARD_IN);
+	//remove(FIFO_KEYBOARD_INTR);
+}
+
+/*
+ * @filename: the name of the file in the partition
+ * @path: file path in the host file system
+ *
+ * When booting, the loader waits for access to Q_STORAGE_DATA_OUT
+ * (which is granted by the OS) and reads the image from that queue.
+ */
+int copy_file_from_boot_partition(char *filename, char *path)
+{
+	//uint32_t fd;
+	FILE *copy_filep;
+	uint8_t buf[STORAGE_BLOCK_SIZE];
+	int offset;
+	printf("%s [1]\n", __func__);
+
+	/* FIXME */
+	int keyboard = !strcmp(filename, "keyboard.so");
+
+	init_mailbox(keyboard);
+
+	//filep = fopen("./storage/octopos_partition_0_data", "r");
+	//if (!filep) {
+	//	printf("Error: %s: Couldn't open the boot partition file.\n", __func__);
+	//	return -1;
+	//}
+
+	/* FIXME: size hard-coded */
+	//total_blocks = 2000;
+
+	/* FIXME: size hard-coded */
+	//initialize_file_system(2000);
+	//printf("%s [2.1]\n", __func__);
+
+	//fd = file_system_open_file(filename, FILE_OPEN_MODE); 
+	//if (fd == 0) {
+	//	printf("Error: %s: Couldn't open file %s in octopos file system.\n",
+	//	       __func__, filename);
+	//	return -1;
+	//}
+	//printf("%s [2.2]\n", __func__);
+
+	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
+		printf("Error: %s: storage data queue msg size must be equal to storage block size\n", __func__);
+		exit(-1);
+	}
+	
+	copy_filep = fopen(path, "w");
+	if (!copy_filep) {
+		printf("Error: %s: Couldn't open the target file (%s).\n", __func__, path);
+		return -1;
+	}
+
+
+	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
+	uint8_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT, READ_ACCESS);
+
+	offset = 0;
+	printf("%s [3]\n", __func__);
+
+	for (int i = 0; i < (int) count; i++) {
+		/* Block interrupts until the program is loaded.
+		 * Otherwise, we might receive some interrupts Not
+		 * intended for the loader.
+		 */
+		if (i == ((int) (count - 1)))
+			close_mailbox_thread();
+		printf("%s [4]: offset = %d\n", __func__, offset);
+		read_from_storage_data_queue(buf);
+
+		fseek(copy_filep, offset, SEEK_SET);
+		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
+
+		offset += STORAGE_BLOCK_SIZE;
+	}
+	printf("%s [6]\n", __func__);
+
+	fclose(copy_filep);
+	//file_system_close_file(fd);
+
+	//close_file_system();
+
+	close_mailbox();
+
+	//fclose(filep);
+
+	return 0;
+}

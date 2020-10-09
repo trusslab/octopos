@@ -61,8 +61,8 @@ void put_char_on_keyboard_queue(uint8_t kchar)
 /* Initializes the keyboard and its mailbox */
 int init_keyboard(void)
 {
-	mkfifo(FIFO_KEYBOARD_OUT, 0666);
-	mkfifo(FIFO_KEYBOARD_INTR, 0666);
+	//mkfifo(FIFO_KEYBOARD_OUT, 0666);
+	//mkfifo(FIFO_KEYBOARD_INTR, 0666);
 
 	fd_out = open(FIFO_KEYBOARD_OUT, O_WRONLY);
 	fd_intr = open(FIFO_KEYBOARD_INTR, O_RDONLY);
@@ -87,6 +87,7 @@ void close_keyboard(void)
 	close(fd_intr);
 	close(fd_out);
 	remove(FIFO_KEYBOARD_INTR);
+	remove(FIFO_KEYBOARD_IN);
 	remove(FIFO_KEYBOARD_OUT);
 }
 

@@ -39,29 +39,62 @@ static void distribute_input(void)
 	}
 }
 
+void help_boot_other_procs(void)
+{
+	/* keyboard proc */
+	printf("%s [1]\n", __func__);
+	uint32_t fd = file_system_open_file((char *) "keyboard.so", FILE_OPEN_MODE);
+	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
+	printf("%s [2]: num_blocks = %d\n", __func__, num_blocks);
+	file_system_read_file_blocks(fd, 0, num_blocks, P_KEYBOARD);
+	file_system_write_file_blocks_late();
+	file_system_close_file(fd);
+	printf("%s [3]\n", __func__);
+
+	/* serial_out proc */
+	fd = file_system_open_file((char *) "serial_out.so", FILE_OPEN_MODE);
+	num_blocks = file_system_get_file_num_blocks(fd);
+	file_system_read_file_blocks(fd, 0, num_blocks, P_SERIAL_OUT);
+	file_system_write_file_blocks_late();
+	file_system_close_file(fd);
+
+	wait_for_storage();
+}
+
+
 int main()
 {
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: OS init\n", __func__);
+	printf("%s [0.1]\n", __func__);
 
 	int ret = init_os_mailbox();
 	if (ret)
 		return ret;
+	printf("%s [1]\n", __func__);
 	
-	release_tpm_writer(P_SERIAL_OUT);
-	release_tpm_writer(P_STORAGE);
-	release_tpm_writer(P_KEYBOARD);
+	//release_tpm_writer(P_SERIAL_OUT);
+	//release_tpm_writer(P_STORAGE);
+	//release_tpm_writer(P_KEYBOARD);
 
 	connect_to_pmu();
+	printf("%s [2]\n", __func__);
 
-	initialize_shell();
+	//initialize_shell();
+	printf("%s [3]\n", __func__);
 	uint32_t partition_size = initialize_storage();
+	printf("%s [4]\n", __func__);
 #ifdef ARCH_UMODE
 	initialize_file_system(partition_size);
 #endif
+	printf("%s [5]\n", __func__);
+	help_boot_other_procs();
+
+	initialize_shell();
 
 	initialize_scheduler();
+	printf("%s [6]\n", __func__);
 
 	while (1) {
 		distribute_input();

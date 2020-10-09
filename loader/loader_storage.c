@@ -21,7 +21,6 @@ extern uint32_t total_blocks;
  *
  * When booting the storage, the loader directly reads the
  * storage image from storage medium itself.
- *
  */
 int copy_file_from_boot_partition(char *filename, char *path)
 {

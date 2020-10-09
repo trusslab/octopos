@@ -212,18 +212,16 @@ static int start_os_proc(void)
 
 static int start_keyboard_proc(void)
 {
-	//char *const args[] = {(char *) "loader", (char *) "keyboard.so", NULL};
-	//char path[] = "./loader/loader";
-	//return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
-	return 0;
+	char *const args[] = {(char *) "loader_other", (char *) "keyboard.so", NULL};
+	char path[] = "./loader/loader_other";
+	return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
 }
 
 static int start_serial_out_proc(void)
 {
-	//char *const args[] = {(char *) "loader", (char *) "serial_out.so", NULL};
-	//char path[] = "./loader/loader";
-	//return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
-	return 0;
+	char *const args[] = {(char *) "loader_other", (char *) "serial_out.so", NULL};
+	char path[] = "./loader/loader_other";
+	return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
 }
 
 static int start_runtime_proc(char *runtime_id)

@@ -105,6 +105,7 @@ static void initialize_processors(void)
 	mkfifo(FIFO_OS_IN, 0666);
 	mkfifo(FIFO_OS_INTR, 0666);
 	mkfifo(FIFO_KEYBOARD_OUT, 0666);
+	mkfifo(FIFO_KEYBOARD_IN, 0666);
 	mkfifo(FIFO_KEYBOARD_INTR, 0666);
 	mkfifo(FIFO_SENSOR, 0666);
 	mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
@@ -141,7 +142,7 @@ static void initialize_processors(void)
 	processors[P_KEYBOARD].processor_id = P_KEYBOARD;
 	processors[P_KEYBOARD].send_interrupt = keyboard_send_interrupt;
 	processors[P_KEYBOARD].out_handle = open(FIFO_KEYBOARD_OUT, O_RDWR);
-	processors[P_KEYBOARD].in_handle = -1; /* not needed */
+	processors[P_KEYBOARD].in_handle = open(FIFO_KEYBOARD_IN, O_RDWR);
 	processors[P_KEYBOARD].intr_handle = open(FIFO_KEYBOARD_INTR, O_RDWR);
 
 	/* sensor processor */
@@ -233,6 +234,7 @@ static void close_processors(void)
 	remove(FIFO_OS_IN);
 	remove(FIFO_OS_INTR);
 	remove(FIFO_KEYBOARD_OUT);
+	remove(FIFO_KEYBOARD_IN);
 	remove(FIFO_KEYBOARD_INTR);
 	remove(FIFO_SERIAL_OUT_OUT);
 	remove(FIFO_SERIAL_OUT_IN);
@@ -725,7 +727,7 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
+	//printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[(int) queue_id];
 		read_queue(queue, processors[(int) reader_id].in_handle);
@@ -742,7 +744,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
+	//printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
@@ -780,6 +782,7 @@ static int reset_queue_full(uint8_t queue_id)
 
 static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count)
 {
+	printf("%s [1]\n", __func__);
 	bool allowed = false;
 	/* sanity checks */
 	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS) {
@@ -825,7 +828,8 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			allowed = true;
 	} else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS) {
 		if (queues[Q_STORAGE_DATA_OUT].reader_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED ||
+		     proc_id == P_KEYBOARD || proc_id == P_SERIAL_OUT))
 			allowed = true;
 
 		if ((queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_OUT].reader_id == P_UNTRUSTED) &&
@@ -882,6 +886,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			proc_id == P_OS && queues[Q_TPM_DATA_IN].access_count == 0)
 			allowed = true;
 	}
+	printf("%s [2]: allowed = %d\n", __func__, allowed);
 
 	if (!allowed) {		
 		printf("Error: invalid config option by os\n");
@@ -982,66 +987,56 @@ static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_
 	processors[proc_id].send_interrupt(queue_id + NUM_QUEUES);
 }
 
-static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count, uint8_t requesting_proc_id)
+static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t requesting_proc_id)
 {
 	if (queue_id == Q_KEYBOARD && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].reader_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].writer_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_STORAGE_CMD_OUT && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].reader_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_STORAGE_CMD_IN && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].writer_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].reader_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_STORAGE_DATA_IN && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].writer_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_NETWORK_DATA_OUT && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].reader_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].writer_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].writer_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	} else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id &&
-		    queues[(int) queue_id].access_count == count)
-			return 1;
+		if (queues[(int) queue_id].writer_id == requesting_proc_id)
+			return queues[(int) queue_id].access_count;
 		else
 			return 0;
 	}
@@ -1140,7 +1135,9 @@ int main(int argc, char **argv)
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
 			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
+				printf("%s [0.1]\n", __func__);
 				if (delegation_allowed) {
+					printf("%s [0.2]\n", __func__);
 					uint8_t opcode_rest[3];
 					memset(opcode_rest, 0x0, 3);
 					read(processors[P_OS].out_handle, opcode_rest, 3);
@@ -1156,11 +1153,24 @@ int main(int argc, char **argv)
 		if (FD_ISSET(processors[P_KEYBOARD].out_handle, &listen_fds)) {
 			memset(opcode, 0x0, 2);
 			read(processors[P_KEYBOARD].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
+			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
+				reader_id = P_KEYBOARD;
+				queue_id = opcode[1];
+				writer_id = INVALID_PROCESSOR;
+				handle_read_queue(queue_id, reader_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
 				writer_id = P_KEYBOARD;
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
+				printf("%s [1]\n", __func__);
+				uint8_t opcode_rest[1];
+				memset(opcode_rest, 0x0, 1);
+				read(processors[P_KEYBOARD].out_handle, opcode_rest, 1);
+				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_KEYBOARD);				
+				printf("%s [2]: count = %d\n", __func__, count);
+				write(processors[P_KEYBOARD].in_handle, &count, 1);
 			} else {
 				printf("Error: invalid opcode from keyboard\n");
 			}
@@ -1179,6 +1189,12 @@ int main(int argc, char **argv)
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
+				uint8_t opcode_rest[1];
+				memset(opcode_rest, 0x0, 1);
+				read(processors[P_SERIAL_OUT].out_handle, opcode_rest, 1);
+				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_SERIAL_OUT);				
+				write(processors[P_SERIAL_OUT].in_handle, &count, 1);
 			} else {
 				printf("Error: invalid opcode from serial_out\n");
 			}
@@ -1207,11 +1223,11 @@ int main(int argc, char **argv)
 					printf("Error: %s: Changing queue access not allowed (RUNTIME1).\n", __func__);
 				}
 			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[2];
-				memset(opcode_rest, 0x0, 2);
-				read(processors[P_RUNTIME1].out_handle, opcode_rest, 2);
-				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME1);				
-				write(processors[P_RUNTIME1].in_handle, &ret, 1);
+				uint8_t opcode_rest[1];
+				memset(opcode_rest, 0x0, 1);
+				read(processors[P_RUNTIME1].out_handle, opcode_rest, 1);
+				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_RUNTIME1);				
+				write(processors[P_RUNTIME1].in_handle, &count, 1);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
@@ -1240,11 +1256,11 @@ int main(int argc, char **argv)
 					printf("Error: %s: Changing queue access not allowed (RUNTIME2).\n", __func__);
 				}
 			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[2];
-				memset(opcode_rest, 0x0, 2);
-				read(processors[P_RUNTIME2].out_handle, opcode_rest, 2);
-				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME2);				
-				write(processors[P_RUNTIME2].in_handle, &ret, 1);
+				uint8_t opcode_rest[1];
+				memset(opcode_rest, 0x0, 1);
+				read(processors[P_RUNTIME2].out_handle, opcode_rest, 1);
+				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_RUNTIME2);				
+				write(processors[P_RUNTIME2].in_handle, &count, 1);
 			} else {
 				printf("Error: invalid opcode from runtime\n");
 			}
@@ -1305,11 +1321,11 @@ int main(int argc, char **argv)
 				read(processors[P_UNTRUSTED].out_handle, opcode_rest, 2);
 				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_UNTRUSTED);				
 			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[2];
-				memset(opcode_rest, 0x0, 2);
-				read(processors[P_UNTRUSTED].out_handle, opcode_rest, 2);
-				uint8_t ret = runtime_attest_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_UNTRUSTED);				
-				write(processors[P_UNTRUSTED].in_handle, &ret, 1);
+				uint8_t opcode_rest[1];
+				memset(opcode_rest, 0x0, 1);
+				read(processors[P_UNTRUSTED].out_handle, opcode_rest, 1);
+				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_UNTRUSTED);				
+				write(processors[P_UNTRUSTED].in_handle, &count, 1);
 			} else {
 				printf("Error: invalid opcode from untrusted\n");
 			}

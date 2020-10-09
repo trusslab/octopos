@@ -57,9 +57,9 @@ void write_chars_to_serial_out(uint8_t *buf)
 /* Initializes the serial_out (if needed) and its mailbox */
 int init_serial_out(void)
 {
-	mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
-	mkfifo(FIFO_SERIAL_OUT_IN, 0666);
-	mkfifo(FIFO_SERIAL_OUT_INTR, 0666);
+	//mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
+	//mkfifo(FIFO_SERIAL_OUT_IN, 0666);
+	//mkfifo(FIFO_SERIAL_OUT_INTR, 0666);
 
 	fd_out = open(FIFO_SERIAL_OUT_OUT, O_WRONLY);
 	fd_in = open(FIFO_SERIAL_OUT_IN, O_RDONLY);

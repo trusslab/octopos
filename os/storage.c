@@ -31,10 +31,14 @@ bool is_storage_config_locked = false;
 
 static int set_storage_config_key(uint8_t *key)
 {
+	printf("%s [1]\n", __func__);
 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
 	buf[0] = STORAGE_OP_SET_CONFIG_KEY;
+	printf("%s [2]\n", __func__);
 	send_msg_to_storage_no_response(buf);
+	printf("%s [3]\n", __func__);
 	get_response_from_storage(buf);
+	printf("%s [4]\n", __func__);
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
