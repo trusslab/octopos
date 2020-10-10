@@ -15,6 +15,11 @@ extern FILE *filep;
 /* FIXME: why should we need the total_blocks in loader? */
 extern uint32_t total_blocks;
 
+void prepare_loader(char *filename, int argc, char *argv[])
+{
+	/* no op */
+}
+
 /*
  * @filename: the name of the file in the partition
  * @path: file path in the host file system

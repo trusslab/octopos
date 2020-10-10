@@ -24,6 +24,8 @@ pthread_t mailbox_thread;
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t availables[NUM_QUEUES + 1];
 
+int keyboard = 0, serial_out = 0, runtime1 = 0, runtime2 = 0;
+
 /* FIXME: adapted from the same func in mailbox_runtime.c */
 static uint8_t mailbox_get_queue_access_count(uint8_t queue_id, uint8_t access)
 {
@@ -77,7 +79,7 @@ static void *handle_mailbox_interrupts(void *data)
 	}
 }
 
-int init_mailbox(int keyboard)
+int init_mailbox(void)
 {
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
@@ -93,7 +95,7 @@ int init_mailbox(int keyboard)
 		fd_out = open(FIFO_KEYBOARD_OUT, O_WRONLY);
 		fd_in = open(FIFO_KEYBOARD_IN, O_RDONLY);
 		fd_intr = open(FIFO_KEYBOARD_INTR, O_RDONLY);
-	} else {
+	} else if (serial_out) {
 		printf("%s [2]: serial_out\n", __func__);
 		mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
 		mkfifo(FIFO_SERIAL_OUT_IN, 0666);
@@ -102,6 +104,27 @@ int init_mailbox(int keyboard)
 		fd_out = open(FIFO_SERIAL_OUT_OUT, O_WRONLY);
 		fd_in = open(FIFO_SERIAL_OUT_IN, O_RDONLY);
 		fd_intr = open(FIFO_SERIAL_OUT_INTR, O_RDONLY);
+	} else if (runtime1) {
+		printf("%s [1]: runtime1\n", __func__);
+		mkfifo(FIFO_RUNTIME1_OUT, 0666);
+		mkfifo(FIFO_RUNTIME1_IN, 0666);
+		mkfifo(FIFO_RUNTIME1_INTR, 0666);
+
+		fd_out = open(FIFO_RUNTIME1_OUT, O_WRONLY);
+		fd_in = open(FIFO_RUNTIME1_IN, O_RDONLY);
+		fd_intr = open(FIFO_RUNTIME1_INTR, O_RDONLY);
+	} else if (runtime2) {
+		printf("%s [1]: runtime2\n", __func__);
+		mkfifo(FIFO_RUNTIME2_OUT, 0666);
+		mkfifo(FIFO_RUNTIME2_IN, 0666);
+		mkfifo(FIFO_RUNTIME2_INTR, 0666);
+
+		fd_out = open(FIFO_RUNTIME2_OUT, O_WRONLY);
+		fd_in = open(FIFO_RUNTIME2_IN, O_RDONLY);
+		fd_intr = open(FIFO_RUNTIME2_INTR, O_RDONLY);
+	} else {
+		printf("Error: %s: no proc specified\n", __func__);
+		exit(-1);
 	}
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
@@ -130,6 +153,33 @@ void close_mailbox(void)
 	//remove(FIFO_KEYBOARD_INTR);
 }
 
+void prepare_loader(char *filename, int argc, char *argv[])
+{
+	/* FIXME */
+	if (!strcmp(filename, "keyboard.so")) {
+		keyboard = 1;
+	} else if (!strcmp(filename, "serial_out.so")) {
+		serial_out = 1;
+	} else if (!strcmp(filename, "runtime")) {
+		if (argc != 1) {
+			printf("Error: %s: invalid number of args for runtime\n", __func__);
+			exit(-1);
+		}
+		if (!strcmp(argv[0], "1")) {
+			runtime1 = 1;
+		} else if (!strcmp(argv[0], "2")) {
+			runtime2 = 1;
+		} else {
+			printf("Error: %s: invalid runtime ID (%s)\n", __func__, argv[0]);
+			exit(-1);
+		}
+	} else {
+		printf("Error: %s: unknown binary\n", __func__);
+		exit(-1);
+	}
+
+}
+
 /*
  * @filename: the name of the file in the partition
  * @path: file path in the host file system
@@ -145,10 +195,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	int offset;
 	printf("%s [1]\n", __func__);
 
-	/* FIXME */
-	int keyboard = !strcmp(filename, "keyboard.so");
-
-	init_mailbox(keyboard);
+	init_mailbox();
 
 	//filep = fopen("./storage/octopos_partition_0_data", "r");
 	//if (!filep) {
@@ -190,14 +237,15 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	printf("%s [3]\n", __func__);
 
 	for (int i = 0; i < (int) count; i++) {
+		printf("%s [4]: offset = %d\n", __func__, offset);
+		read_from_storage_data_queue(buf);
+		
 		/* Block interrupts until the program is loaded.
 		 * Otherwise, we might receive some interrupts Not
 		 * intended for the loader.
 		 */
 		if (i == ((int) (count - 1)))
 			close_mailbox_thread();
-		printf("%s [4]: offset = %d\n", __func__, offset);
-		read_from_storage_data_queue(buf);
 
 		fseek(copy_filep, offset, SEEK_SET);
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);

@@ -150,6 +150,8 @@ int main(int argc, char **argv)
 			       1, (char *) "./installer/copy_storage.so");
 	copy_file_to_partition((char *) "os.so", (char *) "./os/os.so",
 			       1, (char *) "./installer/copy_os.so");
+	copy_file_to_partition((char *) "runtime", (char *) "./runtime/runtime",
+			       1, (char *) "./installer/copy_runtime");
 	
 	close_file_system();
 	fclose(filep);

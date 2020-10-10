@@ -12,6 +12,11 @@
 #include <os/storage.h>
 #include <arch/mailbox_os.h>
 
+void prepare_loader(char *filename, int argc, char *argv[])
+{
+	/* no op */
+}
+
 /*
  * @filename: the name of the file in the partition
  * @path: file path in the host file system

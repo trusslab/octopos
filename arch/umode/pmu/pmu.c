@@ -227,8 +227,8 @@ static int start_serial_out_proc(void)
 static int start_runtime_proc(char *runtime_id)
 {
 	int fd_log;
-	char *const args[] = {(char *) "runtime", runtime_id, NULL};
-	char path[] = "./runtime/runtime";
+	char *const args[] = {(char *) "loader", (char *) "runtime", runtime_id, NULL};
+	char path[] = "./loader/loader_other";
 	
 	if (*runtime_id == '1') {
 		fd_log = fd_runtime1_log;

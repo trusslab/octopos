@@ -282,9 +282,9 @@ int init_runtime(int runtime_id)
 	//	return -1;
 	//}
 
-	mkfifo(fifo_runtime_out, 0666);
-	mkfifo(fifo_runtime_in, 0666);
-	mkfifo(fifo_runtime_intr, 0666);
+	//mkfifo(fifo_runtime_out, 0666);
+	//mkfifo(fifo_runtime_in, 0666);
+	//mkfifo(fifo_runtime_intr, 0666);
 
 	fd_out = open(fifo_runtime_out, O_WRONLY);
 	fd_in = open(fifo_runtime_in, O_RDONLY);

@@ -14,4 +14,7 @@ tpm/tpm
 loader/loader_storage
 loader/loader_os
 loader/loader_other
+loader/runtime1
+loader/runtime2
 installer/installer
+installer/copy*

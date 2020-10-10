@@ -69,6 +69,7 @@ char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 static int command(int input, int first, int last, int double_pipe, int bg)
 {
 	/* FIXME: add support for passing args to apps */
+	printf("%s [1]\n", __func__);
 
 	if (first == 1 && last == 0 && input == 0) {
 		// First command
@@ -361,6 +362,7 @@ static void split(char* cmd);
  
 static int run(char* cmd, int input, int first, int last, int double_pipe, int bg)
 {
+	printf("%s [1]\n", __func__);
 	split(cmd);
 	if (args[0] != NULL) {
 		if (strcmp(args[0], "halt") == 0) {
