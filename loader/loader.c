@@ -19,26 +19,6 @@ void prepare_loader(char *filename, int argc, char *argv[]);
  */
 int copy_file_from_boot_partition(char *filename, char *path);
 
-void load(const char *path, int _argc, char *_argv[])
-{
-	void *handle;
-	int (*fptr)(int, char **);
-
-	handle = dlopen(path, RTLD_LAZY);
-	if (!handle) {
-		printf("Error: couldn't open process.\n");
-		return;
-	}
-
-	fptr = (int(*)(int, char **)) dlsym(handle, "main");
-	if (!fptr) {
-		printf("Error: couldn't find main symbol.\n");
-		return;
-	}
-
-	(*fptr)(_argc, _argv);
-}
-
 int main(int argc, char *argv[])
 {
 	/* Non-buffering stdout */
@@ -64,10 +44,12 @@ int main(int argc, char *argv[])
 	prepare_loader(name, argc - 2, argv + 2);
 	copy_file_from_boot_partition(name, path);
 
+		
+	/* Add exec permission for the copied file */
+	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
+	
 	/* FIXME */
 	if (!strcmp(name, "runtime")) {
-		/* Add exec permission for the copied file */
-		chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
 
 		/* Create the args for execv */
 		char new_name[128];
@@ -78,8 +60,11 @@ int main(int argc, char *argv[])
 		printf("%s [4]: args[0] = %s\n", __func__, args[0]);
 		printf("%s [5]: args[1] = %s\n", __func__, args[1]);
 		execv(path, args);
-	} else
-		load(path, argc - 1, argv + 1);
+	} else {
+		char *const args[] = {name, NULL};
+		execv(path, args);
+	}
+	
 
 	return 0;
 }

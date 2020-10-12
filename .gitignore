@@ -2,7 +2,10 @@
 *.swp
 *.swo
 *.so
+storage/storage
 storage/octopos_partition*
+keyboard/keyboard
+serial_out/serial_out
 runtime/runtime
 os/os
 network/network
@@ -14,6 +17,10 @@ tpm/tpm
 loader/loader_storage
 loader/loader_os
 loader/loader_other
+loader/keyboard
+loader/serial_out
+loader/storage
+loader/os
 loader/runtime1
 loader/runtime2
 installer/installer

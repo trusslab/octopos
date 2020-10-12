@@ -156,9 +156,9 @@ void close_mailbox(void)
 void prepare_loader(char *filename, int argc, char *argv[])
 {
 	/* FIXME */
-	if (!strcmp(filename, "keyboard.so")) {
+	if (!strcmp(filename, "keyboard")) {
 		keyboard = 1;
-	} else if (!strcmp(filename, "serial_out.so")) {
+	} else if (!strcmp(filename, "serial_out")) {
 		serial_out = 1;
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {

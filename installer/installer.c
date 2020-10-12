@@ -142,14 +142,14 @@ int main(int argc, char **argv)
 	/* FIXME: size hard-coded */
 	initialize_file_system(2000);
 
-	copy_file_to_partition((char *) "keyboard.so", (char *) "./keyboard/keyboard.so",
-			       1, (char *) "./installer/copy_keyboard.so");
-	copy_file_to_partition((char *) "serial_out.so", (char *) "./serial_out/serial_out.so",
-			       1, (char *) "./installer/copy_serial_out.so");
-	copy_file_to_partition((char *) "storage.so", (char *) "./storage/storage.so",
-			       1, (char *) "./installer/copy_storage.so");
-	copy_file_to_partition((char *) "os.so", (char *) "./os/os.so",
-			       1, (char *) "./installer/copy_os.so");
+	copy_file_to_partition((char *) "keyboard", (char *) "./keyboard/keyboard",
+			       1, (char *) "./installer/copy_keyboard");
+	copy_file_to_partition((char *) "serial_out", (char *) "./serial_out/serial_out",
+			       1, (char *) "./installer/copy_serial_out");
+	copy_file_to_partition((char *) "storage", (char *) "./storage/storage",
+			       1, (char *) "./installer/copy_storage");
+	copy_file_to_partition((char *) "os", (char *) "./os/os",
+			       1, (char *) "./installer/copy_os");
 	copy_file_to_partition((char *) "runtime", (char *) "./runtime/runtime",
 			       1, (char *) "./installer/copy_runtime");
 	

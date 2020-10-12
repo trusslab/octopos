@@ -205,21 +205,21 @@ static int start_tpm_proc(void)
 
 static int start_os_proc(void)
 {
-	char *const args[] = {(char *) "loader_os", (char *) "os.so", NULL};
+	char *const args[] = {(char *) "loader_os", (char *) "os", NULL};
 	char path[] = "./loader/loader_os";
 	return start_proc(path, args, fd_os_log, 0, 0, 0);
 }
 
 static int start_keyboard_proc(void)
 {
-	char *const args[] = {(char *) "loader_other", (char *) "keyboard.so", NULL};
+	char *const args[] = {(char *) "loader_other", (char *) "keyboard", NULL};
 	char path[] = "./loader/loader_other";
 	return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
 }
 
 static int start_serial_out_proc(void)
 {
-	char *const args[] = {(char *) "loader_other", (char *) "serial_out.so", NULL};
+	char *const args[] = {(char *) "loader_other", (char *) "serial_out", NULL};
 	char path[] = "./loader/loader_other";
 	return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
 }
@@ -244,7 +244,7 @@ static int start_runtime_proc(char *runtime_id)
 
 static int start_storage_proc(void)
 {
-	char *const args[] = {(char *) "loader_storage", (char *) "storage.so", NULL};
+	char *const args[] = {(char *) "loader_storage", (char *) "storage", NULL};
 	char path[] = "./loader/loader_storage";
 	return start_proc(path, args, fd_storage_log, 0, 0, 0);
 }

@@ -43,7 +43,7 @@ void help_boot_other_procs(void)
 {
 	/* keyboard proc */
 	printf("%s [1]\n", __func__);
-	uint32_t fd = file_system_open_file((char *) "keyboard.so", FILE_OPEN_MODE);
+	uint32_t fd = file_system_open_file((char *) "keyboard", FILE_OPEN_MODE);
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
 	printf("%s [2]: num_blocks = %d\n", __func__, num_blocks);
 	file_system_read_file_blocks(fd, 0, num_blocks, P_KEYBOARD);
@@ -52,7 +52,7 @@ void help_boot_other_procs(void)
 	printf("%s [3]\n", __func__);
 
 	/* serial_out proc */
-	fd = file_system_open_file((char *) "serial_out.so", FILE_OPEN_MODE);
+	fd = file_system_open_file((char *) "serial_out", FILE_OPEN_MODE);
 	num_blocks = file_system_get_file_num_blocks(fd);
 	file_system_read_file_blocks(fd, 0, num_blocks, P_SERIAL_OUT);
 	file_system_write_file_blocks_late();
