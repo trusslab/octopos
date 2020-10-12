@@ -152,14 +152,20 @@ static int remove_file_from_list(struct file *file)
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 static uint32_t write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
+	printf("%s [1]\n", __func__);
 	wait_for_storage();
+	printf("%s [2]\n", __func__);
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
+	printf("%s [3]\n", __func__);
 	send_msg_to_storage_no_response(buf);
+	printf("%s [4]\n", __func__);
 	for (uint32_t i = 0; i < num_blocks; i++)
 		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
+	printf("%s [5]\n", __func__);
 	get_response_from_storage(buf);
+	printf("%s [6]\n", __func__);
 
 	STORAGE_GET_ONE_RET
 	return ret0;
@@ -230,7 +236,9 @@ static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offs
 
 static void flush_dir_data_to_storage(void)
 {
+	printf("%s [1]\n", __func__);
 	write_blocks(dir_data, 0, DIR_DATA_NUM_BLOCKS);
+	printf("%s [2]\n", __func__);
 }
 #endif /* ROLE_OS || ROLE_INSTALLER */
 
@@ -392,8 +400,9 @@ static int expand_empty_file(struct file *file, uint32_t needed_blocks)
 static int expand_file_size(struct file *file, uint32_t size)
 {
 	bool empty_file;
-	uint32_t needed_size, needed_blocks;
+	uint32_t needed_size, needed_blocks, leftover;
 	int ret = 0;
+	printf("%s [1]: size = %d\n", __func__, size);
 
 	if (file->size >= size)
 		return 0;
@@ -408,6 +417,12 @@ static int expand_file_size(struct file *file, uint32_t size)
 	}
 	printf("%s [1]: needed_size = %d\n", __func__, needed_size);
 
+	/* first check if there's enough space in the last block */
+	leftover = STORAGE_BLOCK_SIZE - (file->size % STORAGE_BLOCK_SIZE);
+	printf("%s [1.1]: leftover = %d\n", __func__, leftover);
+	if ((leftover != STORAGE_BLOCK_SIZE) && leftover >= needed_size)
+		goto update;
+
 	needed_blocks = needed_size / STORAGE_BLOCK_SIZE;
 	if (needed_size % STORAGE_BLOCK_SIZE)
 		needed_blocks++;
@@ -419,6 +434,7 @@ static int expand_file_size(struct file *file, uint32_t size)
 		ret = expand_existing_file(file, needed_blocks);
 
 	if (!ret) {
+update:
 		file->size = size;
 		ret = update_file_in_directory(file);
 		if (ret)
@@ -438,6 +454,7 @@ static void release_file_blocks(struct file *file)
 
 uint32_t file_system_open_file(char *filename, uint32_t mode)
 {
+	printf("%s [1]: filename = %s\n", __func__, filename);
 	struct file *file = NULL;
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 	if (!(mode == FILE_OPEN_MODE || mode == FILE_OPEN_CREATE_MODE)) {
@@ -458,6 +475,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			file = node->file;
 		}
 	}
+	printf("%s [2]\n", __func__);
 
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 	if (file == NULL && mode == FILE_OPEN_CREATE_MODE) {
@@ -481,6 +499,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		add_file_to_list(file);
 	}
 #endif /* ROLE_OS || ROLE_INSTALLER */
+	printf("%s [3]\n", __func__);
 
 	if (file) {
 		int ret = get_unused_fd();
@@ -500,6 +519,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 		return fd;
 	}
+	printf("%s [4]\n", __func__);
 
 	/* error */
 	return (uint32_t) 0;
@@ -534,6 +554,11 @@ uint32_t file_system_write_to_file(uint32_t fd, uint8_t *data, uint32_t size, ui
 	printf("%s [3]: file->num_blocks = %d\n", __func__, file->num_blocks);
 
 	if (file->size < (offset + size)) {
+		if (offset > file->size) {
+			printf("Error: %s: invalid offset (offset = %d, file->size = %d\n",
+			       __func__, offset, file->size);
+			return 0;
+		}
 		/* Try to expand the file size */
 		expand_file_size(file, offset + size);
 	}
@@ -641,7 +666,9 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, u
 #ifdef ROLE_OS
 /*
  * @start_block: the first file block to write.
- * This API doesn't allow growing the file size.
+ *
+ * This API allows growing the file size, but only if there is enough empty blocks
+ * right after the last file block in the partition.
  */
 uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_t num_blocks, uint8_t runtime_proc_id)
 {
@@ -661,9 +688,20 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_
 		return 0;
 	}
 
-	if ((start_block + num_blocks) > file->num_blocks) {
-		printf("%s: Error: invalid args\n", __func__);
-		return 0;
+	printf("%s [1]\n", __func__);
+	if (((start_block + num_blocks) * STORAGE_BLOCK_SIZE) > file->size) {
+		printf("%s [2]\n", __func__);
+		if ((start_block > file->num_blocks) ||
+		    ((start_block == file->num_blocks) &&
+		     (file->size % STORAGE_BLOCK_SIZE))) {
+			printf("%s: Error: invalid args (start_block = %d, num_blocks = %d, file->num_blocks = %d, "
+			       "file_size = %d)\n", __func__, start_block, num_blocks, file->num_blocks, file->size);
+			return 0;
+		}
+		printf("%s [3]\n", __func__);
+
+		/* Try to expand the file size */
+		expand_file_size(file, (start_block + num_blocks) * STORAGE_BLOCK_SIZE);
 	}
 
 	/* FIXME: this is needed for now since count is uint8_t. */
@@ -723,7 +761,8 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t
 	}
 
 	if ((start_block + num_blocks) > file->num_blocks) {
-		printf("%s: Error: invalid args\n", __func__);
+		printf("%s: Error: invalid args (start_block = %d, num_blocks = %d, file->num_blocks = %d)\n",
+		       __func__, start_block, num_blocks, file->num_blocks);
 		return 0;
 	}
 

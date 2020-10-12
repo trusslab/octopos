@@ -41,6 +41,7 @@ void fs_test(struct runtime_api *api)
 
 	insecure_printf("Test 1\n");
 	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
+	printf("%s [1]\n", __func__);
 	if (fd1 == 0) {
 		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
 		return;
@@ -53,17 +54,19 @@ void fs_test(struct runtime_api *api)
 	}
 
 	data = 13;
-	api->write_to_file(fd1, (uint8_t *) &data, 4, 10);
+	api->write_to_file(fd1, (uint8_t *) &data, 4, 0);
+	api->write_to_file(fd1, (uint8_t *) &data, 4, 4);
 	data = 15;
-	api->write_to_file(fd2, (uint8_t *) &data, 4, 10);
+	api->write_to_file(fd2, (uint8_t *) &data, 4, 0);
+	api->write_to_file(fd2, (uint8_t *) &data, 4, 4);
 
-	api->read_from_file(fd1, (uint8_t *) &data, 4, 10);
+	api->read_from_file(fd1, (uint8_t *) &data, 4, 4);
 	insecure_printf("data (first file) = %d\n", data);
 	if (data != 13) {
 		insecure_printf("Test 1 (1) failed\n");
 		goto out;
 	}
-	api->read_from_file(fd2, (uint8_t *) &data, 4, 10);
+	api->read_from_file(fd2, (uint8_t *) &data, 4, 4);
 	insecure_printf("data (first file) = %d\n", data);
 	if (data != 15) {
 		insecure_printf("Test 1 (2) failed\n");
@@ -76,9 +79,9 @@ void fs_test(struct runtime_api *api)
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 
 	block[10] = 14;
-	api->write_file_blocks(fd1, block, 5, 1);
+	api->write_file_blocks(fd2, block, 0, 1);
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
-	api->read_file_blocks(fd1, block, 5, 1);
+	api->read_file_blocks(fd2, block, 0, 1);
 	insecure_printf("block[10] = %d\n", (int) block[10]);
 	if (block[10] != 14) {
 		insecure_printf("Test 2 failed\n");
@@ -91,9 +94,9 @@ void fs_test(struct runtime_api *api)
 
 	index = (99 * STORAGE_BLOCK_SIZE) + 10;
 	block[index] = 12;
-	api->write_file_blocks(fd1, block, 0, 100);
+	api->write_file_blocks(fd2, block, 1, 100);
 	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
-	api->read_file_blocks(fd1, block, 0, 100);
+	api->read_file_blocks(fd2, block, 1, 100);
 	insecure_printf("block[index] = %d\n", (int) block[index]);
 	if (block[index] != 12) {
 		insecure_printf("Test 3 failed\n");

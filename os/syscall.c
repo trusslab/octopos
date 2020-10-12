@@ -221,7 +221,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		memcpy(filename, data, data_size);
 		/* playing it safe */
 		filename[data_size] = '\0';
+		printf("%s [1]\n", __func__);
 		uint32_t fd = file_system_open_file(filename, mode);
+		printf("%s [2]\n", __func__);
 		SYSCALL_SET_ONE_RET(fd)
 		break;
 	}

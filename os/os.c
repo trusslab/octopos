@@ -71,8 +71,6 @@ void help_boot_other_procs(void)
 	file_system_read_file_blocks(fd, 0, num_blocks, P_RUNTIME2);
 	file_system_write_file_blocks_late();
 	file_system_close_file(fd);
-
-	wait_for_storage();
 }
 
 

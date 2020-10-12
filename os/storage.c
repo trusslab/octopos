@@ -259,39 +259,46 @@ void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
  */
 void wait_for_storage(void)
 {
+	printf("%s [1]\n", __func__);
 	int ret = is_queue_available(Q_STORAGE_CMD_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_CMD_IN);
 	}
 
+	printf("%s [2]\n", __func__);
 	ret = is_queue_available(Q_STORAGE_CMD_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
 
 #ifdef ROLE_OS	
+	printf("%s [3]\n", __func__);
 	ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
 #endif
 
+	printf("%s [4]\n", __func__);
 	ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
 
 #ifdef ROLE_OS
+	printf("%s [5]\n", __func__);
 	if (is_storage_config_locked) {
 		unlock_storage_config(os_storage_config_key);
 		is_storage_config_locked = false;
 	}
 #endif
 
+	printf("%s [6]\n", __func__);
 	if (is_partition_locked) {
 		unlock_secure_storage(os_storage_key);
 		is_partition_locked = false;
 	}
+	printf("%s [7]\n", __func__);
 }
 
 uint32_t initialize_storage(void)
