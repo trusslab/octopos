@@ -68,5 +68,5 @@ network/socket/socket_obj.o:network/socket/*.c
 	@make -C ../util/network/
 
 clean:
-	find . -name *.o | xargs rm -f
+	find -name "*.o" | xargs rm -f
 	rm -f runtime
