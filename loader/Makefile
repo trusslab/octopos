@@ -4,4 +4,4 @@ umode:
 	g++ -Wall -I ../include/ -I ../arch/umode/include/ loader.c loader_other.c -o loader_other -ldl -lpthread -ltss2-esys -ltss2-rc
 
 clean:
-	rm loader_storage loader_os loader_other keyboard serial_out os storage runtime*
+	rm loader_storage loader_os loader_other keyboard serial_out os storage network runtime*

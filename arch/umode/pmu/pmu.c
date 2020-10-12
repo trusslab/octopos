@@ -251,8 +251,8 @@ static int start_storage_proc(void)
 
 static int start_network_proc(void)
 {
-	char *const args[] = {(char *) "network", NULL};
-	char path[] = "./network/network";
+	char *const args[] = {(char *) "loader_other", (char *) "network", NULL};
+	char path[] = "./loader/loader_other";
 	return start_proc(path, args, fd_network_log, 0, 0, 0);
 }
 

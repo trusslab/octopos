@@ -58,6 +58,13 @@ void help_boot_other_procs(void)
 	file_system_write_file_blocks_late();
 	file_system_close_file(fd);
 
+	/* network proc */
+	fd = file_system_open_file((char *) "network", FILE_OPEN_MODE);
+	num_blocks = file_system_get_file_num_blocks(fd);
+	file_system_read_file_blocks(fd, 0, num_blocks, P_NETWORK);
+	file_system_write_file_blocks_late();
+	file_system_close_file(fd);
+
 	/* runtime1 */
 	fd = file_system_open_file((char *) "runtime", FILE_OPEN_MODE);
 	num_blocks = file_system_get_file_num_blocks(fd);

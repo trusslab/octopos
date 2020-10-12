@@ -829,7 +829,7 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 	} else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS) {
 		if (queues[Q_STORAGE_DATA_OUT].reader_id == P_OS &&
 		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED ||
-		     proc_id == P_KEYBOARD || proc_id == P_SERIAL_OUT))
+		     proc_id == P_KEYBOARD || proc_id == P_SERIAL_OUT || proc_id == P_NETWORK))
 			allowed = true;
 
 		if ((queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_OUT].reader_id == P_UNTRUSTED) &&
@@ -1297,8 +1297,14 @@ int main(int argc, char **argv)
 				queue_id = opcode[1];
 				reader_id = INVALID_PROCESSOR;
 				handle_write_queue(queue_id, writer_id);
+			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
+				uint8_t opcode_rest[1];
+				memset(opcode_rest, 0x0, 1);
+				read(processors[P_NETWORK].out_handle, opcode_rest, 1);
+				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_NETWORK);				
+				write(processors[P_NETWORK].in_handle, &count, 1);
 			} else {
-				printf("Error: invalid opcode from storage\n");
+				printf("Error: invalid opcode from network\n");
 			}
 		}
 		

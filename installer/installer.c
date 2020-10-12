@@ -152,6 +152,8 @@ int main(int argc, char **argv)
 			       1, (char *) "./installer/copy_os");
 	copy_file_to_partition((char *) "runtime", (char *) "./runtime/runtime",
 			       1, (char *) "./installer/copy_runtime");
+	copy_file_to_partition((char *) "network", (char *) "./network/network",
+			       1, (char *) "./installer/copy_network");
 	
 	close_file_system();
 	fclose(filep);

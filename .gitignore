@@ -20,6 +20,7 @@ loader/loader_other
 loader/keyboard
 loader/serial_out
 loader/storage
+loader/network
 loader/os
 loader/runtime1
 loader/runtime2

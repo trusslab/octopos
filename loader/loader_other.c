@@ -24,7 +24,7 @@ pthread_t mailbox_thread;
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t availables[NUM_QUEUES + 1];
 
-int keyboard = 0, serial_out = 0, runtime1 = 0, runtime2 = 0;
+int keyboard = 0, serial_out = 0, network = 0, runtime1 = 0, runtime2 = 0;
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
 static uint8_t mailbox_get_queue_access_count(uint8_t queue_id, uint8_t access)
@@ -104,8 +104,17 @@ int init_mailbox(void)
 		fd_out = open(FIFO_SERIAL_OUT_OUT, O_WRONLY);
 		fd_in = open(FIFO_SERIAL_OUT_IN, O_RDONLY);
 		fd_intr = open(FIFO_SERIAL_OUT_INTR, O_RDONLY);
+	} else if (network) {
+		printf("%s [3]: network\n", __func__);
+		mkfifo(FIFO_NETWORK_OUT, 0666);
+		mkfifo(FIFO_NETWORK_IN, 0666);
+		mkfifo(FIFO_NETWORK_INTR, 0666);
+
+		fd_out = open(FIFO_NETWORK_OUT, O_WRONLY);
+		fd_in = open(FIFO_NETWORK_IN, O_RDONLY);
+		fd_intr = open(FIFO_NETWORK_INTR, O_RDONLY);
 	} else if (runtime1) {
-		printf("%s [1]: runtime1\n", __func__);
+		printf("%s [4]: runtime1\n", __func__);
 		mkfifo(FIFO_RUNTIME1_OUT, 0666);
 		mkfifo(FIFO_RUNTIME1_IN, 0666);
 		mkfifo(FIFO_RUNTIME1_INTR, 0666);
@@ -114,7 +123,7 @@ int init_mailbox(void)
 		fd_in = open(FIFO_RUNTIME1_IN, O_RDONLY);
 		fd_intr = open(FIFO_RUNTIME1_INTR, O_RDONLY);
 	} else if (runtime2) {
-		printf("%s [1]: runtime2\n", __func__);
+		printf("%s [5]: runtime2\n", __func__);
 		mkfifo(FIFO_RUNTIME2_OUT, 0666);
 		mkfifo(FIFO_RUNTIME2_IN, 0666);
 		mkfifo(FIFO_RUNTIME2_INTR, 0666);
@@ -160,6 +169,8 @@ void prepare_loader(char *filename, int argc, char *argv[])
 		keyboard = 1;
 	} else if (!strcmp(filename, "serial_out")) {
 		serial_out = 1;
+	} else if (!strcmp(filename, "network")) {
+		network = 1;
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {
 			printf("Error: %s: invalid number of args for runtime\n", __func__);
