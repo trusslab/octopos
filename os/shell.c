@@ -23,6 +23,7 @@
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/syscall.h>
+#include <os/boot.h>
 #include <arch/mailbox_os.h>
 #include <arch/pmu.h> 
 #include <arch/defines.h>
@@ -407,26 +408,9 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			int ret;
 			uint8_t proc_id = (uint8_t) atoi(args[1]);
 
-			if (proc_id == P_UNTRUSTED) {
-				/* Send a halt cmd to untrusted in case it's listening.
-				* Will be automatically rebooted by the PMU.
-				*/
-				uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-				buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-				memcpy(&buf[1], "halt\n", 5);
-				send_cmd_to_untrusted(buf);
-			}
-
-			ret = pmu_reset_proc(proc_id);
-			if (ret) {
+			ret = reset_proc(proc_id);
+			if (ret)
 				output_printf("Couldn't reset proc %d\n", proc_id);
-			} else {
-				/* set the state of runtime procs to resetting */
-				if (proc_id == P_RUNTIME1)
-					sched_runtime_reset(P_RUNTIME1);
-				else if (proc_id == P_RUNTIME2)
-					sched_runtime_reset(P_RUNTIME2);
-			}
 
 			output_printf("octopos$> ");
 			return 0;

@@ -755,6 +755,7 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 
 static void reset_queue(uint8_t queue_id)
 {
+	printf("%s [1]: queue_id = %d\n", __func__, queue_id);
 	for (int i = 0; i < queues[(int) queue_id].queue_size; i++)
 		memset(queues[(int) queue_id].messages[i], 0x0, queues[(int) queue_id].msg_size);
 

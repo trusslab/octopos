@@ -23,6 +23,7 @@
 #ifndef ARCH_SEC_HW
 #include <os/network.h>
 #endif
+#include <os/boot.h>
 #include <arch/mailbox_os.h>
 
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
@@ -161,6 +162,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
 		inform_shell_of_termination(runtime_proc_id);
+		*late_processing = SYSCALL_INFORM_OS_OF_TERMINATION;
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -486,6 +488,8 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
+		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION)
+			help_boot_runtime_proc(runtime_proc_id);
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

@@ -10,6 +10,7 @@
 #include <os/file_system.h>
 #include <os/syscall.h>
 #include <os/storage.h>
+#include <os/boot.h>
 #include <arch/mailbox_os.h>
 #include <arch/pmu.h> 
 #include <arch/defines.h>
@@ -39,48 +40,6 @@ static void distribute_input(void)
 	}
 }
 
-void help_boot_other_procs(void)
-{
-	/* keyboard proc */
-	printf("%s [1]\n", __func__);
-	uint32_t fd = file_system_open_file((char *) "keyboard", FILE_OPEN_MODE);
-	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
-	printf("%s [2]: num_blocks = %d\n", __func__, num_blocks);
-	file_system_read_file_blocks(fd, 0, num_blocks, P_KEYBOARD);
-	file_system_write_file_blocks_late();
-	file_system_close_file(fd);
-	printf("%s [3]\n", __func__);
-
-	/* serial_out proc */
-	fd = file_system_open_file((char *) "serial_out", FILE_OPEN_MODE);
-	num_blocks = file_system_get_file_num_blocks(fd);
-	file_system_read_file_blocks(fd, 0, num_blocks, P_SERIAL_OUT);
-	file_system_write_file_blocks_late();
-	file_system_close_file(fd);
-
-	/* network proc */
-	fd = file_system_open_file((char *) "network", FILE_OPEN_MODE);
-	num_blocks = file_system_get_file_num_blocks(fd);
-	file_system_read_file_blocks(fd, 0, num_blocks, P_NETWORK);
-	file_system_write_file_blocks_late();
-	file_system_close_file(fd);
-
-	/* runtime1 */
-	fd = file_system_open_file((char *) "runtime", FILE_OPEN_MODE);
-	num_blocks = file_system_get_file_num_blocks(fd);
-	file_system_read_file_blocks(fd, 0, num_blocks, P_RUNTIME1);
-	file_system_write_file_blocks_late();
-	file_system_close_file(fd);
-
-	/* runtime2 */
-	fd = file_system_open_file((char *) "runtime", FILE_OPEN_MODE);
-	num_blocks = file_system_get_file_num_blocks(fd);
-	file_system_read_file_blocks(fd, 0, num_blocks, P_RUNTIME2);
-	file_system_write_file_blocks_late();
-	file_system_close_file(fd);
-}
-
-
 int main()
 {
 	/* Non-buffering stdout */
@@ -108,7 +67,7 @@ int main()
 	initialize_file_system(partition_size);
 #endif
 	printf("%s [5]\n", __func__);
-	help_boot_other_procs();
+	help_boot_procs();
 
 	initialize_shell();
 
