@@ -487,9 +487,10 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
-			file_system_read_file_blocks_late();
+		      file_system_read_file_blocks_late();
 		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION)
-			help_boot_runtime_proc(runtime_proc_id);
+			//help_boot_runtime_proc(runtime_proc_id);
+			reset_proc(runtime_proc_id);
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

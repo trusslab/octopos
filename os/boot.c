@@ -42,7 +42,9 @@ static void help_boot_network_proc(void)
 
 void help_boot_runtime_proc(uint8_t runtime_proc_id)
 {
+	printf("%s [1]\n", __func__);
 	help_boot_proc(runtime_proc_id, (char *) "runtime");
+	printf("%s [2]\n", __func__);
 }
 
 void help_boot_procs(void)
@@ -88,20 +90,18 @@ int reset_proc(uint8_t proc_id)
 		 * If these commands are received by its bootloader, it will
 		 * confuse it.
 		 */
-		while (!is_queue_available(Q_STORAGE_DATA_OUT))
-			/* FIXME: too long of a wait */
-			sleep(1);
+		while (!is_queue_available(Q_STORAGE_DATA_OUT));
 	} else if (proc_id == P_NETWORK) {
 		help_boot_network_proc();
 	} else if (proc_id == P_STORAGE) {
-		/*
-		 * This wait is needed because the pmu_reset_proc() returns
-		 * before the PMU resets the proc mailbox(es).
-		 */
-		/* FIXME: too long of a wait. Can we change pmu_reset_proc()
-		 * so that it returns after the reset is completely done?
-		 */
-		sleep(1);
+		///*
+		// * This wait is needed because the pmu_reset_proc() returns
+		// * before the PMU resets the proc mailbox(es).
+		// */
+		///* FIXME: too long of a wait. Can we change pmu_reset_proc()
+		// * so that it returns after the reset is completely done?
+		// */
+		//sleep(1);
 		printf("%s [1]\n", __func__);
 		uint32_t partition_size = initialize_storage();
 		printf("%s [2]\n", __func__);
@@ -110,4 +110,45 @@ int reset_proc(uint8_t proc_id)
 	}
 
 	return 0;
+}
+
+int reboot_system(void)
+{
+	int ret;
+
+	/* Send a halt cmd to untrusted in case it's listening.
+	 * Will be automatically rebooted by the PMU.
+	 */
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+	memcpy(&buf[1], "halt\n", 5);
+	send_cmd_to_untrusted(buf);
+
+	/* send a reboot cmd to PMU */
+	ret = pmu_reboot();
+
+	if (!ret)
+		help_boot_procs();
+
+	return ret;
+}
+
+int halt_system(void)
+{
+	int ret;
+
+	/* send a halt cmd to untrusted in case it's listening */
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+	memcpy(&buf[1], "halt\n", 5);
+	send_cmd_to_untrusted(buf);
+
+	/* send a shutdown cmd to PMU */
+	/* FIXME: there is a race condition here.
+	 * Our halt cmd sent to the untrusted domain might trigger the PMU
+	 * to reboot it before PMU receives the shutdown cmd.
+	 */
+	ret = pmu_shutdown();
+
+	return ret;
 }

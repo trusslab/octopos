@@ -369,18 +369,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 		if (strcmp(args[0], "halt") == 0) {
 			int ret;
 
-			/* send a halt cmd to untrusted in case it's listening */
-			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-			memcpy(&buf[1], "halt\n", 5);
-			send_cmd_to_untrusted(buf);
-
-			/* send a shutdown cmd to PMU */
-			/* FIXME: there is a race condition here.
-			 * Our halt cmd sent to the untrusted domain might trigger the PMU
-			 * to reboot it before PMU receives the shutdown cmd.
-			 */
-			ret = pmu_shutdown();
+			ret = halt_system();
 			if (ret)
 				output_printf("Couldn't shut down\n");
 
@@ -389,16 +378,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 		} else if (strcmp(args[0], "reboot") == 0) {
 			int ret;
 
-			/* Send a halt cmd to untrusted in case it's listening.
-			 * Will be automatically rebooted by the PMU.
-			 */
-			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-			memcpy(&buf[1], "halt\n", 5);
-			send_cmd_to_untrusted(buf);
-
-			/* send a reboot cmd to PMU */
-			ret = pmu_reboot();
+			ret = reboot_system();	
 			if (ret)
 				output_printf("Couldn't reboot all processors\n");
 

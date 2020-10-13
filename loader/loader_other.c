@@ -57,6 +57,7 @@ void read_from_storage_data_queue(uint8_t *buf)
 static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
+	int spurious = 0;
 
 	while (1) {
 		printf("%s [1]\n", __func__);
@@ -72,6 +73,18 @@ static void *handle_mailbox_interrupts(void *data)
 		//} else if (interrupt == Q_TPM_DATA_IN) {
 		//} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
 		//	sem_post(&interrupts[Q_TPM_DATA_IN]);
+		/* When the OS resets a runtime (after it's one), it is possible
+		 * for the loader (when trying to reload the runtime) to receive
+		 * an interrupt acknowledging that the OS read the last syscall
+		 * from the mailbox (for termination information),
+		 * or the interrupt for the response to that last syscall.
+		 */
+		} else if (runtime1 && (interrupt == Q_OS1 || interrupt == Q_RUNTIME1)
+			   && spurious <= 1) {
+			spurious++;
+		} else if (runtime2 && (interrupt == Q_OS2 || interrupt == Q_RUNTIME2)
+			   && spurious <= 1) {
+			spurious++;
 		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);

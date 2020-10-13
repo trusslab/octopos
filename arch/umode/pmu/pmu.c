@@ -8,6 +8,7 @@
 #include <termios.h>
 #include <errno.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -30,8 +31,10 @@ pid_t mailbox_pid, tpm_pid, tpm_server_pid, tpm2_abrmd_pid,
 
 struct termios orig;
 
-int do_reboot = 1;
+int do_restart = 1;
+int do_reset_queues = 1;
 int num_running_procs = 0;
+sem_t reset_done[NUM_PROCESSORS + 1];
 
 int mailbox_ready = 0;
 
@@ -378,33 +381,39 @@ static void *proc_reboot_handler(void *data)
 	int wstatus, ret = 0;
 	int reboot_exception = 0;
 
-	while (do_reboot || num_running_procs) {
+	while (do_restart || do_reset_queues || num_running_procs) {
 		pid_t pid = wait(&wstatus);
 		if (!(wstatus == 0 || wstatus == 9))
 			continue;
 		num_running_procs--;
 		if (pid == mailbox_pid) {
 			sprintf(proc_name, "Mailbox");
-			if (do_reboot)
-				mailbox_pid = start_mailbox_proc();
+			//if (do_restart)
+			//	mailbox_pid = start_mailbox_proc();
+			reboot_exception = 1;
+			sem_post(&reset_done[0]);
 		} else if (pid == tpm_pid) {
 			sprintf(proc_name, "TPM");
-			if (do_reboot) {
-				tpm_server_pid = start_tpm_server_proc();
-				tpm2_abrmd_pid = start_tpm2_abrmd_proc();
-				tpm_pid = start_tpm_proc();
-			}
+			//if (do_restart) {
+			//	tpm_server_pid = start_tpm_server_proc();
+			//	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
+			//	tpm_pid = start_tpm_proc();
+			//}
+			reboot_exception = 1;
+			sem_post(&reset_done[P_TPM]);
 		} else if (pid == tpm_server_pid) {
 			/* do nothing */
 			sprintf(proc_name, "TPM_server");
 			reboot_exception = 1;
+			sem_post(&reset_done[P_TPM]);
 		} else if (pid == tpm2_abrmd_pid) {
 			/* do nothing */
 			sprintf(proc_name, "TPM_abrmd");
 			reboot_exception = 1;
+			sem_post(&reset_done[P_TPM]);
 		} else if (pid == os_pid) {
 			sprintf(proc_name, "OS processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_OS1);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_OS1\n", __func__);
@@ -418,56 +427,71 @@ static void *proc_reboot_handler(void *data)
 				}
 
 				mailbox_reset_queue(Q_OSU);
-
-				os_pid = start_os_proc();
 			}
+
+			if (do_restart)
+				os_pid = start_os_proc();
+
+			sem_post(&reset_done[P_OS]);
 		} else if (pid == keyboard_pid) {
 			sprintf(proc_name, "Keyboard processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_KEYBOARD);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_KEYBOARD\n", __func__);
 					goto print;
 				}
-
-				keyboard_pid = start_keyboard_proc();
 			}
+
+			if (do_restart)
+				keyboard_pid = start_keyboard_proc();
+
+			sem_post(&reset_done[P_KEYBOARD]);
 		} else if (pid == serial_out_pid) {
 			sprintf(proc_name, "Serial Out processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_SERIAL_OUT);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_SERIAL_OUT\n", __func__);
 					goto print;
 				}
-
-				serial_out_pid = start_serial_out_proc();
 			}
+
+			if (do_restart)
+				serial_out_pid = start_serial_out_proc();
+
+			sem_post(&reset_done[P_SERIAL_OUT]);
 		} else if (pid == runtime1_pid) {
 			sprintf(proc_name, "Runtime1 processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_RUNTIME1);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_RUNTIME1\n", __func__);
 					goto print;
 				}
-
-				runtime1_pid = start_runtime_proc((char *) "1");
 			}
+
+			if (do_restart)
+				runtime1_pid = start_runtime_proc((char *) "1");
+
+			sem_post(&reset_done[P_RUNTIME1]);
 		} else if (pid == runtime2_pid) {
 			sprintf(proc_name, "Runtime2 processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_RUNTIME2);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_RUNTIME2\n", __func__);
 					goto print;
 				}
-
-				runtime2_pid = start_runtime_proc((char *) "2");
 			}
+
+			if (do_restart)
+				runtime2_pid = start_runtime_proc((char *) "2");
+
+			sem_post(&reset_done[P_RUNTIME2]);
 		} else if (pid == storage_pid) {
 			sprintf(proc_name, "Storage processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_STORAGE_DATA_IN);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_STORAGE_DATA_IN\n", __func__);
@@ -491,12 +515,15 @@ static void *proc_reboot_handler(void *data)
 					printf("Error: %s: couldn't reset Q_STORAGE_CMD_OUT\n", __func__);
 					goto print;
 				}
-
-				storage_pid = start_storage_proc();
 			}
+
+			if (do_restart)
+				storage_pid = start_storage_proc();
+
+			sem_post(&reset_done[P_STORAGE]);
 		} else if (pid == network_pid) {
 			sprintf(proc_name, "Network processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_NETWORK_DATA_IN);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_NETWORK_DATA_IN\n", __func__);
@@ -520,19 +547,24 @@ static void *proc_reboot_handler(void *data)
 					printf("Error: %s: couldn't reset Q_NETWORK_CMD_OUT\n", __func__);
 					goto print;
 				}
-
-				network_pid = start_network_proc();
 			}
+
+			if (do_restart)
+				network_pid = start_network_proc();
+
+			sem_post(&reset_done[P_NETWORK]);
 		} else if (pid == untrusted_pid) {
 			sprintf(proc_name, "Untrusted processor");
-			if (do_reboot) {
+			if (do_reset_queues)
 				mailbox_reset_queue(Q_UNTRUSTED);
 
+			if (do_restart)
 				untrusted_pid = start_untrusted_proc();
-			}
+
+			sem_post(&reset_done[P_UNTRUSTED]);
 		} else if (pid == socket_server_pid) {
 			sprintf(proc_name, "Socket Server processor");
-			if (do_reboot)
+			if (do_restart)
 				socket_server_pid = start_socket_server_proc();
 		} else {
 			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
@@ -540,8 +572,10 @@ static void *proc_reboot_handler(void *data)
 		}
 
 print:
-		printf("%s terminated (%d)%s\n", proc_name, wstatus,
-		       (do_reboot && !reboot_exception && !ret) ? " and restarted" : "");
+		printf("%s terminated (%d)%s%s%s\n", proc_name, wstatus,
+		       (do_restart && !reboot_exception) ? " and restarted" : "",
+		       do_reset_queues && !reboot_exception ? " -- queues reset" : "",
+		       do_reset_queues && ret && !reboot_exception ? ", but unsuccessfully" : "");
 	}
 	
 	return NULL;
@@ -551,7 +585,7 @@ int main(int argc, char **argv)
 {
 	fd_set r_fds;
 	char buffer[1024];
-	int ret, len;
+	int ret, len, i;
 	int untrusted_init = 0;
 	pthread_t reboot_thread;
 
@@ -608,6 +642,9 @@ int main(int argc, char **argv)
 
 	dup2(fd_pmu_log, 1);
 	printf("%s: PMU init\n", __func__);
+
+	for (i = 0; i < NUM_PROCESSORS + 1; i++)
+		sem_init(&reset_done[i], 0, 0);
 
 	ret = pthread_create(&reboot_thread, NULL, proc_reboot_handler, NULL);
 	if (ret) {
@@ -666,7 +703,8 @@ int main(int argc, char **argv)
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
-					do_reboot = 0;
+					do_restart = 0;
+					do_reset_queues = 0;
 					halt_all_procs();
 					goto err_join;
 				} else {
@@ -682,7 +720,35 @@ int main(int argc, char **argv)
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
+					do_restart = 0;
 					halt_all_procs();
+					printf("%s [1]: waiting for mailbox\n", __func__);
+					/* We've used the first sem in the array for the mailbox. */
+					sem_wait(&reset_done[0]);
+					printf("%s [1]: waiting for TPM\n", __func__);
+					sem_wait(&reset_done[P_TPM]);
+					sem_wait(&reset_done[P_TPM]);
+					sem_wait(&reset_done[P_TPM]);
+					printf("%s [1]: waiting for OS\n", __func__);
+					sem_wait(&reset_done[P_OS]);
+					printf("%s [1]: waiting for KEYBOARD\n", __func__);
+					sem_wait(&reset_done[P_KEYBOARD]);
+					printf("%s [1]: waiting for SERIAL_OUT\n", __func__);
+					sem_wait(&reset_done[P_SERIAL_OUT]);
+					printf("%s [1]: waiting for STORAGE\n", __func__);
+					sem_wait(&reset_done[P_STORAGE]);
+					printf("%s [1]: waiting for NETWORK\n", __func__);
+					sem_wait(&reset_done[P_NETWORK]);
+					printf("%s [1]: waiting for RUNTIME1\n", __func__);
+					sem_wait(&reset_done[P_RUNTIME1]);
+					printf("%s [1]: waiting for RUNTIME2\n", __func__);
+					sem_wait(&reset_done[P_RUNTIME2]);
+					printf("%s [1]: waiting for UNTRUSTED\n", __func__);
+					sem_wait(&reset_done[P_UNTRUSTED]);
+					printf("%s [1]: done waiting\n", __func__);
+
+					do_restart = 1;
+					start_all_procs();
 				} 
 				else {
 					/* not allowed */
@@ -707,6 +773,9 @@ int main(int argc, char **argv)
 					if (!ret) {
 						/* allowed */
 						halt_proc(proc_id);
+						printf("%s [2]: waiting for %d\n", __func__, proc_id);
+						sem_wait(&reset_done[proc_id]);
+						printf("%s [3]\n", __func__);
 					} else {
 						/* not allowed */
 						cmd_ret = (uint32_t) ERR_PERMISSION;

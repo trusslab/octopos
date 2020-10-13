@@ -178,7 +178,7 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		return;
 	}
 
-	runtime_send_msg_on_queue_large((uint8_t *)path, Q_TPM_DATA_IN);
+	//runtime_send_msg_on_queue_large((uint8_t *)path, Q_TPM_DATA_IN);
 
 	(*app_main)(api);
 }
@@ -325,4 +325,11 @@ void close_runtime(void)
 	remove(fifo_runtime_out);
 	remove(fifo_runtime_in);
 	remove(fifo_runtime_intr);
+
+	printf("%s [1]\n", __func__);
+	/* Wait to be terminated by the OS. */
+	while(1) {
+		sleep(10);
+	}
+	printf("%s [2]\n", __func__);
 }
