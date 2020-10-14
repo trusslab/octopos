@@ -18,6 +18,7 @@ void prepare_loader(char *filename, int argc, char *argv[]);
  * @path: file path in the host file system
  */
 int copy_file_from_boot_partition(char *filename, char *path);
+void send_measurement_to_tpm(char *path);
 
 int main(int argc, char *argv[])
 {
@@ -47,6 +48,10 @@ int main(int argc, char *argv[])
 		
 	/* Add exec permission for the copied file */
 	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
+
+	printf("%s [3]: about to send measurement to TPM\n", __func__);
+	send_measurement_to_tpm(path);
+	printf("%s [4]\n", __func__);
 	
 	/* FIXME */
 	if (!strcmp(name, "runtime")) {

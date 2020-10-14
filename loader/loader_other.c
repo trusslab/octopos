@@ -67,12 +67,19 @@ static void *handle_mailbox_interrupts(void *data)
 		/* FIXME: check the TPM interrupt logic */
 		//if (interrupt > 0 && interrupt <= NUM_QUEUES && interrupt != Q_TPM_DATA_IN) {
 		if (interrupt == Q_STORAGE_DATA_OUT) {
-			sem_post(&interrupts[interrupt]);
+			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
 		} else if ((interrupt - NUM_QUEUES) == Q_STORAGE_DATA_OUT) {
 			sem_post(&availables[Q_STORAGE_DATA_OUT]);
-		//} else if (interrupt == Q_TPM_DATA_IN) {
-		//} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
-		//	sem_post(&interrupts[Q_TPM_DATA_IN]);
+		} else if (interrupt == Q_TPM_DATA_IN) {
+			sem_post(&interrupts[Q_TPM_DATA_IN]);
+			/* Block interrupts until the program is loaded.
+			 * Otherwise, we might receive some interrupts not
+			 * intended for the loader.
+			 */
+			return NULL;
+		} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
+			sem_post(&availables[Q_TPM_DATA_IN]);
+
 		/* When the OS resets a runtime (after it's one), it is possible
 		 * for the loader (when trying to reload the runtime) to receive
 		 * an interrupt acknowledging that the OS read the last syscall
@@ -92,11 +99,27 @@ static void *handle_mailbox_interrupts(void *data)
 	}
 }
 
+static void send_message_to_tpm(uint8_t* buf)
+{
+	uint8_t opcode[2];
+
+	//sem_wait(&interrupts[Q_TPM_DATA_IN]);
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_TPM_DATA_IN;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
 int init_mailbox(void)
 {
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
+	/* set the initial value of this one to 0 so that we can use it
+	 * to wait for the TPM to read the message.
+	 */
 	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
 	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 0);
+	sem_init(&availables[Q_TPM_DATA_IN], 0, 0);
 
 	/* FIXME */
 	if (keyboard) {
@@ -131,10 +154,14 @@ int init_mailbox(void)
 		mkfifo(FIFO_RUNTIME1_OUT, 0666);
 		mkfifo(FIFO_RUNTIME1_IN, 0666);
 		mkfifo(FIFO_RUNTIME1_INTR, 0666);
+		printf("%s [4.1]\n", __func__);
 
 		fd_out = open(FIFO_RUNTIME1_OUT, O_WRONLY);
+		printf("%s [4.2]\n", __func__);
 		fd_in = open(FIFO_RUNTIME1_IN, O_RDONLY);
+		printf("%s [4.3]\n", __func__);
 		fd_intr = open(FIFO_RUNTIME1_INTR, O_RDONLY);
+		printf("%s [4.4]\n", __func__);
 	} else if (runtime2) {
 		printf("%s [5]: runtime2\n", __func__);
 		mkfifo(FIFO_RUNTIME2_OUT, 0666);
@@ -148,6 +175,7 @@ int init_mailbox(void)
 		printf("Error: %s: no proc specified\n", __func__);
 		exit(-1);
 	}
+	printf("%s [6]\n", __func__);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
@@ -201,7 +229,6 @@ void prepare_loader(char *filename, int argc, char *argv[])
 		printf("Error: %s: unknown binary\n", __func__);
 		exit(-1);
 	}
-
 }
 
 /*
@@ -264,12 +291,12 @@ int copy_file_from_boot_partition(char *filename, char *path)
 		printf("%s [4]: offset = %d\n", __func__, offset);
 		read_from_storage_data_queue(buf);
 		
-		/* Block interrupts until the program is loaded.
-		 * Otherwise, we might receive some interrupts Not
-		 * intended for the loader.
-		 */
-		if (i == ((int) (count - 1)))
-			close_mailbox_thread();
+		///* Block interrupts until the program is loaded.
+		// * Otherwise, we might receive some interrupts Not
+		// * intended for the loader.
+		// */
+		//if (i == ((int) (count - 1)))
+		//	close_mailbox_thread();
 
 		fseek(copy_filep, offset, SEEK_SET);
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
@@ -283,9 +310,28 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 	//close_file_system();
 
-	close_mailbox();
-
 	//fclose(filep);
 
 	return 0;
+}
+
+void send_measurement_to_tpm(char *path)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+
+	printf("%s [1]\n", __func__);
+	sem_wait(&availables[Q_TPM_DATA_IN]);
+	printf("%s [2]\n", __func__);
+
+	memcpy(buf, path, strlen(path) + 1);
+
+	send_message_to_tpm(buf);
+	printf("%s [3]\n", __func__);
+
+	/* Wait for TPM to read the message */
+	sem_wait(&interrupts[Q_TPM_DATA_IN]);
+	printf("%s [4]\n", __func__);
+
+	close_mailbox_thread();
+	close_mailbox();
 }

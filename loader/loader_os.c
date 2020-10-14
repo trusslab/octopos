@@ -100,3 +100,8 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 	return 0;
 }
+
+void send_measurement_to_tpm(char *path)
+{
+	/* no op */
+}

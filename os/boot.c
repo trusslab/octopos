@@ -13,8 +13,15 @@
 #include <arch/mailbox_os.h>
 #include <arch/pmu.h> 
 
+void delegate_tpm_data_in_queue(uint8_t proc_id)
+{
+	wait_for_queue_availability(Q_TPM_DATA_IN);
+	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, proc_id, 1);
+}
+
 static void help_boot_proc(uint8_t proc_id, char *filename)
 {
+	/* Help with reading the image off of storage */
 	printf("%s [1]\n", __func__);
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
@@ -23,6 +30,10 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	file_system_write_file_blocks_late();
 	file_system_close_file(fd);
 	printf("%s [3]\n", __func__);
+
+	/* Help with sending measurements to TPM */
+	delegate_tpm_data_in_queue(proc_id);
+	printf("%s [4]\n", __func__);
 }
 
 static void help_boot_keyboard_proc(void)

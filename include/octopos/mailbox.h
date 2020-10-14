@@ -45,8 +45,8 @@
 #define	Q_RUNTIME2		15
 #define	Q_OSU			16
 #define	Q_UNTRUSTED		17
-#define Q_TPM_DATA_IN	18
-#define Q_TPM_DATA_OUT	19
+#define Q_TPM_DATA_IN		18
+#define Q_TPM_DATA_OUT		19
 #define NUM_QUEUES		19
 
 #define MAILBOX_QUEUE_SIZE		4

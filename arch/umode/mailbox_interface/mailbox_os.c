@@ -278,20 +278,13 @@ void write_to_storage_data_queue(uint8_t *buf)
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
-#ifdef ROLE_OS
-void release_tpm_writer(uint8_t proc_id)
-{
-	wait_for_queue_availability(Q_TPM_DATA_IN);
-	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, proc_id, 1);
-}
-#endif
-
 static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
+		if (interrupt) printf("%s [1]: interrupt = %d\n", __func__, interrupt);
 		if (interrupt == 0) {
 #ifdef ROLE_OS
 			/* timer interrupt */

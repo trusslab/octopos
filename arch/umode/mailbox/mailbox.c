@@ -727,10 +727,11 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	//printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
+	if (queue_id == Q_TPM_DATA_IN) printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[(int) queue_id];
 		read_queue(queue, processors[(int) reader_id].in_handle);
+		if (queue_id == Q_TPM_DATA_IN) printf("%s [2]: queue->writer_id = %d\n", __func__, queue->writer_id);
 		processors[queue->writer_id].send_interrupt(queue_id);
 		if (queue->access_count > 0) {
 			queue->access_count--;
@@ -744,7 +745,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	//printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
+	if (queue_id == Q_TPM_DATA_IN) printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
 		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
@@ -783,7 +784,8 @@ static int reset_queue_full(uint8_t queue_id)
 
 static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count)
 {
-	printf("%s [1]\n", __func__);
+	printf("%s [1]: queue_id = %d, proc_id = %d, count = %d\n", __func__,
+	       queue_id, proc_id, count);
 	bool allowed = false;
 	/* sanity checks */
 	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS) {
@@ -874,16 +876,16 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 			allowed = true;
 	} else if (queue_id == Q_TPM_DATA_IN && access == WRITE_ACCESS) {
 		if (queues[Q_TPM_DATA_IN].writer_id == P_OS &&
-			(proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 ||
-				proc_id == P_KEYBOARD || proc_id == P_STORAGE ||
-				proc_id == P_SERIAL_OUT))
+		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED ||
+		     proc_id == P_KEYBOARD || proc_id == P_SERIAL_OUT || proc_id == P_NETWORK))
 			allowed = true;
 
 		if ((queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME1 ||
 			 queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME2 ||
 			 queues[Q_TPM_DATA_IN].writer_id == P_KEYBOARD ||
+			 queues[Q_TPM_DATA_IN].writer_id == P_SERIAL_OUT ||
 			 queues[Q_TPM_DATA_IN].writer_id == P_STORAGE ||
-			 queues[Q_TPM_DATA_IN].writer_id == P_SERIAL_OUT) &&
+			 queues[Q_TPM_DATA_IN].writer_id == P_NETWORK) &&
 			proc_id == P_OS && queues[Q_TPM_DATA_IN].access_count == 0)
 			allowed = true;
 	}

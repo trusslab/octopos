@@ -29,8 +29,6 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	//send_ext_request_to_queue((uint8_t *) "./loader/keyboard.so");
-
 	keyboard_core();
 
 	close_keyboard();

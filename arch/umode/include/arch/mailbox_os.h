@@ -14,4 +14,3 @@ void wait_for_queue_availability(uint8_t queue_id);
 void mark_queue_unavailable(uint8_t queue_id);
 int init_os_mailbox(void);
 void close_os_mailbox(void);
-void release_tpm_writer(uint8_t proc_id);
