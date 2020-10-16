@@ -71,12 +71,12 @@ void wait_for_queue_availability(uint8_t queue_id)
 	sem_wait(&availables[queue_id]);
 }
 
-#ifdef ROLE_OS
 void mark_queue_unavailable(uint8_t queue_id)
 {
 	sem_init(&availables[queue_id], 0, 0);
 }
 
+#ifdef ROLE_OS
 int send_output(uint8_t *buf)
 {
 	uint8_t opcode[2];
@@ -203,6 +203,7 @@ int send_cmd_to_untrusted(uint8_t *buf)
 
 	return 0;
 }
+#endif /* ROLE_OS */
 
 /* Only to be used for queues that OS writes to */
 /* FIXME: busy-waiting */
@@ -228,7 +229,6 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	opcode[4] = count;
 	write(fd_out, opcode, 5);
 }
-#endif /* ROLE_OS */
 
 int send_msg_to_storage_no_response(uint8_t *buf)
 {
@@ -346,10 +346,12 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_RUNTIME2]);
 				break;
+#endif
 			case Q_TPM_DATA_IN:
 				sem_init(&interrupts[Q_TPM_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 				sem_post(&availables[Q_TPM_DATA_IN]);
 				break;
+#ifdef ROLE_OS
 			case Q_TPM_DATA_OUT:
 				sem_init(&interrupts[Q_TPM_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_TPM_DATA_OUT]);
@@ -397,7 +399,9 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
+#endif
 	sem_init(&interrupts[Q_TPM_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+#ifdef ROLE_OS
 	sem_init(&interrupts[Q_TPM_DATA_OUT], 0, 0);
 
 	sem_init(&availables[Q_KEYBOARD], 0, 1);
@@ -415,7 +419,9 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_SENSOR], 0, 1);
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);
+#endif
 	sem_init(&availables[Q_TPM_DATA_IN], 0, 1);
+#ifdef ROLE_OS
 	sem_init(&availables[Q_TPM_DATA_OUT], 0, 1);
 #endif
 	printf("%s [3]\n", __func__);

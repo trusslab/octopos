@@ -877,7 +877,8 @@ static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t pro
 	} else if (queue_id == Q_TPM_DATA_IN && access == WRITE_ACCESS) {
 		if (queues[Q_TPM_DATA_IN].writer_id == P_OS &&
 		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED ||
-		     proc_id == P_KEYBOARD || proc_id == P_SERIAL_OUT || proc_id == P_NETWORK))
+		     proc_id == P_KEYBOARD || proc_id == P_SERIAL_OUT || proc_id == P_NETWORK ||
+		     proc_id == P_STORAGE))
 			allowed = true;
 
 		if ((queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME1 ||

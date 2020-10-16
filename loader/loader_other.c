@@ -186,14 +186,11 @@ int init_mailbox(void)
 	return 0;
 }
 
-void close_mailbox_thread(void)
+void close_mailbox(void)
 {	
 	pthread_cancel(mailbox_thread);
 	pthread_join(mailbox_thread, NULL);
-}
-
-void close_mailbox(void)
-{	
+	
 	close(fd_out);
 	close(fd_in);
 	close(fd_intr);
@@ -332,6 +329,5 @@ void send_measurement_to_tpm(char *path)
 	sem_wait(&interrupts[Q_TPM_DATA_IN]);
 	printf("%s [4]\n", __func__);
 
-	close_mailbox_thread();
 	close_mailbox();
 }

@@ -7,14 +7,51 @@
 #include <dlfcn.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <semaphore.h>
+#include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <os/file_system.h>
 #include <os/storage.h>
 #include <arch/mailbox_os.h>
 
+extern int fd_out;
+extern sem_t interrupts[];
+
+/* FIXME: copied from loader_other.c */
+/* FIXME: move to mailbox_os.c or some shared util file*/
+static void send_message_to_tpm(uint8_t* buf)
+{
+	uint8_t opcode[2];
+
+	sem_wait(&interrupts[Q_TPM_DATA_IN]);
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_TPM_DATA_IN;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
 void prepare_loader(char *filename, int argc, char *argv[])
 {
-	/* no op */
+	printf("%s [1]\n", __func__);
+	/* FIXME: size hard-coded */
+	//total_blocks = 2000;
+	init_os_mailbox();
+	printf("%s [2]\n", __func__);
+	
+	/* delegate TPM mailbox to storage */
+	mark_queue_unavailable(Q_TPM_DATA_IN);
+	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, P_STORAGE, 1);
+	printf("%s [3]\n", __func__);
+
+	wait_for_queue_availability(Q_TPM_DATA_IN);
+	
+	initialize_storage();
+	printf("%s [5]\n", __func__);
+
+	/* FIXME: size hard-coded */
+	initialize_file_system(2000);
+	printf("%s [6]\n", __func__);
 }
 
 /*
@@ -39,18 +76,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	//	printf("Error: %s: Couldn't open the boot partition file.\n", __func__);
 	//	return -1;
 	//}
-
-	/* FIXME: size hard-coded */
-	//total_blocks = 2000;
-	init_os_mailbox();
-	initialize_storage();
-	printf("%s [2]\n", __func__);
-
-
-
-	/* FIXME: size hard-coded */
-	initialize_file_system(2000);
-	printf("%s [2.1]\n", __func__);
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
@@ -93,15 +118,23 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 	close_file_system();
 
-
-
 	//fclose(filep);
-	close_os_mailbox();
 
 	return 0;
 }
 
 void send_measurement_to_tpm(char *path)
 {
-	/* no op */
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	printf("%s [1]\n", __func__);
+
+	memcpy(buf, path, strlen(path) + 1);
+
+	send_message_to_tpm(buf);
+	printf("%s [2]\n", __func__);
+
+	/* Wait for TPM to read the message */
+	wait_until_empty(Q_TPM_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	
+	close_os_mailbox();
 }
