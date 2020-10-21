@@ -95,12 +95,17 @@ void tpm_directly_extend(int slot, char *path)
 void tpm_measurement_core()
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t proc_id;
 
 	while (1) {
-		read_ext_request_from_queue(buf);
-		tpm_directly_extend(TPM_USR_MEASUREMENT, (char *) buf);
-		fprintf(stdout, "SLOT %d CHANGED TO: ", TPM_USR_MEASUREMENT);
-		pcr_read_single(TPM_USR_MEASUREMENT);
+		proc_id = read_request_get_owner_from_queue(buf);
+		if (proc_id < MIN_PROC_ID || proc_id > MAX_PROC_ID) {
+			printf("Error: %s: unsupported proc_id (%d)\n", __func__, proc_id);
+			continue;
+		}
+		tpm_directly_extend(PROC_PCR_SLOT(proc_id), (char *) buf);
+		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id, PROC_PCR_SLOT(proc_id));
+		pcr_read_single(PROC_PCR_SLOT(proc_id));
 	}
 }
 

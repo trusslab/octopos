@@ -32,16 +32,43 @@ static void *handle_mailbox_interrupts(void *data)
 	}
 }
 
-void read_ext_request_from_queue(uint8_t *buf)
+/*
+ * This API returns the message as well as the proc_id of the sender.
+ * To achieve this, before reading the message, it disable queue delegation.
+ * This will ensure that the owner of the queue won't change until the message
+ * is read.
+ */
+uint8_t read_request_get_owner_from_queue(uint8_t *buf)
 {
 	uint8_t opcode[2];
+	mailbox_state_reg_t state;
 
+	sem_wait(&interrupts[Q_TPM_IN]);
+
+	/* disable delegation */
+	opcode[0] = MAILBOX_OPCODE_DISABLE_QUEUE_DELEGATION;
+	opcode[1] = Q_TPM_IN;
+	write(fd_out, opcode, 2);
+
+	/* get owner proc_id */
+	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
+	opcode[1] = Q_TPM_IN;
+	write(fd_out, opcode, 2);
+	read(fd_in, &state, sizeof(mailbox_state_reg_t));
+
+	/* read message */
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_TPM_IN;
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-	sem_wait(&interrupts[Q_TPM_IN]);
 	write(fd_out, opcode, 2);
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	/* enable delegation */
+	opcode[0] = MAILBOX_OPCODE_ENABLE_QUEUE_DELEGATION;
+	opcode[1] = Q_TPM_IN;
+	write(fd_out, opcode, 2);
+
+	return (uint8_t) state.owner;
 }
 
 /* Initializes the tpm mailbox */

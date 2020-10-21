@@ -70,6 +70,7 @@ typedef struct {
 	unsigned timeout:12;
 } mailbox_state_reg_t;
 
+/* FIXME: these are also defined in octopos/runtime.h */
 typedef uint32_t limit_t;
 typedef uint32_t timeout_t;
 
