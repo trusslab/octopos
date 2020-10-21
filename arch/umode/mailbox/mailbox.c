@@ -26,6 +26,7 @@ struct queue {
 	uint8_t queue_type;
 #define QUEUE_TYPE_FIXED_READER		0
 #define QUEUE_TYPE_FIXED_WRITER		1
+#define QUEUE_TYPE_SIMPLE		2
 	uint8_t **messages;
 	int queue_size;
 	int msg_size;
@@ -33,15 +34,23 @@ struct queue {
 	int tail;
 	int counter;
 	/* access control */
-	uint8_t reader_id;
-	uint8_t writer_id;
-	/* FIXME: too small */
-	uint8_t access_count;
+	/* For SIMPLE queues, fixed_proc is the reader and owner is the writer.
+	 * ALso, for SIMPLE queues, connections, limit, timeout, and prev_owner are not used. */
+	uint8_t fixed_proc;
+	uint8_t connections[NUM_PROCESSORS + 1]; /* All procs connected to the non-fixed end of the mailbox */
+	/* state register */
+	mailbox_state_reg_t state_reg;
+#define OWNER	state_reg.owner
+#define LIMIT	state_reg.limit
+#define TIMEOUT	state_reg.timeout
 	uint8_t prev_owner;
+	int delegation_disabled;
 };
 
 struct processor processors[NUM_PROCESSORS + 1];
 struct queue queues[NUM_QUEUES + 1];
+
+int delegation_allowed = 1;
 
 static void send_interrupt(struct processor *proc, uint8_t queue_id)
 {
@@ -282,15 +291,11 @@ static int change_back_queue_access(struct queue *queue)
 		return -1;
 	}
 
-	if (queue->queue_type == QUEUE_TYPE_FIXED_READER) {
-		queue->writer_id = queue->prev_owner;
-		queue->prev_owner = 0;
-		processors[(int) queue->writer_id].send_interrupt(queue->queue_id + NUM_QUEUES);
-	} else { /* QUEUE_TYPE_FIXED_WRITER */
-		queue->reader_id = queue->prev_owner;
-		queue->prev_owner = 0;
-		processors[(int) queue->reader_id].send_interrupt(queue->queue_id + NUM_QUEUES);
-	}
+	queue->OWNER = queue->prev_owner;
+	queue->prev_owner = 0;
+	queue->LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queue->TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	processors[queue->OWNER].send_interrupt(queue->queue_id + NUM_QUEUES);
 
 	return 0;
 }
@@ -329,48 +334,10 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
+/* Must only be called on queues that support delegation */
 static int is_queue_securely_delegated(uint8_t queue_id)
 {
-	switch (queue_id) {
-	case Q_KEYBOARD:
-		return (queues[Q_KEYBOARD].reader_id != P_OS);
-
-	case Q_SERIAL_OUT:
-		return (queues[Q_SERIAL_OUT].writer_id != P_OS);
-
-	case Q_STORAGE_DATA_IN:
-		return (queues[Q_STORAGE_DATA_IN].writer_id != P_OS);
-
-	case Q_STORAGE_DATA_OUT:
-		return (queues[Q_STORAGE_DATA_OUT].reader_id != P_OS);
-
-	case Q_STORAGE_CMD_IN:
-		return (queues[Q_STORAGE_CMD_IN].writer_id != P_OS);
-
-	case Q_STORAGE_CMD_OUT:
-		return (queues[Q_STORAGE_CMD_OUT].reader_id != P_OS);
-
-	case Q_NETWORK_DATA_IN:	
-		return (queues[Q_NETWORK_DATA_IN].writer_id != P_OS);
-
-	case Q_NETWORK_DATA_OUT:
-		return (queues[Q_NETWORK_DATA_OUT].reader_id != P_OS);
-
-	case Q_NETWORK_CMD_IN:
-		return (queues[Q_NETWORK_CMD_IN].writer_id != P_OS);
-
-	case Q_NETWORK_CMD_OUT:
-		return (queues[Q_NETWORK_CMD_OUT].reader_id != P_OS);
-
-	case Q_RUNTIME1:
-		return (queues[Q_RUNTIME1].writer_id != P_OS);
-
-	case Q_RUNTIME2:
-		return (queues[Q_RUNTIME2].writer_id != P_OS);
-
-	default:
-		return 0;
-	}
+	return (queues[queue_id].OWNER != P_OS);
 }
 
 static int any_secure_delegations(void)
@@ -391,16 +358,16 @@ static int any_secure_delegations(void)
 
 static int does_proc_have_secure_io(uint8_t proc_id)
 {
-	return ((queues[Q_KEYBOARD].reader_id == proc_id) ||
-		(queues[Q_SERIAL_OUT].writer_id == proc_id) ||
-		(queues[Q_STORAGE_DATA_IN].writer_id == proc_id) ||
-		(queues[Q_STORAGE_DATA_OUT].reader_id == proc_id) ||
-		(queues[Q_STORAGE_CMD_IN].writer_id == proc_id) ||
-		(queues[Q_STORAGE_CMD_OUT].reader_id == proc_id) ||
-		(queues[Q_NETWORK_DATA_IN].writer_id == proc_id) ||
-		(queues[Q_NETWORK_DATA_OUT].reader_id == proc_id) ||
-		(queues[Q_NETWORK_CMD_IN].writer_id == proc_id) ||
-		(queues[Q_NETWORK_CMD_OUT].reader_id == proc_id));
+	return ((queues[Q_KEYBOARD].OWNER == proc_id) ||
+		(queues[Q_SERIAL_OUT].OWNER == proc_id) ||
+		(queues[Q_STORAGE_DATA_IN].OWNER == proc_id) ||
+		(queues[Q_STORAGE_DATA_OUT].OWNER == proc_id) ||
+		(queues[Q_STORAGE_CMD_IN].OWNER == proc_id) ||
+		(queues[Q_STORAGE_CMD_OUT].OWNER == proc_id) ||
+		(queues[Q_NETWORK_DATA_IN].OWNER == proc_id) ||
+		(queues[Q_NETWORK_DATA_OUT].OWNER == proc_id) ||
+		(queues[Q_NETWORK_CMD_IN].OWNER == proc_id) ||
+		(queues[Q_NETWORK_CMD_OUT].OWNER == proc_id));
 }
 
 static int does_proc_have_secure_delegatation(uint8_t proc_id)
@@ -428,13 +395,13 @@ static int does_proc_have_secure_delegatation(uint8_t proc_id)
 		return (is_queue_securely_delegated(Q_RUNTIME1) ||
 			does_proc_have_secure_io(P_RUNTIME1) ||
 			/* secure IPC */
-			(queues[Q_RUNTIME2].writer_id == P_RUNTIME1));
+			(queues[Q_RUNTIME2].OWNER == P_RUNTIME1));
 
 	case P_RUNTIME2:
 		return (is_queue_securely_delegated(Q_RUNTIME2) ||
 			does_proc_have_secure_io(P_RUNTIME2) ||
 			/* secure IPC */
-			(queues[Q_RUNTIME1].writer_id == P_RUNTIME2));
+			(queues[Q_RUNTIME1].OWNER == P_RUNTIME2));
 
 	default:
 		printf("Error: %s: invalid processor ID (%d)\n", __func__, proc_id);
@@ -444,16 +411,13 @@ static int does_proc_have_secure_delegatation(uint8_t proc_id)
 
 static void initialize_queues(void)
 {
+	memset(queues, 0x0, sizeof(struct queue) * (NUM_QUEUES + 1)); 
+
 	/* OS queue for runtime1 */
 	queues[Q_OS1].queue_id = Q_OS1;
-	queues[Q_OS1].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_OS1].head = 0;
-	queues[Q_OS1].tail = 0;
-	queues[Q_OS1].counter = 0;
-	queues[Q_OS1].reader_id = P_OS;
-	queues[Q_OS1].writer_id = P_RUNTIME1;
-	queues[Q_OS1].access_count = 0;
-	queues[Q_OS1].prev_owner = 0;
+	queues[Q_OS1].queue_type = QUEUE_TYPE_SIMPLE;
+	queues[Q_OS1].fixed_proc = P_OS;
+	queues[Q_OS1].OWNER = P_RUNTIME1;
 	queues[Q_OS1].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_OS1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_OS1].messages = 
@@ -461,14 +425,9 @@ static void initialize_queues(void)
 
 	/* OS queue for runtime2 */
 	queues[Q_OS2].queue_id = Q_OS2;
-	queues[Q_OS2].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_OS2].head = 0;
-	queues[Q_OS2].tail = 0;
-	queues[Q_OS2].counter = 0;
-	queues[Q_OS2].reader_id = P_OS;
-	queues[Q_OS2].writer_id = P_RUNTIME2;
-	queues[Q_OS2].access_count = 0;
-	queues[Q_OS2].prev_owner = 0;
+	queues[Q_OS2].queue_type = QUEUE_TYPE_SIMPLE;
+	queues[Q_OS2].fixed_proc = P_OS;
+	queues[Q_OS2].OWNER = P_RUNTIME2;
 	queues[Q_OS2].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_OS2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_OS2].messages = 
@@ -477,13 +436,14 @@ static void initialize_queues(void)
 	/* keyboard queue */
 	queues[Q_KEYBOARD].queue_id = Q_KEYBOARD;
 	queues[Q_KEYBOARD].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_KEYBOARD].head = 0;
-	queues[Q_KEYBOARD].tail = 0;
-	queues[Q_KEYBOARD].counter = 0;
-	queues[Q_KEYBOARD].reader_id = P_OS;
-	queues[Q_KEYBOARD].writer_id = P_KEYBOARD;
-	queues[Q_KEYBOARD].access_count = 0;
-	queues[Q_KEYBOARD].prev_owner = 0;
+	queues[Q_KEYBOARD].fixed_proc = P_KEYBOARD;
+	queues[Q_KEYBOARD].OWNER = P_OS;
+	queues[Q_KEYBOARD].connections[P_OS] = 1;
+	queues[Q_KEYBOARD].connections[P_RUNTIME1] = 1;
+	queues[Q_KEYBOARD].connections[P_RUNTIME2] = 1;
+	queues[Q_KEYBOARD].connections[P_UNTRUSTED] = 1;
+	queues[Q_KEYBOARD].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_KEYBOARD].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_KEYBOARD].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_KEYBOARD].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_KEYBOARD].messages =
@@ -492,13 +452,14 @@ static void initialize_queues(void)
 	/* serial output queue */
 	queues[Q_SERIAL_OUT].queue_id = Q_SERIAL_OUT;
 	queues[Q_SERIAL_OUT].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_SERIAL_OUT].head = 0;
-	queues[Q_SERIAL_OUT].tail = 0;
-	queues[Q_SERIAL_OUT].counter = 0;
-	queues[Q_SERIAL_OUT].reader_id = P_SERIAL_OUT;
-	queues[Q_SERIAL_OUT].writer_id = P_OS;
-	queues[Q_SERIAL_OUT].access_count = 0;
-	queues[Q_SERIAL_OUT].prev_owner = 0;
+	queues[Q_SERIAL_OUT].fixed_proc = P_SERIAL_OUT;
+	queues[Q_SERIAL_OUT].OWNER = P_OS;
+	queues[Q_SERIAL_OUT].connections[P_OS] = 1;
+	queues[Q_SERIAL_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_SERIAL_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_SERIAL_OUT].connections[P_UNTRUSTED] = 1;
+	queues[Q_SERIAL_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_SERIAL_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_SERIAL_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_SERIAL_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_SERIAL_OUT].messages =
@@ -507,13 +468,14 @@ static void initialize_queues(void)
 	/* storage queues */
 	queues[Q_STORAGE_DATA_IN].queue_id = Q_STORAGE_DATA_IN;
 	queues[Q_STORAGE_DATA_IN].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_STORAGE_DATA_IN].head = 0;
-	queues[Q_STORAGE_DATA_IN].tail = 0;
-	queues[Q_STORAGE_DATA_IN].counter = 0;
-	queues[Q_STORAGE_DATA_IN].reader_id = P_STORAGE;
-	queues[Q_STORAGE_DATA_IN].writer_id = P_OS;
-	queues[Q_STORAGE_DATA_IN].access_count = 0;
-	queues[Q_STORAGE_DATA_IN].prev_owner = 0;
+	queues[Q_STORAGE_DATA_IN].fixed_proc = P_STORAGE;
+	queues[Q_STORAGE_DATA_IN].OWNER = P_OS;
+	queues[Q_STORAGE_DATA_IN].connections[P_OS] = 1;
+	queues[Q_STORAGE_DATA_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_STORAGE_DATA_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_STORAGE_DATA_IN].connections[P_UNTRUSTED] = 1;
+	queues[Q_STORAGE_DATA_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_STORAGE_DATA_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_STORAGE_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_IN].messages =
@@ -521,13 +483,21 @@ static void initialize_queues(void)
 
 	queues[Q_STORAGE_DATA_OUT].queue_id = Q_STORAGE_DATA_OUT;
 	queues[Q_STORAGE_DATA_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_STORAGE_DATA_OUT].head = 0;
-	queues[Q_STORAGE_DATA_OUT].tail = 0;
-	queues[Q_STORAGE_DATA_OUT].counter = 0;
-	queues[Q_STORAGE_DATA_OUT].reader_id = P_OS;
-	queues[Q_STORAGE_DATA_OUT].writer_id = P_STORAGE;
-	queues[Q_STORAGE_DATA_OUT].access_count = 0;
-	queues[Q_STORAGE_DATA_OUT].prev_owner = 0;
+	queues[Q_STORAGE_DATA_OUT].fixed_proc = P_STORAGE;
+	queues[Q_STORAGE_DATA_OUT].OWNER = P_OS;
+	/* This queue is connected to all other procs.
+	 * This is needed in the booting process, where each
+	 * proc needs to read its image from the storage service.
+	 */
+	queues[Q_STORAGE_DATA_OUT].connections[P_OS] = 1;
+	queues[Q_STORAGE_DATA_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_STORAGE_DATA_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_STORAGE_DATA_OUT].connections[P_UNTRUSTED] = 1;
+	queues[Q_STORAGE_DATA_OUT].connections[P_KEYBOARD] = 1;
+	queues[Q_STORAGE_DATA_OUT].connections[P_SERIAL_OUT] = 1;
+	queues[Q_STORAGE_DATA_OUT].connections[P_NETWORK] = 1;
+	queues[Q_STORAGE_DATA_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_STORAGE_DATA_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_STORAGE_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_OUT].messages =
@@ -535,13 +505,14 @@ static void initialize_queues(void)
 
 	queues[Q_STORAGE_CMD_IN].queue_id = Q_STORAGE_CMD_IN;
 	queues[Q_STORAGE_CMD_IN].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_STORAGE_CMD_IN].head = 0;
-	queues[Q_STORAGE_CMD_IN].tail = 0;
-	queues[Q_STORAGE_CMD_IN].counter = 0;
-	queues[Q_STORAGE_CMD_IN].reader_id = P_STORAGE;
-	queues[Q_STORAGE_CMD_IN].writer_id = P_OS;
-	queues[Q_STORAGE_CMD_IN].access_count = 0;
-	queues[Q_STORAGE_CMD_IN].prev_owner = 0;
+	queues[Q_STORAGE_CMD_IN].fixed_proc = P_STORAGE;
+	queues[Q_STORAGE_CMD_IN].OWNER = P_OS;
+	queues[Q_STORAGE_CMD_IN].connections[P_OS] = 1;
+	queues[Q_STORAGE_CMD_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_STORAGE_CMD_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_STORAGE_CMD_IN].connections[P_UNTRUSTED] = 1;
+	queues[Q_STORAGE_CMD_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_STORAGE_CMD_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_STORAGE_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_STORAGE_CMD_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_STORAGE_CMD_IN].messages =
@@ -549,13 +520,14 @@ static void initialize_queues(void)
 
 	queues[Q_STORAGE_CMD_OUT].queue_id = Q_STORAGE_CMD_OUT;
 	queues[Q_STORAGE_CMD_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_STORAGE_CMD_OUT].head = 0;
-	queues[Q_STORAGE_CMD_OUT].tail = 0;
-	queues[Q_STORAGE_CMD_OUT].counter = 0;
-	queues[Q_STORAGE_CMD_OUT].reader_id = P_OS;
-	queues[Q_STORAGE_CMD_OUT].writer_id = P_STORAGE;
-	queues[Q_STORAGE_CMD_OUT].access_count = 0;
-	queues[Q_STORAGE_CMD_OUT].prev_owner = 0;
+	queues[Q_STORAGE_CMD_OUT].fixed_proc = P_STORAGE;
+	queues[Q_STORAGE_CMD_OUT].OWNER = P_OS;
+	queues[Q_STORAGE_CMD_OUT].connections[P_OS] = 1;
+	queues[Q_STORAGE_CMD_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_STORAGE_CMD_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_STORAGE_CMD_OUT].connections[P_UNTRUSTED] = 1;
+	queues[Q_STORAGE_CMD_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_STORAGE_CMD_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_STORAGE_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_STORAGE_CMD_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_STORAGE_CMD_OUT].messages =
@@ -564,13 +536,14 @@ static void initialize_queues(void)
 	/* network queues */
 	queues[Q_NETWORK_DATA_IN].queue_id = Q_NETWORK_DATA_IN;
 	queues[Q_NETWORK_DATA_IN].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_NETWORK_DATA_IN].head = 0;
-	queues[Q_NETWORK_DATA_IN].tail = 0;
-	queues[Q_NETWORK_DATA_IN].counter = 0;
-	queues[Q_NETWORK_DATA_IN].reader_id = P_NETWORK;
-	queues[Q_NETWORK_DATA_IN].writer_id = P_OS;
-	queues[Q_NETWORK_DATA_IN].access_count = 0;
-	queues[Q_NETWORK_DATA_IN].prev_owner = 0;
+	queues[Q_NETWORK_DATA_IN].fixed_proc = P_NETWORK;
+	queues[Q_NETWORK_DATA_IN].OWNER = P_OS;
+	queues[Q_NETWORK_DATA_IN].connections[P_OS] = 1;
+	queues[Q_NETWORK_DATA_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_NETWORK_DATA_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_NETWORK_DATA_IN].connections[P_UNTRUSTED] = 1;
+	queues[Q_NETWORK_DATA_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_NETWORK_DATA_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_NETWORK_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_NETWORK_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_NETWORK_DATA_IN].messages =
@@ -578,13 +551,14 @@ static void initialize_queues(void)
 
 	queues[Q_NETWORK_DATA_OUT].queue_id = Q_NETWORK_DATA_OUT;
 	queues[Q_NETWORK_DATA_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_NETWORK_DATA_OUT].head = 0;
-	queues[Q_NETWORK_DATA_OUT].tail = 0;
-	queues[Q_NETWORK_DATA_OUT].counter = 0;
-	queues[Q_NETWORK_DATA_OUT].reader_id = P_OS;
-	queues[Q_NETWORK_DATA_OUT].writer_id = P_NETWORK;
-	queues[Q_NETWORK_DATA_OUT].access_count = 0;
-	queues[Q_NETWORK_DATA_OUT].prev_owner = 0;
+	queues[Q_NETWORK_DATA_OUT].fixed_proc = P_NETWORK;
+	queues[Q_NETWORK_DATA_OUT].OWNER = P_OS;
+	queues[Q_NETWORK_DATA_OUT].connections[P_OS] = 1;
+	queues[Q_NETWORK_DATA_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_NETWORK_DATA_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_NETWORK_DATA_OUT].connections[P_UNTRUSTED] = 1;
+	queues[Q_NETWORK_DATA_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_NETWORK_DATA_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_NETWORK_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_NETWORK_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_NETWORK_DATA_OUT].messages =
@@ -592,13 +566,12 @@ static void initialize_queues(void)
 
 	queues[Q_NETWORK_CMD_IN].queue_id = Q_NETWORK_CMD_IN;
 	queues[Q_NETWORK_CMD_IN].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_NETWORK_CMD_IN].head = 0;
-	queues[Q_NETWORK_CMD_IN].tail = 0;
-	queues[Q_NETWORK_CMD_IN].counter = 0;
-	queues[Q_NETWORK_CMD_IN].reader_id = P_NETWORK;
-	queues[Q_NETWORK_CMD_IN].writer_id = P_OS;
-	queues[Q_NETWORK_CMD_IN].access_count = 0;
-	queues[Q_NETWORK_CMD_IN].prev_owner = 0;
+	queues[Q_NETWORK_CMD_IN].fixed_proc = P_NETWORK;
+	queues[Q_NETWORK_CMD_IN].OWNER = P_OS;
+	/* FIXME: use a SIMPLE queue if only one connection */
+	queues[Q_NETWORK_CMD_IN].connections[P_OS] = 1;
+	queues[Q_NETWORK_CMD_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_NETWORK_CMD_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_NETWORK_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_NETWORK_CMD_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_NETWORK_CMD_IN].messages =
@@ -606,13 +579,12 @@ static void initialize_queues(void)
 
 	queues[Q_NETWORK_CMD_OUT].queue_id = Q_NETWORK_CMD_OUT;
 	queues[Q_NETWORK_CMD_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_NETWORK_CMD_OUT].head = 0;
-	queues[Q_NETWORK_CMD_OUT].tail = 0;
-	queues[Q_NETWORK_CMD_OUT].counter = 0;
-	queues[Q_NETWORK_CMD_OUT].reader_id = P_OS;
-	queues[Q_NETWORK_CMD_OUT].writer_id = P_NETWORK;
-	queues[Q_NETWORK_CMD_OUT].access_count = 0;
-	queues[Q_NETWORK_CMD_OUT].prev_owner = 0;
+	queues[Q_NETWORK_CMD_OUT].fixed_proc = P_NETWORK;
+	queues[Q_NETWORK_CMD_OUT].OWNER = P_OS;
+	/* FIXME: use a SIMPLE queue if only one connection */
+	queues[Q_NETWORK_CMD_OUT].connections[P_OS] = 1;
+	queues[Q_NETWORK_CMD_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_NETWORK_CMD_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_NETWORK_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_NETWORK_CMD_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_NETWORK_CMD_OUT].messages =
@@ -621,13 +593,12 @@ static void initialize_queues(void)
 	/* runtime1 queue */
 	queues[Q_RUNTIME1].queue_id = Q_RUNTIME1;
 	queues[Q_RUNTIME1].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_RUNTIME1].head = 0;
-	queues[Q_RUNTIME1].tail = 0;
-	queues[Q_RUNTIME1].counter = 0;
-	queues[Q_RUNTIME1].reader_id = P_RUNTIME1;
-	queues[Q_RUNTIME1].writer_id = P_OS;
-	queues[Q_RUNTIME1].access_count = 0; /* irrelevant for the RUNTIME1 queue */
-	queues[Q_RUNTIME1].prev_owner = 0;
+	queues[Q_RUNTIME1].fixed_proc = P_RUNTIME1;
+	queues[Q_RUNTIME1].OWNER = P_OS;
+	queues[Q_RUNTIME1].connections[P_OS] = 1;
+	queues[Q_RUNTIME1].connections[P_RUNTIME2] = 1;
+	queues[Q_RUNTIME1].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_RUNTIME1].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_RUNTIME1].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_RUNTIME1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_RUNTIME1].messages =
@@ -636,13 +607,12 @@ static void initialize_queues(void)
 	/* runtime2 queue */
 	queues[Q_RUNTIME2].queue_id = Q_RUNTIME2;
 	queues[Q_RUNTIME2].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_RUNTIME2].head = 0;
-	queues[Q_RUNTIME2].tail = 0;
-	queues[Q_RUNTIME2].counter = 0;
-	queues[Q_RUNTIME2].reader_id = P_RUNTIME2;
-	queues[Q_RUNTIME2].writer_id = P_OS;
-	queues[Q_RUNTIME2].access_count = 0; /* irrelevant for the RUNTIME2 queue */
-	queues[Q_RUNTIME2].prev_owner = 0;
+	queues[Q_RUNTIME2].fixed_proc = P_RUNTIME2;
+	queues[Q_RUNTIME2].OWNER = P_OS;
+	queues[Q_RUNTIME2].connections[P_OS] = 1;
+	queues[Q_RUNTIME2].connections[P_RUNTIME1] = 1;
+	queues[Q_RUNTIME2].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_RUNTIME2].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_RUNTIME2].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_RUNTIME2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_RUNTIME2].messages =
@@ -650,14 +620,9 @@ static void initialize_queues(void)
 
 	/* OS queue for untrusted */
 	queues[Q_OSU].queue_id = Q_OSU;
-	queues[Q_OSU].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_OSU].head = 0;
-	queues[Q_OSU].tail = 0;
-	queues[Q_OSU].counter = 0;
-	queues[Q_OSU].reader_id = P_OS;
-	queues[Q_OSU].writer_id = P_UNTRUSTED;
-	queues[Q_OSU].access_count = 0;
-	queues[Q_OSU].prev_owner = 0;
+	queues[Q_OSU].queue_type = QUEUE_TYPE_SIMPLE;
+	queues[Q_OSU].fixed_proc = P_OS;
+	queues[Q_OSU].OWNER = P_UNTRUSTED;
 	queues[Q_OSU].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_OSU].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_OSU].messages = 
@@ -665,52 +630,65 @@ static void initialize_queues(void)
 
 	/* untrusted queue */
 	queues[Q_UNTRUSTED].queue_id = Q_UNTRUSTED;
-	queues[Q_UNTRUSTED].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_UNTRUSTED].head = 0;
-	queues[Q_UNTRUSTED].tail = 0;
-	queues[Q_UNTRUSTED].counter = 0;
-	queues[Q_UNTRUSTED].reader_id = P_UNTRUSTED;
-	queues[Q_UNTRUSTED].writer_id = P_OS;
-	queues[Q_UNTRUSTED].access_count = 0; /* irrelevant for the UNTRUSTED queue */
-	queues[Q_UNTRUSTED].prev_owner = 0;
+	queues[Q_UNTRUSTED].queue_type = QUEUE_TYPE_SIMPLE;
+	queues[Q_UNTRUSTED].fixed_proc = P_UNTRUSTED;
+	queues[Q_UNTRUSTED].OWNER = P_OS;
 	queues[Q_UNTRUSTED].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_UNTRUSTED].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_UNTRUSTED].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
-	/* tpm queue */
-	queues[Q_TPM_DATA_IN].queue_id = Q_TPM_DATA_IN;
-	queues[Q_TPM_DATA_IN].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_TPM_DATA_IN].head = 0;
-	queues[Q_TPM_DATA_IN].tail = 0;
-	queues[Q_TPM_DATA_IN].counter = 0;
-	queues[Q_TPM_DATA_IN].reader_id = P_TPM;
-	queues[Q_TPM_DATA_IN].writer_id = P_OS;
-	queues[Q_TPM_DATA_IN].access_count = 0;
-	queues[Q_TPM_DATA_IN].prev_owner = 0;
-	queues[Q_TPM_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
-	queues[Q_TPM_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
-	queues[Q_TPM_DATA_IN].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	/* TPM queue */
+	queues[Q_TPM_IN].queue_id = Q_TPM_IN;
+	queues[Q_TPM_IN].queue_type = QUEUE_TYPE_FIXED_READER;
+	queues[Q_TPM_IN].fixed_proc = P_TPM;
+	queues[Q_TPM_IN].OWNER = P_OS;
+	/* This queue is connected to most other procs.
+	 * This is needed in the booting process, where
+	 * each proc needs to send its measurement to TPM.
+	 */
+	queues[Q_TPM_IN].connections[P_OS] = 1;
+	queues[Q_TPM_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_TPM_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_TPM_IN].connections[P_KEYBOARD] = 1;
+	queues[Q_TPM_IN].connections[P_SERIAL_OUT] = 1;
+	queues[Q_TPM_IN].connections[P_NETWORK] = 1;
+	queues[Q_TPM_IN].connections[P_STORAGE] = 1;
+	queues[Q_TPM_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_TPM_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	queues[Q_TPM_IN].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_TPM_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_TPM_IN].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 
-	queues[Q_TPM_DATA_OUT].queue_id = Q_TPM_DATA_OUT;
-	queues[Q_TPM_DATA_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_TPM_DATA_OUT].head = 0;
-	queues[Q_TPM_DATA_OUT].tail = 0;
-	queues[Q_TPM_DATA_OUT].counter = 0;
-	queues[Q_TPM_DATA_OUT].reader_id = P_OS;
-	queues[Q_TPM_DATA_OUT].writer_id = P_TPM;
-	queues[Q_TPM_DATA_OUT].access_count = 0;
-	queues[Q_TPM_DATA_OUT].prev_owner = 0;
-	queues[Q_TPM_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
-	queues[Q_TPM_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
-	queues[Q_TPM_DATA_OUT].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	queues[Q_TPM_OUT].queue_id = Q_TPM_OUT;
+	queues[Q_TPM_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
+	queues[Q_TPM_OUT].fixed_proc = P_TPM;
+	queues[Q_TPM_OUT].OWNER = P_OS;
+	queues[Q_TPM_OUT].connections[P_OS] = 1;
+	//queues[Q_TPM_OUT].connections[P_RUNTIME1] = 1;
+	//queues[Q_TPM_OUT].connections[P_RUNTIME2] = 1;
+	//queues[Q_TPM_OUT].connections[P_KEYBOARD] = 1;
+	//queues[Q_TPM_OUT].connections[P_SERIAL_OUT] = 1;
+	//queues[Q_TPM_OUT].connections[P_NETWORK] = 1;
+	queues[Q_TPM_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_TPM_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	queues[Q_TPM_OUT].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_TPM_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_TPM_OUT].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
 {
-	if (queues[(int) queue_id].reader_id == proc_id)
+	if (queues[queue_id].queue_type == QUEUE_TYPE_FIXED_READER &&
+	    queues[queue_id].fixed_proc == proc_id)
+		return true;
+	else if (queues[queue_id].queue_type == QUEUE_TYPE_FIXED_WRITER &&
+	    queues[queue_id].OWNER == proc_id)
+		return true;
+	else if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE &&
+	    queues[queue_id].fixed_proc == proc_id)
 		return true;
 
 	return false;
@@ -718,24 +696,34 @@ static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
 
 static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 {
-	if (queues[(int) queue_id].writer_id == proc_id ||
-	    queues[(int) queue_id].writer_id == ALL_PROCESSORS)
+	if (queues[queue_id].queue_type == QUEUE_TYPE_FIXED_READER &&
+	    queues[queue_id].OWNER == proc_id)
 		return true;
-		
+	else if (queues[queue_id].queue_type == QUEUE_TYPE_FIXED_WRITER &&
+	    queues[queue_id].fixed_proc == proc_id)
+		return true;
+	else if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE &&
+	    queues[queue_id].OWNER == proc_id)
+		return true;
+
 	return false;
 }
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	if (queue_id == Q_TPM_DATA_IN) printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
+	printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
-		struct queue *queue = &queues[(int) queue_id];
-		read_queue(queue, processors[(int) reader_id].in_handle);
-		if (queue_id == Q_TPM_DATA_IN) printf("%s [2]: queue->writer_id = %d\n", __func__, queue->writer_id);
-		processors[queue->writer_id].send_interrupt(queue_id);
-		if (queue->access_count > 0) {
-			queue->access_count--;
-			if (queue->access_count == 0)
+		struct queue *queue = &queues[queue_id];
+		read_queue(queue, processors[reader_id].in_handle);
+		/* send interrupt to writer */
+		if (queues[queue_id].queue_type == QUEUE_TYPE_FIXED_WRITER)
+			processors[queue->fixed_proc].send_interrupt(queue_id);
+		else /* QUEUE_TYPE_FIXED_READER or QUEUE_TYPE_SIMPLE */
+			processors[queue->OWNER].send_interrupt(queue_id);
+		/* We don't decrement if the original owner is using the queue. */
+		if (queue->LIMIT > 0 && queue->LIMIT != MAILBOX_NO_LIMIT_VAL) {
+			queue->LIMIT--;
+			if (queue->LIMIT == 0)
 				change_back_queue_access(queue);
 		}
 	} else {
@@ -745,10 +733,14 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	if (queue_id == Q_TPM_DATA_IN) printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
+	printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
-		write_queue(&queues[(int) queue_id], processors[(int) writer_id].out_handle);
-		processors[(int) queues[(int) queue_id].reader_id].send_interrupt(queue_id);
+		write_queue(&queues[queue_id], processors[writer_id].out_handle);
+		/* send interrupt to reader */
+		if (queues[queue_id].queue_type == QUEUE_TYPE_FIXED_WRITER)
+			processors[queues[queue_id].OWNER].send_interrupt(queue_id);
+		else /* QUEUE_TYPE_FIXED_READER or QUEUE_TYPE_SIMPLE */
+			processors[queues[queue_id].fixed_proc].send_interrupt(queue_id);
 	} else {
 		printf("Error: processor %d can't write to queue %d\n", writer_id, queue_id);
 	}
@@ -757,22 +749,32 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 static void reset_queue(uint8_t queue_id)
 {
 	printf("%s [1]: queue_id = %d\n", __func__, queue_id);
-	for (int i = 0; i < queues[(int) queue_id].queue_size; i++)
-		memset(queues[(int) queue_id].messages[i], 0x0, queues[(int) queue_id].msg_size);
+	for (int i = 0; i < queues[queue_id].queue_size; i++)
+		memset(queues[queue_id].messages[i], 0x0, queues[queue_id].msg_size);
 
-	queues[(int) queue_id].head = 0;
-	queues[(int) queue_id].tail = 0;
-	queues[(int) queue_id].counter = 0;
+	queues[queue_id].head = 0;
+	queues[queue_id].tail = 0;
+	queues[queue_id].counter = 0;
 }
 
 static int reset_queue_full(uint8_t queue_id)
 {
+	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
+		reset_queue(queue_id);	
+		return 0;
+	}
+
 	if (is_queue_securely_delegated(queue_id))
 	    return -1;
 
 	reset_queue(queue_id);	
-	queues[(int) queue_id].access_count = 0;
-	queues[(int) queue_id].prev_owner = 0;
+	queues[queue_id].LIMIT = 0;
+	queues[queue_id].TIMEOUT = 0;
+	if (queues[queue_id].prev_owner)
+		queues[queue_id].OWNER = queues[queue_id].prev_owner;
+	queues[queue_id].prev_owner = 0;
+	queues[queue_id].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[queue_id].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 
 	return 0;
 }
@@ -782,270 +784,244 @@ static int reset_queue_full(uint8_t queue_id)
 #define ACCESS_UNLIMITED_REVOCABLE	0
 #define ACCESS_LIMITED_IRREVOCABLE	1
 
-static void os_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count)
+static void delegate_queue_access(uint8_t queue_id, uint8_t requester,
+				  mailbox_state_reg_t new_state)
 {
-	printf("%s [1]: queue_id = %d, proc_id = %d, count = %d\n", __func__,
-	       queue_id, proc_id, count);
-	bool allowed = false;
-	/* sanity checks */
-	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS) {
-		if (queues[Q_SERIAL_OUT].writer_id == P_OS && 
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
-			allowed = true;
-
-		if ((queues[Q_SERIAL_OUT].writer_id == P_RUNTIME1 || queues[Q_SERIAL_OUT].writer_id == P_RUNTIME2) &&
-		    proc_id == P_OS && queues[Q_SERIAL_OUT].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_KEYBOARD && access == READ_ACCESS) {
-		if (queues[Q_KEYBOARD].reader_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2))
-			allowed = true;
-
-		if ((queues[Q_KEYBOARD].reader_id == P_RUNTIME1 || queues[Q_KEYBOARD].reader_id == P_RUNTIME2) &&
-		    proc_id == P_OS && queues[Q_KEYBOARD].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_STORAGE_CMD_IN && access == WRITE_ACCESS) {
-		if (queues[Q_STORAGE_CMD_IN].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
-			allowed = true;
-
-		if ((queues[Q_STORAGE_CMD_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_CMD_IN].writer_id == P_RUNTIME2 || queues[Q_STORAGE_CMD_IN].writer_id == P_UNTRUSTED) &&
-		    proc_id == P_OS && queues[Q_STORAGE_CMD_IN].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_STORAGE_CMD_OUT && access == READ_ACCESS) {
-		if (queues[Q_STORAGE_CMD_OUT].reader_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
-			allowed = true;
-
-		if ((queues[Q_STORAGE_CMD_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_CMD_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_CMD_OUT].reader_id == P_UNTRUSTED) &&
-		    proc_id == P_OS &&
-		    queues[Q_STORAGE_CMD_OUT].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_STORAGE_DATA_IN && access == WRITE_ACCESS) {
-		if (queues[Q_STORAGE_DATA_IN].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
-			allowed = true;
-
-		if ((queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_IN].writer_id == P_UNTRUSTED) &&
-		    proc_id == P_OS && queues[Q_STORAGE_DATA_IN].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS) {
-		if (queues[Q_STORAGE_DATA_OUT].reader_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED ||
-		     proc_id == P_KEYBOARD || proc_id == P_SERIAL_OUT || proc_id == P_NETWORK))
-			allowed = true;
-
-		if ((queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_OUT].reader_id == P_UNTRUSTED) &&
-		    proc_id == P_OS &&
-		    queues[Q_STORAGE_DATA_OUT].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS) {
-		if (queues[Q_NETWORK_DATA_IN].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
-			allowed = true;
-
-		if ((queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME2 || queues[Q_NETWORK_DATA_IN].writer_id == P_UNTRUSTED) &&
-		    proc_id == P_OS && queues[Q_NETWORK_DATA_IN].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_NETWORK_DATA_OUT && access == READ_ACCESS) {
-		if (queues[Q_NETWORK_DATA_OUT].reader_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED))
-			allowed = true;
-
-		if ((queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_NETWORK_DATA_OUT].reader_id == P_UNTRUSTED) &&
-		    proc_id == P_OS &&
-		    queues[Q_NETWORK_DATA_OUT].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS) {
-		if (queues[Q_RUNTIME1].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME2))
-			allowed = true;
-
-		if ((queues[Q_RUNTIME1].writer_id == P_RUNTIME2) &&
-		    proc_id == P_OS &&
-		    queues[Q_RUNTIME1].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS) {
-		if (queues[Q_RUNTIME2].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME1))
-			allowed = true;
-
-		if ((queues[Q_RUNTIME2].writer_id == P_RUNTIME1) &&
-		    proc_id == P_OS &&
-		    queues[Q_RUNTIME2].access_count == 0)
-			allowed = true;
-	} else if (queue_id == Q_TPM_DATA_IN && access == WRITE_ACCESS) {
-		if (queues[Q_TPM_DATA_IN].writer_id == P_OS &&
-		    (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2 || proc_id == P_UNTRUSTED ||
-		     proc_id == P_KEYBOARD || proc_id == P_SERIAL_OUT || proc_id == P_NETWORK ||
-		     proc_id == P_STORAGE))
-			allowed = true;
-
-		if ((queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME1 ||
-			 queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME2 ||
-			 queues[Q_TPM_DATA_IN].writer_id == P_KEYBOARD ||
-			 queues[Q_TPM_DATA_IN].writer_id == P_SERIAL_OUT ||
-			 queues[Q_TPM_DATA_IN].writer_id == P_STORAGE ||
-			 queues[Q_TPM_DATA_IN].writer_id == P_NETWORK) &&
-			proc_id == P_OS && queues[Q_TPM_DATA_IN].access_count == 0)
-			allowed = true;
+	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
+		printf("Error: %s: SIMPLE queues don't support delegation (%d).\n",
+		       __func__, queue_id);
+		return;
 	}
-	printf("%s [2]: allowed = %d\n", __func__, allowed);
 
-	if (!allowed) {		
-		printf("Error: invalid config option by os\n");
+	if (requester != queues[queue_id].OWNER) { 
+		printf("Error: %s: Only the owner can perform delegation (%d, %d, %d).\n",
+		       __func__, queue_id, requester, queues[queue_id].OWNER);
+		return;
+	}
+
+	//if (access == WRITE_ACCESS && queues[queue_id].queue_type == QUEUE_TYPE_FIXED_READER) {
+	//	printf("Error: %s: Can't change the writer of a FIXED_READER queue (%d).\n",
+	//	       __func__, queue_id);
+	//	return;
+	//}
+
+	//if (access == READ_ACCESS && queues[queue_id].queue_type == QUEUE_TYPE_FIXED_WRITER) {
+	//	printf("Error: %s: Can't change the writer of a FIXED_WRITER queue (%d).\n",
+	//	       __func__, queue_id);
+	//	return;
+	//}
+
+	if (requester == new_state.owner)
+		/* no op */
+		return;
+
+	if (queues[queue_id].connections[new_state.owner] == 0) {
+		printf("Error: %s: proc %d is not connected to queue %d.\n",
+		       __func__, new_state.owner, queue_id);
+		return;
+	}
+
+	if (queues[queue_id].prev_owner) {
+		printf("Error: %s: nested delegation not supported (%d).\n",
+		       __func__, queue_id);
+		return;
+	}
+
+	if (queues[queue_id].LIMIT != MAILBOX_NO_LIMIT_VAL) {
+		printf("Error: %s: unexpected limit val (%d, %d).\n",
+		       __func__, queue_id, queues[queue_id].LIMIT);
+		return;
+	}
+
+	if (queues[queue_id].TIMEOUT != MAILBOX_NO_TIMEOUT_VAL) {
+		printf("Error: %s: unexpected timeout val (%d, %d).\n",
+		       __func__, queue_id, queues[queue_id].TIMEOUT);
 		return;
 	}
 
 	reset_queue(queue_id);	
 
-	if (access == READ_ACCESS) {
-		queues[(int) queue_id].prev_owner = queues[(int) queue_id].reader_id;
-		queues[(int) queue_id].reader_id = proc_id;
-	} else { /* access == WRITER_ACCESS */
-		queues[(int) queue_id].prev_owner = queues[(int) queue_id].writer_id;
-		queues[(int) queue_id].writer_id = proc_id;
-	}
-
-	queues[(int) queue_id].access_count = count;
+	queues[queue_id].prev_owner = queues[queue_id].OWNER;
+	queues[queue_id].state_reg = new_state;
 
 	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
-	processors[proc_id].send_interrupt(queue_id + NUM_QUEUES);
+	processors[new_state.owner].send_interrupt(queue_id + NUM_QUEUES);
 }
 
-static void runtime_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t requesting_proc_id)
+static void yield_queue_access(uint8_t queue_id, uint8_t requester)
 {
-	bool allowed = false;
-	/* sanity checks */
-	if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS &&
-	    (queues[Q_SERIAL_OUT].writer_id == P_RUNTIME1 || queues[Q_SERIAL_OUT].writer_id == P_RUNTIME2) &&
-	    queues[Q_SERIAL_OUT].writer_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_KEYBOARD && access == READ_ACCESS &&
-		 (queues[Q_KEYBOARD].reader_id == P_RUNTIME1 || queues[Q_KEYBOARD].reader_id == P_RUNTIME2) &&
-		 queues[Q_KEYBOARD].reader_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_STORAGE_CMD_IN && access == WRITE_ACCESS && 
-		 (queues[Q_STORAGE_CMD_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_CMD_IN].writer_id == P_RUNTIME2 || queues[Q_STORAGE_CMD_IN].writer_id == P_UNTRUSTED) &&
-		 queues[Q_STORAGE_CMD_IN].writer_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_STORAGE_CMD_OUT && access == READ_ACCESS &&
-		 (queues[Q_STORAGE_CMD_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_CMD_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_CMD_OUT].reader_id == P_UNTRUSTED) &&
-		 queues[Q_STORAGE_CMD_OUT].reader_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_STORAGE_DATA_IN && access == WRITE_ACCESS && 
-		 (queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_IN].writer_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_IN].writer_id == P_UNTRUSTED) &&
-		 queues[Q_STORAGE_DATA_IN].writer_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS &&
-		 (queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_STORAGE_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_STORAGE_DATA_OUT].reader_id == P_UNTRUSTED) &&
-		 queues[Q_STORAGE_DATA_OUT].reader_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS && 
-		 (queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_IN].writer_id == P_RUNTIME2 || queues[Q_NETWORK_DATA_IN].writer_id == P_UNTRUSTED) &&
-		 queues[Q_NETWORK_DATA_IN].writer_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_NETWORK_DATA_OUT && access == READ_ACCESS &&
-		 (queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME1 || queues[Q_NETWORK_DATA_OUT].reader_id == P_RUNTIME2 || queues[Q_NETWORK_DATA_OUT].reader_id == P_UNTRUSTED) &&
-		 queues[Q_NETWORK_DATA_OUT].reader_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS &&
-		 (queues[Q_RUNTIME1].writer_id == P_RUNTIME1 || queues[Q_RUNTIME1].writer_id == P_RUNTIME2) &&
-		 queues[Q_RUNTIME1].writer_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS &&
-		 requesting_proc_id == P_RUNTIME1 && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS &&
-		 (queues[Q_RUNTIME2].writer_id == P_RUNTIME1 || queues[Q_RUNTIME2].writer_id == P_RUNTIME2) &&
-		 queues[Q_RUNTIME2].writer_id == requesting_proc_id && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS &&
-		 requesting_proc_id == P_RUNTIME2 && proc_id == P_OS)
-			allowed = true;
-	else if (queue_id == Q_TPM_DATA_IN && access == WRITE_ACCESS &&
-			 (queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME1 || queues[Q_TPM_DATA_IN].writer_id == P_RUNTIME2) &&
-			 queues[Q_TPM_DATA_IN].writer_id == requesting_proc_id && proc_id == P_OS)
-		allowed = true;
-	
-	if (!allowed) {
-		printf("Error: invalid config option by runtime (might not be an error in case of secure IPC)\n");
+	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
+		printf("Error: %s: SIMPLE queues don't support delegation (%d).\n",
+		       __func__, queue_id);
 		return;
 	}
 
+	if (requester != queues[queue_id].OWNER) { 
+		printf("Error: %s: Only the owner can yield (%d, %d, %d).\n",
+		       __func__, queue_id, requester, queues[queue_id].OWNER);
+		return;
+	}
+
+	if (queues[queue_id].prev_owner == 0) {
+		printf("Error: %s: the queue hasn't been delegated (%d).\n",
+		       __func__, queue_id);
+		return;
+	}
+
+	if (queues[queue_id].LIMIT == MAILBOX_NO_LIMIT_VAL) {
+		printf("Error: %s: unexpected limit val (%d, %d).\n",
+		       __func__, queue_id, queues[queue_id].LIMIT);
+		return;
+	}
+
+	if (queues[queue_id].TIMEOUT == MAILBOX_NO_TIMEOUT_VAL) {
+		printf("Error: %s: unexpected timeout val (%d, %d).\n",
+		       __func__, queue_id, queues[queue_id].TIMEOUT);
+		return;
+	}
+
+	if (queues[queue_id].LIMIT == 0)
+		/* No op: queue access automatically goes back to prev_owner */
+		return;
+
+	if (queues[queue_id].TIMEOUT == 0)
+		/* No op: queue access automatically goes back to prev_owner */
+		return;
+
 	reset_queue(queue_id);	
 
-	if (access == READ_ACCESS) {
-		queues[(int) queue_id].prev_owner = queues[(int) queue_id].reader_id;
-		queues[(int) queue_id].reader_id = proc_id;
-	} else { /* access == WRITER_ACCESS */
-		queues[(int) queue_id].prev_owner = queues[(int) queue_id].writer_id;
-		queues[(int) queue_id].writer_id = proc_id;
-	}
-
-	/* FIXME: interrupt proc_id so that it knows it has access now? */
-
-	queues[(int) queue_id].access_count = 0; /* irrelevant in this case */
+	queues[queue_id].OWNER = queues[queue_id].prev_owner;
+	queues[queue_id].prev_owner = 0;
+	queues[queue_id].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[queue_id].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 
 	/* FIXME: This is a hack. We need to properly distinguish the interrupts. */
-	processors[proc_id].send_interrupt(queue_id + NUM_QUEUES);
+	processors[queues[queue_id].OWNER].send_interrupt(queue_id + NUM_QUEUES);
 }
 
-static uint8_t runtime_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t requesting_proc_id)
+static mailbox_state_reg_t attest_queue_access(uint8_t queue_id, uint8_t requester)
 {
-	if (queue_id == Q_KEYBOARD && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_SERIAL_OUT && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_STORAGE_CMD_OUT && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_STORAGE_CMD_IN && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_STORAGE_DATA_OUT && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_STORAGE_DATA_IN && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_NETWORK_DATA_OUT && access == READ_ACCESS) {
-		if (queues[(int) queue_id].reader_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_NETWORK_DATA_IN && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_RUNTIME1 && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
-	} else if (queue_id == Q_RUNTIME2 && access == WRITE_ACCESS) {
-		if (queues[(int) queue_id].writer_id == requesting_proc_id)
-			return queues[(int) queue_id].access_count;
-		else
-			return 0;
+	mailbox_state_reg_t MAILBOX_STATE_REG_INVALID =
+		{.owner = 0x00, .limit = 0x000, .timeout = 0x000};
+
+	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
+		printf("Error: %s: SIMPLE queues don't support attestation (%d).\n",
+		       __func__, queue_id);
+		return MAILBOX_STATE_REG_INVALID;
 	}
 
-	return 0;
+	if (requester != queues[queue_id].OWNER &&
+	    requester != queues[queue_id].fixed_proc) { 
+		printf("Error: %s: Only fixed_proc and owner can check the mailbox state (%d, %d, %d).\n",
+		       __func__, queue_id, requester, queues[queue_id].OWNER);
+		return MAILBOX_STATE_REG_INVALID;
+	}
+
+	return queues[queue_id].state_reg;
+}
+
+/*
+ * If requester == 0, it means the request is from PMU
+ */
+static void disable_queue_delegation(uint8_t queue_id, uint8_t requester)
+{
+	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
+		printf("Error: %s: SIMPLE queues don't support delegation (%d).\n",
+		       __func__, queue_id);
+		return;
+	}
+
+	if (requester != 0 &&
+	    requester != queues[queue_id].fixed_proc) { 
+		printf("Error: %s: Only fixed_proc and PMU can disable delegation (%d, %d).\n",
+		       __func__, queue_id, requester);
+		return;
+	}
+
+	queues[queue_id].delegation_disabled = 1;
+}
+
+/*
+ * If requester == 0, it means the request is from PMU
+ */
+static void enable_queue_delegation(uint8_t queue_id, uint8_t requester)
+{
+	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
+		printf("Error: %s: SIMPLE queues don't support delegation (%d).\n",
+		       __func__, queue_id);
+		return;
+	}
+
+	if (requester != 0 &&
+	    requester != queues[queue_id].fixed_proc) { 
+		printf("Error: %s: Only fixed_proc and PMU can enable delegation (%d, %d).\n",
+		       __func__, queue_id, requester);
+		return;
+	}
+
+	queues[queue_id].delegation_disabled = 0;
+}
+
+static void handle_proc_request(uint8_t requester)
+{
+	uint8_t opcode[2], queue_id;
+
+	memset(opcode, 0x0, 2);
+
+	read(processors[requester].out_handle, opcode, 2);
+	queue_id = opcode[1];
+
+	switch (opcode[0]) {
+	case MAILBOX_OPCODE_READ_QUEUE:
+		handle_read_queue(queue_id, requester);
+		break;
+
+	case MAILBOX_OPCODE_WRITE_QUEUE:
+		handle_write_queue(queue_id, requester);
+		break;
+
+	case MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS:
+		printf("%s [0.1]\n", __func__);
+		if (delegation_allowed && !queues[queue_id].delegation_disabled) {
+			printf("%s [0.2]\n", __func__);
+			mailbox_state_reg_t state;
+			memset(&state, 0x0, sizeof(mailbox_state_reg_t));
+			read(processors[requester].out_handle, &state, sizeof(mailbox_state_reg_t));
+			delegate_queue_access(queue_id, requester, state);
+		} else {
+			printf("Error: %s: delegation disabled for queue %d.\n", __func__, queue_id);
+		}
+		break;
+
+	case MAILBOX_OPCODE_YIELD_QUEUE_ACCESS:
+		printf("%s [0.1]\n", __func__);
+		if (delegation_allowed && !queues[queue_id].delegation_disabled) {
+			printf("%s [0.2]\n", __func__);
+			yield_queue_access(queue_id, requester);				
+		} else {
+			printf("Error: %s: delegation (and hence yielding) disabled for queue %d.\n",
+			       __func__, queue_id);
+		}
+		break;
+
+	case MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS: {
+		mailbox_state_reg_t state = attest_queue_access(queue_id, requester);				
+		write(processors[requester].in_handle, &state, sizeof(mailbox_state_reg_t));
+		break;
+		}
+
+	case MAILBOX_OPCODE_DISABLE_QUEUE_DELEGATION:
+		disable_queue_delegation(queue_id, requester);
+		break;
+
+	case MAILBOX_OPCODE_ENABLE_QUEUE_DELEGATION:
+		enable_queue_delegation(queue_id, requester);
+		break;
+
+	default:
+		printf("Error: %s: invalid opcode from %d\n", __func__, requester);
+		break;
+	}
 }
 
 static void *run_timer(void *data)
@@ -1058,10 +1034,8 @@ static void *run_timer(void *data)
 
 int main(int argc, char **argv)
 {
-	uint8_t opcode[2], writer_id, reader_id, queue_id;
 	pthread_t timer_thread;
 	int fd_pmu_to_mailbox, fd_pmu_from_mailbox;
-	int delegation_allowed = 1;
 
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -1125,240 +1099,33 @@ int main(int argc, char **argv)
 			break;
 		}
 
-		if (FD_ISSET(processors[P_OS].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_OS].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_OS;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_OS;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				printf("%s [0.1]\n", __func__);
-				if (delegation_allowed) {
-					printf("%s [0.2]\n", __func__);
-					uint8_t opcode_rest[3];
-					memset(opcode_rest, 0x0, 3);
-					read(processors[P_OS].out_handle, opcode_rest, 3);
-					os_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], opcode_rest[2]);				
-				} else {
-					printf("Error: %s: Changing queue access not allowed (RUNTIME2).\n", __func__);
-				}
-			} else {
-				printf("Error: invalid opcode from OS\n");
-			}
-		}
+		if (FD_ISSET(processors[P_OS].out_handle, &listen_fds))
+			handle_proc_request(P_OS);
 
-		if (FD_ISSET(processors[P_KEYBOARD].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_KEYBOARD].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_KEYBOARD;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_KEYBOARD;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				printf("%s [1]\n", __func__);
-				uint8_t opcode_rest[1];
-				memset(opcode_rest, 0x0, 1);
-				read(processors[P_KEYBOARD].out_handle, opcode_rest, 1);
-				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_KEYBOARD);				
-				printf("%s [2]: count = %d\n", __func__, count);
-				write(processors[P_KEYBOARD].in_handle, &count, 1);
-			} else {
-				printf("Error: invalid opcode from keyboard\n");
-			}
-		}		
+		if (FD_ISSET(processors[P_KEYBOARD].out_handle, &listen_fds))
+			handle_proc_request(P_KEYBOARD);
 
-		if (FD_ISSET(processors[P_SERIAL_OUT].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_SERIAL_OUT].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_SERIAL_OUT;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_SERIAL_OUT;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[1];
-				memset(opcode_rest, 0x0, 1);
-				read(processors[P_SERIAL_OUT].out_handle, opcode_rest, 1);
-				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_SERIAL_OUT);				
-				write(processors[P_SERIAL_OUT].in_handle, &count, 1);
-			} else {
-				printf("Error: invalid opcode from serial_out\n");
-			}
-		}
+		if (FD_ISSET(processors[P_SERIAL_OUT].out_handle, &listen_fds))
+			handle_proc_request(P_SERIAL_OUT);
+			
+		if (FD_ISSET(processors[P_RUNTIME1].out_handle, &listen_fds))
+			handle_proc_request(P_RUNTIME1);
 
-		if (FD_ISSET(processors[P_RUNTIME1].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_RUNTIME1].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_RUNTIME1;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_RUNTIME1;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				if (delegation_allowed) {
-					uint8_t opcode_rest[2];
-					memset(opcode_rest, 0x0, 2);
-					read(processors[P_RUNTIME1].out_handle, opcode_rest, 2);
-					runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME1);				
-				} else {
-					printf("Error: %s: Changing queue access not allowed (RUNTIME1).\n", __func__);
-				}
-			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[1];
-				memset(opcode_rest, 0x0, 1);
-				read(processors[P_RUNTIME1].out_handle, opcode_rest, 1);
-				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_RUNTIME1);				
-				write(processors[P_RUNTIME1].in_handle, &count, 1);
-			} else {
-				printf("Error: invalid opcode from runtime\n");
-			}
-		}
-
-		if (FD_ISSET(processors[P_RUNTIME2].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_RUNTIME2].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_RUNTIME2;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_RUNTIME2;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				if (delegation_allowed) {
-					uint8_t opcode_rest[2];
-					memset(opcode_rest, 0x0, 2);
-					read(processors[P_RUNTIME2].out_handle, opcode_rest, 2);
-					runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_RUNTIME2);				
-				} else {
-					printf("Error: %s: Changing queue access not allowed (RUNTIME2).\n", __func__);
-				}
-			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[1];
-				memset(opcode_rest, 0x0, 1);
-				read(processors[P_RUNTIME2].out_handle, opcode_rest, 1);
-				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_RUNTIME2);				
-				write(processors[P_RUNTIME2].in_handle, &count, 1);
-			} else {
-				printf("Error: invalid opcode from runtime\n");
-			}
-		}
-
-		if (FD_ISSET(processors[P_STORAGE].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_STORAGE].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_STORAGE;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_STORAGE;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else {
-				printf("Error: invalid opcode from storage\n");
-			}
-		}
-
-		if (FD_ISSET(processors[P_NETWORK].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_NETWORK].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_NETWORK;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_NETWORK;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[1];
-				memset(opcode_rest, 0x0, 1);
-				read(processors[P_NETWORK].out_handle, opcode_rest, 1);
-				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_NETWORK);				
-				write(processors[P_NETWORK].in_handle, &count, 1);
-			} else {
-				printf("Error: invalid opcode from network\n");
-			}
-		}
-		
-		if (FD_ISSET(processors[P_UNTRUSTED].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_UNTRUSTED].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_UNTRUSTED;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_UNTRUSTED;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS) {
-				uint8_t opcode_rest[2];
-				memset(opcode_rest, 0x0, 2);
-				read(processors[P_UNTRUSTED].out_handle, opcode_rest, 2);
-				runtime_change_queue_access(opcode[1], opcode_rest[0], opcode_rest[1], P_UNTRUSTED);				
-			} else if (opcode[0] == MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS) {
-				uint8_t opcode_rest[1];
-				memset(opcode_rest, 0x0, 1);
-				read(processors[P_UNTRUSTED].out_handle, opcode_rest, 1);
-				uint8_t count = runtime_attest_queue_access(opcode[1], opcode_rest[0], P_UNTRUSTED);				
-				write(processors[P_UNTRUSTED].in_handle, &count, 1);
-			} else {
-				printf("Error: invalid opcode from untrusted\n");
-			}
-		}
-
-		if (FD_ISSET(processors[P_TPM].out_handle, &listen_fds)) {
-			memset(opcode, 0x0, 2);
-			read(processors[P_TPM].out_handle, opcode, 2);
-			if (opcode[0] == MAILBOX_OPCODE_READ_QUEUE) {
-				reader_id = P_TPM;
-				queue_id = opcode[1];
-				writer_id = INVALID_PROCESSOR;
-				handle_read_queue(queue_id, reader_id);
-			} else if (opcode[0] == MAILBOX_OPCODE_WRITE_QUEUE) {
-				writer_id = P_TPM;
-				queue_id = opcode[1];
-				reader_id = INVALID_PROCESSOR;
-				handle_write_queue(queue_id, writer_id);
-			} else {
-				printf("Error: invalid opcode from tpm\n");
-			}
-		}
-
+		if (FD_ISSET(processors[P_RUNTIME2].out_handle, &listen_fds))
+			handle_proc_request(P_RUNTIME2);
+			
+		if (FD_ISSET(processors[P_STORAGE].out_handle, &listen_fds))
+			handle_proc_request(P_STORAGE);
+			
+		if (FD_ISSET(processors[P_NETWORK].out_handle, &listen_fds))
+			handle_proc_request(P_NETWORK);
+					
+		if (FD_ISSET(processors[P_UNTRUSTED].out_handle, &listen_fds))
+			handle_proc_request(P_UNTRUSTED);
+			
+		if (FD_ISSET(processors[P_TPM].out_handle, &listen_fds))
+			handle_proc_request(P_TPM);
+			
 		if (FD_ISSET(fd_pmu_to_mailbox, &listen_fds)) {
 			uint8_t pmu_mailbox_buf[PMU_MAILBOX_BUF_SIZE];
 			int len = read(fd_pmu_to_mailbox, pmu_mailbox_buf, PMU_MAILBOX_BUF_SIZE);
@@ -1402,4 +1169,6 @@ int main(int argc, char **argv)
 	remove(FIFO_PMU_TO_MAILBOX);
 	
 	close_processors();
+
+	return 0;
 }

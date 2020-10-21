@@ -307,9 +307,10 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 }
 
 #ifdef ARCH_SEC_HW
+/* FIXME: update according to umode updates */
 static int request_secure_keyboard(u16 count)
 #else
-static int request_secure_keyboard(int count)
+static int request_secure_keyboard(limit_t count)
 #endif
 {
 	reset_queue_sync(Q_KEYBOARD, 0);
@@ -322,7 +323,7 @@ static int request_secure_keyboard(int count)
 		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
-					READ_ACCESS, count);
+						     (limit_t) count);
 	if (!attest_ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
@@ -337,18 +338,16 @@ static int request_secure_keyboard(int count)
 
 static int yield_secure_keyboard(void)
 {
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(Q_KEYBOARD);
-#else
-	mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, P_OS);
-#endif
+
 	return 0;
 }
 
 #ifdef ARCH_SEC_HW
+/* FIXME: update according to umode updates */
 static int request_secure_serial_out(u16 count)
 #else
-static int request_secure_serial_out(int count)
+static int request_secure_serial_out(limit_t count)
 #endif
 {
 	reset_queue_sync(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
@@ -360,7 +359,7 @@ static int request_secure_serial_out(int count)
 		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
-					WRITE_ACCESS, count);
+						     (limit_t) count);
 	if (!attest_ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
@@ -377,11 +376,8 @@ static int yield_secure_serial_out(void)
 {
 	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
-#else
-	mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, P_OS);
-#endif
+
 	return 0;
 }
 
@@ -573,9 +569,10 @@ bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
 
 #ifdef ARCH_SEC_HW
+/* FIXME: update according to umode updates */
 static int request_secure_ipc(uint8_t target_runtime_queue_id, u16 count)
 #else
-static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
+static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
 #endif
 {
 	bool no_response;
@@ -591,7 +588,7 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
-					WRITE_ACCESS, count);
+						     (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure ipc send queue access\n", __func__);
 		return ERR_FAULT;
@@ -622,24 +619,21 @@ static int yield_secure_ipc(void)
 
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(qid);
-#else
-	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
-#endif
 
-/* ARCH_SEC_HW OctopOS mailbox only allows the current owner
- * to change/yield ownership. This is different from umode.
- * Thus, instead of explicitly yielding it, we attest it.
- * In case the other runtime refuses to yield, we forcefully
- * deplete the quota by repeatedly reading the mailbox.
- */
+	/* OctopOS mailbox only allows the current owner
+	 * to change/yield ownership.
+	 * Thus, instead of explicitly yielding it, we attest it.
+	 * In case the other runtime refuses to yield, we forcefully
+	 * deplete the quota by repeatedly reading the mailbox.
+	 */
 #ifdef ARCH_SEC_HW
 	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
 		mailbox_force_ownership(q_runtime, P_OS);
 	}
 #else
-	mailbox_change_queue_access(q_runtime, WRITE_ACCESS, P_OS);
+	printf("Error: %s: not supported\n", __func__);
+	exit(-1);
 #endif
 
 	return 0;

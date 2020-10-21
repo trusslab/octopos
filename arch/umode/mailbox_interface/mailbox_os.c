@@ -218,16 +218,32 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint8_t count)
+/*
+ * Compares limit and timeout to the max vals allowed and use
+ * the max vals if larger.
+ */
+void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
+				   limit_t limit, timeout_t timeout)
 {
-	uint8_t opcode[5];
+	uint8_t opcode[2];
+	mailbox_state_reg_t new_state;
 
-	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
+	new_state.owner = proc_id;
+
+	if (limit > MAILBOX_MAX_LIMIT_VAL)
+		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
+	else
+		new_state.limit = limit;
+
+	if (timeout > MAILBOX_MAX_TIMEOUT_VAL)
+		new_state.timeout = MAILBOX_MAX_TIMEOUT_VAL;
+	else
+		new_state.timeout = timeout;
+
+	opcode[0] = MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = proc_id;
-	opcode[4] = count;
-	write(fd_out, opcode, 5);
+	write(fd_out, opcode, 2);
+	write(fd_out, &new_state, sizeof(mailbox_state_reg_t));
 }
 
 int send_msg_to_storage_no_response(uint8_t *buf)
@@ -347,14 +363,14 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_post(&availables[Q_RUNTIME2]);
 				break;
 #endif
-			case Q_TPM_DATA_IN:
-				sem_init(&interrupts[Q_TPM_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
-				sem_post(&availables[Q_TPM_DATA_IN]);
+			case Q_TPM_IN:
+				sem_init(&interrupts[Q_TPM_IN], 0, MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_TPM_IN]);
 				break;
 #ifdef ROLE_OS
-			case Q_TPM_DATA_OUT:
-				sem_init(&interrupts[Q_TPM_DATA_OUT], 0, 0);
-				sem_post(&availables[Q_TPM_DATA_OUT]);
+			case Q_TPM_OUT:
+				sem_init(&interrupts[Q_TPM_OUT], 0, 0);
+				sem_post(&availables[Q_TPM_OUT]);
 				break;
 #endif
 			default:
@@ -400,9 +416,9 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
 #endif
-	sem_init(&interrupts[Q_TPM_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_TPM_IN], 0, MAILBOX_QUEUE_SIZE);
 #ifdef ROLE_OS
-	sem_init(&interrupts[Q_TPM_DATA_OUT], 0, 0);
+	sem_init(&interrupts[Q_TPM_OUT], 0, 0);
 
 	sem_init(&availables[Q_KEYBOARD], 0, 1);
 	sem_init(&availables[Q_SERIAL_OUT], 0, 1);
@@ -420,9 +436,9 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);
 #endif
-	sem_init(&availables[Q_TPM_DATA_IN], 0, 1);
+	sem_init(&availables[Q_TPM_IN], 0, 1);
 #ifdef ROLE_OS
-	sem_init(&availables[Q_TPM_DATA_OUT], 0, 1);
+	sem_init(&availables[Q_TPM_OUT], 0, 1);
 #endif
 	printf("%s [3]\n", __func__);
 

@@ -26,18 +26,17 @@ sem_t availables[NUM_QUEUES + 1];
 
 int keyboard = 0, serial_out = 0, network = 0, runtime1 = 0, runtime2 = 0;
 
-/* FIXME: adapted from the same func in mailbox_runtime.c */
-static uint8_t mailbox_get_queue_access_count(uint8_t queue_id, uint8_t access)
+static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
-	uint8_t opcode[3], count;
+	uint8_t opcode[2];
+	mailbox_state_reg_t state;
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
 	write(fd_out, opcode, 3);
-	read(fd_in, &count, 1);
+	read(fd_in, &state, sizeof(mailbox_state_reg_t));
 
-	return count;
+	return (limit_t) state.limit;
 }
 
 /* FIXME: copied from mailbox_os.c */
@@ -65,20 +64,20 @@ static void *handle_mailbox_interrupts(void *data)
 		printf("%s [2]: interrupt = %d\n", __func__, interrupt);
 
 		/* FIXME: check the TPM interrupt logic */
-		//if (interrupt > 0 && interrupt <= NUM_QUEUES && interrupt != Q_TPM_DATA_IN) {
+		//if (interrupt > 0 && interrupt <= NUM_QUEUES && interrupt != Q_TPM_IN) {
 		if (interrupt == Q_STORAGE_DATA_OUT) {
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
 		} else if ((interrupt - NUM_QUEUES) == Q_STORAGE_DATA_OUT) {
 			sem_post(&availables[Q_STORAGE_DATA_OUT]);
-		} else if (interrupt == Q_TPM_DATA_IN) {
-			sem_post(&interrupts[Q_TPM_DATA_IN]);
+		} else if (interrupt == Q_TPM_IN) {
+			sem_post(&interrupts[Q_TPM_IN]);
 			/* Block interrupts until the program is loaded.
 			 * Otherwise, we might receive some interrupts not
 			 * intended for the loader.
 			 */
 			return NULL;
-		} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
-			sem_post(&availables[Q_TPM_DATA_IN]);
+		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
+			sem_post(&availables[Q_TPM_IN]);
 
 		/* When the OS resets a runtime (after it's one), it is possible
 		 * for the loader (when trying to reload the runtime) to receive
@@ -103,12 +102,12 @@ static void send_message_to_tpm(uint8_t* buf)
 {
 	uint8_t opcode[2];
 
-	//sem_wait(&interrupts[Q_TPM_DATA_IN]);
+	//sem_wait(&interrupts[Q_TPM_IN]);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_TPM_DATA_IN;
+	opcode[1] = Q_TPM_IN;
 	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 int init_mailbox(void)
@@ -117,9 +116,9 @@ int init_mailbox(void)
 	/* set the initial value of this one to 0 so that we can use it
 	 * to wait for the TPM to read the message.
 	 */
-	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
+	sem_init(&interrupts[Q_TPM_IN], 0, 0);
 	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 0);
-	sem_init(&availables[Q_TPM_DATA_IN], 0, 0);
+	sem_init(&availables[Q_TPM_IN], 0, 0);
 
 	/* FIXME */
 	if (keyboard) {
@@ -279,7 +278,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
-	uint8_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT, READ_ACCESS);
+	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
 
 	offset = 0;
 	printf("%s [3]\n", __func__);
@@ -314,10 +313,10 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 void send_measurement_to_tpm(char *path)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	printf("%s [1]\n", __func__);
-	sem_wait(&availables[Q_TPM_DATA_IN]);
+	sem_wait(&availables[Q_TPM_IN]);
 	printf("%s [2]\n", __func__);
 
 	memcpy(buf, path, strlen(path) + 1);
@@ -326,7 +325,7 @@ void send_measurement_to_tpm(char *path)
 	printf("%s [3]\n", __func__);
 
 	/* Wait for TPM to read the message */
-	sem_wait(&interrupts[Q_TPM_DATA_IN]);
+	sem_wait(&interrupts[Q_TPM_IN]);
 	printf("%s [4]\n", __func__);
 
 	close_mailbox();

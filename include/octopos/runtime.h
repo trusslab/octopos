@@ -1,12 +1,17 @@
 #ifndef _OCTOPOS_RUNTIME_H_
 #define _OCTOPOS_RUNTIME_H_
 
+/* FIXME: include mailbox.h and remove the repeated defines. */
+//#include <octopos/mailbox.h>
+typedef uint32_t limit_t;
+typedef uint32_t timeout_t;
+
 #ifndef UNTRUSTED_DOMAIN
 struct runtime_api {
 	/* secure keyboard/serial_out */
-	int (*request_secure_keyboard)(int count);
+	int (*request_secure_keyboard)(limit_t count);
 	int (*yield_secure_keyboard)(void);
-	int (*request_secure_serial_out)(int count);
+	int (*request_secure_serial_out)(limit_t count);
 	int (*yield_secure_serial_out)(void);
 	void (*write_to_secure_serial_out)(char *buf);
 	void (*read_char_from_secure_keyboard)(char *buf);
@@ -39,7 +44,7 @@ struct runtime_api {
 	int (*set_up_context)(void *addr, uint32_t size);
 
 	/* secure IPC */
-	int (*request_secure_ipc)(uint8_t target_runtime_queue_id, int count);
+	int (*request_secure_ipc)(uint8_t target_runtime_queue_id, limit_t count);
 	int (*yield_secure_ipc)(void);
 	int (*send_msg_on_secure_ipc)(char *msg, int size);
 	int (*recv_msg_on_secure_ipc)(char *msg, int *size);

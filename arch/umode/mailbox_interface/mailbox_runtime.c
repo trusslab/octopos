@@ -49,32 +49,34 @@ sem_t load_app_sem;
 
 pthread_spinlock_t mailbox_lock;
 
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+/*
+ * Compares limit and timeout to the max vals allowed and use
+ * the max vals if larger.
+ */
+void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
-	uint8_t opcode[4];
+	uint8_t opcode[2];
 
-	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
+	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = proc_id;
 	pthread_spin_lock(&mailbox_lock);	
-	write(fd_out, opcode, 4);
+	write(fd_out, opcode, 2);
 	pthread_spin_unlock(&mailbox_lock);	
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 {
-	uint8_t opcode[3], _count;
+	uint8_t opcode[2];
+	mailbox_state_reg_t state;
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
 	pthread_spin_lock(&mailbox_lock);	
-	write(fd_out, opcode, 3);
-	read(fd_in, &_count, 1);
+	write(fd_out, opcode, 2);
+	read(fd_in, &state, sizeof(mailbox_state_reg_t));
 	pthread_spin_unlock(&mailbox_lock);	
 
-	if (_count == count)
+	if (state.limit == count)
 		return 1;
 	else
 		return 0;
@@ -208,9 +210,9 @@ void runtime_core(void)
 				sem_post(&interrupt_change);
 				sem_post(&interrupts[q_runtime]);
 			}
-			else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN)
+			else if ((interrupt - NUM_QUEUES) == Q_TPM_IN)
 			{
-				sem_post(&interrupts[Q_TPM_DATA_IN]);
+				sem_post(&interrupts[Q_TPM_IN]);
 			}
 
 			/* ignore the rest */
@@ -292,7 +294,7 @@ int init_runtime(int runtime_id)
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
-	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
+	sem_init(&interrupts[Q_TPM_IN], 0, 0);
 
 	sem_init(&load_app_sem, 0, 0);
 

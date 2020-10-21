@@ -21,12 +21,10 @@ static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
 
-	while (1)
-	{
+	while (1) {
 		read(fd_intr, &interrupt, 1);
 		printf("%s [1]: interrupt = %d\n", __func__, interrupt);
-		if (interrupt < 1 || interrupt > NUM_QUEUES)
-		{
+		if (interrupt < 1 || interrupt > NUM_QUEUES) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
 		}
@@ -39,11 +37,11 @@ void read_ext_request_from_queue(uint8_t *buf)
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = Q_TPM_DATA_IN;
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	sem_wait(&interrupts[Q_TPM_DATA_IN]);
+	opcode[1] = Q_TPM_IN;
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+	sem_wait(&interrupts[Q_TPM_IN]);
 	write(fd_out, opcode, 2);
-	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 /* Initializes the tpm mailbox */
@@ -57,12 +55,11 @@ int init_tpm(void)
 	fd_in = open(FIFO_TPM_IN, O_RDONLY);
 	fd_intr = open(FIFO_TPM_INTR, O_RDONLY);
 
-	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
-	sem_init(&interrupts[Q_TPM_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_TPM_IN], 0, 0);
+	sem_init(&interrupts[Q_TPM_OUT], 0, MAILBOX_QUEUE_SIZE);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
-	if (ret)
-	{
+	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
 	}

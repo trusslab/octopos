@@ -1,3 +1,6 @@
+#ifndef _OCTOPOS_MAILBOX_H_
+#define _OCTOPOS_MAILBOX_H_
+
 #ifndef UNTRUSTED_DOMAIN
 #include <arch/defines.h>
 #endif
@@ -5,10 +8,11 @@
 /* mailbox opcodes */
 #define	MAILBOX_OPCODE_READ_QUEUE		0
 #define	MAILBOX_OPCODE_WRITE_QUEUE		1
-#define	MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS	2
-#define	MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS	3
-/* FIXME: needed? */
-#define MAILBOX_OPCODE_ATTEST_TPM_ACCESS	4
+#define	MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS	2
+#define	MAILBOX_OPCODE_YIELD_QUEUE_ACCESS	3
+#define	MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS	4
+#define	MAILBOX_OPCODE_DISABLE_QUEUE_DELEGATION	5
+#define	MAILBOX_OPCODE_ENABLE_QUEUE_DELEGATION	6
 
 /* processor IDs */
 #define	P_OS			1
@@ -45,8 +49,8 @@
 #define	Q_RUNTIME2		15
 #define	Q_OSU			16
 #define	Q_UNTRUSTED		17
-#define Q_TPM_DATA_IN		18
-#define Q_TPM_DATA_OUT		19
+#define Q_TPM_IN		18
+#define Q_TPM_OUT		19
 #define NUM_QUEUES		19
 
 #define MAILBOX_QUEUE_SIZE		4
@@ -60,8 +64,19 @@
 #define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
 #endif
 
-#define READ_ACCESS		0
-#define WRITE_ACCESS		1
+typedef struct {
+	unsigned owner:8; /* Proc with current access to the non-fixed end of a queue. */
+	unsigned limit:12;
+	unsigned timeout:12;
+} mailbox_state_reg_t;
+
+typedef uint32_t limit_t;
+typedef uint32_t timeout_t;
+
+#define MAILBOX_NO_LIMIT_VAL	0xFFF
+#define MAILBOX_NO_TIMEOUT_VAL	0xFFF
+#define MAILBOX_MAX_LIMIT_VAL	0xFFE
+#define MAILBOX_MAX_TIMEOUT_VAL	0xFFE
 
 /* FIXME: move somewhere else */
 #ifdef UNTRUSTED_DOMAIN
@@ -69,3 +84,5 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count);
 void reset_queue_sync(uint8_t queue_id, int init_val);
 #endif
+
+#endif /* _OCTOPOS_MAILBOX_H_ */

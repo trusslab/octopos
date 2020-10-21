@@ -216,15 +216,16 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
 #ifdef ARCH_SEC_HW
+	/* FIXME: update according to the umode updates. */
 	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 #else
-	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
-	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
+	mailbox_delegate_queue_access(Q_STORAGE_CMD_IN, runtime_proc_id, (limit_t) count, 0);
+	mailbox_delegate_queue_access(Q_STORAGE_CMD_OUT, runtime_proc_id, (limit_t) count, 0);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id, (limit_t) count, 0);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id, (limit_t) count, 0);
 #endif
 
 	SYSCALL_SET_ONE_RET(0)

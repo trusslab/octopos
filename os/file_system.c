@@ -717,11 +717,12 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 
 #ifndef ARCH_SEC_HW
-	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
-							runtime_proc_id, (uint8_t) num_blocks);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id,
+				      (limit_t) num_blocks, 0);
 #else
+	/* FIXME: update according to umode updates. */
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
-							runtime_proc_id, (uint16_t) num_blocks);
+				    runtime_proc_id, (uint16_t) num_blocks);
 #endif
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
@@ -777,10 +778,11 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
 #ifndef ARCH_SEC_HW
-	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
-							runtime_proc_id, (uint8_t) num_blocks);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
+				      (limit_t) num_blocks, 0);
 #else
 	printf("%s [2]\n", __func__);
+	/* FIXME: update according to umode updates. */
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
 							runtime_proc_id, (uint16_t) num_blocks);
 #endif

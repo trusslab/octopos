@@ -23,12 +23,12 @@ static void send_message_to_tpm(uint8_t* buf)
 {
 	uint8_t opcode[2];
 
-	sem_wait(&interrupts[Q_TPM_DATA_IN]);
+	sem_wait(&interrupts[Q_TPM_IN]);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_TPM_DATA_IN;
+	opcode[1] = Q_TPM_IN;
 	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 void prepare_loader(char *filename, int argc, char *argv[])
@@ -40,11 +40,11 @@ void prepare_loader(char *filename, int argc, char *argv[])
 	printf("%s [2]\n", __func__);
 	
 	/* delegate TPM mailbox to storage */
-	mark_queue_unavailable(Q_TPM_DATA_IN);
-	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, P_STORAGE, 1);
+	mark_queue_unavailable(Q_TPM_IN);
+	mailbox_delegate_queue_access(Q_TPM_IN, P_STORAGE, 1, 0);
 	printf("%s [3]\n", __func__);
 
-	wait_for_queue_availability(Q_TPM_DATA_IN);
+	wait_for_queue_availability(Q_TPM_IN);
 	
 	initialize_storage();
 	printf("%s [5]\n", __func__);
@@ -125,7 +125,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 void send_measurement_to_tpm(char *path)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	printf("%s [1]\n", __func__);
 
 	memcpy(buf, path, strlen(path) + 1);
@@ -134,7 +134,7 @@ void send_measurement_to_tpm(char *path)
 	printf("%s [2]\n", __func__);
 
 	/* Wait for TPM to read the message */
-	wait_until_empty(Q_TPM_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	wait_until_empty(Q_TPM_IN, MAILBOX_QUEUE_SIZE);
 	
 	close_os_mailbox();
 }

@@ -68,11 +68,11 @@ static void *handle_mailbox_interrupts(void *data)
 		read(fd_intr, &interrupt, 1);
 
 		/* FIXME: Do we need the TPM interrupts here? */
-		if (interrupt > 0 && interrupt <= NUM_QUEUES && interrupt != Q_TPM_DATA_IN) {
+		if (interrupt > 0 && interrupt <= NUM_QUEUES && interrupt != Q_TPM_IN) {
 			sem_post(&interrupts[interrupt]);
-		} else if (interrupt == Q_TPM_DATA_IN) {
-		} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
-			sem_post(&interrupts[Q_TPM_DATA_IN]);
+		} else if (interrupt == Q_TPM_IN) {
+		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
+			sem_post(&interrupts[Q_TPM_IN]);
 		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
@@ -104,7 +104,7 @@ int init_storage(void)
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
-	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
+	sem_init(&interrupts[Q_TPM_IN], 0, 0);
 
 	initialize_storage_space();
 

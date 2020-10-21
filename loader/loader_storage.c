@@ -38,15 +38,15 @@ static void *handle_mailbox_interrupts(void *data)
 		printf("%s [2]: interrupt = %d\n", __func__, interrupt);
 
 		/* FIXME: check the TPM interrupt logic */
-		if (interrupt == Q_TPM_DATA_IN) {
-			sem_post(&interrupts[Q_TPM_DATA_IN]);
+		if (interrupt == Q_TPM_IN) {
+			sem_post(&interrupts[Q_TPM_IN]);
 			/* Block interrupts until the program is loaded.
 			 * Otherwise, we might receive some interrupts not
 			 * intended for the loader.
 			 */
 			return NULL;
-		} else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN) {
-			sem_post(&availables[Q_TPM_DATA_IN]);
+		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
+			sem_post(&availables[Q_TPM_IN]);
 		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
@@ -59,12 +59,12 @@ static void send_message_to_tpm(uint8_t* buf)
 {
 	uint8_t opcode[2];
 
-	//sem_wait(&interrupts[Q_TPM_DATA_IN]);
+	//sem_wait(&interrupts[Q_TPM_IN]);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_TPM_DATA_IN;
+	opcode[1] = Q_TPM_IN;
 	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 int init_mailbox(void)
@@ -72,8 +72,8 @@ int init_mailbox(void)
 	/* set the initial value of this one to 0 so that we can use it
 	 * to wait for the TPM to read the message.
 	 */
-	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
-	sem_init(&availables[Q_TPM_DATA_IN], 0, 0);
+	sem_init(&interrupts[Q_TPM_IN], 0, 0);
+	sem_init(&availables[Q_TPM_IN], 0, 0);
 
 	mkfifo(FIFO_STORAGE_OUT, 0666);
 	//mkfifo(FIFO_STORAGE_IN, 0666);
@@ -182,8 +182,8 @@ int copy_file_from_boot_partition(char *filename, char *path)
 void send_measurement_to_tpm(char *path)
 {
 	/* no op */
-	uint8_t interrupt;
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	//uint8_t interrupt;
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	printf("%s [1]\n", __func__);
 
 	init_mailbox();
@@ -191,12 +191,13 @@ void send_measurement_to_tpm(char *path)
 	/* Wait for the TPM mailbox */
 	printf("%s [2]\n", __func__);
 	
-	read(fd_intr, &interrupt, 1);
-	printf("%s [4]: interrupt = %d\n", __func__, interrupt);
-	if (interrupt != (NUM_QUEUES + Q_TPM_DATA_IN)) {
-		printf("Error: %s: unexpected interrupt\n", __func__);
-		exit(-1);
-	}
+	//read(fd_intr, &interrupt, 1);
+	//printf("%s [4]: interrupt = %d\n", __func__, interrupt);
+	//if (interrupt != (NUM_QUEUES + Q_TPM_IN)) {
+	//	printf("Error: %s: unexpected interrupt\n", __func__);
+	//	exit(-1);
+	//}
+	sem_wait(&availables[Q_TPM_IN]);
 
 	memcpy(buf, path, strlen(path) + 1);
 
@@ -204,12 +205,13 @@ void send_measurement_to_tpm(char *path)
 	printf("%s [2]\n", __func__);
 
 	/* Wait for TPM to read the message */
-	read(fd_intr, &interrupt, 1);
-	printf("%s [4]: interrupt = %d\n", __func__, interrupt);
-	if (interrupt != Q_TPM_DATA_IN) {
-		printf("Error: %s: unexpected interrupt\n", __func__);
-		exit(-1);
-	}
+	//read(fd_intr, &interrupt, 1);
+	//printf("%s [4]: interrupt = %d\n", __func__, interrupt);
+	//if (interrupt != Q_TPM_IN) {
+	//	printf("Error: %s: unexpected interrupt\n", __func__);
+	//	exit(-1);
+	//}
+	sem_wait(&interrupts[Q_TPM_IN]);
 
 	close_mailbox();
 }
