@@ -90,3 +90,9 @@ AX_CODE_COVERAGE
 #AX_VALGRIND_DFLT([helgrind], [off])
 #AX_VALGRIND_DFLT([drd], [off])
 AX_VALGRIND_CHECK
+
+Problem3. TPM is in DA lockout mode
+Solution: Execute the tpm_shutdown in application/bin folder
+
+It was caused by abnormal shutdown of tpm that making the tpm don't receive TPM_SHUTDOWN
+signal.

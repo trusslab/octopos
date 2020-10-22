@@ -38,6 +38,7 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <arch/mailbox_runtime.h>
+#include <tpm/tpm.h>
 
 #ifdef ARCH_SEC_HW
 #include <runtime/storage_client.h>
@@ -650,6 +651,46 @@ static int recv_msg_on_secure_ipc(char *msg, int *size)
 	return 0;
 }
 
+static int runtime_request_tpm_access(int access, int count)
+{
+	if (access == WRITE_ACCESS) {
+		reset_queue_sync(Q_TPM_DATA_IN, 0);
+		SYSCALL_SET_ONE_ARG(SYSCALL_WRITE_TO_TPM, (uint32_t)count);
+		issue_syscall(buf);
+		SYSCALL_GET_ONE_RET
+		return (int)ret0;
+	} else if (access == READ_ACCESS) {
+		SYSCALL_SET_ONE_ARG(SYSCALL_READ_FROM_TPM, (uint32_t)count);
+		issue_syscall(buf);
+		SYSCALL_GET_ONE_RET
+		return (int)ret0;
+	}
+	
+	return -1;
+}
+
+static int tpm_remote_attest_requst(int slot, char* nonce, int size)
+{
+	runtime_request_tpm_access(WRITE_ACCESS, 1);
+	runtime_request_tpm_access(READ_ACCESS, 1);
+	wait_on_queue(Q_TPM_DATA_OUT);
+
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	buf[0] = TPM_OP_ATTEST;
+	buf[1] = slot;
+	memcpy(&buf[2], (uint8_t *) nonce, size);
+
+	runtime_send_msg_on_queue_large(buf, Q_TPM_DATA_IN);
+
+	return 0;
+}
+
+static int recv_msg_on_tpm(uint8_t *buf)
+{
+	runtime_recv_msg_from_queue_large(buf, Q_TPM_DATA_OUT);
+	return 0;
+}
+
 static uint8_t get_runtime_proc_id(void)
 {
 	return (uint8_t) p_runtime;
@@ -815,6 +856,8 @@ static void load_application(char *msg)
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
+		.tpm_remote_attest_requst = tpm_remote_attest_requst,
+		.recv_msg_on_tpm = recv_msg_on_tpm,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
 #ifdef ARCH_UMODE
@@ -834,6 +877,19 @@ static void load_application(char *msg)
 	load_application_arch(msg, &api);
 
 	return;
+}
+
+void runtime_request_extend(char* msg) {
+	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "./applications/bin/";
+	strcat(path, (char *) msg);
+	strcat(path, ".so");
+	
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	buf[0] = TPM_OP_EXTEND;
+	memcpy(&buf[1], (uint8_t *) path, sizeof(path));
+
+	runtime_request_tpm_access(WRITE_ACCESS, 1);
+	runtime_send_msg_on_queue_large(buf, Q_TPM_DATA_IN);
 }
 
 bool still_running = true;

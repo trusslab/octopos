@@ -1,7 +1,10 @@
 /* OctopOS keyboard code */
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <arch/mailbox_keyboard.h>
+#include <octopos/mailbox.h>
+#include <tpm/tpm.h>
 
 static int keyboard_core(void)
 {

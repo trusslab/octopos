@@ -1,4 +1,4 @@
-DIRS := fs_loop fs_test ipc_receiver ipc_sender secure_login simple_loop socket_client secure_interact
+DIRS := fs_loop fs_test ipc_receiver ipc_sender secure_login simple_loop socket_client secure_interact attest_client
 
 .PHONY: umode
 

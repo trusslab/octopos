@@ -76,6 +76,18 @@ uint8_t read_request_get_owner_from_queue(uint8_t *buf)
 	return (uint8_t) state.owner;
 }
 
+void send_response_to_queue(uint8_t *buf)
+{
+	uint8_t opcode[2];
+
+	sem_wait(&interrupts[Q_TPM_DATA_OUT]);
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_TPM_DATA_OUT;
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
 /* Initializes the tpm mailbox */
 int init_tpm(void)
 {
