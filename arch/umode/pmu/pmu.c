@@ -278,8 +278,8 @@ static int start_socket_server_proc(void)
 static void start_all_procs(void)
 {
 	mailbox_pid = start_mailbox_proc();
-	tpm_server_pid = start_tpm_server_proc();
-	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
+	// tpm_server_pid = start_tpm_server_proc();
+	// tpm2_abrmd_pid = start_tpm2_abrmd_proc();
 	tpm_pid = start_tpm_proc();
 	os_pid = start_os_proc();
 	keyboard_pid = start_keyboard_proc();

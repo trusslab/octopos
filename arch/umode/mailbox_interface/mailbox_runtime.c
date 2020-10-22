@@ -18,6 +18,7 @@
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <tpm/tpm.h>
 #include <arch/mailbox.h>
 
 /* FIXME: also repeated in runtime.c */
@@ -112,10 +113,10 @@ static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int que
 	opcode[1] = queue_id;
 	/* wait for message */
 	sem_wait(&interrupts[queue_id]);
-	pthread_spin_lock(&mailbox_lock);	
-	write(fd_out, opcode, 2), 
+	pthread_spin_lock(&mailbox_lock);
+	write(fd_out, opcode, 2);
 	read(fd_in, buf, queue_msg_size);
-	pthread_spin_unlock(&mailbox_lock);	
+	pthread_spin_unlock(&mailbox_lock);
 }
 
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -221,14 +222,14 @@ void runtime_core(void)
 			printf("Error: invalid interrupt (%d)\n", interrupt);
 			exit(-1);
 		} else if (interrupt > NUM_QUEUES) {
-			if ((interrupt - NUM_QUEUES) == change_queue)
-			{
+			if ((interrupt - NUM_QUEUES) == change_queue) {
 				sem_post(&interrupt_change);
 				sem_post(&interrupts[q_runtime]);
-			}
-			else if ((interrupt - NUM_QUEUES) == Q_TPM_IN)
-			{
+			/* FIXME: do we need the next two? */
+			} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
 				sem_post(&interrupts[Q_TPM_IN]);
+			} else if ((interrupt - NUM_QUEUES) == Q_TPM_OUT) {
+				sem_post(&interrupts[Q_TPM_OUT]);
 			}
 
 			/* ignore the rest */
@@ -301,6 +302,8 @@ int init_runtime(int runtime_id)
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
 	sem_init(&interrupts[Q_TPM_IN], 0, 0);
+	/* FIXME: correct init value? Also, why init here? */
+	sem_init(&interrupts[Q_TPM_OUT], 0, 0);
 
 	sem_init(&load_app_sem, 0, 0);
 

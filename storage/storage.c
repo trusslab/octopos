@@ -15,6 +15,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <tpm/tpm.h>
 
 #include "arch/mailbox_storage.h"
 #include "arch/syscall.h"
