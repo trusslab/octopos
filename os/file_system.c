@@ -733,7 +733,7 @@ repeat:
 
 #ifndef ARCH_SEC_HW
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id,
-				      next_num_blocks, 0);
+				      next_num_blocks, 1);
 #else
 	/* FIXME: update according to umode updates. */
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
@@ -819,7 +819,7 @@ repeat:
 
 #ifndef ARCH_SEC_HW
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
-				      next_num_blocks, 0);
+				      next_num_blocks, 1);
 #else
 	printf("%s [2]\n", __func__);
 	/* FIXME: update according to umode updates. */

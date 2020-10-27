@@ -41,12 +41,14 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 
 	if (len % 512)
 		BUG();
+	printk("%s [1]\n", __func__);
 
 	ret = request_secure_storage_access(200, 2048);
 	if (ret) {
 		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
 	}
+	printk("%s [2]\n", __func__);
 
 	mem = kmap_atomic(page);
 	if (!op_is_write(op)) {
@@ -58,6 +60,7 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	}
 	kunmap_atomic(mem);
 
+	printk("%s [3]\n", __func__);
 	yield_secure_storage_access();
 
 	return 0;

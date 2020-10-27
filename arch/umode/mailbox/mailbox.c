@@ -787,6 +787,16 @@ static int reset_queue_full(uint8_t queue_id)
 static void delegate_queue_access(uint8_t queue_id, uint8_t requester,
 				  mailbox_state_reg_t new_state)
 {
+	if (new_state.limit == 0) {
+		printf("Error: %s: limit can't be 0\n", __func__);
+		return;
+	}
+
+	if (new_state.timeout == 0) {
+		printf("Error: %s: timeout can't be 0\n", __func__);
+		return;
+	}
+
 	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
 		printf("Error: %s: SIMPLE queues don't support delegation (%d).\n",
 		       __func__, queue_id);

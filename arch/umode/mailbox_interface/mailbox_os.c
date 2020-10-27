@@ -324,20 +324,24 @@ static void *handle_mailbox_interrupts(void *data)
 				break;
 #endif
 			case Q_STORAGE_CMD_IN:
+				printf("%s [2]: Q_STORAGE_CMD_IN\n", __func__);
 				sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_STORAGE_CMD_IN]);
 				break;
 			case Q_STORAGE_CMD_OUT:
+				printf("%s [3]: Q_STORAGE_CMD_OUT\n", __func__);
 				sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
 				sem_post(&availables[Q_STORAGE_CMD_OUT]);
 				break;
 #ifdef ROLE_OS
 			case Q_STORAGE_DATA_IN:
+				printf("%s [4]: Q_STORAGE_DATA_IN\n", __func__);
 				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 				sem_post(&availables[Q_STORAGE_DATA_IN]);
 				break;
 #endif
 			case Q_STORAGE_DATA_OUT:
+				printf("%s [5]: Q_STORAGE_DATA_OUT\n", __func__);
 				sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_STORAGE_DATA_OUT]);
 				break;

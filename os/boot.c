@@ -16,7 +16,7 @@
 void delegate_tpm_data_in_queue(uint8_t proc_id)
 {
 	wait_for_queue_availability(Q_TPM_IN);
-	mailbox_delegate_queue_access(Q_TPM_IN, proc_id, 1, 0);
+	mailbox_delegate_queue_access(Q_TPM_IN, proc_id, 1, 1);
 }
 
 static void help_boot_proc(uint8_t proc_id, char *filename)

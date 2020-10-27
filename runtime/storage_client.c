@@ -232,6 +232,7 @@ static int request_secure_storage_creation(uint8_t *returned_key, uint32_t size)
 
 static void yield_secure_storage_queues_access(void)
 {
+	printf("%s [1]\n", __func__);
 #ifdef ARCH_SEC_HW
 // FIXME: remove once we have nested interrupt. Context switch happens 
 // in interrupt context, and subsequent write/read intr will not be 
@@ -243,28 +244,34 @@ if (!async_syscall_mode) {
 #ifdef ARCH_SEC_HW
 }
 #endif
+	printf("%s [2]\n", __func__);
 
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+	printf("%s [3]\n", __func__);
 }
 
 int yield_secure_storage_access(void)
 {
+	printf("%s [1]\n", __func__);
 	if (!has_access_to_secure_storage) {
 		printf("%s: Error: secure storage has not been set up\n", __func__);
 		return ERR_INVALID;
 	}
+	printf("%s [2]\n", __func__);
 
 	if (lock_secure_storage()) {
 		printf("%s: Error: fail to lock secure storage\n", __func__);
 		return ERR_FAULT;
 	}
+	printf("%s [3]\n", __func__);
 
 	has_access_to_secure_storage = false;
 
 	yield_secure_storage_queues_access();
+	printf("%s [4]\n", __func__);
 
 	return 0;
 }

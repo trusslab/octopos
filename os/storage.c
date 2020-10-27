@@ -170,6 +170,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 {
 	SYSCALL_GET_ONE_ARG
 	uint32_t count = arg0;
+	printf("%s [1]\n", __func__);
 
 	/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
@@ -179,6 +180,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
+	printf("%s [2]\n", __func__);
 
 	/* Or should we make this blocking? */
 	if (!is_queue_available(Q_STORAGE_CMD_IN) ||
@@ -188,6 +190,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 		return;
 	}
+	printf("%s [3]\n", __func__);
 
 	if (!is_partition_locked) {
 		int ret = lock_secure_storage();
@@ -197,6 +200,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 		is_partition_locked = true;
 	}
+	printf("%s [4]\n", __func__);
 
 	if (!is_storage_config_locked) {
 		int ret = lock_storage_config();
@@ -206,6 +210,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 		is_storage_config_locked = true;
 	}
+	printf("%s [5]\n", __func__);
 
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -222,12 +227,13 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 #else
-	mailbox_delegate_queue_access(Q_STORAGE_CMD_IN, runtime_proc_id, (limit_t) count, 0);
-	mailbox_delegate_queue_access(Q_STORAGE_CMD_OUT, runtime_proc_id, (limit_t) count, 0);
-	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id, (limit_t) count, 0);
-	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id, (limit_t) count, 0);
+	mailbox_delegate_queue_access(Q_STORAGE_CMD_IN, runtime_proc_id, (limit_t) count, 1);
+	mailbox_delegate_queue_access(Q_STORAGE_CMD_OUT, runtime_proc_id, (limit_t) count, 1);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id, (limit_t) count, 1);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id, (limit_t) count, 1);
 #endif
 
+	printf("%s [6]\n", __func__);
 	SYSCALL_SET_ONE_RET(0)
 }
 
