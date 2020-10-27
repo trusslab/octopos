@@ -133,9 +133,8 @@ int copy_file_from_boot_partition(char *filename, char *path)
 		return -1;
 	}
 
-	/* FIXME: size hard-coded */
-	total_blocks = 2000;
-	initialize_file_system(2000);
+	total_blocks = STORAGE_BOOT_PARTITION_SIZE;
+	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {

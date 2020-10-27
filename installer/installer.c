@@ -139,8 +139,7 @@ int main(int argc, char **argv)
 
 	total_blocks += DIR_DATA_NUM_BLOCKS;
 
-	/* FIXME: size hard-coded */
-	initialize_file_system(2000);
+	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 
 	copy_file_to_partition((char *) "keyboard", (char *) "./keyboard/keyboard",
 			       1, (char *) "./installer/copy_keyboard");
@@ -154,6 +153,8 @@ int main(int argc, char **argv)
 			       1, (char *) "./installer/copy_runtime");
 	copy_file_to_partition((char *) "network", (char *) "./network/network",
 			       1, (char *) "./installer/copy_network");
+	copy_file_to_partition((char *) "linux", (char *) "./arch/umode/untrusted_linux/linux",
+			       1, (char *) "./installer/copy_linux");
 	
 	close_file_system();
 	fclose(filep);

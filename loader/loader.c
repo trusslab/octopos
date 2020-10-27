@@ -65,6 +65,12 @@ int main(int argc, char *argv[])
 		printf("%s [4]: args[0] = %s\n", __func__, args[0]);
 		printf("%s [5]: args[1] = %s\n", __func__, args[1]);
 		execv(path, args);
+	} else if (!strcmp(name, "linux")) {
+		char *const args[] = {name, (char *) argv[2], (char *) argv[3], NULL};
+		printf("%s [6]: args[0] = %s\n", __func__, args[0]);
+		printf("%s [7]: args[1] = %s\n", __func__, args[1]);
+		printf("%s [8]: args[2] = %s\n", __func__, args[2]);
+		execv(path, args);
 	} else {
 		char *const args[] = {name, NULL};
 		execv(path, args);

@@ -32,7 +32,8 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	printf("%s [3]\n", __func__);
 
 	/* Help with sending measurements to TPM */
-	delegate_tpm_data_in_queue(proc_id);
+	if (proc_id != P_UNTRUSTED)
+		delegate_tpm_data_in_queue(proc_id);
 	printf("%s [4]\n", __func__);
 }
 
@@ -58,6 +59,11 @@ void help_boot_runtime_proc(uint8_t runtime_proc_id)
 	printf("%s [2]\n", __func__);
 }
 
+static void help_boot_untrusted_proc(void)
+{
+	help_boot_proc(P_UNTRUSTED, (char *) "linux");
+}
+
 void help_boot_procs(void)
 {
 	help_boot_keyboard_proc();
@@ -65,6 +71,7 @@ void help_boot_procs(void)
 	help_boot_network_proc();
 	help_boot_runtime_proc(P_RUNTIME1);
 	help_boot_runtime_proc(P_RUNTIME2);
+	help_boot_untrusted_proc();
 }
 
 int reset_proc(uint8_t proc_id)

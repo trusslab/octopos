@@ -305,8 +305,7 @@ void wait_for_storage(void)
 uint32_t initialize_storage(void)
 {
 	printf("%s [1]\n", __func__);
-	/* FIXME: hard-coded. */
-	uint32_t partition_size = 2000;
+	uint32_t partition_size = STORAGE_BOOT_PARTITION_SIZE;
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		os_storage_key[i] = i + 3;

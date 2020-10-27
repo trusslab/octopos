@@ -711,7 +711,7 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
+	//printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[queue_id];
 		read_queue(queue, processors[reader_id].in_handle);
@@ -733,7 +733,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
+	//printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[queue_id], processors[writer_id].out_handle);
 		/* send interrupt to reader */

@@ -49,10 +49,6 @@ sem_t load_app_sem;
 
 pthread_spinlock_t mailbox_lock;
 
-/*
- * Compares limit and timeout to the max vals allowed and use
- * the max vals if larger.
- */
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
 	uint8_t opcode[2];

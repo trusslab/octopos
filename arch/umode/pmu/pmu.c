@@ -261,10 +261,10 @@ static int start_network_proc(void)
 
 static int start_untrusted_proc(void)
 {
-	char *const args[] = {(char *) "linux",
+	char *const args[] = {(char *) "loader_other", (char *) "linux",
 		(char *) "ubda=./arch/umode/untrusted_linux/CentOS6.x-AMD64-root_fs",
 		(char *) "mem=128M", NULL};
-	char path[] = "./arch/umode/untrusted_linux/linux";
+	char path[] = "./loader/loader_other";
 	return start_proc(path, args, fd_untrusted_log, 0, 0, 1);
 }
 

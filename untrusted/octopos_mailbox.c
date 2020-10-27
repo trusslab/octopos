@@ -266,29 +266,27 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
+void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
-	uint8_t opcode[4];
+	uint8_t opcode[2];
 
-	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
+	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = proc_id;
-	os_write_file(fd_out, opcode, 4);
+	os_write_file(fd_out, opcode, 2);
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
-int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 {
-	uint8_t opcode[3], _count;
+	uint8_t opcode[2];
+	mailbox_state_reg_t state;
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
-	os_write_file(fd_out, opcode, 3);
-	os_read_file(fd_in, &_count, 1);
+	os_write_file(fd_out, opcode, 2);
+	os_read_file(fd_in, &state, sizeof(mailbox_state_reg_t));
 
-	if (_count == count)
+	if (state.limit == count)
 		return 1;
 	else
 		return 0;

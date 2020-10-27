@@ -27,4 +27,6 @@
 #define STORAGE_BLOCK_SIZE	512  /* bytes */
 #endif
 
+#define STORAGE_BOOT_PARTITION_SIZE	200000
+
 #endif /* __STORAGE_OCTOPOS_CORE_H_ */

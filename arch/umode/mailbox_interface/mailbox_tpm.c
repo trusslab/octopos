@@ -56,17 +56,23 @@ uint8_t read_request_get_owner_from_queue(uint8_t *buf)
 	write(fd_out, opcode, 2);
 	read(fd_in, &state, sizeof(mailbox_state_reg_t));
 
+	/* enable delegation
+	 * We enable delegation before reading the message.
+	 * If we did it after, there would be a race condition.
+	 * That is, the queue would be given back to the OS since
+	 * it was delegated for 1 message only and the OS might try
+	 * to delegate to someone else but would fail.
+	 */
+	opcode[0] = MAILBOX_OPCODE_ENABLE_QUEUE_DELEGATION;
+	opcode[1] = Q_TPM_IN;
+	write(fd_out, opcode, 2);
+
 	/* read message */
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_TPM_IN;
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	write(fd_out, opcode, 2);
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-
-	/* enable delegation */
-	opcode[0] = MAILBOX_OPCODE_ENABLE_QUEUE_DELEGATION;
-	opcode[1] = Q_TPM_IN;
-	write(fd_out, opcode, 2);
 
 	return (uint8_t) state.owner;
 }

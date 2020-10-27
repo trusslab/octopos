@@ -669,9 +669,15 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, u
  *
  * This API allows growing the file size, but only if there is enough empty blocks
  * right after the last file block in the partition.
+ *
+ * FIXME: this API is supposed to be async. But for large files (i.e., files with
+ * more than MAILBOX_MAX_LIMIT_VAL blocks, it does block.
  */
 uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_t num_blocks, uint8_t runtime_proc_id)
 {
+	limit_t next_num_blocks = 0;
+	uint32_t total_written_blocks = 0;
+
 	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
@@ -704,10 +710,19 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_
 		expand_file_size(file, (start_block + num_blocks) * STORAGE_BLOCK_SIZE);
 	}
 
-	/* FIXME: this is needed for now since count is uint8_t. */
-	if (num_blocks > 255) {
+	/* FIXME: impose a reasonable limit here
+	if (num_blocks > ???) {
 		printf("%s: Error: num_blocks is too large\n", __func__);
 		return 0;
+	}*/
+
+repeat:
+	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
+		next_num_blocks = num_blocks;
+		num_blocks = 0;
+	} else {
+		next_num_blocks = MAILBOX_MAX_LIMIT_VAL;
+		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
 	}
 
 	wait_for_storage();
@@ -718,16 +733,25 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_
 
 #ifndef ARCH_SEC_HW
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id,
-				      (limit_t) num_blocks, 0);
+				      next_num_blocks, 0);
 #else
 	/* FIXME: update according to umode updates. */
 	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
-				    runtime_proc_id, (uint16_t) num_blocks);
+				    runtime_proc_id, (uint16_t) next_num_blocks);
 #endif
 
-	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
+	STORAGE_SET_TWO_ARGS(file->start_block + start_block + total_written_blocks,
+			     next_num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
 	send_msg_to_storage_no_response(buf);
+
+	if (num_blocks) {
+		get_response_from_storage(buf);
+		/* FIXME: check the response here */
+		total_written_blocks += next_num_blocks;
+		printf("%s [1.2]: total_written_blocks = %d\n", __func__, total_written_blocks);
+		goto repeat;
+	}
 
 	return Q_STORAGE_DATA_IN;
 }
@@ -741,9 +765,15 @@ void file_system_write_file_blocks_late(void)
 
 /*
  * @start_block: the first file block to read.
+ *
+ * FIXME: this API is supposed to be async. But for large files (i.e., files with
+ * more than MAILBOX_MAX_LIMIT_VAL blocks, it does block.
  */
 uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t num_blocks, uint8_t runtime_proc_id)
 {
+	limit_t next_num_blocks = 0;
+	uint32_t total_read_blocks = 0;
+
 	printf("%s [1]\n", __func__);
 	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
@@ -767,10 +797,20 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t
 		return 0;
 	}
 
-	/* FIXME: this is needed for now since count is uint8_t. */
-	if (num_blocks > 255) {
+	/* FIXME: impose a reasonable limit here
+	if (num_blocks > ???) {
 		printf("%s: Error: num_blocks is too large\n", __func__);
 		return 0;
+	}*/
+
+	printf("%s [1.1]: num_blocks = %d\n", __func__, num_blocks);
+repeat:
+	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
+		next_num_blocks = num_blocks;
+		num_blocks = 0;
+	} else {
+		next_num_blocks = MAILBOX_MAX_LIMIT_VAL;
+		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
 	}
 
 	wait_for_storage();
@@ -779,17 +819,26 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t
 
 #ifndef ARCH_SEC_HW
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
-				      (limit_t) num_blocks, 0);
+				      next_num_blocks, 0);
 #else
 	printf("%s [2]\n", __func__);
 	/* FIXME: update according to umode updates. */
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
-							runtime_proc_id, (uint16_t) num_blocks);
+							runtime_proc_id, (uint16_t) next_num_blocks);
 #endif
 
-	STORAGE_SET_TWO_ARGS(file->start_block + start_block, num_blocks)
+	STORAGE_SET_TWO_ARGS(file->start_block + start_block + total_read_blocks,
+			     next_num_blocks)
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
+
+	if (num_blocks) {
+		get_response_from_storage(buf);
+		/* FIXME: check the response here */
+		total_read_blocks += next_num_blocks;
+		printf("%s [1.2]: total_read_blocks = %d\n", __func__, total_read_blocks);
+		goto repeat;
+	}
 
 	return Q_STORAGE_DATA_OUT;
 }

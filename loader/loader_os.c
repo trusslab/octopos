@@ -34,8 +34,6 @@ static void send_message_to_tpm(uint8_t* buf)
 void prepare_loader(char *filename, int argc, char *argv[])
 {
 	printf("%s [1]\n", __func__);
-	/* FIXME: size hard-coded */
-	//total_blocks = 2000;
 	init_os_mailbox();
 	printf("%s [2]\n", __func__);
 	
@@ -49,8 +47,7 @@ void prepare_loader(char *filename, int argc, char *argv[])
 	initialize_storage();
 	printf("%s [5]\n", __func__);
 
-	/* FIXME: size hard-coded */
-	initialize_file_system(2000);
+	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 	printf("%s [6]\n", __func__);
 }
 

@@ -24,7 +24,8 @@ pthread_t mailbox_thread;
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t availables[NUM_QUEUES + 1];
 
-int keyboard = 0, serial_out = 0, network = 0, runtime1 = 0, runtime2 = 0;
+int keyboard = 0, serial_out = 0, network = 0,
+    runtime1 = 0, runtime2 = 0, untrusted = 0;
 
 static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
@@ -33,7 +34,7 @@ static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	write(fd_out, opcode, 3);
+	write(fd_out, opcode, 2);
 	read(fd_in, &state, sizeof(mailbox_state_reg_t));
 
 	return (limit_t) state.limit;
@@ -59,9 +60,9 @@ static void *handle_mailbox_interrupts(void *data)
 	int spurious = 0;
 
 	while (1) {
-		printf("%s [1]\n", __func__);
+		//printf("%s [1]\n", __func__);
 		read(fd_intr, &interrupt, 1);
-		printf("%s [2]: interrupt = %d\n", __func__, interrupt);
+		//printf("%s [2]: interrupt = %d\n", __func__, interrupt);
 
 		/* FIXME: check the TPM interrupt logic */
 		//if (interrupt > 0 && interrupt <= NUM_QUEUES && interrupt != Q_TPM_IN) {
@@ -79,7 +80,7 @@ static void *handle_mailbox_interrupts(void *data)
 		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
 			sem_post(&availables[Q_TPM_IN]);
 
-		/* When the OS resets a runtime (after it's one), it is possible
+		/* When the OS resets a runtime (after it's done), it is possible
 		 * for the loader (when trying to reload the runtime) to receive
 		 * an interrupt acknowledging that the OS read the last syscall
 		 * from the mailbox (for termination information),
@@ -170,11 +171,20 @@ int init_mailbox(void)
 		fd_out = open(FIFO_RUNTIME2_OUT, O_WRONLY);
 		fd_in = open(FIFO_RUNTIME2_IN, O_RDONLY);
 		fd_intr = open(FIFO_RUNTIME2_INTR, O_RDONLY);
+	} else if (untrusted) {
+		printf("%s [6]: untrusted\n", __func__);
+		mkfifo(FIFO_UNTRUSTED_OUT, 0666);
+		mkfifo(FIFO_UNTRUSTED_IN, 0666);
+		mkfifo(FIFO_UNTRUSTED_INTR, 0666);
+
+		fd_out = open(FIFO_UNTRUSTED_OUT, O_WRONLY);
+		fd_in = open(FIFO_UNTRUSTED_IN, O_RDONLY);
+		fd_intr = open(FIFO_UNTRUSTED_INTR, O_RDONLY);
 	} else {
 		printf("Error: %s: no proc specified\n", __func__);
 		exit(-1);
 	}
-	printf("%s [6]\n", __func__);
+	printf("%s [7]\n", __func__);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
@@ -221,6 +231,8 @@ void prepare_loader(char *filename, int argc, char *argv[])
 			printf("Error: %s: invalid runtime ID (%s)\n", __func__, argv[0]);
 			exit(-1);
 		}
+	} else if (!strcmp(filename, "linux")) {
+		untrusted = 1;
 	} else {
 		printf("Error: %s: unknown binary\n", __func__);
 		exit(-1);
@@ -239,7 +251,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	//uint32_t fd;
 	FILE *copy_filep;
 	uint8_t buf[STORAGE_BLOCK_SIZE];
-	int offset;
+	int offset, need_repeat = 0;
 	printf("%s [1]\n", __func__);
 
 	init_mailbox();
@@ -276,15 +288,27 @@ int copy_file_from_boot_partition(char *filename, char *path)
 		return -1;
 	}
 
-
+	int total = 0;
+	offset = 0;
+repeat:
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
 	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
 
-	offset = 0;
-	printf("%s [3]\n", __func__);
+	/*
+	 * When the file is very large, which is, for example, the case
+	 * for the untrusted domain kernel, the queue will need to be
+	 * delegated more than once.
+	 */ 
+	if (count == MAILBOX_MAX_LIMIT_VAL)
+		need_repeat = 1;
+	else
+		need_repeat = 0;
+
+	total += count;
+	printf("%s [3]: total = %d\n", __func__, total);
 
 	for (int i = 0; i < (int) count; i++) {
-		printf("%s [4]: offset = %d\n", __func__, offset);
+		//printf("%s [4]: offset = %d\n", __func__, offset);
 		read_from_storage_data_queue(buf);
 		
 		///* Block interrupts until the program is loaded.
@@ -299,7 +323,10 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 		offset += STORAGE_BLOCK_SIZE;
 	}
-	printf("%s [6]\n", __func__);
+	printf("%s [6]: offset = %d\n", __func__, offset);
+
+	if (need_repeat)
+		goto repeat;
 
 	fclose(copy_filep);
 	//file_system_close_file(fd);
@@ -314,6 +341,9 @@ int copy_file_from_boot_partition(char *filename, char *path)
 void send_measurement_to_tpm(char *path)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+
+	if (untrusted)
+		return;
 
 	printf("%s [1]\n", __func__);
 	sem_wait(&availables[Q_TPM_IN]);
