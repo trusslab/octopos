@@ -24,5 +24,6 @@ loader/network
 loader/os
 loader/runtime1
 loader/runtime2
+loader/linux
 installer/installer
 installer/copy*

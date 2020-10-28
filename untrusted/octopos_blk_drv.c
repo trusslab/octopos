@@ -43,7 +43,7 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 		BUG();
 	printk("%s [1]\n", __func__);
 
-	ret = request_secure_storage_access(200, 2048);
+	ret = request_secure_storage_access(200, STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE);
 	if (ret) {
 		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
@@ -62,6 +62,7 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 
 	printk("%s [3]\n", __func__);
 	yield_secure_storage_access();
+	printk("%s [4]\n", __func__);
 
 	return 0;
 }
@@ -118,7 +119,8 @@ static const struct block_device_operations obd_fops = {
 /*
  * And now the modules code and kernel interface.
  */
-unsigned long obd_size = 1024;
+unsigned long obd_size =
+	(STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE * STORAGE_BLOCK_SIZE) / 1024;
 module_param(obd_size, ulong, 0444);
 MODULE_PARM_DESC(obd_size, "Size of the partition (in kB) requested from the "
 		 "OctopOS storage service.");
@@ -185,6 +187,11 @@ static int __init obd_init(void)
 	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
 	int i;
 
+	for (i = 0; i < STORAGE_KEY_SIZE; i++)
+		secure_storage_key[i] = i + 2;
+
+	set_up_secure_storage_key(secure_storage_key);
+
 	if (register_blkdev(OCTOPOS_BLK_MAJOR, "octopos_blk"))
 		return -EIO;
 
@@ -202,11 +209,6 @@ static int __init obd_init(void)
 				  THIS_MODULE, obd_probe, NULL, NULL);
 
 	pr_info("obd: module loaded\n");
-
-	for (i = 0; i < STORAGE_KEY_SIZE; i++)
-		secure_storage_key[i] = i + 2;
-
-	set_up_secure_storage_key(secure_storage_key);
 
 	return 0;
 
@@ -230,4 +232,3 @@ static void __exit obd_exit(void)
 
 module_init(obd_init);
 module_exit(obd_exit);
-

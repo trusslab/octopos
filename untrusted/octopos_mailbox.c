@@ -46,6 +46,9 @@ int srq_tail;
 int srq_counter;
 struct semaphore srq_sem;
 
+/* FIXME: use spinlock. Tried but doesn't lock correctly. */
+struct semaphore mailbox_lock;
+
 /* FIXME: modified from the same functin in runtime.c */
 int write_syscall_response(uint8_t *buf)
 {
@@ -148,23 +151,39 @@ static ssize_t om_dev_write(struct file *filp, const char __user *buf, size_t si
 {
 	char data[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
+	size_t per_msg_size = MAILBOX_QUEUE_MSG_SIZE - 3;
+	ssize_t total_size = 0;
 
+	/* We're informing the OS of termination.
+	 * Therefore, we'll have to finish everything in
+	 * this function. Won't be able to send more later.
+	 */
 	if (*offp != 0)
 		return 0;
-  
-	if (size > MAILBOX_QUEUE_MSG_SIZE) {
-		printk("Error: %s: invalid size (%d). Can't be larger than %d.\n",
-		       __func__, (int) size, MAILBOX_QUEUE_MSG_SIZE);
-		return -EINVAL;
+ 
+	while (size > 0) {
+
+		if (size < per_msg_size)
+			per_msg_size = size;
+
+		size -= per_msg_size;
+
+		ret = copy_from_user(data, buf + total_size, per_msg_size);
+		*offp += (per_msg_size - ret);
+
+		write_to_shell(data, per_msg_size - ret);
+
+		total_size += (per_msg_size - ret);
+
+		if (ret) {
+			printk("Error: %s: copy_from_user failed to fully copy. Won't continue.\n", __func__);
+			break;
+		}
 	}
 
-	ret = copy_from_user(data, buf, size);
-	*offp += (size - ret);
-
-	write_to_shell(data, size - ret);
 	inform_os_of_termination();
 
-	return (size - ret);
+	return total_size;
 }
 
 static const struct file_operations om_chrdev_ops = {
@@ -188,8 +207,10 @@ void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 	opcode[1] = queue_id;
 	/* wait for message */
 	down(&interrupts[queue_id]);
+	while (down_trylock(&mailbox_lock));
 	os_write_file(fd_out, opcode, 2), 
 	os_read_file(fd_in, buf, queue_msg_size);
+	up(&mailbox_lock);
 }
 
 static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -198,8 +219,10 @@ static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queu
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
+	while (down_trylock(&mailbox_lock));
 	os_write_file(fd_out, opcode, 2), 
 	os_read_file(fd_in, buf, queue_msg_size);
+	up(&mailbox_lock);
 }
 
 void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -209,8 +232,10 @@ void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 	down(&interrupts[queue_id]);
+	while (down_trylock(&mailbox_lock));
 	os_write_file(fd_out, opcode, 2);
 	os_write_file(fd_out, buf, queue_msg_size);
+	up(&mailbox_lock);
 }
 
 /* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
@@ -272,7 +297,9 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 
 	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
 	opcode[1] = queue_id;
+	while (down_trylock(&mailbox_lock));
 	os_write_file(fd_out, opcode, 2);
+	up(&mailbox_lock);
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
@@ -283,8 +310,10 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
+	while (down_trylock(&mailbox_lock));
 	os_write_file(fd_out, opcode, 2);
 	os_read_file(fd_in, &state, sizeof(mailbox_state_reg_t));
+	up(&mailbox_lock);
 
 	if (state.limit == count)
 		return 1;
@@ -429,6 +458,8 @@ static int __init om_init(void)
 	sema_init(&srq_sem, MAILBOX_QUEUE_SIZE);
 
 	INIT_WORK(&net_wq, net_receive_wq);
+
+	sema_init(&mailbox_lock, 1);
 
 	/* register char dev */
 	err = misc_register(&om_miscdev);

@@ -125,9 +125,11 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	SYSCALL_GET_ONE_ARG
 	uint32_t partition_size = arg0;
 
-	/* sanity check on the requested size */
-	/* FIXME: hard-coded */
-	if (partition_size > 2048) {
+	/* sanity check on the requested size:
+	 * the root_fs of the untrusted domain should be
+	 * the largest partition.
+	 */
+	if (partition_size > STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE) {
 		char dummy;
 		SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
 		return;

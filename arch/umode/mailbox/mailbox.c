@@ -748,7 +748,7 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 
 static void reset_queue(uint8_t queue_id)
 {
-	printf("%s [1]: queue_id = %d\n", __func__, queue_id);
+	//printf("%s [1]: queue_id = %d\n", __func__, queue_id);
 	for (int i = 0; i < queues[queue_id].queue_size; i++)
 		memset(queues[queue_id].messages[i], 0x0, queues[queue_id].msg_size);
 
@@ -787,6 +787,7 @@ static int reset_queue_full(uint8_t queue_id)
 static void delegate_queue_access(uint8_t queue_id, uint8_t requester,
 				  mailbox_state_reg_t new_state)
 {
+	printf("%s [1]: queue_id = %d, requester = %d\n", __func__, queue_id, requester);
 	if (new_state.limit == 0) {
 		printf("Error: %s: limit can't be 0\n", __func__);
 		return;
@@ -860,6 +861,7 @@ static void delegate_queue_access(uint8_t queue_id, uint8_t requester,
 
 static void yield_queue_access(uint8_t queue_id, uint8_t requester)
 {
+	printf("%s [1]: queue_id = %d, requester = %d\n", __func__, queue_id, requester);
 	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
 		printf("Error: %s: SIMPLE queues don't support delegation (%d).\n",
 		       __func__, queue_id);
@@ -991,9 +993,9 @@ static void handle_proc_request(uint8_t requester)
 		break;
 
 	case MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS:
-		printf("%s [0.1]\n", __func__);
+		//printf("%s [0.1]\n", __func__);
 		if (delegation_allowed && !queues[queue_id].delegation_disabled) {
-			printf("%s [0.2]\n", __func__);
+			//printf("%s [0.2]\n", __func__);
 			mailbox_state_reg_t state;
 			memset(&state, 0x0, sizeof(mailbox_state_reg_t));
 			read(processors[requester].out_handle, &state, sizeof(mailbox_state_reg_t));
@@ -1004,9 +1006,9 @@ static void handle_proc_request(uint8_t requester)
 		break;
 
 	case MAILBOX_OPCODE_YIELD_QUEUE_ACCESS:
-		printf("%s [0.1]\n", __func__);
+		//printf("%s [0.1]\n", __func__);
 		if (delegation_allowed && !queues[queue_id].delegation_disabled) {
-			printf("%s [0.2]\n", __func__);
+			//printf("%s [0.2]\n", __func__);
 			yield_queue_access(queue_id, requester);				
 		} else {
 			printf("Error: %s: delegation (and hence yielding) disabled for queue %d.\n",
