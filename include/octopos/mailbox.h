@@ -76,6 +76,7 @@ typedef uint32_t timeout_t;
 
 #define MAILBOX_NO_LIMIT_VAL	0xFFF
 #define MAILBOX_NO_TIMEOUT_VAL	0xFFF
+/* FIXME: these are also defined in octopos/runtime.h */
 #define MAILBOX_MAX_LIMIT_VAL	0xFFE
 #define MAILBOX_MAX_TIMEOUT_VAL	0xFFE
 

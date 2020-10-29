@@ -176,9 +176,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
-	/* No more than 200 block reads/writes */
-	/* FIXME: hard-coded */
-	if (count > 200) {
+	if (count > MAILBOX_NO_LIMIT_VAL) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}

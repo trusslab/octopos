@@ -24,6 +24,7 @@
 #include <linux/backing-dev.h>
 
 #include <linux/uaccess.h>
+#include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include "storage_client.h" 
 
@@ -31,6 +32,7 @@ struct request_queue	*obd_queue = NULL;
 struct gendisk		*obd_disk = NULL;
 
 struct mutex obd_lock;
+limit_t access_limit = 0;
 
 /*
  * Process a single bvec of a bio.
@@ -40,32 +42,59 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 {
 	void *mem;
 	int ret;
+	unsigned int num_blocks;
 
-	mutex_lock(&obd_lock);
-
-	if (len % 512)
+	if (len % STORAGE_BLOCK_SIZE)
 		BUG();
 	//printk("%s [1]\n", __func__);
 
-	ret = request_secure_storage_access(200, STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE);
-	if (ret) {
-		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
-		return ret;
+	num_blocks = len / STORAGE_BLOCK_SIZE;
+
+	mutex_lock(&obd_lock);
+	//printk("%s [1.1]: STORAGE_BLOCK_SIZE = %d\n", __func__, STORAGE_BLOCK_SIZE);
+	//printk("%s [1.2]: num_blocks = %d\n", __func__, num_blocks);
+	//printk("%s [1.3]: access_limit = %d\n", __func__, access_limit);
+	/* FIXME: we need to keep separate counts for each storage queue. */
+	if (((unsigned int) access_limit) < num_blocks) {
+		//printk("%s [1.4]\n", __func__);
+
+		//if (access_limit) {
+			//printk("%s [1.5]\n", __func__);
+		/* FIXME: we don't need to yield if it already expired.
+		 * We currently have to do this since we're not dealing
+		 * with storage queue separately.
+		 */
+		yield_secure_storage_access();
+		access_limit = 0;
+		//}
+
+		ret = request_secure_storage_access(MAILBOX_MAX_LIMIT_VAL,
+						    STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE);
+		if (ret) {
+			printk("Error (%s): Failed to get secure access to storage.\n", __func__);
+			return ret;
+		}
+
+		access_limit = MAILBOX_MAX_LIMIT_VAL;
+		//printk("%s [1.5]: access_limit = %d\n", __func__, access_limit);
 	}
 	//printk("%s [2]\n", __func__);
 
+	access_limit -= (limit_t) num_blocks;
+	//printk("%s [1.6]: access_limit = %d\n", __func__, access_limit);
+
 	mem = kmap_atomic(page);
 	if (!op_is_write(op)) {
-		read_secure_storage_blocks(mem + off, sector, len / 512);
+		read_secure_storage_blocks(mem + off, sector, num_blocks);
 		flush_dcache_page(page);
 	} else {
 		flush_dcache_page(page);
-		write_secure_storage_blocks(mem + off, sector, len / 512);
+		write_secure_storage_blocks(mem + off, sector, num_blocks);
 	}
 	kunmap_atomic(mem);
 
 	//printk("%s [3]\n", __func__);
-	yield_secure_storage_access();
+	//yield_secure_storage_access();
 	//printk("%s [4]\n", __func__);
 	mutex_unlock(&obd_lock);
 

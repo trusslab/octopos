@@ -5,6 +5,8 @@
 //#include <octopos/mailbox.h>
 typedef uint32_t limit_t;
 typedef uint32_t timeout_t;
+#define MAILBOX_MAX_LIMIT_VAL	0xFFE
+#define MAILBOX_MAX_TIMEOUT_VAL	0xFFE
 
 #ifndef UNTRUSTED_DOMAIN
 struct runtime_api {
