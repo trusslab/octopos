@@ -46,8 +46,8 @@ int srq_tail;
 int srq_counter;
 struct semaphore srq_sem;
 
-/* FIXME: use spinlock. Tried but doesn't lock correctly. */
-struct semaphore mailbox_lock;
+//struct semaphore mailbox_lock;
+spinlock_t mailbox_lock;
 
 /* FIXME: modified from the same functin in runtime.c */
 int write_syscall_response(uint8_t *buf)
@@ -85,11 +85,15 @@ static int read_syscall_response(uint8_t *buf)
 
 int issue_syscall(uint8_t *buf)
 {
+	//printk("%s [1]\n", __func__);
 	send_msg_on_queue(buf, Q_OSU, MAILBOX_QUEUE_MSG_SIZE);
+	//printk("%s [2]\n", __func__);
 
 	/* wait on queue */
 	down(&interrupts[Q_UNTRUSTED]);
+	//printk("%s [3]\n", __func__);
 	read_syscall_response(buf);
+	//printk("%s [4]\n", __func__);
 	
 	return 0;
 }
@@ -202,40 +206,57 @@ static struct miscdevice om_miscdev = {
 void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
 	/* wait for message */
 	down(&interrupts[queue_id]);
-	while (down_trylock(&mailbox_lock));
+	//while (down_trylock(&mailbox_lock));
+	spin_lock_irqsave(&mailbox_lock, flags);
+	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2), 
 	os_read_file(fd_in, buf, queue_msg_size);
-	up(&mailbox_lock);
+	//up(&mailbox_lock);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
+	//printk("%s [2]: unlocked\n", __func__);
 }
 
 static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
-	while (down_trylock(&mailbox_lock));
+	//while (down_trylock(&mailbox_lock));
+	spin_lock_irqsave(&mailbox_lock, flags);
+	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2), 
 	os_read_file(fd_in, buf, queue_msg_size);
-	up(&mailbox_lock);
+	//up(&mailbox_lock);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
+	//printk("%s [2]: unlocked\n", __func__);
 }
 
 void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 	down(&interrupts[queue_id]);
-	while (down_trylock(&mailbox_lock));
+	//while (down_trylock(&mailbox_lock));
+	spin_lock_irqsave(&mailbox_lock, flags);
+	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2);
+	//printk("%s [1.1]\n", __func__);
 	os_write_file(fd_out, buf, queue_msg_size);
-	up(&mailbox_lock);
+	//printk("%s [1.2]\n", __func__);
+	//up(&mailbox_lock);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
+	//printk("%s [2]: unlocked\n", __func__);
 }
 
 /* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
@@ -294,12 +315,17 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
 	uint8_t opcode[2];
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	while (down_trylock(&mailbox_lock));
+	//while (down_trylock(&mailbox_lock));
+	spin_lock_irqsave(&mailbox_lock, flags);
+	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2);
-	up(&mailbox_lock);
+	//up(&mailbox_lock);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
+	//printk("%s [2]: unlocked\n", __func__);
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
@@ -307,13 +333,18 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 {
 	uint8_t opcode[2];
 	mailbox_state_reg_t state;
+	unsigned long flags;
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	while (down_trylock(&mailbox_lock));
+	//while (down_trylock(&mailbox_lock));
+	spin_lock_irqsave(&mailbox_lock, flags);
+	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2);
 	os_read_file(fd_in, &state, sizeof(mailbox_state_reg_t));
-	up(&mailbox_lock);
+	//up(&mailbox_lock);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
+	//printk("%s [2]: unlocked\n", __func__);
 
 	if (state.limit == count)
 		return 1;
@@ -459,7 +490,8 @@ static int __init om_init(void)
 
 	INIT_WORK(&net_wq, net_receive_wq);
 
-	sema_init(&mailbox_lock, 1);
+	//sema_init(&mailbox_lock, 1);
+	spin_lock_init(&mailbox_lock);
 
 	/* register char dev */
 	err = misc_register(&om_miscdev);

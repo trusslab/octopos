@@ -232,7 +232,7 @@ static int request_secure_storage_creation(uint8_t *returned_key, uint32_t size)
 
 static void yield_secure_storage_queues_access(void)
 {
-	printf("%s [1]\n", __func__);
+	//printf("%s [1]\n", __func__);
 #ifdef ARCH_SEC_HW
 // FIXME: remove once we have nested interrupt. Context switch happens 
 // in interrupt context, and subsequent write/read intr will not be 
@@ -244,34 +244,34 @@ if (!async_syscall_mode) {
 #ifdef ARCH_SEC_HW
 }
 #endif
-	printf("%s [2]\n", __func__);
+	//printf("%s [2]\n", __func__);
 
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
-	printf("%s [3]\n", __func__);
+	//printf("%s [3]\n", __func__);
 }
 
 int yield_secure_storage_access(void)
 {
-	printf("%s [1]\n", __func__);
+	//printf("%s [1]\n", __func__);
 	if (!has_access_to_secure_storage) {
 		printf("%s: Error: secure storage has not been set up\n", __func__);
 		return ERR_INVALID;
 	}
-	printf("%s [2]\n", __func__);
+	//printf("%s [2]\n", __func__);
 
 	if (lock_secure_storage()) {
 		printf("%s: Error: fail to lock secure storage\n", __func__);
 		return ERR_FAULT;
 	}
-	printf("%s [3]\n", __func__);
+	//printf("%s [3]\n", __func__);
 
 	has_access_to_secure_storage = false;
 
 	yield_secure_storage_queues_access();
-	printf("%s [4]\n", __func__);
+	//printf("%s [4]\n", __func__);
 
 	return 0;
 }
@@ -279,17 +279,21 @@ int yield_secure_storage_access(void)
 static int request_secure_storage_queues_access(int count)
 {
 	int attest_ret;
+	//printf("%s [1]\n", __func__);
 
 	reset_queue_sync(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	reset_queue_sync(Q_STORAGE_CMD_OUT, 0);
 	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	reset_queue_sync(Q_STORAGE_DATA_OUT, 0);
+	//printf("%s [2]\n", __func__);
 
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS, count)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
+	//printf("%s [3]\n", __func__);
 	if (ret0)
 		return (int) ret0;
+	//printf("%s [4]\n", __func__);
 
 	/* FIXME: if any of the attetations fail, we should yield the other ones */
 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, (limit_t) count);
@@ -297,18 +301,21 @@ static int request_secure_storage_queues_access(int count)
 		printf("%s: Error: failed to attest secure storage cmd write access\n", __func__);
 		return ERR_FAULT;
 	}
+	//printf("%s [5]\n", __func__);
 
 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT, (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure storage cmd read access\n", __func__);
 		return ERR_FAULT;
 	}
+	//printf("%s [6]\n", __func__);
 
 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN, (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure storage data write access\n", __func__);
 		return ERR_FAULT;
 	}
+	//printf("%s [7]\n", __func__);
 
 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT, (limit_t) count);
 	if (!attest_ret) {
@@ -316,6 +323,7 @@ static int request_secure_storage_queues_access(int count)
 		return ERR_FAULT;
 	}
 	has_access_to_secure_storage = true;
+	//printf("%s [8]\n", __func__);
 	
 	return 0;
 }
@@ -327,6 +335,7 @@ static int request_secure_storage_queues_access(int count)
 int request_secure_storage_access(int count, uint32_t partition_size)
 {
 	int ret, unlock_ret, set_key_ret;
+	//printf("%s [1]\n", __func__);
 
 	if (!secure_storage_key_set) {
 		printf("%s: Error: secure storage key not set.\n", __func__);
@@ -338,11 +347,14 @@ int request_secure_storage_access(int count, uint32_t partition_size)
 		printf("%s: Error: couldn't get access to storage queues.\n", __func__);
 		return ret;
 	}
+	//printf("%s [2]\n", __func__);
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
 	unlock_ret = unlock_secure_storage(secure_storage_key);
+	//printf("%s [3]\n", __func__);
 	if (unlock_ret == ERR_EXIST) {
+		//printf("%s [4]\n", __func__);
 		uint8_t temp_key[STORAGE_KEY_SIZE];
 		int create_ret, unlock_ret_2;
 		yield_secure_storage_queues_access();
@@ -351,11 +363,13 @@ int request_secure_storage_access(int count, uint32_t partition_size)
 			printf("%s: Error: request for secure storage creation failed.\n", __func__);
 			return create_ret;
 		}
+		//printf("%s [5]\n", __func__);
 		ret = request_secure_storage_queues_access(count);	
 		if (ret) {
 			printf("%s: Error: couldn't regain access to storage queues.\n", __func__);
 			return ret;
 		}
+		//printf("%s [6]\n", __func__);
 		/* FIXME: verify the partition size? */
 		unlock_ret_2 = unlock_secure_storage(temp_key);
 		if (unlock_ret_2) {
@@ -366,6 +380,7 @@ int request_secure_storage_access(int count, uint32_t partition_size)
 		yield_secure_storage_queues_access();
 		return unlock_ret;
 	}
+	//printf("%s [7]\n", __func__);
 
 	/* if new storage, set the key */
 	set_key_ret = set_secure_storage_key(secure_storage_key);
@@ -373,6 +388,7 @@ int request_secure_storage_access(int count, uint32_t partition_size)
 		yield_secure_storage_access();
 		return set_key_ret;
 	}
+	//printf("%s [8]\n", __func__);
 
 	secure_storage_available = true;
 	return 0;

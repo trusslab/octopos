@@ -30,6 +30,8 @@
 struct request_queue	*obd_queue = NULL;
 struct gendisk		*obd_disk = NULL;
 
+struct mutex obd_lock;
+
 /*
  * Process a single bvec of a bio.
  */
@@ -39,16 +41,18 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	void *mem;
 	int ret;
 
+	mutex_lock(&obd_lock);
+
 	if (len % 512)
 		BUG();
-	printk("%s [1]\n", __func__);
+	//printk("%s [1]\n", __func__);
 
 	ret = request_secure_storage_access(200, STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE);
 	if (ret) {
 		printk("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
 	}
-	printk("%s [2]\n", __func__);
+	//printk("%s [2]\n", __func__);
 
 	mem = kmap_atomic(page);
 	if (!op_is_write(op)) {
@@ -60,9 +64,10 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	}
 	kunmap_atomic(mem);
 
-	printk("%s [3]\n", __func__);
+	//printk("%s [3]\n", __func__);
 	yield_secure_storage_access();
-	printk("%s [4]\n", __func__);
+	//printk("%s [4]\n", __func__);
+	mutex_unlock(&obd_lock);
 
 	return 0;
 }
@@ -204,6 +209,8 @@ static int __init obd_init(void)
 	 */
 	obd_disk->queue = obd_queue;
 	add_disk(obd_disk);
+
+	mutex_init(&obd_lock);
 
 	blk_register_region(MKDEV(OCTOPOS_BLK_MAJOR, 0), 1UL << MINORBITS,
 				  THIS_MODULE, obd_probe, NULL, NULL);
