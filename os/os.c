@@ -11,7 +11,9 @@
 #include <os/syscall.h>
 #include <os/storage.h>
 #include <arch/mailbox_os.h>
-#include <arch/pmu.h> 
+#ifndef ARCH_SEC_HW
+#include <arch/pmu.h>
+#endif
 #include <arch/defines.h>
 
 static void distribute_input(void)
@@ -48,12 +50,14 @@ int main()
 	int ret = init_os_mailbox();
 	if (ret)
 		return ret;
-	
+
+#ifndef ARCH_SEC_HW
 	release_tpm_writer(P_SERIAL_OUT);
 	release_tpm_writer(P_STORAGE);
 	release_tpm_writer(P_KEYBOARD);
 
 	connect_to_pmu();
+#endif
 
 	initialize_shell();
 	initialize_storage();

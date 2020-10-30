@@ -851,9 +851,13 @@ void *run_app(void *load_buf)
 	}
 	wait_for_app_load();
 	
+#ifndef ARCH_SEC_HW
 	request_runtime_extend(200);
+#endif
 	load_application((char *) load_buf);
+#ifndef ARCH_SEC_HW
 	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, P_OS);
+#endif
 	still_running = false;
 	inform_os_of_termination();
 

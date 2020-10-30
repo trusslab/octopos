@@ -4,13 +4,13 @@
 #include "xil_printf.h"
 #include "sleep.h"
 #include "xstatus.h"
-#include "xmbox.h"
 #include "xintc.h"
 
 #include "ff.h"
 
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
+#include "arch/octopos_xmbox.h"
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox_owner_map.h"
 #include "arch/octopos_mbox.h"
@@ -21,7 +21,7 @@
 
 XIntc			intc;
 
-XMbox			Mbox_storage_in_2,
+OCTOPOS_XMbox			Mbox_storage_in_2,
 				Mbox_storage_out_2,
 				Mbox_storage_cmd_in,
 				Mbox_storage_cmd_out,
@@ -30,7 +30,7 @@ XMbox			Mbox_storage_in_2,
 
 sem_t			interrupts[NUM_QUEUES + 1];
 
-XMbox*			Mbox_regs[NUM_QUEUES + 1];
+OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 static FATFS	fatfs;
@@ -61,12 +61,12 @@ static void initialize_ramfs(void)
 
 void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 {
-	XMbox_ReadBlocking(Mbox_regs[queue_id], (u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	OCTOPOS_XMbox_ReadBlocking(Mbox_regs[queue_id], (u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void write_data_to_queue(uint8_t *buf, uint8_t queue_id)
 {
-	XMbox_WriteBlocking(Mbox_regs[queue_id], (u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	OCTOPOS_XMbox_WriteBlocking(Mbox_regs[queue_id], (u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
@@ -77,17 +77,17 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 	switch (queue_id) {
 		case Q_STORAGE_CMD_OUT:
 		case Q_STORAGE_DATA_OUT:
-			XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_STA | XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
+			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_STORAGE_CMD_IN:
-			XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD);
+			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 		case Q_STORAGE_DATA_IN:
-			XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		default:
@@ -106,32 +106,32 @@ static void handle_change_queue_interrupts(void* callback_ref)
 static void handle_mailbox_interrupts(void* callback_ref)
 {
 	u32         mask;
-	XMbox       *mbox_inst = (XMbox *)callback_ref;
+	OCTOPOS_XMbox       *mbox_inst = (OCTOPOS_XMbox *)callback_ref;
 
 	_SEC_HW_DEBUG("Mailbox ref: %p", callback_ref);
-	mask = XMbox_GetInterruptStatus(mbox_inst);
+	mask = OCTOPOS_XMbox_GetInterruptStatus(mbox_inst);
 
-	if (mask & XMB_IX_STA) {
-		_SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
+	if (mask & OCTOPOS_XMB_IX_STA) {
+		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_STA");
 		if (callback_ref == &Mbox_storage_cmd_out) {
 			sem_post(&interrupts[Q_STORAGE_CMD_OUT]);
 		} else if (callback_ref == &Mbox_storage_data_out) {
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
 		}
-	} else if (mask & XMB_IX_RTA) {
-		_SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
+	} else if (mask & OCTOPOS_XMB_IX_RTA) {
+		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_RTA");
 		if (callback_ref == &Mbox_storage_cmd_in) {
 			sem_post(&interrupts[Q_STORAGE_CMD_IN]);
 		} else if (callback_ref == &Mbox_storage_data_in) {
 			sem_post(&interrupts[Q_STORAGE_DATA_IN]);
 		}
-	} else if (mask & XMB_IX_ERR) {
-		_SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
+	} else if (mask & OCTOPOS_XMB_IX_ERR) {
+		_SEC_HW_ERROR("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
 	} else {
 		_SEC_HW_ERROR("interrupt type unknown, mask %d, from %p", mask, callback_ref);
 	}
 
-	XMbox_ClearInterrupt(mbox_inst, mask);
+	OCTOPOS_XMbox_ClearInterrupt(mbox_inst, mask);
 
 	_SEC_HW_DEBUG("interrupt cleared");
 }
@@ -142,62 +142,62 @@ void storage_event_loop(void)
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
-		XMbox_ReadBlocking(&Mbox_storage_cmd_in, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
+		OCTOPOS_XMbox_ReadBlocking(&Mbox_storage_cmd_in, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 		process_request(buf);
-		XMbox_WriteBlocking(&Mbox_storage_cmd_out, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
+		OCTOPOS_XMbox_WriteBlocking(&Mbox_storage_cmd_out, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 	}
 }
 
 int init_storage(void)
 {
 	int				Status;
-	XMbox_Config	*Config_cmd_out, 
+	OCTOPOS_XMbox_Config	*Config_cmd_out, 
 					*Config_cmd_in, 
 					*Config_Data_out, 
 					*Config_Data_in;
 
 	init_platform();
 
-	/* Initialize XMbox */
-	Config_cmd_in = XMbox_LookupConfig(XPAR_MAILBOX_2_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_cmd_in, Config_cmd_in, Config_cmd_in->BaseAddress);
+	/* Initialize OCTOPOS_XMbox */
+	Config_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_STORAGE_MBOX_CMD_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_cmd_in, Config_cmd_in, Config_cmd_in->BaseAddress);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_2_IF_0_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_STORAGE_MBOX_CMD_IN_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	Config_cmd_out = XMbox_LookupConfig(XPAR_MAILBOX_3_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_cmd_out, Config_cmd_out, Config_cmd_out->BaseAddress);
+	Config_cmd_out = OCTOPOS_XMbox_LookupConfig(XPAR_STORAGE_MBOX_CMD_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_cmd_out, Config_cmd_out, Config_cmd_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_3_IF_0_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_STORAGE_MBOX_CMD_OUT_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	Config_Data_in = XMbox_LookupConfig(XPAR_MAILBOX_0_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_data_in, Config_Data_in, Config_Data_in->BaseAddress);
+	Config_Data_in = OCTOPOS_XMbox_LookupConfig(XPAR_STORAGE_MBOX_DATA_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_data_in, Config_Data_in, Config_Data_in->BaseAddress);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_0_IF_0_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_STORAGE_MBOX_DATA_IN_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	Config_Data_out = XMbox_LookupConfig(XPAR_MAILBOX_1_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage_data_out, Config_Data_out, Config_Data_out->BaseAddress);
+	Config_Data_out = OCTOPOS_XMbox_LookupConfig(XPAR_STORAGE_MBOX_DATA_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_data_out, Config_Data_out, Config_Data_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MAILBOX_1_IF_0_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_STORAGE_MBOX_DATA_OUT_DEVICE_ID);
 		return XST_FAILURE;
 	}
 
-	XMbox_SetReceiveThreshold(&Mbox_storage_cmd_in, MAILBOX_DEFAULT_RX_THRESHOLD);
-	XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, XMB_IX_RTA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_cmd_in, MAILBOX_DEFAULT_RX_THRESHOLD);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_storage_cmd_out, 0);
-	XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, XMB_IX_STA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_cmd_out, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetReceiveThreshold(&Mbox_storage_data_in, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-	XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_RTA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_data_in, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_in, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_storage_data_out, 0);
-	XMbox_SetInterruptEnable(&Mbox_storage_data_out, XMB_IX_STA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_data_out, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();

@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include "xil_printf.h"
 #include "xstatus.h"
-#include "xmbox.h"
+#include "arch/octopos_xmbox.h"
 #include "xparameters.h"
 #include "xil_exception.h"
 #include "xscugic.h"
@@ -35,7 +35,7 @@ XScuGic			irq_controller;
 XIpiPsu 		ipi_pmu_inst;
 XIntc			intc;
 
-XMbox			Mbox_output, 
+OCTOPOS_XMbox			Mbox_output, 
 				Mbox_keyboard, 
 				Mbox_OS1, 
 				Mbox_OS2, 
@@ -52,7 +52,7 @@ sem_t			availables[NUM_QUEUES + 1];
 
 cbuf_handle_t	cbuf_keyboard;
 
-XMbox*			Mbox_regs[NUM_QUEUES + 1];
+OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 int is_queue_available(uint8_t queue_id)
@@ -138,7 +138,7 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 	uint8_t          *message_buffer;
 	u32		        bytes_read;
 
-	XMbox*          InstancePtr = NULL;
+	OCTOPOS_XMbox*          InstancePtr = NULL;
 
 	InstancePtr = sem_wait_impatient_receive_multiple(&interrupt_input, 3, &Mbox_keyboard, &Mbox_OS1, &Mbox_OS2);
 
@@ -182,15 +182,15 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 
 #ifdef HW_MAILBOX_BLOCKING
-		XMbox_ReadBlocking(&Mbox_keyboard, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+		OCTOPOS_XMbox_ReadBlocking(&Mbox_keyboard, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 #else
 		if (sketch_buffer[*queue_id])
-			XMbox_Read(&Mbox_keyboard,
+			OCTOPOS_XMbox_Read(&Mbox_keyboard,
 					(u32*)(message_buffer),
 					MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset[*queue_id],
 					&bytes_read);
 		else
-			XMbox_Read(&Mbox_keyboard,
+			OCTOPOS_XMbox_Read(&Mbox_keyboard,
 					(u32*)(message_buffer),
 					MAILBOX_QUEUE_MSG_SIZE,
 					&bytes_read);
@@ -208,15 +208,15 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 
 #ifdef HW_MAILBOX_BLOCKING
-		XMbox_ReadBlocking(&Mbox_OS1, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+		OCTOPOS_XMbox_ReadBlocking(&Mbox_OS1, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 #else
 		if (sketch_buffer[*queue_id])
-			XMbox_Read(&Mbox_OS1,
+			OCTOPOS_XMbox_Read(&Mbox_OS1,
 					(u32*)(message_buffer),
 					MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset[*queue_id],
 					&bytes_read);
 		else
-			XMbox_Read(&Mbox_OS1,
+			OCTOPOS_XMbox_Read(&Mbox_OS1,
 					(u32*)(message_buffer),
 					MAILBOX_QUEUE_MSG_SIZE,
 					&bytes_read);
@@ -234,15 +234,15 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 		
 #ifdef HW_MAILBOX_BLOCKING
-		XMbox_ReadBlocking(&Mbox_OS2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+		OCTOPOS_XMbox_ReadBlocking(&Mbox_OS2, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 #else
 		if (sketch_buffer[*queue_id])
-			XMbox_Read(&Mbox_OS2,
+			OCTOPOS_XMbox_Read(&Mbox_OS2,
 					(u32*)(message_buffer),
 					MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset[*queue_id],
 					&bytes_read);
 		else
-			XMbox_Read(&Mbox_OS2,
+			OCTOPOS_XMbox_Read(&Mbox_OS2,
 					(u32*)(message_buffer),
 					MAILBOX_QUEUE_MSG_SIZE,
 					&bytes_read);
@@ -387,12 +387,12 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 	switch (queue_id) {
 		case Q_KEYBOARD:
 		case Q_STORAGE_CMD_OUT:
-			XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD);
+			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 		case Q_STORAGE_DATA_OUT:
-			XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_RTA | XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_SERIAL_OUT:
@@ -400,8 +400,8 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 		case Q_RUNTIME2:
 		case Q_STORAGE_CMD_IN:
 		case Q_STORAGE_DATA_IN:
-			XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
-			XMbox_SetInterruptEnable(Mbox_regs[queue_id], XMB_IX_STA | XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
+			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		default:
@@ -442,13 +442,13 @@ void Rpu_IpiHandler(XIpiPsu *IpiInstPtr)
 static void handle_mailbox_interrupts(void* callback_ref) 
 {
 	u32         mask;
-	XMbox       *mbox_inst = (XMbox *)callback_ref;
+	OCTOPOS_XMbox       *mbox_inst = (OCTOPOS_XMbox *)callback_ref;
 
 	_SEC_HW_DEBUG("Mailbox ref: %p", callback_ref);
-	mask = XMbox_GetInterruptStatus(mbox_inst);
+	mask = OCTOPOS_XMbox_GetInterruptStatus(mbox_inst);
 
-	if (mask & XMB_IX_STA) {
-		_SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
+	if (mask & OCTOPOS_XMB_IX_STA) {
+		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_STA");
 		if (callback_ref == &Mbox_output) {
 			/* Serial Out */
 			_SEC_HW_DEBUG("from Mbox_output");
@@ -483,8 +483,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&availables[Q_STORAGE_CMD_IN]);
 		}
 		
-	} else if (mask & XMB_IX_RTA) {
-		_SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
+	} else if (mask & OCTOPOS_XMB_IX_RTA) {
+		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_RTA");
 		if (callback_ref == &Mbox_keyboard) {
 			/* Keyboard */
 			_SEC_HW_DEBUG("from Mbox_keyboard");
@@ -522,13 +522,13 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&availables[Q_STORAGE_CMD_OUT]);
 			sem_post(&interrupts[Q_STORAGE_CMD_OUT]);
 		}
-	} else if (mask & XMB_IX_ERR) {
-		_SEC_HW_ERROR("interrupt type: XMB_IX_ERR, from %p", callback_ref);
+	} else if (mask & OCTOPOS_XMB_IX_ERR) {
+		_SEC_HW_ERROR("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
 	} else {
 		_SEC_HW_ERROR("interrupt type unknown, mask %d, from %p", mask, callback_ref);
 	}
 
-	XMbox_ClearInterrupt(mbox_inst, mask);
+	OCTOPOS_XMbox_ClearInterrupt(mbox_inst, mask);
 
 	_SEC_HW_DEBUG("interrupt cleared");
 //  _SEC_HW_DEBUG("STATE register: (in decimal) %d",
@@ -552,141 +552,138 @@ int init_os_mailbox(void)
 	int				Status;
 	uint32_t		irqNo;
 
-	XMbox_Config	*ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4,
+	OCTOPOS_XMbox_Config	*ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4,
 					*ConfigPtr_runtime1, *ConfigPtr_runtime2, *Config_storage_cmd_in,
 					*Config_storage_cmd_out, *Config_storage_data_in, *Config_storage_data_out;
 	XIpiPsu_Config	*ipi_psu_config;
 
 	init_platform();
+	OMboxIds_init();
 
-	ConfigPtr = XMbox_LookupConfig(XPAR_MBOX_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_output, ConfigPtr, ConfigPtr->BaseAddress);
+	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_KEYBOARD_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_output, ConfigPtr, ConfigPtr->BaseAddress);
 	if (Status != XST_SUCCESS) 
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_0_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_KEYBOARD_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr2 = XMbox_LookupConfig(XPAR_MBOX_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_keyboard, ConfigPtr2, ConfigPtr2->BaseAddress);
+	ConfigPtr2 = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_keyboard, ConfigPtr2, ConfigPtr2->BaseAddress);
 	if (Status != XST_SUCCESS) 
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_1_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr3 = XMbox_LookupConfig(XPAR_ENCLAVE0_PS_MAILBOX_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_OS1, ConfigPtr3, ConfigPtr3->BaseAddress);
+	ConfigPtr3 = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_ENCLAVE0_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_OS1, ConfigPtr3, ConfigPtr3->BaseAddress);
 	if (Status != XST_SUCCESS) 
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_ENCLAVE0_PS_MAILBOX_IF_0_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_ENCLAVE0_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr4 = XMbox_LookupConfig(XPAR_ENCLAVE1_PS_MAILBOX_IF_0_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_OS2, ConfigPtr4, ConfigPtr4->BaseAddress);
+	ConfigPtr4 = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_ENCLAVE1_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_OS2, ConfigPtr4, ConfigPtr4->BaseAddress);
 	if (Status != XST_SUCCESS) 
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_ENCLAVE1_PS_MAILBOX_IF_0_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_ENCLAVE1_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr_runtime1 = XMbox_LookupConfig(XPAR_MBOX_2_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_runtime1, ConfigPtr_runtime1, ConfigPtr_runtime1->BaseAddress);
+	ConfigPtr_runtime1 = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_RUNTIME1_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_runtime1, ConfigPtr_runtime1, ConfigPtr_runtime1->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_2_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_RUNTIME1_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr_runtime2 = XMbox_LookupConfig(XPAR_MBOX_3_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_runtime2, ConfigPtr_runtime2, ConfigPtr_runtime2->BaseAddress);
+	ConfigPtr_runtime2 = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_RUNTIME2_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_runtime2, ConfigPtr_runtime2, ConfigPtr_runtime2->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_3_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_RUNTIME2_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	Config_storage_data_in = XMbox_LookupConfig(XPAR_MBOX_4_DEVICE_ID);
-	Status = XMbox_CfgInitialize(
+	Config_storage_data_in = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_STORAGE_DATA_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
 		&Mbox_storage_data_in, 
 		Config_storage_data_in,
 		Config_storage_data_in->BaseAddress
 		);
 	if (Status != XST_SUCCESS)
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_4_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_STORAGE_DATA_IN_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	Config_storage_data_out = XMbox_LookupConfig(XPAR_MBOX_5_DEVICE_ID);
-	Status = XMbox_CfgInitialize(
+	Config_storage_data_out = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_STORAGE_DATA_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
 		&Mbox_storage_data_out, 
 		Config_storage_data_out,
 		Config_storage_data_out->BaseAddress
 		);
 	if (Status != XST_SUCCESS)
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_5_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_STORAGE_DATA_OUT_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	Config_storage_cmd_in = XMbox_LookupConfig(XPAR_MBOX_6_DEVICE_ID);
-	Status = XMbox_CfgInitialize(
+	Config_storage_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_CMD_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
 		&Mbox_storage_cmd_in, 
 		Config_storage_cmd_in,
 		Config_storage_cmd_in->BaseAddress
 		);
 	if (Status != XST_SUCCESS)
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_6_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_CMD_IN_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	Config_storage_cmd_out = XMbox_LookupConfig(XPAR_MBOX_7_DEVICE_ID);
-	Status = XMbox_CfgInitialize(
+	Config_storage_cmd_out = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_CMD_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
 		&Mbox_storage_cmd_out, 
 		Config_storage_cmd_out,
 		Config_storage_cmd_out->BaseAddress
 		);
 	if (Status != XST_SUCCESS)
 	{
-		_SEC_HW_ERROR("XMbox_CfgInitialize %d failed", XPAR_MBOX_7_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_CMD_OUT_DEVICE_ID);
 		return -XST_FAILURE;
 	}
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_output, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_output, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
-	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
-	OMboxIds_init();
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_keyboard, MAILBOX_DEFAULT_RX_THRESHOLD);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_keyboard, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_output, 0);
-	XMbox_SetInterruptEnable(&Mbox_output, XMB_IX_STA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_OS1, MAILBOX_DEFAULT_RX_THRESHOLD);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_OS1, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetReceiveThreshold(&Mbox_keyboard, MAILBOX_DEFAULT_RX_THRESHOLD);
-	XMbox_SetInterruptEnable(&Mbox_keyboard, XMB_IX_RTA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_OS2, MAILBOX_DEFAULT_RX_THRESHOLD);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_OS2, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetReceiveThreshold(&Mbox_OS1, MAILBOX_DEFAULT_RX_THRESHOLD);
-	XMbox_SetInterruptEnable(&Mbox_OS1, XMB_IX_RTA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_runtime1, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_runtime1, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetReceiveThreshold(&Mbox_OS2, MAILBOX_DEFAULT_RX_THRESHOLD);
-	XMbox_SetInterruptEnable(&Mbox_OS2, XMB_IX_RTA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_runtime2, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_runtime2, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_runtime1, 0);
-	XMbox_SetInterruptEnable(&Mbox_runtime1, XMB_IX_STA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_cmd_in, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_runtime2, 0);
-	XMbox_SetInterruptEnable(&Mbox_runtime2, XMB_IX_STA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_cmd_out, MAILBOX_DEFAULT_RX_THRESHOLD);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetSendThreshold(&Mbox_storage_cmd_in, 0);
-	XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, XMB_IX_STA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
-	XMbox_SetReceiveThreshold(&Mbox_storage_cmd_out, MAILBOX_DEFAULT_RX_THRESHOLD);
-	XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, XMB_IX_RTA | XMB_IX_ERR);
-
-	XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-	XMbox_SetInterruptEnable(&Mbox_storage_data_out, XMB_IX_RTA | XMB_IX_ERR);
-
-	XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
-	XMbox_SetInterruptEnable(&Mbox_storage_data_in, XMB_IX_STA | XMB_IX_ERR);
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
 	Xil_ExceptionInit();
 
@@ -708,13 +705,13 @@ int init_os_mailbox(void)
 			&irq_controller);
 	Xil_ExceptionEnable();
 
-	irqNo = XPAR_FABRIC_MAILBOX_1_INTERRUPT_1_INTR;
+	irqNo = OMboxIntrs[P_OS][Q_SERIAL_OUT];
 	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_output);
 	XScuGic_Enable(&irq_controller, irqNo);
 	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
 	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
-	irqNo = XPAR_FABRIC_MAILBOX_0_INTERRUPT_1_INTR;
+	irqNo = OMboxIntrs[P_OS][Q_KEYBOARD];
 	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_keyboard);
 	XScuGic_Enable(&irq_controller, irqNo);
 	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
@@ -732,13 +729,13 @@ int init_os_mailbox(void)
 	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
 	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
-	irqNo = XPAR_FABRIC_MAILBOX_2_INTERRUPT_1_INTR;
+	irqNo = OMboxIntrs[P_OS][Q_RUNTIME1];
 	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_runtime1);
 	XScuGic_Enable(&irq_controller, irqNo);
 	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
 	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
 
-	irqNo = XPAR_FABRIC_MAILBOX_3_INTERRUPT_1_INTR;
+	irqNo = OMboxIntrs[P_OS][Q_RUNTIME2];
 	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_runtime2);
 	XScuGic_Enable(&irq_controller, irqNo);
 	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
@@ -791,100 +788,100 @@ int init_os_mailbox(void)
 	}
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_XI_INTC_STORAGE_Q_STORAGE_IN_2_INTERRUPT_0_INTR,
+			OMboxIntrs[P_OS][Q_STORAGE_CMD_IN],
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox_storage_cmd_in);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_XI_INTC_STORAGE_Q_STORAGE_IN_2_INTERRUPT_0_INTR);
+				OMboxIntrs[P_OS][Q_STORAGE_CMD_IN]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_IN_2_INTERRUPT_0_INTR);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_IN]);
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_XI_INTC_STORAGE_Q_STORAGE_OUT_2_INTERRUPT_0_INTR,
+			OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT],
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox_storage_cmd_out);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_XI_INTC_STORAGE_Q_STORAGE_OUT_2_INTERRUPT_0_INTR);
+				OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_OUT_2_INTERRUPT_0_INTR);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR,
+			OMboxIntrs[P_OS][Q_STORAGE_DATA_IN],
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox_storage_data_in);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR);
+				OMboxIntrs[P_OS][Q_STORAGE_DATA_IN]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_IN]);
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR,
+			OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT],
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox_storage_data_out);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR);
+				OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT]);
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_XI_INTC_STORAGE_Q_STORAGE_IN_2_INTERRUPT_CTRL0_INTR,
+			OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_CMD_IN);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_XI_INTC_STORAGE_Q_STORAGE_IN_2_INTERRUPT_CTRL0_INTR);
+				OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_IN_2_INTERRUPT_CTRL0_INTR);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN]);
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_XI_INTC_STORAGE_Q_STORAGE_OUT_2_INTERRUPT_CTRL0_INTR,
+			OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_CMD_OUT);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_XI_INTC_STORAGE_Q_STORAGE_OUT_2_INTERRUPT_CTRL0_INTR);
+				OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_OUT_2_INTERRUPT_CTRL0_INTR);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_IN_INTERRUPT_CTRL0_INTR,
+			OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_DATA_IN);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_IN_INTERRUPT_CTRL0_INTR);
+				OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_IN_INTERRUPT_CTRL0_INTR);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN]);
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL0_INTR,
+			OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_DATA_OUT);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL0_INTR);
+				OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_XI_INTC_STORAGE_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL0_INTR);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT]);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
@@ -910,10 +907,10 @@ int init_os_mailbox(void)
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
 	Mbox_regs[Q_STORAGE_DATA_IN] = &Mbox_storage_data_in;
 
-	Mbox_ctrl_regs[Q_KEYBOARD] = OCTOPOS_MAILBOX_OS_1WRI_0_BASEADDR;
-	Mbox_ctrl_regs[Q_SERIAL_OUT] = OCTOPOS_MAILBOX_OS_3WRI_0_BASEADDR;
-	Mbox_ctrl_regs[Q_RUNTIME1] = OCTOPOS_MAILBOX_OS_3WRI_2_BASEADDR;
-	Mbox_ctrl_regs[Q_RUNTIME2] = OCTOPOS_MAILBOX_OS_3WRI_1_BASEADDR;
+	Mbox_ctrl_regs[Q_KEYBOARD] = OCTOPOS_OS_Q_KEYBOARD_BASEADDR;
+	Mbox_ctrl_regs[Q_SERIAL_OUT] = OCTOPOS_OS_Q_SERIAL_OUT_BASEADDR;
+	Mbox_ctrl_regs[Q_RUNTIME1] = OCTOPOS_OS_Q_RUNTIME1_BASEADDR;
+	Mbox_ctrl_regs[Q_RUNTIME2] = OCTOPOS_OS_Q_RUNTIME2_BASEADDR;
 	Mbox_ctrl_regs[Q_STORAGE_CMD_IN] = OCTOPOS_OS_Q_STORAGE_IN_2_BASEADDR;
 	Mbox_ctrl_regs[Q_STORAGE_CMD_OUT] = OCTOPOS_OS_Q_STORAGE_OUT_2_BASEADDR;
 	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_OS_Q_STORAGE_DATA_OUT_BASEADDR;

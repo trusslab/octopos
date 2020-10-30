@@ -24,7 +24,9 @@
 #include <os/scheduler.h>
 #include <os/syscall.h>
 #include <arch/mailbox_os.h>
-#include <arch/pmu.h> 
+#ifndef ARCH_SEC_HW
+#include <arch/pmu.h>
+#endif
 #include <arch/defines.h>
 
 #ifdef 	ARCH_SEC_HW
@@ -371,7 +373,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
 			memcpy(&buf[1], "halt\n", 5);
 			send_cmd_to_untrusted(buf);
-
+#ifndef ARCH_SEC_HW
 			/* send a shutdown cmd to PMU */
 			/* FIXME: there is a race condition here.
 			 * Our halt cmd sent to the untrusted domain might trigger the PMU
@@ -380,7 +382,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			ret = pmu_shutdown();
 			if (ret)
 				output_printf("Couldn't shut down\n");
-
+#endif
 			output_printf("octopos$> ");
 			return 0;
 		} else if (strcmp(args[0], "reboot") == 0) {
@@ -393,12 +395,12 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
 			memcpy(&buf[1], "halt\n", 5);
 			send_cmd_to_untrusted(buf);
-
+#ifndef ARCH_SEC_HW
 			/* send a reboot cmd to PMU */
 			ret = pmu_reboot();
 			if (ret)
 				output_printf("Couldn't reboot all processors\n");
-
+#endif
 			output_printf("octopos$> ");
 			return 0;
 		} else if (strcmp(args[0], "reset") == 0) {
@@ -414,7 +416,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 				memcpy(&buf[1], "halt\n", 5);
 				send_cmd_to_untrusted(buf);
 			}
-
+#ifndef ARCH_SEC_HW
 			ret = pmu_reset_proc(proc_id);
 			if (ret) {
 				output_printf("Couldn't reset proc %d\n", proc_id);
@@ -425,7 +427,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 				else if (proc_id == P_RUNTIME2)
 					sched_runtime_reset(P_RUNTIME2);
 			}
-
+#endif
 			output_printf("octopos$> ");
 			return 0;
 		}

@@ -28,7 +28,9 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
+#ifndef ARCH_SEC_HW_KEYBOARD
 	send_ext_request_to_queue((uint8_t *) argv[0]);
+#endif
 
 	keyboard_core();
 
