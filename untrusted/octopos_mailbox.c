@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/uaccess.h>
 #include <linux/semaphore.h>
+#include <linux/timer.h>
 #include <init.h>
 #include <irq_kern.h>
 #include <os.h>
@@ -48,6 +49,48 @@ struct semaphore srq_sem;
 
 //struct semaphore mailbox_lock;
 spinlock_t mailbox_lock;
+
+limit_t queue_limits[NUM_QUEUES + 1];
+timeout_t queue_timeouts[NUM_QUEUES + 1];
+void (*queue_timeout_update_callbacks[NUM_QUEUES + 1])(uint8_t queue_id,
+						       timeout_t timeout);
+
+static struct timer_list timer;
+
+void callback_timer(struct timer_list *_timer)
+{
+	int i;
+
+	printk("%s [1]\n", __func__);
+	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
+	
+	for (i = 1; i <= NUM_QUEUES; i++) {
+		if (queue_timeouts[i] &&
+		    (queue_timeouts[i] != MAILBOX_NO_TIMEOUT_VAL)) {
+			queue_timeouts[i]--;
+			if (queue_timeout_update_callbacks[i])
+				(*queue_timeout_update_callbacks[i])(i, queue_timeouts[i]);
+		}
+	}
+
+}
+
+void register_timeout_update_callback(uint8_t queue_id,
+				      void (*callback)(uint8_t, timeout_t))
+{
+	if (queue_id < 1 || queue_id > NUM_QUEUES) {
+		printk("Error: %s: invalid queue id (%d)\n", __func__, queue_id);
+		return;
+	}
+
+	if (queue_timeout_update_callbacks[queue_id]) {
+		printk("Error: %s: queue timeout update callback for queue %d is already "
+		       "registered\n", __func__, queue_id);
+		return;
+	}
+
+	queue_timeout_update_callbacks[queue_id] = callback;
+}
 
 /* FIXME: modified from the same functin in runtime.c */
 int write_syscall_response(uint8_t *buf)
@@ -317,6 +360,9 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 	uint8_t opcode[2];
 	unsigned long flags;
 
+	queue_limits[queue_id] = 0;
+	queue_timeouts[queue_id] = 0;
+
 	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
 	opcode[1] = queue_id;
 	//while (down_trylock(&mailbox_lock));
@@ -346,6 +392,12 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 	//printk("%s [2]: unlocked\n", __func__);
 
+	if (state.limit && (state.limit != MAILBOX_NO_LIMIT_VAL))
+		queue_limits[queue_id] = state.limit;
+
+	if (state.timeout && (state.timeout != MAILBOX_NO_TIMEOUT_VAL))
+		queue_timeouts[queue_id] = state.timeout;
+
 	if (state.limit == count)
 		return 1;
 	else
@@ -356,6 +408,26 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 void reset_queue_sync(uint8_t queue_id, int init_val)
 {
 	sema_init(&interrupts[queue_id], init_val);
+}
+
+limit_t get_queue_limit(uint8_t queue_id)
+{
+	printk("%s [1]: queue_limits[%d] = %d\n", __func__, queue_id, queue_limits[queue_id]);
+	return queue_limits[queue_id];
+}
+
+timeout_t get_queue_timeout(uint8_t queue_id)
+{
+	printk("%s [1]: queue_timeouts[%d] = %d\n", __func__, queue_id, queue_timeouts[queue_id]);
+	return queue_timeouts[queue_id];
+}
+
+void decrement_queue_limit(uint8_t queue_id, limit_t count)
+{
+	if (queue_limits[queue_id] <= count)
+		queue_limits[queue_id] = 0;
+	else
+		queue_limits[queue_id] -= count;
 }
 
 /* FIXME: move somewhere else */
@@ -493,6 +565,13 @@ static int __init om_init(void)
 	//sema_init(&mailbox_lock, 1);
 	spin_lock_init(&mailbox_lock);
 
+	memset(queue_limits, 0x0, sizeof(queue_limits));
+	memset(queue_timeouts, 0x0, sizeof(queue_timeouts));
+	memset(queue_timeout_update_callbacks, 0x0, sizeof(queue_timeout_update_callbacks));
+
+	timer_setup(&timer, callback_timer, 0);
+	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
+
 	/* register char dev */
 	err = misc_register(&om_miscdev);
 	if (err) {
@@ -511,6 +590,8 @@ static void cleanup(void)
 
 static void __exit om_cleanup(void)
 {
+	del_timer(&timer);
+
 	os_close_file(fd_out);
 	os_close_file(fd_in);
 	os_close_file(fd_intr);

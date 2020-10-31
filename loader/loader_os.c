@@ -39,7 +39,8 @@ void prepare_loader(char *filename, int argc, char *argv[])
 	
 	/* delegate TPM mailbox to storage */
 	mark_queue_unavailable(Q_TPM_IN);
-	mailbox_delegate_queue_access(Q_TPM_IN, P_STORAGE, 1, 1);
+	mailbox_delegate_queue_access(Q_TPM_IN, P_STORAGE, 1,
+			MAILBOX_DEFAULT_TIMEOUT_VAL);
 	printf("%s [3]\n", __func__);
 
 	wait_for_queue_availability(Q_TPM_IN);

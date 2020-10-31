@@ -127,7 +127,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		/* FIXME: update according to umode updates. */
 		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 #else
-		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id, (limit_t) count, 1);
+		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id, (limit_t) count,
+				MAILBOX_DEFAULT_TIMEOUT_VAL);
 #endif
 
 		SYSCALL_SET_ONE_RET(0)
@@ -156,7 +157,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		/* FIXME: update according to umode updates. */
 		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 #else
-		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id, (limit_t) count, 1);
+		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id, (limit_t) count,
+				MAILBOX_DEFAULT_TIMEOUT_VAL);
 #endif
 
 		SYSCALL_SET_ONE_RET(0)
@@ -402,7 +404,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_TPM_IN);
 
-		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id, (limit_t) count, 1);
+		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id, (limit_t) count,
+				MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;

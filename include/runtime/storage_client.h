@@ -2,6 +2,11 @@
 #define bool _Bool
 #endif
 
+/* The number of limits on the storage cmd
+ * queues needed to lock the partition.
+ */
+#define STORAGE_CLIENT_MIN_CMD_LIMIT	1
+
 bool is_secure_storage_key_set(void);
 int set_up_secure_storage_key(uint8_t *key);
 int yield_secure_storage_access(void);

@@ -24,6 +24,8 @@
 #include <linux/backing-dev.h>
 
 #include <linux/uaccess.h>
+#define UNTRUSTED_DOMAIN
+#include <octopos/mailbox.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include "storage_client.h" 
@@ -32,8 +34,24 @@ struct request_queue	*obd_queue = NULL;
 struct gendisk		*obd_disk = NULL;
 
 struct mutex obd_lock;
-limit_t access_limit = 0;
 
+static struct work_struct yield_wq;
+
+static void obd_yield_storage_queues(struct work_struct *work)
+{
+	mutex_lock(&obd_lock);
+	yield_secure_storage_access();
+	mutex_unlock(&obd_lock);
+}
+
+/*
+ * Will be called in the interrupt context.
+ */
+void obd_queue_timeout_update(uint8_t queue_id, timeout_t timeout)
+{
+	if (timeout <= MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL)
+		schedule_work(&yield_wq);
+}
 /*
  * Process a single bvec of a bio.
  */
@@ -43,10 +61,11 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	void *mem;
 	int ret;
 	unsigned int num_blocks;
+	uint8_t data_queue = (op_is_write(op)) ? Q_STORAGE_DATA_IN : Q_STORAGE_DATA_OUT;
 
 	if (len % STORAGE_BLOCK_SIZE)
 		BUG();
-	//printk("%s [1]\n", __func__);
+	printk("%s [1]\n", __func__);
 
 	num_blocks = len / STORAGE_BLOCK_SIZE;
 
@@ -55,8 +74,16 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	//printk("%s [1.2]: num_blocks = %d\n", __func__, num_blocks);
 	//printk("%s [1.3]: access_limit = %d\n", __func__, access_limit);
 	/* FIXME: we need to keep separate counts for each storage queue. */
-	if (((unsigned int) access_limit) < num_blocks) {
-		//printk("%s [1.4]\n", __func__);
+	if (get_queue_limit(data_queue) < num_blocks ||
+	    /* The +1 is because we need to send and receive one message on the cmd
+	     * queues for the upcoming read/write.
+	     */
+	    get_queue_limit(Q_STORAGE_CMD_IN) < (STORAGE_CLIENT_MIN_CMD_LIMIT + 1) ||
+	    get_queue_limit(Q_STORAGE_CMD_OUT) < (STORAGE_CLIENT_MIN_CMD_LIMIT + 1) ||
+	    get_queue_timeout(data_queue) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
+	    get_queue_timeout(Q_STORAGE_CMD_IN) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
+	    get_queue_timeout(Q_STORAGE_CMD_OUT) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL) {
+		printk("%s [1.4]\n", __func__);
 
 		//if (access_limit) {
 			//printk("%s [1.5]\n", __func__);
@@ -65,7 +92,7 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 		 * with storage queue separately.
 		 */
 		yield_secure_storage_access();
-		access_limit = 0;
+		//access_limit = 0;
 		//}
 
 		ret = request_secure_storage_access(MAILBOX_MAX_LIMIT_VAL,
@@ -75,13 +102,16 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 			return ret;
 		}
 
-		access_limit = MAILBOX_MAX_LIMIT_VAL;
+		//access_limit = MAILBOX_MAX_LIMIT_VAL;
 		//printk("%s [1.5]: access_limit = %d\n", __func__, access_limit);
 	}
 	//printk("%s [2]\n", __func__);
 
-	access_limit -= (limit_t) num_blocks;
+	//access_limit -= (limit_t) num_blocks;
 	//printk("%s [1.6]: access_limit = %d\n", __func__, access_limit);
+	decrement_queue_limit(data_queue, num_blocks);
+	decrement_queue_limit(Q_STORAGE_CMD_IN, 1);
+	decrement_queue_limit(Q_STORAGE_CMD_OUT, 1);
 
 	mem = kmap_atomic(page);
 	if (!op_is_write(op)) {
@@ -240,6 +270,13 @@ static int __init obd_init(void)
 	add_disk(obd_disk);
 
 	mutex_init(&obd_lock);
+
+	register_timeout_update_callback(Q_STORAGE_CMD_IN, obd_queue_timeout_update);
+	register_timeout_update_callback(Q_STORAGE_CMD_OUT, obd_queue_timeout_update);
+	register_timeout_update_callback(Q_STORAGE_DATA_IN, obd_queue_timeout_update);
+	register_timeout_update_callback(Q_STORAGE_DATA_OUT, obd_queue_timeout_update);
+
+	INIT_WORK(&yield_wq, obd_yield_storage_queues);
 
 	blk_register_region(MKDEV(OCTOPOS_BLK_MAJOR, 0), 1UL << MINORBITS,
 				  THIS_MODULE, obd_probe, NULL, NULL);

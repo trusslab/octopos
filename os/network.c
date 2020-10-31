@@ -151,8 +151,10 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 	mailbox_change_queue_access(Q_NETWORK_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
 	mailbox_change_queue_access(Q_NETWORK_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
 #else
-	mailbox_delegate_queue_access(Q_NETWORK_DATA_IN, runtime_proc_id, (limit_t) count, 1);
-	mailbox_delegate_queue_access(Q_NETWORK_DATA_OUT, runtime_proc_id, (limit_t) count, 1);
+	mailbox_delegate_queue_access(Q_NETWORK_DATA_IN, runtime_proc_id, (limit_t) count,
+			MAILBOX_DEFAULT_TIMEOUT_VAL);
+	mailbox_delegate_queue_access(Q_NETWORK_DATA_OUT, runtime_proc_id, (limit_t) count,
+			MAILBOX_DEFAULT_TIMEOUT_VAL);
 #endif
 
 	SYSCALL_SET_ONE_RET((uint32_t) 0)

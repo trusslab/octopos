@@ -74,17 +74,24 @@ typedef struct {
 typedef uint32_t limit_t;
 typedef uint32_t timeout_t;
 
-#define MAILBOX_NO_LIMIT_VAL	0xFFF
-#define MAILBOX_NO_TIMEOUT_VAL	0xFFF
+#define MAILBOX_NO_LIMIT_VAL			0xFFF
+#define MAILBOX_NO_TIMEOUT_VAL			0xFFF
 /* FIXME: these are also defined in octopos/runtime.h */
-#define MAILBOX_MAX_LIMIT_VAL	0xFFE
-#define MAILBOX_MAX_TIMEOUT_VAL	0xFFE
+#define MAILBOX_MAX_LIMIT_VAL			0xFFE
+#define MAILBOX_MAX_TIMEOUT_VAL			0xFFE
+#define MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL	2
+#define MAILBOX_DEFAULT_TIMEOUT_VAL		6
 
 /* FIXME: move somewhere else */
 #ifdef UNTRUSTED_DOMAIN
 void mailbox_yield_to_previous_owner(uint8_t queue_id);
 int mailbox_attest_queue_access(uint8_t queue_id, limit_t count);
 void reset_queue_sync(uint8_t queue_id, int init_val);
+limit_t get_queue_limit(uint8_t queue_id);
+timeout_t get_queue_timeout(uint8_t queue_id);
+void decrement_queue_limit(uint8_t queue_id, limit_t count);
+void register_timeout_update_callback(uint8_t queue_id,
+				      void (*callback)(uint8_t, timeout_t));
 #endif
 
 #endif /* _OCTOPOS_MAILBOX_H_ */

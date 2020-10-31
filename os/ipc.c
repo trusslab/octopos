@@ -86,9 +86,9 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 					    target_runtime_proc->id, (uint16_t) count);
 #else
 		mailbox_delegate_queue_access(target_runtime_queue_id, runtime_proc_id, 
-					      (limit_t) count, 1);
+					      (limit_t) count, MAILBOX_DEFAULT_TIMEOUT_VAL);
 		mailbox_delegate_queue_access(runtime_queue_id, target_runtime_proc->id,
-					      (limit_t) count, 1);
+					      (limit_t) count, MAILBOX_DEFAULT_TIMEOUT_VAL);
 #endif
 		
 		target_runtime_proc->pending_secure_ipc_request = 0;
