@@ -1,4 +1,4 @@
-/* OctopOS loader */
+/* OctopOS bootloader */
 
 #include <stdio.h>
 #include <string.h>
@@ -12,7 +12,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 
-void prepare_loader(char *filename, int argc, char *argv[]);
+void prepare_bootloader(char *filename, int argc, char *argv[]);
 /*
  * @filename: the name of the file in the partition
  * @path: file path in the host file system
@@ -24,10 +24,10 @@ int main(int argc, char *argv[])
 {
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s: loader init\n", __func__);
+	printf("%s: bootloader init\n", __func__);
 
 	if (argc < 2) {
-		fprintf(stderr, "Usage: ``loader <executable_name> [parameters]''.\n");
+		fprintf(stderr, "Usage: ``bootloader <executable_name> [parameters]''.\n");
 		return -1;
 	}
 
@@ -35,14 +35,14 @@ int main(int argc, char *argv[])
 	char *name = argv[1];
 	char path[128];
 	memset(path, 0x0, 128);
-	strcpy(path, "./loader/");
+	strcpy(path, "./bootloader/");
 	strcat(path, name);
 	/* FIXME */
 	if (!strcmp(name, "runtime"))
 		strcat(path, argv[2]);
 	printf("%s [2]: path = %s\n", __func__, path);
 
-	prepare_loader(name, argc - 2, argv + 2);
+	prepare_bootloader(name, argc - 2, argv + 2);
 	copy_file_from_boot_partition(name, path);
 
 		

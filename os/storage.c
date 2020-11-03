@@ -1,6 +1,6 @@
 /* OctopOS storage code for the OS
  *
- * This file is used the OS and its loader.
+ * This file is used the OS and its bootloader.
  * We use macros ROLE_... to specialize, i.e., to compile only the needed code for each.
  */
 #include <arch/defines.h>

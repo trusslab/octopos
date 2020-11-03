@@ -30,7 +30,7 @@ sem_t availables[NUM_QUEUES + 1];
 static int intialize_channels(void)
 {
 	printf("%s [1]\n", __func__);
-#ifdef ROLE_LOADER_OS
+#ifdef ROLE_BOOTLOADER_OS
 	mkfifo(FIFO_OS_OUT, 0666);
 	mkfifo(FIFO_OS_IN, 0666);
 	mkfifo(FIFO_OS_INTR, 0666);

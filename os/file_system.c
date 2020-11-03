@@ -1,6 +1,6 @@
 /* OctopOS file system
  *
- * This file is used the OS, the installer, and the loader for storage.
+ * This file is used the OS, the installer, and the bootloader for storage.
  * We use macros ROLE_... to specialize, i.e., to compile only the needed code for each.
  */
 #include <arch/defines.h>
@@ -944,7 +944,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 	for (int i = 1; i < (MAX_NUM_FD / 8); i++)
 		fd_bitmap[i] = 0;
 
-#if defined(ROLE_OS) || defined(ROLE_LOADER_OS) 
+#if defined(ROLE_OS) || defined(ROLE_BOOTLOADER_OS) 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (file system): storage data queue msg size must be equal to storage block size\n");
 		exit(-1);

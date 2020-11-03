@@ -1,5 +1,5 @@
-DIRS := applications arch keyboard os runtime serial_out storage network tpm loader installer
-DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network util/network tpm loader util/tpm installer
+DIRS := applications arch keyboard os runtime serial_out storage network tpm bootloader installer
+DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network util/network tpm bootloader util/tpm installer
 
 EXTERNAL_DIR := ./external
 

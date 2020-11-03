@@ -1,4 +1,4 @@
-/* OctopOS loader for processors other than storage and OS */
+/* OctopOS bootloader for processors other than storage and OS */
 
 #include <stdio.h>
 #include <string.h>
@@ -74,14 +74,14 @@ static void *handle_mailbox_interrupts(void *data)
 			sem_post(&interrupts[Q_TPM_IN]);
 			/* Block interrupts until the program is loaded.
 			 * Otherwise, we might receive some interrupts not
-			 * intended for the loader.
+			 * intended for the bootloader.
 			 */
 			return NULL;
 		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
 			sem_post(&availables[Q_TPM_IN]);
 
 		/* When the OS resets a runtime (after it's done), it is possible
-		 * for the loader (when trying to reload the runtime) to receive
+		 * for the bootloader (when trying to reload the runtime) to receive
 		 * an interrupt acknowledging that the OS read the last syscall
 		 * from the mailbox (for termination information),
 		 * or the interrupt for the response to that last syscall.
@@ -209,7 +209,7 @@ void close_mailbox(void)
 	//remove(FIFO_KEYBOARD_INTR);
 }
 
-void prepare_loader(char *filename, int argc, char *argv[])
+void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	/* FIXME */
 	if (!strcmp(filename, "keyboard")) {
@@ -243,7 +243,7 @@ void prepare_loader(char *filename, int argc, char *argv[])
  * @filename: the name of the file in the partition
  * @path: file path in the host file system
  *
- * When booting, the loader waits for access to Q_STORAGE_DATA_OUT
+ * When booting, the bootloader waits for access to Q_STORAGE_DATA_OUT
  * (which is granted by the OS) and reads the image from that queue.
  */
 int copy_file_from_boot_partition(char *filename, char *path)
@@ -313,7 +313,7 @@ repeat:
 		
 		///* Block interrupts until the program is loaded.
 		// * Otherwise, we might receive some interrupts Not
-		// * intended for the loader.
+		// * intended for the bootloader.
 		// */
 		//if (i == ((int) (count - 1)))
 		//	close_mailbox_thread();

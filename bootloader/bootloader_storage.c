@@ -1,4 +1,4 @@
-/* OctopOS loader for storage */
+/* OctopOS bootloader for storage */
 
 #include <stdio.h>
 #include <string.h>
@@ -18,7 +18,7 @@
 
 /* in file system wrapper */
 extern FILE *filep;
-/* FIXME: why should we need the total_blocks in loader? */
+/* FIXME: why should we need the total_blocks in bootloader? */
 extern uint32_t total_blocks;
 
 int fd_out, fd_intr;
@@ -42,7 +42,7 @@ static void *handle_mailbox_interrupts(void *data)
 			sem_post(&interrupts[Q_TPM_IN]);
 			/* Block interrupts until the program is loaded.
 			 * Otherwise, we might receive some interrupts not
-			 * intended for the loader.
+			 * intended for the bootloader.
 			 */
 			return NULL;
 		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
@@ -54,7 +54,7 @@ static void *handle_mailbox_interrupts(void *data)
 	}
 }
 
-/* FIXME: copied from loader_other.c */
+/* FIXME: copied from bootloader_other.c */
 static void send_message_to_tpm(uint8_t* buf)
 {
 	uint8_t opcode[2];
@@ -107,7 +107,7 @@ void close_mailbox(void)
 	//remove(FIFO_STORAGE_INTR);
 }
 
-void prepare_loader(char *filename, int argc, char *argv[])
+void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	/* no op */
 }
@@ -116,7 +116,7 @@ void prepare_loader(char *filename, int argc, char *argv[])
  * @filename: the name of the file in the partition
  * @path: file path in the host file system
  *
- * When booting the storage, the loader directly reads the
+ * When booting the storage, the bootloader directly reads the
  * storage image from storage medium itself.
  */
 int copy_file_from_boot_partition(char *filename, char *path)

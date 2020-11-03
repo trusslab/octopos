@@ -1,4 +1,4 @@
-/* OctopOS loader for OS */
+/* OctopOS bootloader for OS */
 
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +17,7 @@
 extern int fd_out;
 extern sem_t interrupts[];
 
-/* FIXME: copied from loader_other.c */
+/* FIXME: copied from bootloader_other.c */
 /* FIXME: move to mailbox_os.c or some shared util file*/
 static void send_message_to_tpm(uint8_t* buf)
 {
@@ -31,7 +31,7 @@ static void send_message_to_tpm(uint8_t* buf)
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
-void prepare_loader(char *filename, int argc, char *argv[])
+void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	printf("%s [1]\n", __func__);
 	init_os_mailbox();
@@ -56,7 +56,7 @@ void prepare_loader(char *filename, int argc, char *argv[])
  * @filename: the name of the file in the partition
  * @path: file path in the host file system
  *
- * When booting the OS, the loader reads the OS image
+ * When booting the OS, the bootloader reads the OS image
  * by communicating with the storage service using the
  * storage mailboxes.
  */

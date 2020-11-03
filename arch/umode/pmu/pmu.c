@@ -208,30 +208,30 @@ static int start_tpm_proc(void)
 
 static int start_os_proc(void)
 {
-	char *const args[] = {(char *) "loader_os", (char *) "os", NULL};
-	char path[] = "./loader/loader_os";
+	char *const args[] = {(char *) "bootloader_os", (char *) "os", NULL};
+	char path[] = "./bootloader/bootloader_os";
 	return start_proc(path, args, fd_os_log, 0, 0, 0);
 }
 
 static int start_keyboard_proc(void)
 {
-	char *const args[] = {(char *) "loader_other", (char *) "keyboard", NULL};
-	char path[] = "./loader/loader_other";
+	char *const args[] = {(char *) "bootloader_other", (char *) "keyboard", NULL};
+	char path[] = "./bootloader/bootloader_other";
 	return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
 }
 
 static int start_serial_out_proc(void)
 {
-	char *const args[] = {(char *) "loader_other", (char *) "serial_out", NULL};
-	char path[] = "./loader/loader_other";
+	char *const args[] = {(char *) "bootloader_other", (char *) "serial_out", NULL};
+	char path[] = "./bootloader/bootloader_other";
 	return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
 }
 
 static int start_runtime_proc(char *runtime_id)
 {
 	int fd_log;
-	char *const args[] = {(char *) "loader", (char *) "runtime", runtime_id, NULL};
-	char path[] = "./loader/loader_other";
+	char *const args[] = {(char *) "bootloader", (char *) "runtime", runtime_id, NULL};
+	char path[] = "./bootloader/bootloader_other";
 	
 	if (*runtime_id == '1') {
 		fd_log = fd_runtime1_log;
@@ -247,25 +247,25 @@ static int start_runtime_proc(char *runtime_id)
 
 static int start_storage_proc(void)
 {
-	char *const args[] = {(char *) "loader_storage", (char *) "storage", NULL};
-	char path[] = "./loader/loader_storage";
+	char *const args[] = {(char *) "bootloader_storage", (char *) "storage", NULL};
+	char path[] = "./bootloader/bootloader_storage";
 	return start_proc(path, args, fd_storage_log, 0, 0, 0);
 }
 
 static int start_network_proc(void)
 {
-	char *const args[] = {(char *) "loader_other", (char *) "network", NULL};
-	char path[] = "./loader/loader_other";
+	char *const args[] = {(char *) "bootloader_other", (char *) "network", NULL};
+	char path[] = "./bootloader/bootloader_other";
 	return start_proc(path, args, fd_network_log, 0, 0, 0);
 }
 
 static int start_untrusted_proc(void)
 {
-	char *const args[] = {(char *) "loader_other", (char *) "linux",
+	char *const args[] = {(char *) "bootloader_other", (char *) "linux",
 		//(char *) "ubda=./arch/umode/untrusted_linux/CentOS6.x-AMD64-root_fs",
 		(char *) "root=/dev/octopos_blk",
 		(char *) "mem=128M", NULL};
-	char path[] = "./loader/loader_other";
+	char path[] = "./bootloader/bootloader_other";
 	return start_proc(path, args, fd_untrusted_log, 0, 0, 1);
 }
 
