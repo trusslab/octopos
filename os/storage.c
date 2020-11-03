@@ -182,14 +182,15 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	}
 	printf("%s [2]\n", __func__);
 
-	/* Or should we make this blocking? */
-	if (!is_queue_available(Q_STORAGE_CMD_IN) ||
-	    !is_queue_available(Q_STORAGE_CMD_OUT) ||
-	    !is_queue_available(Q_STORAGE_DATA_IN) ||
-	    !is_queue_available(Q_STORAGE_DATA_OUT)) {
-		SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
-		return;
-	}
+	///* Or should we make this blocking? */
+	//if (!is_queue_available(Q_STORAGE_CMD_IN) ||
+	//    !is_queue_available(Q_STORAGE_CMD_OUT) ||
+	//    !is_queue_available(Q_STORAGE_DATA_IN) ||
+	//    !is_queue_available(Q_STORAGE_DATA_OUT)) {
+	//	SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
+	//	return;
+	//}
+	wait_for_storage();
 	printf("%s [3]\n", __func__);
 
 	if (!is_partition_locked) {

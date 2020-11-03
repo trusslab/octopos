@@ -621,19 +621,22 @@ static int yield_secure_ipc(void)
 
 	mailbox_yield_to_previous_owner(qid);
 
+#ifdef ARCH_SEC_HW
 	/* OctopOS mailbox only allows the current owner
 	 * to change/yield ownership.
 	 * Thus, instead of explicitly yielding it, we attest it.
 	 * In case the other runtime refuses to yield, we forcefully
 	 * deplete the quota by repeatedly reading the mailbox.
 	 */
-#ifdef ARCH_SEC_HW
 	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
 		mailbox_force_ownership(q_runtime, P_OS);
 	}
 #else
-	printf("Error: %s: not supported\n", __func__);
-	exit(-1);
+	/*
+	 * Or we can just wait for the timeout */
+	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
+		sleep(1);
+	}
 #endif
 
 	return 0;
@@ -770,15 +773,32 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 
 #endif
 
-//static int request_runtime_extend(int count)
-//{
-//	reset_queue_sync(Q_TPM_DATA_IN, 0);
-//
-//	SYSCALL_SET_ONE_ARG(SYSCALL_MEASUREMENT, (uint32_t)count);
-//	issue_syscall(buf);
-//	SYSCALL_GET_ONE_RET
-//	return (int)ret0;
-//}
+int send_app_measurement_to_tpm(uint8_t *path)
+{
+	reset_queue_sync(Q_TPM_IN, 0);
+
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_TPM_ACCESS, 1);
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0) {
+		printf("Error: %s: couldn't get access to the TPM queue.\n", __func__);
+		return (int) ret0;
+	}
+
+	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, 1);
+	if (!attest_ret) {
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+#else
+		printf("%s: Error: failed to attest TPM_IN queue\n", __func__);
+#endif
+		return ERR_FAULT;
+	}
+
+	runtime_send_msg_on_queue((uint8_t *)path, Q_TPM_IN);
+
+	return 0;
+}
 
 static void load_application(char *msg)
 {
@@ -827,7 +847,6 @@ static void load_application(char *msg)
 #endif
 	};
 
-
 	load_application_arch(msg, &api);
 
 	return;
@@ -845,7 +864,6 @@ void *run_app(void *load_buf)
 	}
 	wait_for_app_load();
 	
-	//request_runtime_extend(200);
 	load_application((char *) load_buf);
 	//mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, P_OS);
 	still_running = false;

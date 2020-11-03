@@ -1047,8 +1047,10 @@ static void decrement_timeouts(void)
 			continue;
 
 		queues[i].TIMEOUT--;
-		if (queues[i].TIMEOUT == 0)
+		if (queues[i].TIMEOUT == 0) {
+			printf("%s: queue %d timed out\n", __func__, i);
 			change_back_queue_access(&queues[i]);
+		}
 	}
 }
 

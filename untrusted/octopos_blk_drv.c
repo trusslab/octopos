@@ -65,7 +65,7 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 
 	if (len % STORAGE_BLOCK_SIZE)
 		BUG();
-	printk("%s [1]\n", __func__);
+	//printk("%s [1]\n", __func__);
 
 	num_blocks = len / STORAGE_BLOCK_SIZE;
 
@@ -83,7 +83,7 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	    get_queue_timeout(data_queue) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
 	    get_queue_timeout(Q_STORAGE_CMD_IN) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
 	    get_queue_timeout(Q_STORAGE_CMD_OUT) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL) {
-		printk("%s [1.4]\n", __func__);
+		//printk("%s [1.4]\n", __func__);
 
 		//if (access_limit) {
 			//printk("%s [1.5]\n", __func__);

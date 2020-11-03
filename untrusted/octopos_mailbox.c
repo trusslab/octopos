@@ -61,7 +61,7 @@ void callback_timer(struct timer_list *_timer)
 {
 	int i;
 
-	printk("%s [1]\n", __func__);
+	//printk("%s [1]\n", __func__);
 	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
 	
 	for (i = 1; i <= NUM_QUEUES; i++) {
@@ -412,13 +412,13 @@ void reset_queue_sync(uint8_t queue_id, int init_val)
 
 limit_t get_queue_limit(uint8_t queue_id)
 {
-	printk("%s [1]: queue_limits[%d] = %d\n", __func__, queue_id, queue_limits[queue_id]);
+	//printk("%s [1]: queue_limits[%d] = %d\n", __func__, queue_id, queue_limits[queue_id]);
 	return queue_limits[queue_id];
 }
 
 timeout_t get_queue_timeout(uint8_t queue_id)
 {
-	printk("%s [1]: queue_timeouts[%d] = %d\n", __func__, queue_id, queue_timeouts[queue_id]);
+	//printk("%s [1]: queue_timeouts[%d] = %d\n", __func__, queue_id, queue_timeouts[queue_id]);
 	return queue_timeouts[queue_id];
 }
 

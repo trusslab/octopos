@@ -63,9 +63,16 @@ int is_queue_available(uint8_t queue_id)
 	return available;
 }
 
+/*
+ * When this function returns, the queue is available
+ * and the available semaphore is 1. If one needs to use
+ * the queue, one needs to mark it unavailable.
+ */ 
 void wait_for_queue_availability(uint8_t queue_id)
 {
 	sem_wait(&availables[queue_id]);
+	/* FIXME: added without testing. Only tested in umode. */
+	sem_init(&availables[queue_id], 0, 1);
 }
 
 void mark_queue_unavailable(uint8_t queue_id)

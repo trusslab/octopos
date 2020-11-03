@@ -49,6 +49,15 @@ sem_t load_app_sem;
 
 pthread_spinlock_t mailbox_lock;
 
+pthread_t app_thread, ctx_thread;
+bool has_ctx_thread = false;
+
+/* FIXME: move to a header file */
+int write_syscall_response(uint8_t *buf);
+void *store_context(void *data);
+void *run_app(void *data);
+int send_app_measurement_to_tpm(uint8_t *path);
+
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
 	uint8_t opcode[2];
@@ -60,7 +69,7 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 	pthread_spin_unlock(&mailbox_lock);	
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
+static mailbox_state_reg_t mailbox_read_state_register(uint8_t queue_id)
 {
 	uint8_t opcode[2];
 	mailbox_state_reg_t state;
@@ -70,12 +79,27 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 2);
 	read(fd_in, &state, sizeof(mailbox_state_reg_t));
-	pthread_spin_unlock(&mailbox_lock);	
+	pthread_spin_unlock(&mailbox_lock);
 
-	if (state.limit == count)
-		return 1;
-	else
-		return 0;
+	return state;
+}
+
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
+{
+	mailbox_state_reg_t state;
+
+	state = mailbox_read_state_register(queue_id);
+
+	return (state.limit == count);
+}
+
+int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
+{
+	mailbox_state_reg_t state;
+
+	state = mailbox_read_state_register(queue_id);
+
+	return (state.owner == owner);
 }
 
 static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -176,18 +200,10 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		return;
 	}
 
-	//runtime_send_msg_on_queue_large((uint8_t *)path, Q_TPM_DATA_IN);
+	send_app_measurement_to_tpm((uint8_t *) path);
 
 	(*app_main)(api);
 }
-
-pthread_t app_thread, ctx_thread;
-bool has_ctx_thread = false;
-
-/* FIXME: move to a header file */
-int write_syscall_response(uint8_t *buf);
-void *store_context(void *data);
-void *run_app(void *data);
 
 void runtime_core(void)
 {
@@ -320,9 +336,9 @@ void close_runtime(void)
 	close(fd_in);
 	close(fd_intr);
 
-	remove(fifo_runtime_out);
-	remove(fifo_runtime_in);
-	remove(fifo_runtime_intr);
+	//remove(fifo_runtime_out);
+	//remove(fifo_runtime_in);
+	//remove(fifo_runtime_intr);
 
 	printf("%s [1]\n", __func__);
 	/* Wait to be terminated by the OS. */

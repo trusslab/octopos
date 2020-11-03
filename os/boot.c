@@ -16,6 +16,7 @@
 void delegate_tpm_data_in_queue(uint8_t proc_id)
 {
 	wait_for_queue_availability(Q_TPM_IN);
+	mark_queue_unavailable(Q_TPM_IN);
 	mailbox_delegate_queue_access(Q_TPM_IN, proc_id, 1,
 			MAILBOX_DEFAULT_TIMEOUT_VAL);
 }
@@ -28,7 +29,7 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
 	printf("%s [2]: num_blocks = %d\n", __func__, num_blocks);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
-	file_system_write_file_blocks_late();
+	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
 	printf("%s [3]\n", __func__);
 

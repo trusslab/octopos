@@ -351,6 +351,8 @@ static void halt_all_procs(void)
 	mailbox_ready = 0;
 
 	halt_proc(P_UNTRUSTED);	
+	/* Give the untrusted domain time to properly terminate first. */
+	sleep(5);
 
 	/* Shut down the rest */
 	kill(socket_server_pid, SIGKILL);
@@ -383,6 +385,9 @@ static void *proc_reboot_handler(void *data)
 	int reboot_exception = 0;
 
 	while (do_restart || do_reset_queues || num_running_procs) {
+		printf("%s [1]: num_running_procs = %d\n", __func__, num_running_procs);
+		printf("%s [2]: do_restart = %d\n", __func__, do_restart);
+		printf("%s [3]: do_reset_queues = %d\n", __func__, do_reset_queues);
 		pid_t pid = wait(&wstatus);
 		if (!(wstatus == 0 || wstatus == 9))
 			continue;
