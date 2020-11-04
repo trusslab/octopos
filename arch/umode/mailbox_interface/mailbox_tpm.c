@@ -23,7 +23,6 @@ static void *handle_mailbox_interrupts(void *data)
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
-		printf("%s [1]: interrupt = %d\n", __func__, interrupt);
 		if (interrupt < 1 || interrupt > NUM_QUEUES) {
 			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);

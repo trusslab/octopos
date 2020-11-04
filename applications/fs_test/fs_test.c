@@ -41,7 +41,6 @@ void fs_test(struct runtime_api *api)
 
 	insecure_printf("Test 1\n");
 	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
-	printf("%s [1]\n", __func__);
 	if (fd1 == 0) {
 		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
 		return;

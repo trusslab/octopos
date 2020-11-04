@@ -24,19 +24,15 @@ void delegate_tpm_data_in_queue(uint8_t proc_id)
 static void help_boot_proc(uint8_t proc_id, char *filename)
 {
 	/* Help with reading the image off of storage */
-	printf("%s [1]\n", __func__);
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
-	printf("%s [2]: num_blocks = %d\n", __func__, num_blocks);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
-	printf("%s [3]\n", __func__);
 
 	/* Help with sending measurements to TPM */
 	if (proc_id != P_UNTRUSTED)
 		delegate_tpm_data_in_queue(proc_id);
-	printf("%s [4]\n", __func__);
 }
 
 static void help_boot_keyboard_proc(void)
@@ -56,9 +52,7 @@ static void help_boot_network_proc(void)
 
 void help_boot_runtime_proc(uint8_t runtime_proc_id)
 {
-	printf("%s [1]\n", __func__);
 	help_boot_proc(runtime_proc_id, (char *) "runtime");
-	printf("%s [2]\n", __func__);
 }
 
 static void help_boot_untrusted_proc(void)
@@ -114,19 +108,8 @@ int reset_proc(uint8_t proc_id)
 	} else if (proc_id == P_NETWORK) {
 		help_boot_network_proc();
 	} else if (proc_id == P_STORAGE) {
-		///*
-		// * This wait is needed because the pmu_reset_proc() returns
-		// * before the PMU resets the proc mailbox(es).
-		// */
-		///* FIXME: too long of a wait. Can we change pmu_reset_proc()
-		// * so that it returns after the reset is completely done?
-		// */
-		//sleep(1);
-		printf("%s [1]\n", __func__);
 		uint32_t partition_size = initialize_storage();
-		printf("%s [2]\n", __func__);
 		initialize_file_system(partition_size);
-		printf("%s [3]\n", __func__);
 	}
 
 	return 0;

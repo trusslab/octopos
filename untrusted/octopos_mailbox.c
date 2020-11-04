@@ -61,7 +61,6 @@ void callback_timer(struct timer_list *_timer)
 {
 	int i;
 
-	//printk("%s [1]\n", __func__);
 	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
 	
 	for (i = 1; i <= NUM_QUEUES; i++) {
@@ -128,15 +127,11 @@ static int read_syscall_response(uint8_t *buf)
 
 int issue_syscall(uint8_t *buf)
 {
-	//printk("%s [1]\n", __func__);
 	send_msg_on_queue(buf, Q_OSU, MAILBOX_QUEUE_MSG_SIZE);
-	//printk("%s [2]\n", __func__);
 
 	/* wait on queue */
 	down(&interrupts[Q_UNTRUSTED]);
-	//printk("%s [3]\n", __func__);
 	read_syscall_response(buf);
-	//printk("%s [4]\n", __func__);
 	
 	return 0;
 }
@@ -255,14 +250,10 @@ void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 	opcode[1] = queue_id;
 	/* wait for message */
 	down(&interrupts[queue_id]);
-	//while (down_trylock(&mailbox_lock));
 	spin_lock_irqsave(&mailbox_lock, flags);
-	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2), 
 	os_read_file(fd_in, buf, queue_msg_size);
-	//up(&mailbox_lock);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
-	//printk("%s [2]: unlocked\n", __func__);
 }
 
 static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -272,14 +263,10 @@ static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queu
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
-	//while (down_trylock(&mailbox_lock));
 	spin_lock_irqsave(&mailbox_lock, flags);
-	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2), 
 	os_read_file(fd_in, buf, queue_msg_size);
-	//up(&mailbox_lock);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
-	//printk("%s [2]: unlocked\n", __func__);
 }
 
 void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -290,16 +277,10 @@ void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 	down(&interrupts[queue_id]);
-	//while (down_trylock(&mailbox_lock));
 	spin_lock_irqsave(&mailbox_lock, flags);
-	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2);
-	//printk("%s [1.1]\n", __func__);
 	os_write_file(fd_out, buf, queue_msg_size);
-	//printk("%s [1.2]\n", __func__);
-	//up(&mailbox_lock);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
-	//printk("%s [2]: unlocked\n", __func__);
 }
 
 /* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
@@ -365,13 +346,9 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 
 	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	//while (down_trylock(&mailbox_lock));
 	spin_lock_irqsave(&mailbox_lock, flags);
-	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2);
-	//up(&mailbox_lock);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
-	//printk("%s [2]: unlocked\n", __func__);
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
@@ -383,14 +360,10 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	//while (down_trylock(&mailbox_lock));
 	spin_lock_irqsave(&mailbox_lock, flags);
-	//printk("%s [1]: locked\n", __func__);
 	os_write_file(fd_out, opcode, 2);
 	os_read_file(fd_in, &state, sizeof(mailbox_state_reg_t));
-	//up(&mailbox_lock);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
-	//printk("%s [2]: unlocked\n", __func__);
 
 	if (state.limit && (state.limit != MAILBOX_NO_LIMIT_VAL))
 		queue_limits[queue_id] = state.limit;
@@ -412,13 +385,11 @@ void reset_queue_sync(uint8_t queue_id, int init_val)
 
 limit_t get_queue_limit(uint8_t queue_id)
 {
-	//printk("%s [1]: queue_limits[%d] = %d\n", __func__, queue_id, queue_limits[queue_id]);
 	return queue_limits[queue_id];
 }
 
 timeout_t get_queue_timeout(uint8_t queue_id)
 {
-	//printk("%s [1]: queue_timeouts[%d] = %d\n", __func__, queue_id, queue_timeouts[queue_id]);
 	return queue_timeouts[queue_id];
 }
 
@@ -562,7 +533,6 @@ static int __init om_init(void)
 
 	INIT_WORK(&net_wq, net_receive_wq);
 
-	//sema_init(&mailbox_lock, 1);
 	spin_lock_init(&mailbox_lock);
 
 	memset(queue_limits, 0x0, sizeof(queue_limits));

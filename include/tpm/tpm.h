@@ -16,8 +16,6 @@
 * 23         Application specific
 */
 #define TPM_PCR_BANK(slot) (ESYS_TR_PCR0 + slot)
-//#define TPM_KNL_MEASUREMENT 8
-//#define TPM_USR_MEASUREMENT 9
 #define PROC_PCR_SLOT(proc_id) (7 + proc_id)
 #define MIN_PROC_ID	1
 #define MAX_PROC_ID	8

@@ -26,13 +26,10 @@ uint32_t total_blocks = 0;
 void wait_for_storage(void)
 {
 	/* No op */
-	printf("%s [1]\n", __func__);
 }
 
 int send_msg_to_storage_no_response(uint8_t *buf)
 {
-	printf("%s [1]\n", __func__);
-
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
 		STORAGE_GET_TWO_ARGS
@@ -40,7 +37,6 @@ int send_msg_to_storage_no_response(uint8_t *buf)
 		num_blocks = arg1;
 		if (start_block + num_blocks > total_blocks) {
 			total_blocks = start_block + num_blocks;
-			printf("%s [2]: total_blocks = %d\n", __func__, total_blocks);
 		}
 		size = 0;
 	} else if (buf[0] == STORAGE_OP_READ) { /* read */
@@ -62,15 +58,12 @@ int send_msg_to_storage_no_response(uint8_t *buf)
 
 int get_response_from_storage(uint8_t *buf)
 {
-	printf("%s [1]\n", __func__);
 	STORAGE_SET_ONE_RET(size);
 	return 0;
 }
 
 void read_from_storage_data_queue(uint8_t *buf)
 {
-	/* No op */
-	printf("%s [1]: start_block = %d, num_blocks = %d\n", __func__, start_block, num_blocks);
 	if (num_blocks == 0) {
 		printf("Error: %s: too many block reads\n", __func__);
 		exit(-1);
@@ -79,25 +72,20 @@ void read_from_storage_data_queue(uint8_t *buf)
 	uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
 	fseek(filep, seek_off, SEEK_SET);
 	size += (uint32_t) fread(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
-	printf("%s [2]: size = %d\n", __func__, size);
-	//printf("%s [3]: %c %c %c %c\n", __func__, buf[0], buf[1], buf[2], buf[3]);
 	start_block++;
 	num_blocks--;
 }
 
 void write_to_storage_data_queue(uint8_t *buf)
 {
-	printf("%s [1]: start_block = %d, num_blocks = %d\n", __func__, start_block, num_blocks);
 	uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
 	if (num_blocks == 0) {
 		printf("Error: %s: too many block writes\n", __func__);
 		exit(-1);
 	}
 
-	//printf("%s [2]: %c %c %c %c\n", __func__, buf[0], buf[1], buf[2], buf[3]);
 	fseek(filep, seek_off, SEEK_SET);
 	size += (uint32_t) fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
-	printf("%s [3]: size = %d\n", __func__, size);
 	start_block++;
 	num_blocks--;
 }

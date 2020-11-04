@@ -31,7 +31,6 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	printf("%s [1]\n", __func__);
 	char *name = argv[1];
 	char path[128];
 	memset(path, 0x0, 128);
@@ -40,7 +39,6 @@ int main(int argc, char *argv[])
 	/* FIXME */
 	if (!strcmp(name, "runtime"))
 		strcat(path, argv[2]);
-	printf("%s [2]: path = %s\n", __func__, path);
 
 	prepare_bootloader(name, argc - 2, argv + 2);
 	copy_file_from_boot_partition(name, path);
@@ -49,9 +47,7 @@ int main(int argc, char *argv[])
 	/* Add exec permission for the copied file */
 	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
 
-	printf("%s [3]: about to send measurement to TPM\n", __func__);
 	send_measurement_to_tpm(path);
-	printf("%s [4]\n", __func__);
 	
 	/* FIXME */
 	if (!strcmp(name, "runtime")) {
@@ -62,14 +58,9 @@ int main(int argc, char *argv[])
 		strcpy(new_name, argv[1]);
 		strcat(new_name, argv[2]);
 		char *const args[] = {new_name, (char *) argv[2], NULL};
-		printf("%s [4]: args[0] = %s\n", __func__, args[0]);
-		printf("%s [5]: args[1] = %s\n", __func__, args[1]);
 		execv(path, args);
 	} else if (!strcmp(name, "linux")) {
 		char *const args[] = {name, (char *) argv[2], (char *) argv[3], NULL};
-		printf("%s [6]: args[0] = %s\n", __func__, args[0]);
-		printf("%s [7]: args[1] = %s\n", __func__, args[1]);
-		printf("%s [8]: args[2] = %s\n", __func__, args[2]);
 		execv(path, args);
 	} else {
 		char *const args[] = {name, NULL};

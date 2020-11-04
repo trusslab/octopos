@@ -31,14 +31,10 @@ bool is_storage_config_locked = false;
 
 static int set_storage_config_key(uint8_t *key)
 {
-	printf("%s [1]\n", __func__);
 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
 	buf[0] = STORAGE_OP_SET_CONFIG_KEY;
-	printf("%s [2]\n", __func__);
 	send_msg_to_storage_no_response(buf);
-	printf("%s [3]\n", __func__);
 	get_response_from_storage(buf);
-	printf("%s [4]\n", __func__);
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
@@ -69,11 +65,8 @@ static int unlock_secure_storage(uint8_t *key)
 {
 	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
 	buf[0] = STORAGE_OP_UNLOCK;
-	printf("%s [1]\n", __func__);
 	send_msg_to_storage_no_response(buf);
-	printf("%s [2]\n", __func__);
 	get_response_from_storage(buf);
-	printf("%s [3]\n", __func__);
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
@@ -172,7 +165,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 {
 	SYSCALL_GET_ONE_ARG
 	uint32_t count = arg0;
-	printf("%s [1]\n", __func__);
 
 	/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
@@ -180,18 +172,8 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
-	printf("%s [2]\n", __func__);
 
-	///* Or should we make this blocking? */
-	//if (!is_queue_available(Q_STORAGE_CMD_IN) ||
-	//    !is_queue_available(Q_STORAGE_CMD_OUT) ||
-	//    !is_queue_available(Q_STORAGE_DATA_IN) ||
-	//    !is_queue_available(Q_STORAGE_DATA_OUT)) {
-	//	SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
-	//	return;
-	//}
 	wait_for_storage();
-	printf("%s [3]\n", __func__);
 
 	if (!is_partition_locked) {
 		int ret = lock_secure_storage();
@@ -201,7 +183,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 		is_partition_locked = true;
 	}
-	printf("%s [4]\n", __func__);
 
 	if (!is_storage_config_locked) {
 		int ret = lock_storage_config();
@@ -211,7 +192,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 		is_storage_config_locked = true;
 	}
-	printf("%s [5]\n", __func__);
 
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -238,7 +218,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			MAILBOX_DEFAULT_TIMEOUT_VAL);
 #endif
 
-	printf("%s [6]\n", __func__);
 	SYSCALL_SET_ONE_RET(0)
 }
 
@@ -271,51 +250,43 @@ void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
  */
 void wait_for_storage(void)
 {
-	printf("%s [1]\n", __func__);
 	int ret = is_queue_available(Q_STORAGE_CMD_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_CMD_IN);
 	}
 
-	printf("%s [2]\n", __func__);
 	ret = is_queue_available(Q_STORAGE_CMD_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
 
 #ifdef ROLE_OS	
-	printf("%s [3]\n", __func__);
 	ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
 #endif
 
-	printf("%s [4]\n", __func__);
 	ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
 
 #ifdef ROLE_OS
-	printf("%s [5]\n", __func__);
 	if (is_storage_config_locked) {
 		unlock_storage_config(os_storage_config_key);
 		is_storage_config_locked = false;
 	}
 #endif
 
-	printf("%s [6]\n", __func__);
 	if (is_partition_locked) {
 		unlock_secure_storage(os_storage_key);
 		is_partition_locked = false;
 	}
-	printf("%s [7]\n", __func__);
 }
 
 uint32_t initialize_storage(void)
 {
-	printf("%s [1]\n", __func__);
 	uint32_t partition_size = STORAGE_BOOT_PARTITION_SIZE;
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
@@ -328,11 +299,9 @@ uint32_t initialize_storage(void)
 	set_storage_config_key(os_storage_config_key);
 #endif
 
-	printf("%s [2]\n", __func__);
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
 	int unlock_ret = unlock_secure_storage(os_storage_key);
-	printf("%s [3]\n", __func__);
 	if (unlock_ret == ERR_EXIST) {
 		int unused_partition_id;
 		int create_ret = storage_create_secure_partition(os_storage_key,

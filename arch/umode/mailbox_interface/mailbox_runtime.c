@@ -290,16 +290,6 @@ int init_runtime(int runtime_id)
 		return -1;
 	}
 
-	//int ret = net_stack_init();
-	//if (ret) {
-	//	printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
-	//	return -1;
-	//}
-
-	//mkfifo(fifo_runtime_out, 0666);
-	//mkfifo(fifo_runtime_in, 0666);
-	//mkfifo(fifo_runtime_intr, 0666);
-
 	fd_out = open(fifo_runtime_out, O_WRONLY);
 	fd_in = open(fifo_runtime_in, O_RDONLY);
 	fd_intr = open(fifo_runtime_intr, O_RDONLY);
@@ -336,14 +326,8 @@ void close_runtime(void)
 	close(fd_in);
 	close(fd_intr);
 
-	//remove(fifo_runtime_out);
-	//remove(fifo_runtime_in);
-	//remove(fifo_runtime_intr);
-
-	printf("%s [1]\n", __func__);
 	/* Wait to be terminated by the OS. */
 	while(1) {
 		sleep(10);
 	}
-	printf("%s [2]\n", __func__);
 }

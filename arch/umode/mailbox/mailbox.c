@@ -666,11 +666,6 @@ static void initialize_queues(void)
 	queues[Q_TPM_OUT].fixed_proc = P_TPM;
 	queues[Q_TPM_OUT].OWNER = P_OS;
 	queues[Q_TPM_OUT].connections[P_OS] = 1;
-	//queues[Q_TPM_OUT].connections[P_RUNTIME1] = 1;
-	//queues[Q_TPM_OUT].connections[P_RUNTIME2] = 1;
-	//queues[Q_TPM_OUT].connections[P_KEYBOARD] = 1;
-	//queues[Q_TPM_OUT].connections[P_SERIAL_OUT] = 1;
-	//queues[Q_TPM_OUT].connections[P_NETWORK] = 1;
 	queues[Q_TPM_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
 	queues[Q_TPM_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_TPM_OUT].queue_size = MAILBOX_QUEUE_SIZE;
@@ -711,7 +706,6 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
-	//printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[queue_id];
 		read_queue(queue, processors[reader_id].in_handle);
@@ -733,7 +727,6 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
-	//printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[queue_id], processors[writer_id].out_handle);
 		/* send interrupt to reader */
@@ -748,7 +741,6 @@ static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 
 static void reset_queue(uint8_t queue_id)
 {
-	//printf("%s [1]: queue_id = %d\n", __func__, queue_id);
 	for (int i = 0; i < queues[queue_id].queue_size; i++)
 		memset(queues[queue_id].messages[i], 0x0, queues[queue_id].msg_size);
 
@@ -787,7 +779,6 @@ static int reset_queue_full(uint8_t queue_id)
 static void delegate_queue_access(uint8_t queue_id, uint8_t requester,
 				  mailbox_state_reg_t new_state)
 {
-	printf("%s [1]: queue_id = %d, requester = %d\n", __func__, queue_id, requester);
 	if (new_state.limit == 0) {
 		printf("Error: %s: limit can't be 0\n", __func__);
 		return;
@@ -809,18 +800,6 @@ static void delegate_queue_access(uint8_t queue_id, uint8_t requester,
 		       __func__, queue_id, requester, queues[queue_id].OWNER);
 		return;
 	}
-
-	//if (access == WRITE_ACCESS && queues[queue_id].queue_type == QUEUE_TYPE_FIXED_READER) {
-	//	printf("Error: %s: Can't change the writer of a FIXED_READER queue (%d).\n",
-	//	       __func__, queue_id);
-	//	return;
-	//}
-
-	//if (access == READ_ACCESS && queues[queue_id].queue_type == QUEUE_TYPE_FIXED_WRITER) {
-	//	printf("Error: %s: Can't change the writer of a FIXED_WRITER queue (%d).\n",
-	//	       __func__, queue_id);
-	//	return;
-	//}
 
 	if (requester == new_state.owner)
 		/* no op */
@@ -861,7 +840,6 @@ static void delegate_queue_access(uint8_t queue_id, uint8_t requester,
 
 static void yield_queue_access(uint8_t queue_id, uint8_t requester)
 {
-	printf("%s [1]: queue_id = %d, requester = %d\n", __func__, queue_id, requester);
 	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
 		printf("Error: %s: SIMPLE queues don't support delegation (%d).\n",
 		       __func__, queue_id);
@@ -993,9 +971,7 @@ static void handle_proc_request(uint8_t requester)
 		break;
 
 	case MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS:
-		//printf("%s [0.1]\n", __func__);
 		if (delegation_allowed && !queues[queue_id].delegation_disabled) {
-			//printf("%s [0.2]\n", __func__);
 			mailbox_state_reg_t state;
 			memset(&state, 0x0, sizeof(mailbox_state_reg_t));
 			read(processors[requester].out_handle, &state, sizeof(mailbox_state_reg_t));
@@ -1006,9 +982,7 @@ static void handle_proc_request(uint8_t requester)
 		break;
 
 	case MAILBOX_OPCODE_YIELD_QUEUE_ACCESS:
-		//printf("%s [0.1]\n", __func__);
 		if (delegation_allowed && !queues[queue_id].delegation_disabled) {
-			//printf("%s [0.2]\n", __func__);
 			yield_queue_access(queue_id, requester);				
 		} else {
 			printf("Error: %s: delegation (and hence yielding) disabled for queue %d.\n",

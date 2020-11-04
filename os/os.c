@@ -45,34 +45,22 @@ int main()
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: OS init\n", __func__);
-	printf("%s [0.1]\n", __func__);
 
 	int ret = init_os_mailbox();
 	if (ret)
 		return ret;
-	printf("%s [1]\n", __func__);
 	
-	//release_tpm_writer(P_SERIAL_OUT);
-	//release_tpm_writer(P_STORAGE);
-	//release_tpm_writer(P_KEYBOARD);
-
 	connect_to_pmu();
-	printf("%s [2]\n", __func__);
 
-	//initialize_shell();
-	printf("%s [3]\n", __func__);
 	uint32_t partition_size = initialize_storage();
-	printf("%s [4]\n", __func__);
 #ifdef ARCH_UMODE
 	initialize_file_system(partition_size);
 #endif
-	printf("%s [5]\n", __func__);
 	help_boot_procs();
 
 	initialize_shell();
 
 	initialize_scheduler();
-	printf("%s [6]\n", __func__);
 
 	while (1) {
 		distribute_input();

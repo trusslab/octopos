@@ -14,7 +14,6 @@ static int serial_out_core(void)
 	
 	while(1) {
 		get_chars_from_serial_out_queue(buf);
-		printf("%s [1]: %s\n", __func__, buf);
 		write_chars_to_serial_out(buf);
 	}
 

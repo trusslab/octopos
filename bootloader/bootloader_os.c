@@ -33,23 +33,18 @@ static void send_message_to_tpm(uint8_t* buf)
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
-	printf("%s [1]\n", __func__);
 	init_os_mailbox();
-	printf("%s [2]\n", __func__);
 	
 	/* delegate TPM mailbox to storage */
 	mark_queue_unavailable(Q_TPM_IN);
 	mailbox_delegate_queue_access(Q_TPM_IN, P_STORAGE, 1,
 			MAILBOX_DEFAULT_TIMEOUT_VAL);
-	printf("%s [3]\n", __func__);
 
 	wait_for_queue_availability(Q_TPM_IN);
 	
 	initialize_storage();
-	printf("%s [5]\n", __func__);
 
 	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
-	printf("%s [6]\n", __func__);
 }
 
 /*
@@ -67,13 +62,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int _size;
 	int offset;
-	printf("%s [1]\n", __func__);
-
-	//filep = fopen("./storage/octopos_partition_0_data", "r");
-	//if (!filep) {
-	//	printf("Error: %s: Couldn't open the boot partition file.\n", __func__);
-	//	return -1;
-	//}
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
@@ -81,7 +69,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 		       __func__, filename);
 		return -1;
 	}
-	printf("%s [2.2]\n", __func__);
 
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
@@ -90,12 +77,9 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	}
 
 	offset = 0;
-	printf("%s [3]\n", __func__);
 
 	while (1) {
-		printf("%s [4]: offset = %d\n", __func__, offset);
 		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE, offset);
-		printf("%s [5]: _size = %d\n", __func__, _size);
 		if (_size == 0)
 			break;
 
@@ -109,14 +93,11 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 		offset += _size;
 	}
-	printf("%s [6]\n", __func__);
 
 	fclose(copy_filep);
 	file_system_close_file(fd);
 
 	close_file_system();
-
-	//fclose(filep);
 
 	return 0;
 }
@@ -124,12 +105,10 @@ int copy_file_from_boot_partition(char *filename, char *path)
 void send_measurement_to_tpm(char *path)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	printf("%s [1]\n", __func__);
 
 	memcpy(buf, path, strlen(path) + 1);
 
 	send_message_to_tpm(buf);
-	printf("%s [2]\n", __func__);
 
 	/* Wait for TPM to read the message */
 	wait_until_empty(Q_TPM_IN, MAILBOX_QUEUE_SIZE);

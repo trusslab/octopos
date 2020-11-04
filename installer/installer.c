@@ -40,10 +40,8 @@ static int copy_file_to_partition(char *filename, char *path, int do_test, char 
 	offset = 0;
 
 	while (1) { 
-		printf("%s [2]: offset = %d\n", __func__, offset);
 		fseek(src_filep, offset, SEEK_SET);
 		_size = fread(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, src_filep);
-		printf("%s [3]: _size = %d\n", __func__, _size);
 		if (_size == 0)
 			break;
 
@@ -82,9 +80,7 @@ static int copy_file_to_partition(char *filename, char *path, int do_test, char 
 	offset = 0;
 
 	while (1) {
-		printf("%s [4]: offset = %d\n", __func__, offset);
 		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE, offset);
-		printf("%s [5]: _size = %d\n", __func__, _size);
 		if (_size == 0)
 			break;
 
@@ -108,20 +104,6 @@ static int copy_file_to_partition(char *filename, char *path, int do_test, char 
 
 int main(int argc, char **argv)
 {
-	printf("%s [1]\n", __func__);
-
-	//filep = fopen("./storage/octopos_partition_0_data", "r+");
-	//if (!filep) {
-		//printf("%s: Creating partition file.\n", __func__);
-		//filep = fopen("./storage/octopos_partition_0_data", "w");
-		//fclose(filep);
-		//filep = fopen("./storage/octopos_partition_0_data", "r+");
-		//if (!filep) {
-	//		printf("Error: %s: Couldn't create/open the partition file.\n", __func__);
-	//		return -1;
-		//}
-	//}
-
 	/* create new file or delete existing file */
 	filep = fopen("./storage/octopos_partition_0_data", "w");
 	if (!filep) {

@@ -378,7 +378,6 @@ int sched_connect_apps(int input_app_id, int output_app_id, int two_way)
 /* FIXME: change func name */
 int sched_run_app(int app_id)
 {
-	printf("%s [1]\n", __func__);
 	struct app *app = get_app(app_id);
 	if (!app) {
 		printf("%s: Error: couldn't find app %d\n", __func__, app_id);
@@ -393,7 +392,6 @@ int sched_run_app(int app_id)
 	app->state = SCHED_READY;
 
 	add_app_to_ready_queue(app);
-	printf("%s [2]\n", __func__);
 
 	sched_next_app();
 

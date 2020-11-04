@@ -29,18 +29,15 @@ sem_t availables[NUM_QUEUES + 1];
 
 static int intialize_channels(void)
 {
-	printf("%s [1]\n", __func__);
 #ifdef ROLE_BOOTLOADER_OS
 	mkfifo(FIFO_OS_OUT, 0666);
 	mkfifo(FIFO_OS_IN, 0666);
 	mkfifo(FIFO_OS_INTR, 0666);
 #endif
-	printf("%s [2]\n", __func__);
 
 	fd_out = open(FIFO_OS_OUT, O_WRONLY);
 	fd_in = open(FIFO_OS_IN, O_RDONLY);
 	fd_intr = open(FIFO_OS_INTR, O_RDONLY);
-	printf("%s [3]\n", __func__);
 
 	return 0;
 }
@@ -63,7 +60,6 @@ int is_queue_available(uint8_t queue_id)
 	int available;
 
 	sem_getvalue(&availables[queue_id], &available);
-	printf("%s [1]: queue_id = %d, available = %d\n", __func__, queue_id, available);
 	return available;
 }
 
@@ -74,14 +70,12 @@ int is_queue_available(uint8_t queue_id)
  */ 
 void wait_for_queue_availability(uint8_t queue_id)
 {
-	printf("%s [1]: queue_id = %d\n", __func__, queue_id);
 	sem_wait(&availables[queue_id]);
 	sem_init(&availables[queue_id], 0, 1);
 }
 
 void mark_queue_unavailable(uint8_t queue_id)
 {
-	printf("%s [1]: queue_id = %d\n", __func__, queue_id);
 	sem_init(&availables[queue_id], 0, 0);
 }
 
@@ -309,7 +303,6 @@ static void *handle_mailbox_interrupts(void *data)
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
-		if (interrupt) printf("%s [1]: interrupt = %d\n", __func__, interrupt);
 		if (interrupt == 0) {
 #ifdef ROLE_OS
 			/* timer interrupt */
@@ -333,24 +326,20 @@ static void *handle_mailbox_interrupts(void *data)
 				break;
 #endif
 			case Q_STORAGE_CMD_IN:
-				printf("%s [2]: Q_STORAGE_CMD_IN\n", __func__);
 				sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_STORAGE_CMD_IN]);
 				break;
 			case Q_STORAGE_CMD_OUT:
-				printf("%s [3]: Q_STORAGE_CMD_OUT\n", __func__);
 				sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
 				sem_post(&availables[Q_STORAGE_CMD_OUT]);
 				break;
 #ifdef ROLE_OS
 			case Q_STORAGE_DATA_IN:
-				printf("%s [4]: Q_STORAGE_DATA_IN\n", __func__);
 				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
 				sem_post(&availables[Q_STORAGE_DATA_IN]);
 				break;
 #endif
 			case Q_STORAGE_DATA_OUT:
-				printf("%s [5]: Q_STORAGE_DATA_OUT\n", __func__);
 				sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_STORAGE_DATA_OUT]);
 				break;
@@ -404,9 +393,7 @@ static void *handle_mailbox_interrupts(void *data)
 
 int init_os_mailbox(void)
 {
-	printf("%s [1]\n", __func__);
 	intialize_channels();
-	printf("%s [2]\n", __func__);
 	
 #ifdef ROLE_OS
 	sem_init(&interrupts[Q_OS1], 0, 0);
@@ -453,14 +440,12 @@ int init_os_mailbox(void)
 #ifdef ROLE_OS
 	sem_init(&availables[Q_TPM_OUT], 0, 1);
 #endif
-	printf("%s [3]\n", __func__);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
 	}
-	printf("%s [4]\n", __func__);
 
 	return 0;
 }

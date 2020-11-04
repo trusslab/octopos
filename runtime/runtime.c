@@ -404,7 +404,6 @@ static int inform_os_of_termination(void)
 static int inform_os_of_pause(void)
 {
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_PAUSE)
-	//issue_syscall_noresponse(buf);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return (int) ret0;
@@ -865,7 +864,6 @@ void *run_app(void *load_buf)
 	wait_for_app_load();
 	
 	load_application((char *) load_buf);
-	//mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, P_OS);
 	still_running = false;
 	inform_os_of_termination();
 

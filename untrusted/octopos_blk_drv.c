@@ -65,14 +65,10 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 
 	if (len % STORAGE_BLOCK_SIZE)
 		BUG();
-	//printk("%s [1]\n", __func__);
 
 	num_blocks = len / STORAGE_BLOCK_SIZE;
 
 	mutex_lock(&obd_lock);
-	//printk("%s [1.1]: STORAGE_BLOCK_SIZE = %d\n", __func__, STORAGE_BLOCK_SIZE);
-	//printk("%s [1.2]: num_blocks = %d\n", __func__, num_blocks);
-	//printk("%s [1.3]: access_limit = %d\n", __func__, access_limit);
 	/* FIXME: we need to keep separate counts for each storage queue. */
 	if (get_queue_limit(data_queue) < num_blocks ||
 	    /* The +1 is because we need to send and receive one message on the cmd
@@ -83,17 +79,12 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	    get_queue_timeout(data_queue) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
 	    get_queue_timeout(Q_STORAGE_CMD_IN) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
 	    get_queue_timeout(Q_STORAGE_CMD_OUT) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL) {
-		//printk("%s [1.4]\n", __func__);
 
-		//if (access_limit) {
-			//printk("%s [1.5]\n", __func__);
 		/* FIXME: we don't need to yield if it already expired.
 		 * We currently have to do this since we're not dealing
-		 * with storage queue separately.
+		 * with the storage queues separately.
 		 */
 		yield_secure_storage_access();
-		//access_limit = 0;
-		//}
 
 		ret = request_secure_storage_access(MAILBOX_MAX_LIMIT_VAL,
 						    STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE);
@@ -101,14 +92,8 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 			printk("Error (%s): Failed to get secure access to storage.\n", __func__);
 			return ret;
 		}
-
-		//access_limit = MAILBOX_MAX_LIMIT_VAL;
-		//printk("%s [1.5]: access_limit = %d\n", __func__, access_limit);
 	}
-	//printk("%s [2]\n", __func__);
 
-	//access_limit -= (limit_t) num_blocks;
-	//printk("%s [1.6]: access_limit = %d\n", __func__, access_limit);
 	decrement_queue_limit(data_queue, num_blocks);
 	decrement_queue_limit(Q_STORAGE_CMD_IN, 1);
 	decrement_queue_limit(Q_STORAGE_CMD_OUT, 1);
@@ -123,9 +108,6 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	}
 	kunmap_atomic(mem);
 
-	//printk("%s [3]\n", __func__);
-	//yield_secure_storage_access();
-	//printk("%s [4]\n", __func__);
 	mutex_unlock(&obd_lock);
 
 	return 0;

@@ -152,20 +152,14 @@ static int remove_file_from_list(struct file *file)
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 static uint32_t write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	printf("%s [1]\n", __func__);
 	wait_for_storage();
-	printf("%s [2]\n", __func__);
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_WRITE;
-	printf("%s [3]\n", __func__);
 	send_msg_to_storage_no_response(buf);
-	printf("%s [4]\n", __func__);
 	for (uint32_t i = 0; i < num_blocks; i++)
 		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
-	printf("%s [5]\n", __func__);
 	get_response_from_storage(buf);
-	printf("%s [6]\n", __func__);
 
 	STORAGE_GET_ONE_RET
 	return ret0;
@@ -174,20 +168,14 @@ static uint32_t write_blocks(uint8_t *data, uint32_t start_block, uint32_t num_b
 
 static uint32_t read_blocks(uint8_t *data, uint32_t start_block, uint32_t num_blocks)
 {
-	printf("%s [1]\n", __func__);
 	wait_for_storage();
-	printf("%s [2]\n", __func__);
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
 	buf[0] = STORAGE_OP_READ;
-	printf("%s [3]\n", __func__);
 	send_msg_to_storage_no_response(buf);
-	printf("%s [4]: num_blocks = %d\n", __func__, num_blocks);
 	for (uint32_t i = 0; i < num_blocks; i++)
 		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
-	printf("%s [5]\n", __func__);
 	get_response_from_storage(buf);
-	printf("%s [6]\n", __func__);
 
 	STORAGE_GET_ONE_RET
 	return ret0;
@@ -236,9 +224,7 @@ static int write_to_block(uint8_t *data, uint32_t block_num, uint32_t block_offs
 
 static void flush_dir_data_to_storage(void)
 {
-	printf("%s [1]\n", __func__);
 	write_blocks(dir_data, 0, DIR_DATA_NUM_BLOCKS);
-	printf("%s [2]\n", __func__);
 }
 #endif /* ROLE_OS || ROLE_INSTALLER */
 
@@ -402,7 +388,6 @@ static int expand_file_size(struct file *file, uint32_t size)
 	bool empty_file;
 	uint32_t needed_size, needed_blocks, leftover;
 	int ret = 0;
-	printf("%s [1]: size = %d\n", __func__, size);
 
 	if (file->size >= size)
 		return 0;
@@ -415,18 +400,15 @@ static int expand_file_size(struct file *file, uint32_t size)
 		empty_file = false;
 		needed_size = size - file->size;
 	}
-	printf("%s [1]: needed_size = %d\n", __func__, needed_size);
 
 	/* first check if there's enough space in the last block */
 	leftover = STORAGE_BLOCK_SIZE - (file->size % STORAGE_BLOCK_SIZE);
-	printf("%s [1.1]: leftover = %d\n", __func__, leftover);
 	if ((leftover != STORAGE_BLOCK_SIZE) && leftover >= needed_size)
 		goto update;
 
 	needed_blocks = needed_size / STORAGE_BLOCK_SIZE;
 	if (needed_size % STORAGE_BLOCK_SIZE)
 		needed_blocks++;
-	printf("%s [2]: needed_blocks = %d\n", __func__, needed_blocks);
 
 	if (empty_file)
 		ret = expand_empty_file(file, needed_blocks);
@@ -454,7 +436,6 @@ static void release_file_blocks(struct file *file)
 
 uint32_t file_system_open_file(char *filename, uint32_t mode)
 {
-	printf("%s [1]: filename = %s\n", __func__, filename);
 	struct file *file = NULL;
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 	if (!(mode == FILE_OPEN_MODE || mode == FILE_OPEN_CREATE_MODE)) {
@@ -475,7 +456,6 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			file = node->file;
 		}
 	}
-	printf("%s [2]\n", __func__);
 
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 	if (file == NULL && mode == FILE_OPEN_CREATE_MODE) {
@@ -499,7 +479,6 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		add_file_to_list(file);
 	}
 #endif /* ROLE_OS || ROLE_INSTALLER */
-	printf("%s [3]\n", __func__);
 
 	if (file) {
 		int ret = get_unused_fd();
@@ -519,7 +498,6 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 		return fd;
 	}
-	printf("%s [4]\n", __func__);
 
 	/* error */
 	return (uint32_t) 0;
@@ -547,11 +525,6 @@ uint32_t file_system_write_to_file(uint32_t fd, uint8_t *data, uint32_t size, ui
 		printf("%s: Error: file not opened!\n", __func__);
 		return 0;
 	}
-	printf("%s [0.1]: offset = %d\n", __func__, offset);
-	printf("%s [0.2]: size = %d\n", __func__, size);
-	printf("%s [1]: file->size = %d\n", __func__, file->size);
-	printf("%s [2]: file->start_block = %d\n", __func__, file->start_block);
-	printf("%s [3]: file->num_blocks = %d\n", __func__, file->num_blocks);
 
 	if (file->size < (offset + size)) {
 		if (offset > file->size) {
@@ -581,11 +554,8 @@ uint32_t file_system_write_to_file(uint32_t fd, uint8_t *data, uint32_t size, ui
 	uint32_t ret = 0;
 
 	while (written_size < size) {
-		printf("%s [4]: written_size = %d\n", __func__, written_size);
-		printf("%s [4.1]: next_write_size = %d\n", __func__, next_write_size);
 		ret = write_to_block(&data[written_size], file->start_block + block_num,
 				block_offset, next_write_size);
-		printf("%s [4.2]: ret = %d\n", __func__, ret);
 		if (ret != next_write_size) {
 			written_size += ret;
 			break;
@@ -598,7 +568,6 @@ uint32_t file_system_write_to_file(uint32_t fd, uint8_t *data, uint32_t size, ui
 		else
 			next_write_size = (size - written_size);
 	}
-	printf("%s [5]: written_size = %d\n", __func__, written_size);
 
 	return written_size;
 }
@@ -622,8 +591,6 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, u
 		return 0;
 	}
 
-	printf("%s [1]: file->num_blocks = %d\n", __func__, file->num_blocks);
-
 	if (offset >= file->size) {
 		return 0;
 	}
@@ -642,10 +609,8 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, u
 	uint32_t ret = 0;
 
 	while (read_size < size) {
-		printf("%s [2]: next_read_size = %d\n", __func__, next_read_size);
 		ret = read_from_block(&data[read_size], file->start_block + block_num,
 				block_offset, next_read_size);
-		printf("%s [3]: ret = %d\n", __func__, ret);
 		if (ret != next_read_size) {
 			read_size += ret;
 			break;
@@ -658,7 +623,6 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, u
 		else
 			next_read_size = (size - read_size);
 	}
-	printf("%s [4]: read_size = %d\n", __func__, read_size);
 
 	return read_size;
 }
@@ -694,9 +658,7 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_
 		return 0;
 	}
 
-	printf("%s [1]\n", __func__);
 	if (((start_block + num_blocks) * STORAGE_BLOCK_SIZE) > file->size) {
-		printf("%s [2]\n", __func__);
 		if ((start_block > file->num_blocks) ||
 		    ((start_block == file->num_blocks) &&
 		     (file->size % STORAGE_BLOCK_SIZE))) {
@@ -704,7 +666,6 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block, uint32_
 			       "file_size = %d)\n", __func__, start_block, num_blocks, file->num_blocks, file->size);
 			return 0;
 		}
-		printf("%s [3]\n", __func__);
 
 		/* Try to expand the file size */
 		expand_file_size(file, (start_block + num_blocks) * STORAGE_BLOCK_SIZE);
@@ -749,7 +710,6 @@ repeat:
 		get_response_from_storage(buf);
 		/* FIXME: check the response here */
 		total_written_blocks += next_num_blocks;
-		printf("%s [1.2]: total_written_blocks = %d\n", __func__, total_written_blocks);
 		goto repeat;
 	}
 
@@ -774,7 +734,6 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t
 	limit_t next_num_blocks = 0;
 	uint32_t total_read_blocks = 0;
 
-	printf("%s [1]\n", __func__);
 	if (fd == 0 || fd >= MAX_NUM_FD) {
 		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
@@ -803,7 +762,6 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t
 		return 0;
 	}*/
 
-	printf("%s [1.1]: num_blocks = %d\n", __func__, num_blocks);
 repeat:
 	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
 		next_num_blocks = num_blocks;
@@ -821,7 +779,6 @@ repeat:
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      next_num_blocks, MAILBOX_DEFAULT_TIMEOUT_VAL);
 #else
-	printf("%s [2]\n", __func__);
 	/* FIXME: update according to umode updates. */
 	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
 							runtime_proc_id, (uint16_t) next_num_blocks);
@@ -836,7 +793,6 @@ repeat:
 		get_response_from_storage(buf);
 		/* FIXME: check the response here */
 		total_read_blocks += next_num_blocks;
-		printf("%s [1.2]: total_read_blocks = %d\n", __func__, total_read_blocks);
 		goto repeat;
 	}
 
@@ -932,13 +888,11 @@ int file_system_remove_file(char *filename)
 
 void initialize_file_system(uint32_t _partition_num_blocks)
 {
-	printf("%s [1]\n", __func__);
 	/* initialize fd bitmap */
 	if (MAX_NUM_FD % 8) {
 		printf("%s: Error: MAX_NUM_FD must be divisible by 8\n", __func__);
 		_exit(-1);
 	}
-	printf("%s [2]\n", __func__);
 
 	fd_bitmap[0] = 0x00000001; /* fd 0 is error */
 	for (int i = 1; i < (MAX_NUM_FD / 8); i++)
@@ -950,23 +904,15 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 		exit(-1);
 	}
 #endif
-	printf("%s [3]\n", __func__);
 
 	partition_num_blocks = _partition_num_blocks;
 
-	/* wipe dir */
-	//memset(dir_data, 0x0, DIR_DATA_SIZE);
-	//flush_dir_data_to_storage();
-	//exit(-1);
-
 	/* read the directory */
 	read_dir_data_from_storage();
-	printf("%s [4]\n", __func__);
 
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
-		printf("%s [1]: existing dir\n", __func__);
 		/* retrieve file info */
 		uint16_t num_files = *((uint16_t *) &dir_data[4]);
 		dir_data_ptr = 6;
@@ -1002,7 +948,6 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 		}
 	} else {
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
-		printf("%s [1]: new dir\n", __func__);
 		/* initialize signature */
 		dir_data[0] = '$';
 		dir_data[1] = '%';

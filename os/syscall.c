@@ -228,9 +228,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		memcpy(filename, data, data_size);
 		/* playing it safe */
 		filename[data_size] = '\0';
-		printf("%s [1]\n", __func__);
 		uint32_t fd = file_system_open_file(filename, mode);
-		printf("%s [2]\n", __func__);
 		SYSCALL_SET_ONE_RET(fd)
 		break;
 	}
@@ -498,7 +496,6 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		      file_system_read_file_blocks_late();
 		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
 			 late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
-			//help_boot_runtime_proc(runtime_proc_id);
 			reset_proc(runtime_proc_id);
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
