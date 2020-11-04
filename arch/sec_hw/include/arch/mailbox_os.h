@@ -1,6 +1,12 @@
 #ifndef __SEC_HW_MAILBOX_OS_H
 #define __SEC_HW_MAILBOX_OS_H
 
+#ifdef ARMR5
+#define IPI_TRIGGER_REG 0xFF310018U
+#else
+#define IPI_TRIGGER_REG 0xFF340018U
+#endif
+
 void _mailbox_print_queue_status(uint8_t queue_id);
 
 int is_queue_available(uint8_t queue_id);

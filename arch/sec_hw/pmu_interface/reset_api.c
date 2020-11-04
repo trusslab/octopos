@@ -1,7 +1,5 @@
 #ifdef 	ARCH_SEC_HW_OS
 
-#include "xscugic.h"
-#include "xttcps.h"
 #include "xipipsu.h"
 
 #include <arch/sec_hw.h>

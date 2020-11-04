@@ -11,8 +11,6 @@
 #include "arch/octopos_xmbox.h"
 #include "xparameters.h"
 #include "xil_exception.h"
-#include "xscugic.h"
-#include "xttcps.h"
 #include "xipipsu.h"
 #include "xintc.h"
 
@@ -21,6 +19,7 @@
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox.h"
 #include "arch/octopos_mbox_owner_map.h"
+#include "arch/mailbox_os.h"
 
 #include "octopos/error.h"
 #include "octopos/mailbox.h"
@@ -30,8 +29,6 @@
 #define IPI_HEADER_OFFSET			0x0U
 #define IPI_HEADER					0x1E0000 /* 1E - Target Module ID */
 
-XScuGic			irq_controller;
-//XScuGic 		gic_controller;
 XIpiPsu 		ipi_pmu_inst;
 XIntc			intc;
 
@@ -560,19 +557,19 @@ int init_os_mailbox(void)
 	init_platform();
 	OMboxIds_init();
 
-	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_KEYBOARD_DEVICE_ID);
+	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_output, ConfigPtr, ConfigPtr->BaseAddress);
 	if (Status != XST_SUCCESS) 
 	{
-		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_KEYBOARD_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr2 = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
+	ConfigPtr2 = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_KEYBOARD_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_keyboard, ConfigPtr2, ConfigPtr2->BaseAddress);
 	if (Status != XST_SUCCESS) 
 	{
-		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_KEYBOARD_DEVICE_ID);
 		return -XST_FAILURE;
 	}
 
@@ -686,104 +683,98 @@ int init_os_mailbox(void)
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
 	Xil_ExceptionInit();
-
-	XScuGic_Config *IntcConfig;
-	IntcConfig = XScuGic_LookupConfig(XPAR_SCUGIC_SINGLE_DEVICE_ID);
-	if (IntcConfig == NULL) {
-		_SEC_HW_ERROR("XScuGic_LookupConfig failed");
-		return -XST_FAILURE;
-	}
-
-	Status = XScuGic_CfgInitialize(&irq_controller, IntcConfig, IntcConfig->CpuBaseAddress);
-	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XScuGic_CfgInitialize failed");
-		return -XST_FAILURE;
-	}
-
-	Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_IRQ_INT,
-			(Xil_ExceptionHandler) XScuGic_InterruptHandler,
-			&irq_controller);
 	Xil_ExceptionEnable();
 
-	irqNo = OMboxIntrs[P_OS][Q_SERIAL_OUT];
-	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_output);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = OMboxIntrs[P_OS][Q_KEYBOARD];
-	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_keyboard);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = XPAR_FABRIC_ENCLAVE0_PS_MAILBOX_INTERRUPT_0_INTR;
-	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_OS1);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = XPAR_FABRIC_ENCLAVE1_PS_MAILBOX_INTERRUPT_0_INTR;
-	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_OS2);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = OMboxIntrs[P_OS][Q_RUNTIME1];
-	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_runtime1);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = OMboxIntrs[P_OS][Q_RUNTIME2];
-	XScuGic_Connect(&irq_controller, irqNo, handle_mailbox_interrupts, (void *)&Mbox_runtime2);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = OMboxCtrlIntrs[P_OS][Q_RUNTIME1];
-	XScuGic_Connect(&irq_controller, irqNo, handle_change_queue_interrupts, (void *)Q_RUNTIME1);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = OMboxCtrlIntrs[P_OS][Q_RUNTIME2];
-	XScuGic_Connect(&irq_controller, irqNo, handle_change_queue_interrupts, (void *)Q_RUNTIME2);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = OMboxCtrlIntrs[P_OS][Q_SERIAL_OUT];
-	XScuGic_Connect(&irq_controller, irqNo, handle_change_queue_interrupts, (void *)Q_SERIAL_OUT);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = OMboxCtrlIntrs[P_OS][Q_KEYBOARD];
-	XScuGic_Connect(&irq_controller, irqNo, handle_change_queue_interrupts, (void *)Q_KEYBOARD);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	irqNo = XPAR_FABRIC_FIT_TIMER_2_INTERRUPT_INTR;
-	XScuGic_Connect(&irq_controller, irqNo, handle_fixed_timer_interrupts, 0);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x3);
-
-	XScuGic_Connect(&irq_controller,
-			XPAR_PSU_IPI_1_INT_ID,
-			(Xil_ExceptionHandler)Rpu_IpiHandler,
-			&ipi_pmu_inst);
-	XScuGic_Enable(&irq_controller, XPAR_PSU_IPI_1_INT_ID);
-
-	/* Enable interrupts in the processor */
-	Xil_ExceptionEnableMask(XIL_EXCEPTION_IRQ);
-
-	/* Initialize extra interrupt lines through XIntc */
-	Status = XIntc_Initialize(&intc, XPAR_XI_INTC_STORAGE_DEVICE_ID);
+	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Initialize %d failed", XPAR_XI_INTC_STORAGE_DEVICE_ID);
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		OMboxIntrs[P_OS][Q_SERIAL_OUT],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void *)&Mbox_output);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		OMboxIntrs[P_OS][Q_KEYBOARD],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void *)&Mbox_keyboard);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		OMboxIntrs[P_OS][Q_OS1],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void *)&Mbox_OS1);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		OMboxIntrs[P_OS][Q_OS2],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void *)&Mbox_OS2);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		OMboxIntrs[P_OS][Q_RUNTIME1],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void *)&Mbox_runtime1);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+		OMboxIntrs[P_OS][Q_RUNTIME2],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void *)&Mbox_runtime2);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_OS][Q_RUNTIME1],
+		(XInterruptHandler)handle_change_queue_interrupts,
+		(void *)Q_RUNTIME1);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_OS][Q_RUNTIME2],
+		(XInterruptHandler)handle_change_queue_interrupts,
+		(void *)Q_RUNTIME2);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_OS][Q_SERIAL_OUT],
+		(XInterruptHandler)handle_change_queue_interrupts,
+		(void *)Q_SERIAL_OUT);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_OS][Q_KEYBOARD],
+		(XInterruptHandler)handle_change_queue_interrupts,
+		(void *)Q_KEYBOARD);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc,
+			XPAR_MICROBLAZE_6_AXI_INTC_FIT_TIMER_2_INTERRUPT_INTR,
+		(XInterruptHandler)handle_fixed_timer_interrupts,
+		(void *)0);
+	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
@@ -792,95 +783,83 @@ int init_os_mailbox(void)
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox_storage_cmd_in);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-				OMboxIntrs[P_OS][Q_STORAGE_CMD_IN]);
 		return XST_FAILURE;
 	}
-
-	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_IN]);
 
 	Status = XIntc_Connect(&intc, 
 			OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT],
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox_storage_cmd_out);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-				OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 		return XST_FAILURE;
 	}
-
-	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 
 	Status = XIntc_Connect(&intc, 
 			OMboxIntrs[P_OS][Q_STORAGE_DATA_IN],
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox_storage_data_in);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-				OMboxIntrs[P_OS][Q_STORAGE_DATA_IN]);
 		return XST_FAILURE;
 	}
-
-	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_IN]);
 
 	Status = XIntc_Connect(&intc, 
 			OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT],
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox_storage_data_out);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-				OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT]);
 		return XST_FAILURE;
 	}
-
-	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT]);
 
 	Status = XIntc_Connect(&intc, 
 			OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_CMD_IN);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-				OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN]);
 		return XST_FAILURE;
 	}
-
-	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN]);
 
 	Status = XIntc_Connect(&intc, 
 			OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_CMD_OUT);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-				OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 		return XST_FAILURE;
 	}
-
-	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 
 	Status = XIntc_Connect(&intc, 
 			OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_DATA_IN);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-				OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN]);
 		return XST_FAILURE;
 	}
-
-	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN]);
 
 	Status = XIntc_Connect(&intc, 
 			OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_DATA_OUT);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-				OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT]);
 		return XST_FAILURE;
 	}
 
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_IN]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_IN]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_SERIAL_OUT]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_KEYBOARD]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_OS1]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_OS2]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_RUNTIME1]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_RUNTIME2]);
+	XIntc_Enable(&intc, XPAR_MICROBLAZE_6_AXI_INTC_FIT_TIMER_2_INTERRUPT_INTR);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_SERIAL_OUT]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_KEYBOARD]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_RUNTIME1]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_RUNTIME2]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT]);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
@@ -888,12 +867,6 @@ int init_os_mailbox(void)
 		_SEC_HW_ERROR("XIntc_Start failed");
 		return XST_FAILURE;
 	}
-
-	irqNo = 138U;
-	XScuGic_Connect(&irq_controller, irqNo, (Xil_InterruptHandler) XIntc_InterruptHandler, (void *)&intc);
-	XScuGic_Enable(&irq_controller, irqNo);
-	XScuGic_InterruptMaptoCpu(&irq_controller, XPAR_CPU_ID, irqNo);
-	XScuGic_SetPriorityTriggerType(&irq_controller, irqNo, 0xA0, 0x1);
 
 	/* Initialize pointers for bookkeeping */
 	Mbox_regs[Q_OS1] = &Mbox_OS1;
@@ -962,7 +935,7 @@ int init_os_mailbox(void)
 	}
 
 	/* Enable IPI from PMU to RPU_0 */
-	Xil_Out32(0xFF310018U, 0xF0000U);
+	Xil_Out32(IPI_TRIGGER_REG, 0xF0000U);
 
 	return XST_SUCCESS;
 }
