@@ -262,7 +262,6 @@ static int start_network_proc(void)
 static int start_untrusted_proc(void)
 {
 	char *const args[] = {(char *) "bootloader_other", (char *) "linux",
-		//(char *) "ubda=./arch/umode/untrusted_linux/CentOS6.x-AMD64-root_fs",
 		(char *) "root=/dev/octopos_blk",
 		(char *) "mem=128M", NULL};
 	char path[] = "./bootloader/bootloader_other";
@@ -346,13 +345,12 @@ static void halt_proc(uint8_t proc_id)
 	}
 }
 
+/*
+ * Halts all procs other than the untrusted one.
+ */
 static void halt_all_procs(void)
 {
 	mailbox_ready = 0;
-
-	//halt_proc(P_UNTRUSTED);	
-	///* Give the untrusted domain time to properly terminate first. */
-	//sleep(5);
 
 	/* Shut down the rest */
 	kill(socket_server_pid, SIGKILL);
@@ -385,35 +383,23 @@ static void *proc_reboot_handler(void *data)
 	int reboot_exception = 0;
 
 	while (do_restart || do_reset_queues || num_running_procs) {
-		printf("%s [1]: num_running_procs = %d\n", __func__, num_running_procs);
-		printf("%s [2]: do_restart = %d\n", __func__, do_restart);
-		printf("%s [3]: do_reset_queues = %d\n", __func__, do_reset_queues);
 		pid_t pid = wait(&wstatus);
 		if (!(wstatus == 0 || wstatus == 9))
 			continue;
 		num_running_procs--;
 		if (pid == mailbox_pid) {
 			sprintf(proc_name, "Mailbox");
-			//if (do_restart)
-			//	mailbox_pid = start_mailbox_proc();
 			reboot_exception = 1;
 			sem_post(&reset_done[0]);
 		} else if (pid == tpm_pid) {
 			sprintf(proc_name, "TPM");
-			//if (do_restart) {
-			//	tpm_server_pid = start_tpm_server_proc();
-			//	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
-			//	tpm_pid = start_tpm_proc();
-			//}
 			reboot_exception = 1;
 			sem_post(&reset_done[P_TPM]);
 		} else if (pid == tpm_server_pid) {
-			/* do nothing */
 			sprintf(proc_name, "TPM_server");
 			reboot_exception = 1;
 			sem_post(&reset_done[P_TPM]);
 		} else if (pid == tpm2_abrmd_pid) {
-			/* do nothing */
 			sprintf(proc_name, "TPM_abrmd");
 			reboot_exception = 1;
 			sem_post(&reset_done[P_TPM]);
@@ -705,7 +691,6 @@ int main(int argc, char **argv)
 			if (pmu_os_buf[0] == PMU_OS_CMD_SHUTDOWN) {
 				printf("%s: shutting down\n", __func__);
 				uint32_t cmd_ret = 0;
-				//mailbox_pause_delegation();
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
@@ -740,8 +725,6 @@ int main(int argc, char **argv)
 					ret = mailbox_terminate_check();
 					if (!ret) {
 						/* allowed */
-						//do_restart = 0;
-						//do_reset_queues = 0;
 						halt_all_procs();
 						goto err_join;
 					} else {
@@ -750,19 +733,16 @@ int main(int argc, char **argv)
 						do_restart = 1;
 						do_reset_queues = 1;
 						mailbox_resume_delegation();
-
 					}
 				} else {
 					/* not allowed */
 					printf("Error: %s: shutdown not allowed (first check)\n", __func__);
 					cmd_ret = (uint32_t) ERR_PERMISSION;
-					//mailbox_resume_delegation();
 					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
 			} else if (pmu_os_buf[0] == PMU_OS_CMD_REBOOT) {
 				printf("%s: rebooting\n", __func__);
 				uint32_t cmd_ret = 0;
-				//mailbox_pause_delegation();
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
@@ -796,32 +776,20 @@ int main(int argc, char **argv)
 					ret = mailbox_terminate_check();
 					if (!ret) {
 						/* allowed */
-						//do_restart = 0;
 						halt_all_procs();
-						printf("%s [1]: waiting for mailbox\n", __func__);
 						/* We've used the first sem in the array for the mailbox. */
 						sem_wait(&reset_done[0]);
-						printf("%s [1]: waiting for TPM\n", __func__);
 						sem_wait(&reset_done[P_TPM]);
 						sem_wait(&reset_done[P_TPM]);
 						sem_wait(&reset_done[P_TPM]);
-						printf("%s [1]: waiting for OS\n", __func__);
 						sem_wait(&reset_done[P_OS]);
-						printf("%s [1]: waiting for KEYBOARD\n", __func__);
 						sem_wait(&reset_done[P_KEYBOARD]);
-						printf("%s [1]: waiting for SERIAL_OUT\n", __func__);
 						sem_wait(&reset_done[P_SERIAL_OUT]);
-						printf("%s [1]: waiting for STORAGE\n", __func__);
 						sem_wait(&reset_done[P_STORAGE]);
-						printf("%s [1]: waiting for NETWORK\n", __func__);
 						sem_wait(&reset_done[P_NETWORK]);
-						printf("%s [1]: waiting for RUNTIME1\n", __func__);
 						sem_wait(&reset_done[P_RUNTIME1]);
-						printf("%s [1]: waiting for RUNTIME2\n", __func__);
 						sem_wait(&reset_done[P_RUNTIME2]);
-						printf("%s [1]: waiting for UNTRUSTED\n", __func__);
 						sem_wait(&reset_done[P_UNTRUSTED]);
-						printf("%s [1]: done waiting\n", __func__);
 
 						do_restart = 1;
 						start_all_procs();
@@ -836,7 +804,6 @@ int main(int argc, char **argv)
 					/* not allowed */
 					printf("Error: %s: reboot not allowed (first check)\n", __func__);
 					cmd_ret = (uint32_t) ERR_PERMISSION;
-					//mailbox_resume_delegation();
 					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
 			} else if (pmu_os_buf[0] == PMU_OS_CMD_RESET_PROC) {
@@ -861,9 +828,7 @@ int main(int argc, char **argv)
 					if (!ret) {
 						/* allowed */
 						halt_proc(proc_id);
-						printf("%s [2]: waiting for %d\n", __func__, proc_id);
 						sem_wait(&reset_done[proc_id]);
-						printf("%s [3]\n", __func__);
 					} else {
 						/* not allowed */
 						cmd_ret = (uint32_t) ERR_PERMISSION;

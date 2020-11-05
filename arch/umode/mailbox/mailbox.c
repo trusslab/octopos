@@ -846,8 +846,9 @@ static void yield_queue_access(uint8_t queue_id, uint8_t requester)
 		return;
 	}
 
-	if (requester != queues[queue_id].OWNER) { 
-		printf("Error: %s: Only the owner can yield (%d, %d, %d).\n",
+	if (requester != queues[queue_id].OWNER) {
+		/* We label this a warning since it (currently) happens in normal execution. */
+		printf("Warning: %s: Only the owner can yield (%d, %d, %d).\n",
 		       __func__, queue_id, requester, queues[queue_id].OWNER);
 		return;
 	}

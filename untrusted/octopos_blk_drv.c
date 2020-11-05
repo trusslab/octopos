@@ -83,6 +83,8 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 		/* FIXME: we don't need to yield if it already expired.
 		 * We currently have to do this since we're not dealing
 		 * with the storage queues separately.
+		 * 
+		 * This can create a warning in the mailbox (umode) 
 		 */
 		yield_secure_storage_access();
 
