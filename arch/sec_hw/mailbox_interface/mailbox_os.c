@@ -71,7 +71,6 @@ int is_queue_available(uint8_t queue_id)
 void wait_for_queue_availability(uint8_t queue_id)
 {
 	sem_wait(&availables[queue_id]);
-	/* FIXME: added without testing. Only tested in umode. */
 	sem_init(&availables[queue_id], 0, 1);
 }
 
@@ -318,6 +317,7 @@ void _mailbox_print_queue_status(uint8_t runtime_proc_id)
 	_SEC_HW_ERROR("queue %d: ctrl reg content %08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
 }
 
+/* Obsolete API */
 void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint16_t count)
 {
 	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
@@ -340,6 +340,27 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 }
 
+void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
+				   limit_t limit, timeout_t timeout)
+{
+	mailbox_state_reg_t new_state;
+	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
+	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
+
+	new_state.owner = OMboxIds[queue_id][proc_id];
+
+	if (limit > MAILBOX_MAX_LIMIT_VAL)
+		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
+	else
+		new_state.limit = limit * factor;
+
+	if (timeout > MAILBOX_MAX_TIMEOUT_VAL)
+		new_state.timeout = MAILBOX_MAX_TIMEOUT_VAL;
+	else
+		new_state.timeout = timeout;
+
+	octopos_mailbox_set_status_reg(queue_ptr, (int) new_state);
+}
 
 int send_msg_to_storage_no_response(uint8_t *buf)
 {

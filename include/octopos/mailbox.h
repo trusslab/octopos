@@ -68,6 +68,10 @@ typedef struct {
 	unsigned owner:8; /* Proc with current access to the non-fixed end of a queue. */
 	unsigned limit:12;
 	unsigned timeout:12;
+
+	operator int() const{
+		return (owner << 24) + (limit << 12) + timeout;
+	}
 } mailbox_state_reg_t;
 
 /* FIXME: these are also defined in octopos/runtime.h */

@@ -692,14 +692,8 @@ repeat:
 
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 
-#ifndef ARCH_SEC_HW
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id,
 				      next_num_blocks, MAILBOX_DEFAULT_TIMEOUT_VAL);
-#else
-	/* FIXME: update according to umode updates. */
-	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS,
-				    runtime_proc_id, (uint16_t) next_num_blocks);
-#endif
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + total_written_blocks,
 			     next_num_blocks)
@@ -775,14 +769,8 @@ repeat:
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
-#ifndef ARCH_SEC_HW
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      next_num_blocks, MAILBOX_DEFAULT_TIMEOUT_VAL);
-#else
-	/* FIXME: update according to umode updates. */
-	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS,
-							runtime_proc_id, (uint16_t) next_num_blocks);
-#endif
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + total_read_blocks,
 			     next_num_blocks)
