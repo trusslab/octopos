@@ -306,12 +306,7 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
-#ifdef ARCH_SEC_HW
-/* FIXME: update according to umode updates */
-static int request_secure_keyboard(u16 count)
-#else
 static int request_secure_keyboard(limit_t count)
-#endif
 {
 	reset_queue_sync(Q_KEYBOARD, 0);
 
@@ -343,12 +338,7 @@ static int yield_secure_keyboard(void)
 	return 0;
 }
 
-#ifdef ARCH_SEC_HW
-/* FIXME: update according to umode updates */
-static int request_secure_serial_out(u16 count)
-#else
 static int request_secure_serial_out(limit_t count)
-#endif
 {
 	reset_queue_sync(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
@@ -567,12 +557,7 @@ static int set_up_context(void *addr, uint32_t size)
 bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
 
-#ifdef ARCH_SEC_HW
-/* FIXME: update according to umode updates */
-static int request_secure_ipc(uint8_t target_runtime_queue_id, u16 count)
-#else
 static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
-#endif
 {
 	bool no_response;
 	reset_queue_sync(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);

@@ -69,9 +69,11 @@ typedef struct {
 	unsigned limit:12;
 	unsigned timeout:12;
 
+#ifdef ARCH_SEC_HW
 	operator int() const{
 		return (owner << 24) + (limit << 12) + timeout;
 	}
+#endif
 } mailbox_state_reg_t;
 
 /* FIXME: these are also defined in octopos/runtime.h */
