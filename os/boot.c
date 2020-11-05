@@ -13,6 +13,8 @@
 #include <arch/mailbox_os.h>
 #include <arch/pmu.h> 
 
+int untrusted_needs_help_with_boot = 0;
+
 void delegate_tpm_data_in_queue(uint8_t proc_id)
 {
 	wait_for_queue_availability(Q_TPM_IN);
@@ -60,29 +62,30 @@ static void help_boot_untrusted_proc(void)
 	help_boot_proc(P_UNTRUSTED, (char *) "linux");
 }
 
-void help_boot_procs(void)
+void help_boot_procs(int boot_untrusted)
 {
 	help_boot_keyboard_proc();
 	help_boot_serial_out_proc();
 	help_boot_network_proc();
 	help_boot_runtime_proc(P_RUNTIME1);
 	help_boot_runtime_proc(P_RUNTIME2);
-	help_boot_untrusted_proc();
+	if (boot_untrusted)
+		help_boot_untrusted_proc();
 }
 
 int reset_proc(uint8_t proc_id)
 {
 	int ret;
 
-	if (proc_id == P_UNTRUSTED) {
-		/* Send a halt cmd to untrusted in case it's listening.
-		* Will be automatically rebooted by the PMU.
-		*/
-		uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-		buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-		memcpy(&buf[1], "halt\n", 5);
-		send_cmd_to_untrusted(buf);
-	}
+	//if (proc_id == P_UNTRUSTED) {
+	//	/* Send a halt cmd to untrusted in case it's listening.
+	//	* Will be automatically rebooted by the PMU.
+	//	*/
+	//	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	//	buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+	//	memcpy(&buf[1], "halt\n", 5);
+	//	send_cmd_to_untrusted(buf);
+	//}
 
 	if (proc_id == P_STORAGE)
 		close_file_system();
@@ -110,6 +113,14 @@ int reset_proc(uint8_t proc_id)
 	} else if (proc_id == P_STORAGE) {
 		uint32_t partition_size = initialize_storage();
 		initialize_file_system(partition_size);
+	} else if (proc_id == P_UNTRUSTED) {
+		if (!untrusted_needs_help_with_boot) {
+			untrusted_needs_help_with_boot = 1;
+			return 1;
+		} else {
+			help_boot_untrusted_proc();
+			untrusted_needs_help_with_boot = 0;
+		}
 	}
 
 	return 0;
@@ -119,19 +130,21 @@ int reboot_system(void)
 {
 	int ret;
 
-	/* Send a halt cmd to untrusted in case it's listening.
-	 * Will be automatically rebooted by the PMU.
-	 */
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-	memcpy(&buf[1], "halt\n", 5);
-	send_cmd_to_untrusted(buf);
+	///* Send a halt cmd to untrusted in case it's listening.
+	// * Will be automatically rebooted by the PMU.
+	// */
+	//uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	//buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+	//memcpy(&buf[1], "halt\n", 5);
+	//send_cmd_to_untrusted(buf);
 
 	/* send a reboot cmd to PMU */
 	ret = pmu_reboot();
 
-	if (!ret)
-		help_boot_procs();
+	//if (!ret) {
+	//	help_boot_procs(0);
+	//	untrusted_needs_help_with_boot = 1;
+	//}
 
 	return ret;
 }
@@ -140,11 +153,11 @@ int halt_system(void)
 {
 	int ret;
 
-	/* send a halt cmd to untrusted in case it's listening */
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-	memcpy(&buf[1], "halt\n", 5);
-	send_cmd_to_untrusted(buf);
+	///* send a halt cmd to untrusted in case it's listening */
+	//uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	//buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
+	//memcpy(&buf[1], "halt\n", 5);
+	//send_cmd_to_untrusted(buf);
 
 	/* send a shutdown cmd to PMU */
 	/* FIXME: there is a race condition here.

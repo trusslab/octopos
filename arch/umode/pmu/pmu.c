@@ -350,9 +350,9 @@ static void halt_all_procs(void)
 {
 	mailbox_ready = 0;
 
-	halt_proc(P_UNTRUSTED);	
-	/* Give the untrusted domain time to properly terminate first. */
-	sleep(5);
+	//halt_proc(P_UNTRUSTED);	
+	///* Give the untrusted domain time to properly terminate first. */
+	//sleep(5);
 
 	/* Shut down the rest */
 	kill(socket_server_pid, SIGKILL);
@@ -705,61 +705,138 @@ int main(int argc, char **argv)
 			if (pmu_os_buf[0] == PMU_OS_CMD_SHUTDOWN) {
 				printf("%s: shutting down\n", __func__);
 				uint32_t cmd_ret = 0;
-				mailbox_pause_delegation();
+				//mailbox_pause_delegation();
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
+					/* There are two terminate checks. The first one
+					 * is mainly to inform the OS. Here, we need to
+					 * send the response back to the OS before we
+					 * reboot since the OS needs to help the
+					 * untrusted proc to properly halt. Therefore, we
+					 * do the first check to inform the OS.
+					 * If the check is successful, we then do a second check.
+					 * The second check is protected by pausing of all delegations,
+					 * therefore, it's safe to shut down if the check passes.
+					 *
+					 * The side effect of this approach is that we might tell the OS
+					 * that we can shut down but later realize that we can't.
+					 * That's not a security problem and indeed it's the job of the OS
+					 * to not perform any more delegations after our response.
+					 * If it does, then the shutdown will fail.
+					 */
+					write(fd_pmu_to_os, &cmd_ret, 4);
+
 					do_restart = 0;
 					do_reset_queues = 0;
-					halt_all_procs();
-					goto err_join;
+					/* Halt the untrusted domain before we disable delegations
+					 * since it will need access to the storage service.
+					 */
+					halt_proc(P_UNTRUSTED);	
+					/* Give the untrusted domain time to properly terminate first. */
+					sleep(10);
+
+					mailbox_pause_delegation();
+					ret = mailbox_terminate_check();
+					if (!ret) {
+						/* allowed */
+						//do_restart = 0;
+						//do_reset_queues = 0;
+						halt_all_procs();
+						goto err_join;
+					} else {
+						/* not allowed */
+						printf("Error: %s: shutdown not allowed (second check)\n", __func__);
+						do_restart = 1;
+						do_reset_queues = 1;
+						mailbox_resume_delegation();
+
+					}
 				} else {
 					/* not allowed */
+					printf("Error: %s: shutdown not allowed (first check)\n", __func__);
 					cmd_ret = (uint32_t) ERR_PERMISSION;
-					mailbox_resume_delegation();
+					//mailbox_resume_delegation();
 					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
 			} else if (pmu_os_buf[0] == PMU_OS_CMD_REBOOT) {
 				printf("%s: rebooting\n", __func__);
 				uint32_t cmd_ret = 0;
-				mailbox_pause_delegation();
+				//mailbox_pause_delegation();
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
-					do_restart = 0;
-					halt_all_procs();
-					printf("%s [1]: waiting for mailbox\n", __func__);
-					/* We've used the first sem in the array for the mailbox. */
-					sem_wait(&reset_done[0]);
-					printf("%s [1]: waiting for TPM\n", __func__);
-					sem_wait(&reset_done[P_TPM]);
-					sem_wait(&reset_done[P_TPM]);
-					sem_wait(&reset_done[P_TPM]);
-					printf("%s [1]: waiting for OS\n", __func__);
-					sem_wait(&reset_done[P_OS]);
-					printf("%s [1]: waiting for KEYBOARD\n", __func__);
-					sem_wait(&reset_done[P_KEYBOARD]);
-					printf("%s [1]: waiting for SERIAL_OUT\n", __func__);
-					sem_wait(&reset_done[P_SERIAL_OUT]);
-					printf("%s [1]: waiting for STORAGE\n", __func__);
-					sem_wait(&reset_done[P_STORAGE]);
-					printf("%s [1]: waiting for NETWORK\n", __func__);
-					sem_wait(&reset_done[P_NETWORK]);
-					printf("%s [1]: waiting for RUNTIME1\n", __func__);
-					sem_wait(&reset_done[P_RUNTIME1]);
-					printf("%s [1]: waiting for RUNTIME2\n", __func__);
-					sem_wait(&reset_done[P_RUNTIME2]);
-					printf("%s [1]: waiting for UNTRUSTED\n", __func__);
-					sem_wait(&reset_done[P_UNTRUSTED]);
-					printf("%s [1]: done waiting\n", __func__);
+					/* There are two terminate checks. The first one
+					 * is mainly to inform the OS. Here, we need to
+					 * send the response back to the OS before we
+					 * reboot since the OS needs to help the
+					 * untrusted proc to properly halt. Therefore, we
+					 * do the first check to inform the OS.
+					 * If the check is successful, we then do a second check.
+					 * The second check is protected by pausing of all delegations,
+					 * therefore, it's safe to reboot if the check passes.
+					 *
+					 * The side effect of this approach is that we might tell the OS
+					 * that we can reboot but later realize that we can't.
+					 * That's not a security problem and indeed it's the job of the OS
+					 * to not perform any more delegations after our response.
+					 * If it does, then the reboot will fail.
+					 */
+					write(fd_pmu_to_os, &cmd_ret, 4);
 
-					do_restart = 1;
-					start_all_procs();
+					do_restart = 0;
+					/* Halt the untrusted domain before we disable delegations
+					 * since it will need access to the storage service.
+					 */
+					halt_proc(P_UNTRUSTED);	
+					/* Give the untrusted domain time to properly terminate first. */
+					sleep(10);
+
+					mailbox_pause_delegation();
+					ret = mailbox_terminate_check();
+					if (!ret) {
+						/* allowed */
+						//do_restart = 0;
+						halt_all_procs();
+						printf("%s [1]: waiting for mailbox\n", __func__);
+						/* We've used the first sem in the array for the mailbox. */
+						sem_wait(&reset_done[0]);
+						printf("%s [1]: waiting for TPM\n", __func__);
+						sem_wait(&reset_done[P_TPM]);
+						sem_wait(&reset_done[P_TPM]);
+						sem_wait(&reset_done[P_TPM]);
+						printf("%s [1]: waiting for OS\n", __func__);
+						sem_wait(&reset_done[P_OS]);
+						printf("%s [1]: waiting for KEYBOARD\n", __func__);
+						sem_wait(&reset_done[P_KEYBOARD]);
+						printf("%s [1]: waiting for SERIAL_OUT\n", __func__);
+						sem_wait(&reset_done[P_SERIAL_OUT]);
+						printf("%s [1]: waiting for STORAGE\n", __func__);
+						sem_wait(&reset_done[P_STORAGE]);
+						printf("%s [1]: waiting for NETWORK\n", __func__);
+						sem_wait(&reset_done[P_NETWORK]);
+						printf("%s [1]: waiting for RUNTIME1\n", __func__);
+						sem_wait(&reset_done[P_RUNTIME1]);
+						printf("%s [1]: waiting for RUNTIME2\n", __func__);
+						sem_wait(&reset_done[P_RUNTIME2]);
+						printf("%s [1]: waiting for UNTRUSTED\n", __func__);
+						sem_wait(&reset_done[P_UNTRUSTED]);
+						printf("%s [1]: done waiting\n", __func__);
+
+						do_restart = 1;
+						start_all_procs();
+					} else {
+						/* not allowed */
+						printf("Error: %s: reboot not allowed (second check)\n", __func__);
+						do_restart = 1;
+						mailbox_resume_delegation();
+					}
 				} 
 				else {
 					/* not allowed */
+					printf("Error: %s: reboot not allowed (first check)\n", __func__);
 					cmd_ret = (uint32_t) ERR_PERMISSION;
-					mailbox_resume_delegation();
+					//mailbox_resume_delegation();
 					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
 			} else if (pmu_os_buf[0] == PMU_OS_CMD_RESET_PROC) {
@@ -767,6 +844,11 @@ int main(int argc, char **argv)
 				uint8_t proc_id = pmu_os_buf[1];
 				if (proc_id == P_UNTRUSTED ||
 				    proc_id == P_OS) {
+					/* We send the response back to the OS before we
+					 * reset the proc since the OS needs to help the
+					 * untrusted proc to properly halt.
+					 */
+					write(fd_pmu_to_os, &cmd_ret, 4);
 					halt_proc(proc_id);
 				} else if (proc_id == P_KEYBOARD ||
 					   proc_id == P_SERIAL_OUT ||
@@ -787,12 +869,13 @@ int main(int argc, char **argv)
 						cmd_ret = (uint32_t) ERR_PERMISSION;
 					}
 					mailbox_resume_delegation();
+					write(fd_pmu_to_os, &cmd_ret, 4);
 				} else {
 					printf("Error: %s: invalid processor ID (%d)\n",
 					       __func__, proc_id);
 					cmd_ret = (uint32_t) ERR_INVALID;
+					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
-				write(fd_pmu_to_os, &cmd_ret, 4);
 			} else {
 				printf("Error: %s: invalid command from the OS (%d)\n",
 				       __func__, pmu_os_buf[0]);

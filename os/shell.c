@@ -387,8 +387,12 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			uint8_t proc_id = (uint8_t) atoi(args[1]);
 
 			ret = reset_proc(proc_id);
-			if (ret)
+			if (ret == 1 && proc_id == P_UNTRUSTED) {
+				output_printf("Enter this command again to complete "
+					      "the reset\n");
+			} else if (ret) {
 				output_printf("Couldn't reset proc %d\n", proc_id);
+			}
 
 			output_printf("octopos$> ");
 			return 0;

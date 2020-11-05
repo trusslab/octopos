@@ -56,7 +56,7 @@ int main()
 #ifdef ARCH_UMODE
 	initialize_file_system(partition_size);
 #endif
-	help_boot_procs();
+	help_boot_procs(1);
 
 	initialize_shell();
 
