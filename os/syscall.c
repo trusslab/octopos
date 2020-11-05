@@ -44,7 +44,7 @@
 #define SYSCALL_GET_ONE_ARG_DATA				\
 	uint32_t arg0;						\
 	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[2]);				\
+	DESERIALIZE_32(&arg0, &buf[2]);	\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;		\
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
@@ -62,8 +62,8 @@
 #define SYSCALL_GET_TWO_ARGS_DATA				\
 	uint32_t arg0, arg1;					\
 	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[2]);				\
-	arg1 = *((uint32_t *) &buf[6]);				\
+	DESERIALIZE_32(&arg0, &buf[2]);	\
+	DESERIALIZE_32(&arg1, &buf[6]);	\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 11;		\
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
@@ -134,6 +134,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
+		for (int mm = 0; mm < 7; mm++) {
+			_SEC_HW_ERROR("%02X", buf[mm]);
+		}
 
 		 /* No more than 100 characters */
 		 if (count > 100) {
