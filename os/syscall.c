@@ -134,15 +134,12 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
-		for (int mm = 0; mm < 7; mm++) {
-			_SEC_HW_ERROR("%02X", buf[mm]);
-		}
 
-		 /* No more than 100 characters */
-		 if (count > 100) {
-		 	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-		 	break;
-		 }
+		/* No more than 100 characters */
+		if (count > 100) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */

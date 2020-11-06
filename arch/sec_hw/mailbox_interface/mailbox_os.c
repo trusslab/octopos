@@ -13,6 +13,7 @@
 #include "xil_exception.h"
 #include "xipipsu.h"
 #include "xintc.h"
+#include "xgpio.h"
 
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
@@ -51,6 +52,8 @@ cbuf_handle_t	cbuf_keyboard;
 
 OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
+
+XGpio reset_gpio_0;
 
 int is_queue_available(uint8_t queue_id)
 {
@@ -936,6 +939,15 @@ int init_os_mailbox(void)
 
 	/* Enable IPI from PMU to RPU_0 */
 	Xil_Out32(IPI_TRIGGER_REG, 0xF0000U);
+
+	Status = XGpio_Initialize(&reset_gpio_0, XPAR_AXI_GPIO_1_DEVICE_ID);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("Error: XGpio_initialize failed");
+		return -XST_FAILURE;
+	}
+
+	XGpio_SetDataDirection(&reset_gpio_0, 1, 0x0);
+	XGpio_SetDataDirection(&reset_gpio_0, 2, 0x0);
 
 	return XST_SUCCESS;
 }
