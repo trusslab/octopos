@@ -162,6 +162,30 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
 		inform_shell_of_termination(runtime_proc_id);
 		SYSCALL_SET_ONE_RET(0)
+		/* FIXME: This is a known issue that a Runtime after reset will receive stale 
+		 * syscall ret. It is due to Runtime mailbox not flushed after a reset. 
+		 *
+		 * This issue need more investigation. If PMU trigger the reset module, the mailbox
+		 * is properly reset. However, if the PL trigger the reset module using the exactly 
+		 * same GPIO output pattern, the mailbox is not reset. The peripheral reset lines 
+		 * are wired exactly the same. 
+		 *
+		 * This bug will cause a Runtime's syscall response ring buffer out of sync after a
+		 * reset. See the timing diagram below for details. 
+		 *
+		 * |------|---|-------------|-|-------------
+		 * ^ Runtime inform_shell_of_termination
+		 *        ^ OS resets the runtime
+		 *            ^OS sends syscall ret back to Runtime
+		 *                          ^ Runtime has been reset, and it missed the syscall ret
+		 *                            ^ If PMU resets, the mailbox has been reset, so no 
+		 *                              stale syscall ret will be delivered.
+		 *                            ^ If OS resets, the stale syscall ret gets delivered,
+		 *                              and causes the srq ring buffer to be out of sync.
+		 */
+#ifdef ARCH_SEC_HW
+		*no_response = true;
+#endif
 		break;
 	}
 	case SYSCALL_INFORM_OS_OF_PAUSE: {

@@ -150,7 +150,6 @@ static int read_syscall_response(uint8_t *buf)
 	srq_head = (srq_head + 1) % srq_size;
 
 	sem_post(&srq_sem);
-
 	return 0;
 }
 
@@ -449,6 +448,8 @@ static int read_from_shell(char *data, int *data_size)
 #endif
 	return (int) ret0;
 }
+
+
 
 static uint32_t open_file(char *filename, uint32_t mode)
 {
