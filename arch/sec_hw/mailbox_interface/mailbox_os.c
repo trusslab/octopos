@@ -1,7 +1,3 @@
-/*
- * Based on https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841941/Zynq+UltraScale+MPSoC+-+IPI+Messaging+Example
- */
-
 /* OctopOS OS mailbox interface */
 #ifdef ARCH_SEC_HW_OS
 #include <stdio.h>
@@ -11,7 +7,6 @@
 #include "arch/octopos_xmbox.h"
 #include "xparameters.h"
 #include "xil_exception.h"
-#include "xipipsu.h"
 #include "xintc.h"
 #include "xgpio.h"
 
@@ -26,14 +21,9 @@
 #include "octopos/mailbox.h"
 #include "os/scheduler.h"
 
-#define RESP_AND_MSG_NUM_OFFSET		0x1U
-#define IPI_HEADER_OFFSET			0x0U
-#define IPI_HEADER					0x1E0000 /* 1E - Target Module ID */
-
-XIpiPsu 		ipi_pmu_inst;
 XIntc			intc;
 
-OCTOPOS_XMbox			Mbox_output, 
+OCTOPOS_XMbox	Mbox_output, 
 				Mbox_keyboard, 
 				Mbox_OS1, 
 				Mbox_OS2, 
@@ -425,22 +415,6 @@ static void handle_change_queue_interrupts(void* callback_ref)
 	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[queue_id]);
 }
 
-void Rpu_IpiHandler(XIpiPsu *IpiInstPtr)
-{
-	u32 RegVal;
-
-	/* Check if the IPI is from the expected source i.e., PMU channel-1 */
-	RegVal = Xil_In32(0xFF310010U);
-	if((RegVal & (u32)XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK) == 0U) {
-		xil_printf("RPU: Received IPI from invalid source, ISR:%x\r\n", RegVal);
-		return;
-	} else {
-		/* Valid IPI. Clear the appropriate bit in the respective ISR */
-		Xil_Out32(0xFF310010U, (RegVal & (u32)XPAR_XIPIPS_TARGET_PSU_PMU_0_CH1_MASK));
-
-	}
-}
-
 static void handle_mailbox_interrupts(void* callback_ref) 
 {
 	u32         mask;
@@ -557,7 +531,6 @@ int init_os_mailbox(void)
 	OCTOPOS_XMbox_Config	*ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4,
 					*ConfigPtr_runtime1, *ConfigPtr_runtime2, *Config_storage_cmd_in,
 					*Config_storage_cmd_out, *Config_storage_data_in, *Config_storage_data_out;
-	XIpiPsu_Config	*ipi_psu_config;
 
 	init_platform();
 	OMboxIds_init();
@@ -920,28 +893,7 @@ int init_os_mailbox(void)
 	/* Initialize keyboard circular buffer */
 	cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
 
-	/* Initialize PMU IPI */
-	u32 pmu_ipi_status = XST_FAILURE;
-
-	ipi_psu_config = XIpiPsu_LookupConfig(XPAR_XIPIPSU_0_DEVICE_ID);
-	if (ipi_psu_config == NULL) {
-		_SEC_HW_ERROR("RPU: Error: Ipi Init failed");
-		return -XST_FAILURE;
-	}
-
-	pmu_ipi_status = XIpiPsu_CfgInitialize(
-			&ipi_pmu_inst,
-			ipi_psu_config,
-			ipi_psu_config->BaseAddress);
-
-	if (pmu_ipi_status != XST_SUCCESS) {
-		_SEC_HW_ERROR("RPU: Error: IPI Config failed");
-		return -XST_FAILURE;
-	}
-
-	/* Enable IPI from PMU to RPU_0 */
-	Xil_Out32(IPI_TRIGGER_REG, 0xF0000U);
-
+	/* Initialize GPIO. This is an ad-hoc impl of secure reset */
 	Status = XGpio_Initialize(&reset_gpio_0, XPAR_AXI_GPIO_1_DEVICE_ID);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("Error: XGpio_initialize failed");
