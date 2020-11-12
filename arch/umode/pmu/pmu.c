@@ -271,7 +271,7 @@ static int start_untrusted_proc(void)
 static int start_socket_server_proc(void)
 {
 	char *const args[] = {(char *) "socket_server", NULL};
-	char path[] = "./applications/socket_client/socket_server";
+	char path[] = "./applications/bank_client/bank_server";
 	return start_proc(path, args, fd_socket_server_log, 0, 0, 0);
 }
 

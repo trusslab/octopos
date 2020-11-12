@@ -146,10 +146,11 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 	mark_queue_unavailable(Q_NETWORK_DATA_IN);
 	mark_queue_unavailable(Q_NETWORK_DATA_OUT);
 
+	/* FIXME: 100 is hard-coded. */
 	mailbox_delegate_queue_access(Q_NETWORK_DATA_IN, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
+			100);
 	mailbox_delegate_queue_access(Q_NETWORK_DATA_OUT, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
+			100);
 
 	SYSCALL_SET_ONE_RET((uint32_t) 0)
 }

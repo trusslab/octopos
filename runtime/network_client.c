@@ -103,6 +103,11 @@ int yield_network_access(void)
 
 	net_stop_receive();
 
+	/* FIXME: we should have a bounded wait here in case the network service
+	 * does not read all messages off the queue.
+	 * Yielding the queue resets the queues therefore there is no concern
+	 * about the leaking of the leftover messages.
+	 */
 	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);

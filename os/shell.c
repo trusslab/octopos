@@ -224,6 +224,8 @@ void shell_process_input(char buf)
 			memset(line, 0, MAX_LINE_SIZE);
 		}
 		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT) {
+			/* Don't send the \n or \r to the app. */
+			num_chars--;
 			process_app_input(foreground_app, (uint8_t *) line, num_chars);
 			memset(line, 0, MAX_LINE_SIZE);
 		}
@@ -264,6 +266,7 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		output_printf("octopos$> ");
 	}
 #ifdef ARCH_SEC_HW
+	/* FIXME: consolidate with umode's use of reset_proc in syscall.c */
 	request_pmu_to_reset(runtime_proc_id);
 #endif
 
