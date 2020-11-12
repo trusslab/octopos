@@ -10,6 +10,7 @@ void read_from_storage_data_queue(uint8_t *buf);
 void write_to_storage_data_queue(uint8_t *buf);
 int send_cmd_to_network(uint8_t *buf);
 int send_cmd_to_untrusted(uint8_t *buf);
+int send_cmd_to_bluetooth(uint8_t *buf);
 int is_queue_available(uint8_t queue_id);
 void wait_for_queue_availability(uint8_t queue_id);
 void mark_queue_unavailable(uint8_t queue_id);

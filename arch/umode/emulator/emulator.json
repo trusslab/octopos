@@ -67,6 +67,11 @@
 	   ]
 	},{
 	   "shell_command":[
+		"arch/umode/emulator/log_view -b",
+		"exit"
+	   ]
+	},{
+	   "shell_command":[
 		"sudo arch/umode/pmu/pmu"
 	   ]
 	}

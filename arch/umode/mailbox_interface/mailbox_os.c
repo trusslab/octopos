@@ -206,6 +206,26 @@ int send_cmd_to_untrusted(uint8_t *buf)
 
 	return 0;
 }
+
+int send_cmd_to_bluetooth(uint8_t *buf)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = Q_BLUETOOTH_CMD_IN;
+
+	sem_wait(&interrupts[Q_BLUETOOTH_CMD_IN]);
+	write(fd_out, opcode, 2);
+	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = Q_BLUETOOTH_CMD_OUT;
+	sem_wait(&interrupts[Q_BLUETOOTH_CMD_OUT]);
+	write(fd_out, opcode, 2), 
+	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
+
+	return 0;
+}
 #endif /* ROLE_OS */
 
 /* Only to be used for queues that OS writes to */
@@ -321,12 +341,14 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_post(&availables[Q_KEYBOARD]);
 				break;
 			case Q_SERIAL_OUT:
-				sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
+				sem_init(&interrupts[Q_SERIAL_OUT], 0,
+					 MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_SERIAL_OUT]);
 				break;
 #endif
 			case Q_STORAGE_CMD_IN:
-				sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
+				sem_init(&interrupts[Q_STORAGE_CMD_IN], 0,
+					 MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_STORAGE_CMD_IN]);
 				break;
 			case Q_STORAGE_CMD_OUT:
@@ -335,7 +357,8 @@ static void *handle_mailbox_interrupts(void *data)
 				break;
 #ifdef ROLE_OS
 			case Q_STORAGE_DATA_IN:
-				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+				sem_init(&interrupts[Q_STORAGE_DATA_IN], 0,
+					 MAILBOX_QUEUE_SIZE_LARGE);
 				sem_post(&availables[Q_STORAGE_DATA_IN]);
 				break;
 #endif
@@ -345,28 +368,46 @@ static void *handle_mailbox_interrupts(void *data)
 				break;
 #ifdef ROLE_OS
 			case Q_NETWORK_DATA_IN:
-				sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+				sem_init(&interrupts[Q_NETWORK_DATA_IN], 0,
+					 MAILBOX_QUEUE_SIZE_LARGE);
 				sem_post(&availables[Q_NETWORK_DATA_IN]);
 				break;
 			case Q_NETWORK_DATA_OUT:
 				sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_NETWORK_DATA_OUT]);
 				break;
-			case Q_SENSOR:
-				sem_init(&interrupts[Q_SENSOR], 0, 0);
-				sem_post(&availables[Q_SENSOR]);
+			case Q_BLUETOOTH_CMD_IN:
+				sem_init(&interrupts[Q_BLUETOOTH_CMD_IN], 0,
+					 MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_BLUETOOTH_CMD_IN]);
+				break;
+			case Q_BLUETOOTH_CMD_OUT:
+				sem_init(&interrupts[Q_BLUETOOTH_CMD_OUT], 0, 0);
+				sem_post(&availables[Q_BLUETOOTH_CMD_OUT]);
+				break;
+			case Q_BLUETOOTH_DATA_IN:
+				sem_init(&interrupts[Q_BLUETOOTH_DATA_IN], 0,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+				sem_post(&availables[Q_BLUETOOTH_DATA_IN]);
+				break;
+			case Q_BLUETOOTH_DATA_OUT:
+				sem_init(&interrupts[Q_BLUETOOTH_DATA_OUT], 0, 0);
+				sem_post(&availables[Q_BLUETOOTH_DATA_OUT]);
 				break;
 			case Q_RUNTIME1:
-				sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
+				sem_init(&interrupts[Q_RUNTIME1], 0,
+					 MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_RUNTIME1]);
 				break;
 			case Q_RUNTIME2:
-				sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
+				sem_init(&interrupts[Q_RUNTIME2], 0,
+					 MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_RUNTIME2]);
 				break;
 #endif
 			case Q_TPM_IN:
-				sem_init(&interrupts[Q_TPM_IN], 0, MAILBOX_QUEUE_SIZE);
+				sem_init(&interrupts[Q_TPM_IN], 0,
+					 MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_TPM_IN]);
 				break;
 #ifdef ROLE_OS
@@ -376,7 +417,8 @@ static void *handle_mailbox_interrupts(void *data)
 				break;
 #endif
 			default:
-				printf("%s: Error: unexpected ownership change interrupt.\n", __func__);
+				printf("%s: Error: unexpected ownership change "
+				       "interrupt.\n", __func__);
 				break;
 			}
 		} else {
@@ -411,7 +453,10 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, 0);
-	sem_init(&interrupts[Q_SENSOR], 0, 0);
+	sem_init(&interrupts[Q_BLUETOOTH_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_BLUETOOTH_DATA_OUT], 0, 0);
+	sem_init(&interrupts[Q_BLUETOOTH_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_BLUETOOTH_CMD_OUT], 0, 0);
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
@@ -432,7 +477,10 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_NETWORK_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_IN], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_OUT], 0, 1);
-	sem_init(&availables[Q_SENSOR], 0, 1);
+	sem_init(&availables[Q_BLUETOOTH_DATA_IN], 0, 1);
+	sem_init(&availables[Q_BLUETOOTH_DATA_OUT], 0, 1);
+	sem_init(&availables[Q_BLUETOOTH_CMD_IN], 0, 1);
+	sem_init(&availables[Q_BLUETOOTH_CMD_OUT], 0, 1);
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);
 #endif

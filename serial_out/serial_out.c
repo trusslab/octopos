@@ -28,6 +28,16 @@ int main(int argc, char **argv)
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: serial_out init\n", __func__);
 
+	/* Need to make sure msgs are big enough so that we don't overflow
+	 * when processing incoming msgs and preparing outgoing ones.
+	 */
+	/* FIXME: find the smallest bound. 64 is conservative. */
+	if (MAILBOX_QUEUE_MSG_SIZE < 64) {
+		printf("Error: %s: MAILBOX_QUEUE_MSG_SIZE is too small (%d).\n",
+		       __func__, MAILBOX_QUEUE_MSG_SIZE);
+		return -1;
+	}
+
 	int ret = init_serial_out();
 	if (ret)
 		return ret;

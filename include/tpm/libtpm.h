@@ -6,8 +6,10 @@
 #include <tss2/tss2_rc.h>
 #include <stdint.h>
 
+/* FIXME: is this the right file for all of these? */
 int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value);
-int quote_request(FAPI_CONTEXT *context, uint8_t *nonce, int slot,
-	uint8_t **signature, size_t *signature_size,
-	char** quote_info, char **pcr_event_log);
-void tpm_directly_extend(int slot, char *hash_buf);
+void tpm_directly_extend(int slot, uint8_t *hash_buf);
+int quote_request(FAPI_CONTEXT *context, uint8_t *nonce, uint8_t *pcr_slots,
+		  uint8_t num_pcr_slots, uint8_t **signature,
+		  size_t *signature_size, char** quote_info,
+		  char **pcr_event_log);

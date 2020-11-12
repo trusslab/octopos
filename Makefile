@@ -1,5 +1,5 @@
-DIRS := applications arch keyboard os runtime serial_out storage network tpm bootloader installer
-DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network util/network tpm bootloader util/tpm installer
+DIRS := applications arch keyboard os runtime serial_out storage network bluetooth tpm bootloader installer
+DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network tpm bootloader util/tpm installer
 
 EXTERNAL_DIR := ./external
 
@@ -11,7 +11,7 @@ umode:
 	for dir in $(DIRS); do \
 		$(MAKE) umode -C $$dir; \
 	done
-	./installer/installer > /dev/null 2>&1
+	./installer/installer
 	if [ ! -f $(UNTRUSTED_ROOT_FS_PARTITION_PATH) ]; then \
 		cp $(UNTRUSTED_ROOT_FS_SRC_PATH) $(UNTRUSTED_ROOT_FS_PARTITION_PATH); \
 	fi 

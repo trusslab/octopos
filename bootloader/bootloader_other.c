@@ -26,8 +26,8 @@ pthread_t mailbox_thread;
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t availables[NUM_QUEUES + 1];
 
-int keyboard = 0, serial_out = 0, network = 0,
-    runtime1 = 0, runtime2 = 0, untrusted = 0;
+int keyboard = 0, serial_out = 0, network = 0, bluetooth = 0, runtime1 = 0,
+    runtime2 = 0, untrusted = 0;
 
 static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
@@ -66,7 +66,9 @@ static void *handle_mailbox_interrupts(void *data)
 		read(fd_intr, &interrupt, 1);
 
 		/* FIXME: check the TPM interrupt logic */
-		if (interrupt == Q_STORAGE_DATA_OUT) {
+		if (interrupt == 0) {
+			/* ignore the timer interrupt */
+		} else if (interrupt == Q_STORAGE_DATA_OUT) {
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
 		} else if ((interrupt - NUM_QUEUES) == Q_STORAGE_DATA_OUT) {
 			sem_post(&availables[Q_STORAGE_DATA_OUT]);
@@ -146,6 +148,14 @@ int init_mailbox(void)
 		fd_out = open(FIFO_NETWORK_OUT, O_WRONLY);
 		fd_in = open(FIFO_NETWORK_IN, O_RDONLY);
 		fd_intr = open(FIFO_NETWORK_INTR, O_RDONLY);
+	} else if (bluetooth) {
+		mkfifo(FIFO_BLUETOOTH_OUT, 0666);
+		mkfifo(FIFO_BLUETOOTH_IN, 0666);
+		mkfifo(FIFO_BLUETOOTH_INTR, 0666);
+
+		fd_out = open(FIFO_BLUETOOTH_OUT, O_WRONLY);
+		fd_in = open(FIFO_BLUETOOTH_IN, O_RDONLY);
+		fd_intr = open(FIFO_BLUETOOTH_INTR, O_RDONLY);
 	} else if (runtime1) {
 		mkfifo(FIFO_RUNTIME1_OUT, 0666);
 		mkfifo(FIFO_RUNTIME1_IN, 0666);
@@ -203,9 +213,12 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		serial_out = 1;
 	} else if (!strcmp(filename, "network")) {
 		network = 1;
+	} else if (!strcmp(filename, "bluetooth")) {
+		bluetooth = 1;
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {
-			printf("Error: %s: invalid number of args for runtime\n", __func__);
+			printf("Error: %s: invalid number of args for runtime\n",
+			       __func__);
 			exit(-1);
 		}
 		if (!strcmp(argv[0], "1")) {
@@ -213,7 +226,8 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		} else if (!strcmp(argv[0], "2")) {
 			runtime2 = 1;
 		} else {
-			printf("Error: %s: invalid runtime ID (%s)\n", __func__, argv[0]);
+			printf("Error: %s: invalid runtime ID (%s)\n", __func__,
+			       argv[0]);
 			exit(-1);
 		}
 	} else if (!strcmp(filename, "linux")) {
@@ -272,6 +286,7 @@ repeat:
 		read_from_storage_data_queue(buf);
 		
 		fseek(copy_filep, offset, SEEK_SET);
+		/* FIXME: check the return val from fwrite */
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
 
 		offset += STORAGE_BLOCK_SIZE;
@@ -288,7 +303,7 @@ repeat:
 void send_measurement_to_tpm(char *path)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	char hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
+	uint8_t hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
 	int i;
 
 	if (untrusted)
@@ -299,16 +314,13 @@ void send_measurement_to_tpm(char *path)
 	hash_file(path, hash_buf);
 	buf[0] = TPM_OP_EXTEND;
 
-	/* Note that we assume that two messages are needed to send the hash.
+	/* Note that we assume that one message is needed to send the hash.
 	 * See include/tpm/hash.h
 	 */
-	memcpy(buf + 1, hash_buf, MAILBOX_QUEUE_MSG_SIZE - 1);
-	send_message_to_tpm(buf);
-	memcpy(buf, hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1,
-	       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
+	memcpy(buf + 1, hash_buf, TPM_EXTEND_HASH_SIZE);
 	send_message_to_tpm(buf);
 
-	/* Wait for TPM to read the messages */
+	/* Wait for TPM to read the message(s). */
 	for (i = 0; i < TPM_EXTEND_HASH_NUM_MAILBOX_MSGS; i++)
 		sem_wait(&interrupts[Q_TPM_IN]);
 

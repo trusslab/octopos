@@ -236,7 +236,7 @@ int octopos_open_socket(__be32 daddr, __be32 saddr, __be16 dport, __be16 sport)
 	}
 	
 	if (!octopos_net_access) {
-		request_network_access(200);
+		request_network_access(200, 100, NULL, NULL, NULL);
 		octopos_net_access = true;
 	}
 

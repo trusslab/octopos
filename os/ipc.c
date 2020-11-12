@@ -58,7 +58,8 @@ void ipc_receive_data(struct app *receiver)
 }
 
 int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
-		      uint8_t runtime_proc_id, int count, bool *no_response)
+		      uint8_t runtime_proc_id, limit_t limit, timeout_t timeout,
+		      bool *no_response)
 {
 	uint8_t target_proc_id = get_runtime_proc_id(target_runtime_queue_id);
 	*no_response = false;
@@ -78,10 +79,11 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 		mark_queue_unavailable(target_runtime_queue_id);
 		mark_queue_unavailable(runtime_queue_id);
 
-		mailbox_delegate_queue_access(target_runtime_queue_id, runtime_proc_id, 
-					      (limit_t) count, MAILBOX_DEFAULT_TIMEOUT_VAL);
-		mailbox_delegate_queue_access(runtime_queue_id, target_runtime_proc->id,
-					      (limit_t) count, MAILBOX_DEFAULT_TIMEOUT_VAL);
+		mailbox_delegate_queue_access(target_runtime_queue_id,
+					      runtime_proc_id, limit, timeout);
+		mailbox_delegate_queue_access(runtime_queue_id,
+					      target_runtime_proc->id, limit,
+					      timeout);
 		
 		target_runtime_proc->pending_secure_ipc_request = 0;
 		*no_response = true;

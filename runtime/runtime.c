@@ -8,6 +8,7 @@
 #endif
 #include <unistd.h>
 #include <stdint.h>
+#include <time.h>
 
 #ifdef ARCH_UMODE
 #include <dlfcn.h>
@@ -35,9 +36,11 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
+#include <octopos/io.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <octopos/tpm.h>
+#include <octopos/bluetooth.h>
 #include <tpm/hash.h>
 #include <arch/mailbox_runtime.h>
 
@@ -65,6 +68,8 @@ int p_runtime = 0;
 int q_runtime = 0;
 int q_os = 0;
 
+bool still_running = true;
+
 uint8_t **syscall_resp_queue;
 int srq_size;
 int srq_msg_size;
@@ -72,6 +77,14 @@ int srq_head;
 int srq_tail;
 int srq_counter;
 sem_t srq_sem;
+
+limit_t queue_limits[NUM_QUEUES + 1];
+timeout_t queue_timeouts[NUM_QUEUES + 1];
+queue_update_callback_t queue_update_callbacks[NUM_QUEUES + 1];
+
+bool has_secure_keyboard_access = false;
+bool has_secure_serial_out_access = false;
+bool has_secure_bluetooth_access = false;
 
 #ifdef ARCH_SEC_HW
 extern sem_t interrupt_change;
@@ -112,6 +125,9 @@ _Bool async_syscall_mode = FALSE;
 	data = &buf[2];
 
 int change_queue = 0;
+
+bool secure_ipc_mode = false;
+static uint8_t secure_ipc_target_queue = 0;
 
 unsigned int net_debug = 0;
 pthread_t tcp_threads[2];
@@ -192,6 +208,130 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 		*no_response = true;
 	}
 #endif
+}
+
+static void reset_keyboard_queue_trackers(void)
+{
+	/* FIXME: redundant when called from yield_secure_keyboard() */
+	has_secure_keyboard_access = false;
+
+	queue_limits[Q_KEYBOARD] = 0;
+	queue_timeouts[Q_KEYBOARD] = 0;
+	queue_update_callbacks[Q_KEYBOARD] = NULL;
+}
+
+static void reset_serial_out_queue_trackers(void)
+{
+	/* FIXME: redundant when called from yield_secure_serial_out() */
+	has_secure_serial_out_access = false;
+
+	queue_limits[Q_SERIAL_OUT] = 0;
+	queue_timeouts[Q_SERIAL_OUT] = 0;
+	queue_update_callbacks[Q_SERIAL_OUT] = NULL;
+}
+
+static void reset_ipc_queue_trackers(void)
+{
+	/* FIXME: redundant when called from yield_secure_ipc() */
+	secure_ipc_mode = false;
+
+	queue_limits[secure_ipc_target_queue] = 0;
+	queue_timeouts[secure_ipc_target_queue] = 0;
+	queue_update_callbacks[secure_ipc_target_queue] = NULL;
+}
+
+static void reset_bluetooth_queues_trackers(void)
+{
+	/* FIXME: redundant when called from yield_secure_bluetooth_access() */
+	has_secure_bluetooth_access = false;
+
+	queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+	queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+	queue_update_callbacks[Q_BLUETOOTH_CMD_IN] = NULL;
+
+	queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+	queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+	queue_update_callbacks[Q_BLUETOOTH_CMD_OUT] = NULL;
+
+	queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+	queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+	queue_update_callbacks[Q_BLUETOOTH_DATA_IN] = NULL;
+
+	queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+	queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+	queue_update_callbacks[Q_BLUETOOTH_DATA_OUT] = NULL;
+}
+
+static void queue_expired(uint8_t queue_id)
+{
+	if (queue_id == Q_KEYBOARD)
+		reset_keyboard_queue_trackers();
+	else if (queue_id == Q_SERIAL_OUT)
+		reset_serial_out_queue_trackers();
+	else if (queue_id == secure_ipc_target_queue)
+		reset_ipc_queue_trackers();
+	else if (queue_id == Q_STORAGE_CMD_IN ||
+		 queue_id == Q_STORAGE_CMD_OUT ||
+		 queue_id == Q_STORAGE_DATA_IN ||
+		 queue_id == Q_STORAGE_DATA_OUT)
+		reset_storage_queues_trackers();
+	else if (queue_id == Q_NETWORK_DATA_IN ||
+		 queue_id == Q_NETWORK_DATA_OUT)
+		reset_network_queues_tracker();
+	else if (queue_id == Q_BLUETOOTH_CMD_IN ||
+		 queue_id == Q_BLUETOOTH_CMD_OUT ||
+		 queue_id == Q_BLUETOOTH_DATA_IN ||
+		 queue_id == Q_BLUETOOTH_DATA_OUT)
+		reset_bluetooth_queues_trackers();
+	else
+		printf("Error: %s: invalid queue_id (%d)\n", __func__, queue_id);
+}
+
+void report_queue_usage(uint8_t queue_id)
+{
+	int check_expire = 0;
+
+	if (queue_limits[queue_id]) {
+		queue_limits[queue_id]--;
+		check_expire = 1;
+	}
+
+	if (queue_update_callbacks[queue_id]) {
+		(*queue_update_callbacks[queue_id])(queue_id,
+						    queue_limits[queue_id],
+						    queue_timeouts[queue_id],
+						    LIMIT_UPDATE);
+	}
+
+	if (check_expire && (queue_limits[queue_id] == 0))
+		queue_expired(queue_id);
+}
+
+void timer_tick(void)
+{
+	int i, check_expire;
+
+	for (i = 1; i < (NUM_QUEUES + 1); i++) {
+		check_expire = 0;
+
+		if (queue_timeouts[i]) {
+			queue_timeouts[i]--;
+			check_expire = 1;
+		}
+
+		if (queue_update_callbacks[i]) {
+			(*queue_update_callbacks[i])(i, queue_limits[i],
+						     queue_timeouts[i],
+						     TIMEOUT_UPDATE);
+		}
+		
+		/* FIXME: this can be a little late as the queue might
+		 * have expired a little bit earlier due to the error
+		 * margin in the mailbox timeouts.
+		 */
+		if (check_expire && (queue_timeouts[i] == 0))
+			queue_expired(i);
+	}
 }
 
 #ifdef ARCH_UMODE
@@ -308,81 +448,214 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
-static int request_secure_keyboard(limit_t count)
+int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 {
+	uint8_t pcr_val[TPM_EXTEND_HASH_SIZE];
+	int ret;
+
+	ret = read_tpm_pcr_for_proc(proc_id, pcr_val);
+	if (ret) {
+		printf("Error: %s: read_tpm_pcr_for_proc failed\n", __func__);
+		return ret;
+	}
+
+	ret = memcmp(pcr_val, expected_pcr, TPM_EXTEND_HASH_SIZE);
+	if (ret) {
+		printf("Error: %s: pcr val doesn't match the expected val\n",
+		       __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	return 0;
+}
+
+
+static int request_secure_keyboard(limit_t limit, timeout_t timeout,
+				   queue_update_callback_t callback,
+				   uint8_t *expected_pcr)
+{
+	int ret;
+
+	if (has_secure_keyboard_access) {
+		printf("Error: %s: already has access to secure keyboard.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
 	reset_queue_sync(Q_KEYBOARD, 0);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) limit,
+			     (uint32_t) timeout)
 
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
 
-	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
-						     (limit_t) count);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
+	if (!ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
 #else
-		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+		printf("%s: Error: failed to attest secure keyboard access\n",
+		       __func__);
 #endif
 		return ERR_FAULT;
 	}
+
+	/* Note: we set the limit/timeout values right after attestation and
+	 * before we call check_proc_pcr(). This is because that call issues a
+	 * syscall, which might take an arbitrary amount of time.
+	 */
+	queue_limits[Q_KEYBOARD] = limit;
+	queue_timeouts[Q_KEYBOARD] = timeout;
+
+	if (expected_pcr) {
+		ret = check_proc_pcr(P_KEYBOARD, expected_pcr);
+		if (ret) {
+			printf("%s: Error: unexpected PCR\n", __func__);
+			mailbox_yield_to_previous_owner(Q_KEYBOARD);
+			
+			queue_limits[Q_KEYBOARD] = 0;
+			queue_timeouts[Q_KEYBOARD] = 0;
+			return ERR_UNEXPECTED;
+		}
+	}
+
+	queue_update_callbacks[Q_KEYBOARD] = callback;
+
+	has_secure_keyboard_access = true;
 
 	return 0;
 }
 
 static int yield_secure_keyboard(void)
 {
+	if (!has_secure_keyboard_access) {
+		printf("Error: %s: does not have access to secure keyboard.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
+	has_secure_keyboard_access = false;
+
 	mailbox_yield_to_previous_owner(Q_KEYBOARD);
+
+	reset_keyboard_queue_trackers();
 
 	return 0;
 }
 
-static int request_secure_serial_out(limit_t count)
+static int request_secure_serial_out(limit_t limit, timeout_t timeout,
+				     queue_update_callback_t callback,
+				     uint8_t *expected_pcr)
 {
+	int ret;
+
+	if (has_secure_serial_out_access) {
+		printf("Error: %s: already has access to secure serial_out.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
 	reset_queue_sync(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) limit,
+			     (uint32_t) timeout);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
 
-	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
-						     (limit_t) count);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
+	if (!ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
 #else
-		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+		printf("%s: Error: failed to attest secure keyboard access\n",
+		       __func__);
 #endif
 		return ERR_FAULT;
 	}
+
+	/* Note: we set the limit/timeout values right after attestation and
+	 * before we call check_proc_pcr(). This is because that call issues a
+	 * syscall, which might take an arbitrary amount of time.
+	 */
+	queue_limits[Q_SERIAL_OUT] = limit;
+	queue_timeouts[Q_SERIAL_OUT] = timeout;
+
+	if (expected_pcr) {
+		ret = check_proc_pcr(P_SERIAL_OUT, expected_pcr);
+		if (ret) {
+			printf("%s: Error: unexpected PCR\n", __func__);
+			wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
+			mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
+
+			queue_limits[Q_SERIAL_OUT] = 0;
+			queue_timeouts[Q_SERIAL_OUT] = 0;
+			return ERR_UNEXPECTED;
+		}
+	}
+
+	has_secure_serial_out_access = true;
+
+	queue_update_callbacks[Q_SERIAL_OUT] = callback;
 
 	return 0;
 }
 
 static int yield_secure_serial_out(void)
 {
+	if (!has_secure_serial_out_access) {
+		printf("Error: %s: does not have access to secure serial_out.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
+	has_secure_serial_out_access = false;
+
 	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
 	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
 
+	reset_serial_out_queue_trackers();
+
 	return 0;
 }
 
-static void write_to_secure_serial_out(char *buf)
+static int write_to_secure_serial_out(char *buf)
 {
+	if (!has_secure_serial_out_access) {
+		printf("Error: %s: does not have access to secure serial_out.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
 	runtime_send_msg_on_queue((uint8_t *) buf, Q_SERIAL_OUT);
+
+	report_queue_usage(Q_SERIAL_OUT);
+
+	return 0;
 }
 
-static void read_char_from_secure_keyboard(char *buf)
+static int read_char_from_secure_keyboard(char *buf)
 {
 	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
+
+	if (!has_secure_keyboard_access) {
+		printf("Error: %s: does not have access to secure keyboard.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
 	runtime_recv_msg_from_queue(input_buf, Q_KEYBOARD);
+
+	report_queue_usage(Q_KEYBOARD);
+
 	*buf = (char) input_buf[0];
+
+	return 0;
 }
 
 static int inform_os_of_termination(void)
@@ -439,7 +712,8 @@ static int read_from_shell(char *data, int *data_size)
 
 static uint32_t open_file(char *filename, uint32_t mode)
 {
-	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
+	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename,
+				 strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return ret0;
@@ -461,11 +735,12 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	return (int) ret0;
 }
 
-static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
+static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block,
+			     int num_blocks)
 {
 	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_WRITE_FILE_BLOCKS, fd,
-				   (uint32_t) start_block, (uint32_t) num_blocks)
+			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
@@ -473,16 +748,18 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 	uint8_t queue_id = (uint8_t) ret0;
 
 	for (int i = 0; i < num_blocks; i++)
-		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
+		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE),
+						queue_id);
 
 	return num_blocks;
 }
 
-static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
+static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block,
+			    int num_blocks)
 {
 	reset_queue_sync(Q_STORAGE_DATA_OUT, 0);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FILE_BLOCKS, fd,
-				   (uint32_t) start_block, (uint32_t) num_blocks)
+			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
@@ -491,9 +768,18 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num
 	uint8_t queue_id = (uint8_t) ret0;
 
 	for (int i = 0; i < num_blocks; i++)
-		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
+		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE),
+						  queue_id);
 
 	return num_blocks;
+}
+
+static uint32_t get_file_size(uint32_t fd)
+{
+	SYSCALL_SET_ONE_ARG(SYSCALL_GET_FILE_SIZE, fd)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0;
 }
 
 static int close_file(uint32_t fd)
@@ -506,7 +792,8 @@ static int close_file(uint32_t fd)
 
 static int remove_file(char *filename)
 {
-	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_REMOVE_FILE, filename, strlen(filename))
+	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_REMOVE_FILE, filename,
+				   strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return (int) ret0;
@@ -530,7 +817,8 @@ static int set_up_context(void *addr, uint32_t size)
 	context_size = size;
 	context_set = true;
 	/* Now, let's retrieve the context. */
-	int ret = request_secure_storage_access(200, 100);
+	int ret = request_secure_storage_access(100, 200,
+				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
@@ -556,14 +844,14 @@ static int set_up_context(void *addr, uint32_t size)
 	return 0;
 }
 
-bool secure_ipc_mode = false;
-static uint8_t secure_ipc_target_queue = 0;
-
-static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
+static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
+			      timeout_t timeout, queue_update_callback_t callback)
 {
 	bool no_response;
 	reset_queue_sync(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_IPC, target_runtime_queue_id, count)
+	SYSCALL_SET_THREE_ARGS(SYSCALL_REQUEST_SECURE_IPC,
+			       target_runtime_queue_id, (uint32_t) limit,
+			       (uint32_t) timeout)
 	change_queue = target_runtime_queue_id;
 	issue_syscall_response_or_change(buf, &no_response);
 	if (!no_response) {
@@ -574,9 +862,10 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
-						     (limit_t) count);
+						     limit, timeout);
 	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure ipc send queue access\n", __func__);
+		printf("%s: Error: failed to attest secure ipc send queue "
+		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
@@ -591,6 +880,16 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
 	}*/
 #endif
 
+
+	queue_limits[target_runtime_queue_id] = limit;
+	queue_timeouts[target_runtime_queue_id] = timeout;
+
+	/* FIXME: check PCR. Need the proc_id for that. It needs to be done
+	 * after setting limit/timeout. See comments in other similar funcs.
+	 */	
+
+	queue_update_callbacks[target_runtime_queue_id] = callback;
+
 	secure_ipc_mode = true;
 	secure_ipc_target_queue = target_runtime_queue_id;
 
@@ -600,12 +899,14 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
 static int yield_secure_ipc(void)
 {
 	uint8_t qid = secure_ipc_target_queue;
-	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
 
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
 	mailbox_yield_to_previous_owner(qid);
+	
+	reset_ipc_queue_trackers();
+	secure_ipc_target_queue = 0;
 
 #ifdef ARCH_SEC_HW
 	/* OctopOS mailbox only allows the current owner
@@ -636,6 +937,8 @@ static int send_msg_on_secure_ipc(char *msg, int size)
 	IPC_SET_ZERO_ARGS_DATA(msg, size)
 	runtime_send_msg_on_queue(buf, secure_ipc_target_queue);
 
+	report_queue_usage(secure_ipc_target_queue);
+
 	return 0;
 }
 
@@ -660,6 +963,30 @@ static uint8_t get_runtime_proc_id(void)
 static uint8_t get_runtime_queue_id(void)
 {
 	return (uint8_t) q_runtime;
+}
+
+static void terminate_app(void)
+{
+	still_running = false;
+	inform_os_of_termination();
+
+	terminate_app_thread_arch();
+}
+
+/*
+ * func() should terminate on its own. We don't cancel it anywhere.
+ */
+static int schedule_func_execution(void *(*func)(void *), void *data)
+{
+	return schedule_func_execution_arch(func, data);
+}
+
+/* FIXME: use libsodim for cryptographically-secure randomness. */
+static uint32_t get_random_uint(void)
+{
+	srand(time(NULL));
+
+	return (uint32_t) rand();	
 }
 
 extern bool has_network_access;
@@ -757,6 +1084,243 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 	return _write(sock, buf, len);
 }
 
+static int verify_bluetooth_service_state(uint8_t *device_name)
+{
+	BLUETOOTH_SET_ZERO_ARGS(IO_OP_QUERY_STATE)
+
+	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
+	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
+
+	BLUETOOTH_GET_ONE_RET_DATA
+	if (ret0) {
+		printf("Error: %s: received error from the bluetooth service "
+		       "(%d)\n", __func__, ret0);
+		return (int) ret0;
+	}
+
+	/* data[0] is bound. Must be 1.
+	 * data[1] is used. Must be 0.
+	 * &data[2] is the starting addr for the bound device name.
+	 */
+	if ((_size != (3 + BD_ADDR_LEN)) || (data[0] != 1) ||
+	    (data[1] != 0) || !memcmp(&data[2], device_name, BD_ADDR_LEN)) {
+		printf("Error: %s: bluetooth service state not verified.\n",
+		       __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	return 0;
+}
+
+static int request_secure_bluetooth_access(uint8_t *device_name,
+					   limit_t limit, timeout_t timeout,
+					   queue_update_callback_t callback,
+					   uint8_t *expected_pcr)
+{
+	int ret;
+
+	/* request access to the queues */
+	reset_queue_sync(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+	reset_queue_sync(Q_BLUETOOTH_CMD_OUT, 0);
+	reset_queue_sync(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	reset_queue_sync(Q_BLUETOOTH_DATA_OUT, 0);
+
+	SYSCALL_SET_TWO_ARGS_DATA(SYSCALL_REQUEST_BLUETOOTH_ACCESS,
+				  (uint32_t) limit, (uint32_t) timeout,
+				  device_name, BD_ADDR_LEN)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int) ret0;
+
+	/* Verify mailbox state */
+	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_IN, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure bluetooth cmd write "
+		       "access\n", __func__);
+		return ERR_FAULT;
+	}
+
+	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_OUT, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure bluetooth cmd read "
+		       "access\n", __func__);
+		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+		return ERR_FAULT;
+	}
+
+	ret = mailbox_attest_queue_access(Q_BLUETOOTH_DATA_IN, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure bluetooth data write "
+		       "access\n", __func__);
+		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+		return ERR_FAULT;
+	}
+
+	ret = mailbox_attest_queue_access(Q_BLUETOOTH_DATA_OUT, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure bluetooth data read "
+		       "access\n", __func__);
+		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+		wait_until_empty(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+		return ERR_FAULT;
+	}
+
+#ifndef UNTRUSTED_DOMAIN
+	/* Note: we set the limit/timeout values right after attestation and
+	 * before we call check_proc_pcr(). This is because that call issues a
+	 * syscall, which might take an arbitrary amount of time.
+	 */
+	queue_limits[Q_BLUETOOTH_CMD_IN] = limit;
+	queue_timeouts[Q_BLUETOOTH_CMD_IN] = timeout;
+
+	queue_limits[Q_BLUETOOTH_CMD_OUT] = limit;
+	queue_timeouts[Q_BLUETOOTH_CMD_OUT] = timeout;
+
+	queue_limits[Q_BLUETOOTH_DATA_IN] = limit;
+	queue_timeouts[Q_BLUETOOTH_DATA_IN] = timeout;
+
+	queue_limits[Q_BLUETOOTH_DATA_OUT] = limit;
+	queue_timeouts[Q_BLUETOOTH_DATA_OUT] = timeout;
+
+	/* Verify TPM PCR val */
+	if (expected_pcr) {
+		ret = check_proc_pcr(P_BLUETOOTH, expected_pcr);
+		if (ret) {
+			/* FIXME: the next two error blocks are identical. */
+			/* FIXME: also, has a lot in common with the yield func.
+			 * (the same for other I/Os)
+			 */
+			printf("%s: Error: unexpected PCR\n", __func__);
+			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+			wait_until_empty(Q_BLUETOOTH_DATA_IN,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+			return ERR_UNEXPECTED;
+		}
+	}
+
+	/* Verify bluetooth service state */
+	ret = verify_bluetooth_service_state(device_name);
+	if (ret) {
+		printf("Error: %s: invalid state sent from the bluetooth "
+		       "service.\n", __func__);
+			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+			wait_until_empty(Q_BLUETOOTH_DATA_IN,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+			return ret;
+	}
+
+	queue_update_callbacks[Q_BLUETOOTH_CMD_IN] = callback;
+	queue_update_callbacks[Q_BLUETOOTH_CMD_OUT] = callback;
+	queue_update_callbacks[Q_BLUETOOTH_DATA_IN] = callback;
+	queue_update_callbacks[Q_BLUETOOTH_DATA_OUT] = callback;
+#endif
+
+	has_secure_bluetooth_access = true;
+
+	return 0;
+}
+
+static int yield_secure_bluetooth_access(void)
+{
+	has_secure_bluetooth_access = false;
+
+	wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+#ifndef UNTRUSTED_DOMAIN
+	reset_bluetooth_queues_trackers();
+#endif
+
+	return 0;
+}
+
+int bluetooth_send_data(uint8_t *data, uint32_t len)
+{
+	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	struct btpacket *btp = (struct btpacket *) buf_large;
+
+	if (len > BTPACKET_FIXED_DATA_SIZE) {
+		printf("Error: %s: can't send more than %d bytes\n", __func__,
+		       BTPACKET_FIXED_DATA_SIZE);
+		return ERR_INVALID;
+	}
+
+	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	memcpy(btp->data, data, len);
+
+	/* the arg is the number of packets */
+	BLUETOOTH_SET_ONE_ARG(IO_OP_SEND_DATA, 1)
+
+	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
+	runtime_send_msg_on_queue_large(buf_large, Q_BLUETOOTH_DATA_IN);
+	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
+
+	BLUETOOTH_GET_ONE_RET
+	if (ret0) {
+		printf("Error: %s: received error from the bluetooth service "
+		       "(%d)\n", __func__, ret0);
+		return (int) ret0;
+	}
+
+	return 0;
+}
+
+int bluetooth_recv_data(uint8_t *data, uint32_t len)
+{
+	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	struct btpacket *btp = (struct btpacket *) buf_large;
+
+	if (len > BTPACKET_FIXED_DATA_SIZE) {
+		printf("Error: %s: can't receive more than %d bytes\n",
+		       __func__, BTPACKET_FIXED_DATA_SIZE);
+		return ERR_INVALID;
+	}
+
+	runtime_recv_msg_from_queue_large(buf_large, Q_BLUETOOTH_DATA_OUT);
+
+	memcpy(data, btp->data, len);
+
+	return 0;
+}
+
 #endif
 
 static int request_tpm_access(limit_t limit)
@@ -764,7 +1328,8 @@ static int request_tpm_access(limit_t limit)
 	reset_queue_sync(Q_TPM_IN, MAILBOX_QUEUE_SIZE);
 	reset_queue_sync(Q_TPM_OUT, 0);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_TPM_ACCESS, limit);
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_TPM_ACCESS, limit,
+			     MAILBOX_DEFAULT_TIMEOUT_VAL);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0) {
@@ -773,28 +1338,38 @@ static int request_tpm_access(limit_t limit)
 		return (int) ret0;
 	}
 
-	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, limit);
+	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, limit,
+						MAILBOX_DEFAULT_TIMEOUT_VAL);
 	if (!attest_ret) {
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+#else
 		printf("%s: Error: failed to attest TPM_IN queue\n", __func__);
+#endif
 		return ERR_FAULT;
 	}
 
-	attest_ret = mailbox_attest_queue_access(Q_TPM_OUT, limit);
+	attest_ret = mailbox_attest_queue_access(Q_TPM_OUT, limit,
+						MAILBOX_DEFAULT_TIMEOUT_VAL);
 	if (!attest_ret) {
 		mailbox_yield_to_previous_owner(Q_TPM_IN);
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+#else
 		printf("%s: Error: failed to attest TPM_OUT queue\n", __func__);
+#endif
 		return ERR_FAULT;
 	}
 
 	return 0;
 }
 
-int send_app_measurement_to_tpm(char *hash_buf)
+int send_app_measurement_to_tpm(uint8_t *hash_buf)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
 	
-	ret = request_tpm_access(2);
+	ret = request_tpm_access(TPM_EXTEND_HASH_NUM_MAILBOX_MSGS);
 	if (ret) {
 		printf("Error: %s: couldn't get access to TPM.\n", __func__);
 		return ret;
@@ -802,13 +1377,10 @@ int send_app_measurement_to_tpm(char *hash_buf)
 
 	buf[0] = TPM_OP_EXTEND;
 
-	/* Note that we assume that two messages are needed to send the hash.
+	/* Note that we assume that one message is needed to send the hash.
 	 * See include/tpm/hash.h
 	 */
-	memcpy(buf + 1, hash_buf, MAILBOX_QUEUE_MSG_SIZE - 1);
-	runtime_send_msg_on_queue(buf, Q_TPM_IN);
-	memcpy(buf, hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1,
-	       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
+	memcpy(buf + 1, hash_buf, TPM_EXTEND_HASH_SIZE);
 	runtime_send_msg_on_queue(buf, Q_TPM_IN);
 
 	/* We're not using the Q_TPM_OUT queue, so let's yield it. */
@@ -817,13 +1389,27 @@ int send_app_measurement_to_tpm(char *hash_buf)
 	return 0;
 }
 
-static int request_tpm_attestation_report(int slot, char* nonce, int nonce_size,
+static int request_tpm_attestation_report(uint8_t *pcr_slots,
+					  uint8_t num_pcr_slots, char* nonce,
 					  uint8_t **signature,
 					  uint32_t *sig_size, uint8_t **quote,
 					  uint32_t *quote_size)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
+
+	if (num_pcr_slots > 24) {
+		printf("Error: %s: invalid num_pcr_slots (%d)\n", __func__,
+		       num_pcr_slots);
+		return ERR_INVALID;
+	}
+
+	if ((num_pcr_slots + TPM_AT_NONCE_LENGTH) > (MAILBOX_QUEUE_MSG_SIZE - 2)) {
+		printf("Error: %s: content won't fit in a message (%d, %d, %d)\n",
+		       __func__, num_pcr_slots, TPM_AT_NONCE_LENGTH,
+		       MAILBOX_QUEUE_MSG_SIZE);
+		return ERR_INVALID;
+	}
 
 	/* FIXME: why 20? */
 	ret = request_tpm_access(20);
@@ -833,8 +1419,9 @@ static int request_tpm_attestation_report(int slot, char* nonce, int nonce_size,
 	}
 
 	buf[0] = TPM_OP_ATTEST;
-	buf[1] = slot;
-	memcpy(&buf[2], (uint8_t *) nonce, nonce_size);
+	buf[1] = num_pcr_slots;
+	memcpy(&buf[2], pcr_slots, num_pcr_slots);
+	memcpy(&buf[2 + num_pcr_slots], (uint8_t *) nonce, TPM_AT_NONCE_LENGTH);
 
 	runtime_send_msg_on_queue(buf, Q_TPM_IN);
 	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
@@ -899,8 +1486,46 @@ static int request_tpm_attestation_report(int slot, char* nonce, int nonce_size,
 	return 0;
 }
 
+int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	int ret;
+	uint8_t pcr_slot = PROC_PCR_SLOT(proc_id);
+
+	ret = request_tpm_access(1);
+	if (ret) {
+		printf("Error: %s: couldn't get access to TPM.\n", __func__);
+		return ret;
+	}
+
+	buf[0] = TPM_OP_READ_PCR;
+	buf[1] = pcr_slot;
+
+	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
+
+	if (buf[0] != TPM_REP_READ_PCR) {
+		printf("Error: %s: PCR read op failed.\n", __func__);
+		return ERR_FAULT;
+	}
+
+	memcpy(pcr_val, &buf[1], TPM_EXTEND_HASH_SIZE);
+
+	return 0;
+}
+
 static void load_application(char *msg)
 {
+	/* The bound is the length of load_buf minus one (for the null
+	 * terminator)
+	 */
+	size_t msg_str_len = strlen(msg);
+	if (msg_str_len > (MAILBOX_QUEUE_MSG_SIZE - 2)) {
+		printf("Error: %s: invalid msg string len (%lu).\n", __func__,
+		       msg_str_len);
+		return;
+	}
+
 	struct runtime_api api = {
 		.request_secure_keyboard = request_secure_keyboard,
 		.yield_secure_keyboard = yield_secure_keyboard,
@@ -915,6 +1540,7 @@ static void load_application(char *msg)
 		.read_from_file = read_from_file,
 		.write_file_blocks = write_file_blocks,
 		.read_file_blocks = read_file_blocks,
+		.get_file_size = get_file_size,
 		.close_file = close_file,
 		.remove_file = remove_file,
 		.set_up_secure_storage_key = set_up_secure_storage_key,
@@ -933,6 +1559,9 @@ static void load_application(char *msg)
 		.request_tpm_attestation_report = request_tpm_attestation_report,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
+		.terminate_app = terminate_app,
+		.schedule_func_execution = schedule_func_execution,
+		.get_random_uint = get_random_uint,
 #ifdef ARCH_UMODE
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
@@ -944,15 +1573,78 @@ static void load_application(char *msg)
 		.write_to_socket = write_to_socket,
 		.request_network_access = request_network_access,
 		.yield_network_access = yield_network_access,
+		.request_secure_bluetooth_access = request_secure_bluetooth_access,
+		.yield_secure_bluetooth_access = yield_secure_bluetooth_access,
+		.bluetooth_send_data = bluetooth_send_data,
+		.bluetooth_recv_data = bluetooth_recv_data,
 #endif
 	};
 
-	load_application_arch(msg, &api);
+	/* Retrieve app from FS */
+	uint32_t fd = open_file(msg, FILE_OPEN_MODE);
+	if (!fd) {
+		printf("Error: %s: couldn't retrieve app.\n", __func__);
+		return;
+	}
+
+	uint32_t file_size = get_file_size(fd);
+	if (!file_size) {
+		printf("Error: %s: couldn't retrieve file size.\n", __func__);
+		close_file(fd);
+		return;
+	}
+
+	int num_blocks = file_size / STORAGE_BLOCK_SIZE;
+	if (file_size % STORAGE_BLOCK_SIZE)
+		num_blocks++;
+
+	uint8_t *file_data = (uint8_t *) malloc(num_blocks * STORAGE_BLOCK_SIZE);
+	if (!file_data) {
+		printf("Error: %s: couldn't allocate memory.\n", __func__);
+		close_file(fd);
+		return;
+	}
+
+	int num_read_blocks = read_file_blocks(fd, file_data, 0, num_blocks);
+	if (num_read_blocks != num_blocks) {
+		printf("Error: %s: couldn't read all file blocks.\n", __func__);
+		close_file(fd);
+		return;
+	}
+
+	close_file(fd);
+
+	/* write to a local file */
+	char path[2 * MAILBOX_QUEUE_MSG_SIZE];
+	memset(path, 0x0, 2 * MAILBOX_QUEUE_MSG_SIZE);
+	/* FIXME: use a different path. */
+	strcpy(path, "./bootloader/");
+	strcat(path, msg);
+	strcat(path, ".so");
+
+	FILE *filep = fopen(path, "w");
+	if (!filep) {
+		printf("Error: %s: Couldn't open the file (%s).\n", __func__,
+		       path);
+		return;
+	}
+
+	fseek(filep, 0, SEEK_SET);
+	size_t write_ret = fwrite(file_data, sizeof(uint8_t),
+				  (size_t) file_size, filep);
+	if (write_ret != (size_t) file_size) {
+		printf("Error: %s: Couldn't write to local file (%lu).\n",
+		       __func__, write_ret);
+		return;
+	}
+
+	fclose(filep);
+
+	/* Finally, run the app. */
+	load_application_arch(path, &api);
 
 	return;
 }
-
-bool still_running = true;
 
 void *run_app(void *load_buf)
 {
@@ -1002,7 +1694,8 @@ void *store_context(void *data)
 #ifdef ARCH_SEC_HW
 	async_syscall_mode = true;
 #endif
-	int ret = request_secure_storage_access(200, 100);
+	int ret = request_secure_storage_access(100, 200,
+				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return NULL;
@@ -1053,9 +1746,19 @@ int main()
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 
+	/* Need to make sure msgs are big enough so that we don't overflow
+	 * when processing incoming msgs and preparing outgoing ones.
+	 */
+	/* FIXME: find the smallest bound. 64 is conservative. */
+	if (MAILBOX_QUEUE_MSG_SIZE < 64) {
+		printf("Error: %s: MAILBOX_QUEUE_MSG_SIZE is too small (%d).\n",
+		       __func__, MAILBOX_QUEUE_MSG_SIZE);
+		return -1;
+	}
+
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
-		exit(-1);
+		return -1;
 	}
 #ifdef ARCH_UMODE
 	if (argc != 2) {
@@ -1090,6 +1793,12 @@ int main()
 	srq_tail = 0;
 
 	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
+
+	for (int i = 0; i < (NUM_QUEUES + 1); i++) {
+		queue_limits[i] = 0;
+		queue_timeouts[i] = 0;
+		queue_update_callbacks[i] = NULL;
+	}
 
 #ifdef ARCH_UMODE
 	ret = net_stack_init();

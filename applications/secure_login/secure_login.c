@@ -13,6 +13,8 @@
 
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
+#define APPLICATION
+#include <octopos/mailbox.h>
 
 /* FIXME: how does the app know the size of the buf? */
 #ifndef ARCH_SEC_HW
@@ -46,13 +48,13 @@ void secure_login(struct runtime_api *api)
 
 	insecure_printf("Switching to secure mode now.\n");
 
-	ret = api->request_secure_keyboard(100);
+	ret = api->request_secure_keyboard(100, 100, NULL, NULL);
 	if (ret) {
 		printf("Error: could not get secure access to keyboard\n");
 		insecure_printf("Failed to switch.\n");
 		return;
 	}
-	ret = api->request_secure_serial_out(200);
+	ret = api->request_secure_serial_out(200, 100, NULL, NULL);
 	if (ret) {
 		api->yield_secure_keyboard();
 		printf("Error: could not get secure access to serial_out\n");
@@ -101,7 +103,9 @@ void secure_login(struct runtime_api *api)
 	for (i = 0; i < STORAGE_KEY_SIZE; i++)
 		secure_storage_key[i] = i;
 	api->set_up_secure_storage_key(secure_storage_key);
-	ret = api->request_secure_storage_access(200, 100);
+	ret = api->request_secure_storage_access(100, 200,
+						 MAILBOX_DEFAULT_TIMEOUT_VAL,
+						 NULL, NULL);
 	if (ret) {
 		printf("Error: could not get secure access to storage.\n");
 		insecure_printf("Error: could not get secure access to storage.\n");

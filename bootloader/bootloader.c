@@ -26,6 +26,16 @@ int main(int argc, char *argv[])
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: bootloader init\n", __func__);
 
+	/* Need to make sure msgs are big enough so that we don't overflow
+	 * when processing incoming msgs and preparing outgoing ones.
+	 */
+	/* FIXME: find the smallest bound. 64 is conservative. */
+	if (MAILBOX_QUEUE_MSG_SIZE < 64) {
+		printf("Error: %s: MAILBOX_QUEUE_MSG_SIZE is too small (%d).\n",
+		       __func__, MAILBOX_QUEUE_MSG_SIZE);
+		return -1;
+	}
+
 	if (argc < 2) {
 		fprintf(stderr, "Usage: ``bootloader <executable_name> [parameters]''.\n");
 		return -1;
@@ -34,6 +44,7 @@ int main(int argc, char *argv[])
 	char *name = argv[1];
 	char path[128];
 	memset(path, 0x0, 128);
+	/* FIXME: use a different path. */
 	strcpy(path, "./bootloader/");
 	strcat(path, name);
 	/* FIXME */

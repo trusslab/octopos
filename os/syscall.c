@@ -13,7 +13,9 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
+#include <octopos/io.h>
 #include <octopos/storage.h>
+#include <octopos/bluetooth.h>
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/ipc.h>
@@ -88,6 +90,19 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
+/* FIXME: move somewhere else */
+static uint32_t send_bind_cmd_to_bluetooth(uint8_t *device_name)
+{
+	BLUETOOTH_SET_ZERO_ARGS_DATA(IO_OP_BIND_RESOURCE, device_name,
+				     BD_ADDR_LEN)
+
+	send_cmd_to_bluetooth(buf);
+
+	BLUETOOTH_GET_ONE_RET
+
+	return ret0;
+}
+
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
 {
 	uint16_t syscall_nr;
@@ -101,11 +116,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
+		SYSCALL_GET_TWO_ARGS
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
 
-		/* No more than 200 characters */
-		if (count > 200) {
+		/* FIXME: arbitrary thresholds */
+		/* No more than 1000 characters; no more than 100 seconds */
+		if (limit > 1000 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -123,18 +140,21 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
-		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id, (limit_t) count,
-				MAILBOX_DEFAULT_TIMEOUT_VAL);
+		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id,
+					      (limit_t) limit,
+					      (timeout_t) timeout);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
+		SYSCALL_GET_TWO_ARGS
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
 
-		/* No more than 100 characters */
-		if (count > 100) {
+		/* FIXME: arbitrary thresholds */
+		/* No more than 100 characters; no more than 100 seconds. */
+		if (limit > 100 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -148,8 +168,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
-		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id, (limit_t) count,
-				MAILBOX_DEFAULT_TIMEOUT_VAL);
+		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id,
+					      (limit_t) limit,
+					      (timeout_t) timeout);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -292,6 +313,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
+	case SYSCALL_GET_FILE_SIZE: {
+		uint32_t ret;
+		SYSCALL_GET_ONE_ARG
+		ret = file_system_get_file_size(arg0);
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
 	case SYSCALL_CLOSE_FILE: {
 		uint32_t ret;
 		SYSCALL_GET_ONE_ARG
@@ -328,13 +356,17 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_IPC: {
-		SYSCALL_GET_TWO_ARGS
+		SYSCALL_GET_THREE_ARGS
 		uint8_t target_runtime_queue_id = arg0;
-		uint32_t count = arg1;
+		uint32_t limit = arg1;
+		uint32_t timeout = arg2;
 		uint32_t runtime_queue_id = 0;
 
-		/* No more than 200 block reads/writes */
-		if (count > 200) {
+		/* FIXME: arbitrary thresholds. */
+		/* No more than 200 block reads/writes;
+		 * no more than 100 seconds
+		 */
+		if (limit > 200 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -358,7 +390,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		int ret = set_up_secure_ipc(target_runtime_queue_id, runtime_queue_id, runtime_proc_id, count, no_response);
+		int ret = set_up_secure_ipc(target_runtime_queue_id,
+					    runtime_queue_id, runtime_proc_id,
+					    (limit_t) limit, (timeout_t) timeout,
+					    no_response);
 		if (ret) {
 			SYSCALL_SET_ONE_RET((uint32_t) ret)
 			break;
@@ -385,6 +420,66 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		handle_close_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
+
+	case SYSCALL_REQUEST_BLUETOOTH_ACCESS: {
+		SYSCALL_GET_TWO_ARGS_DATA
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
+		uint8_t *device_name = data;
+
+		if (data_size != BD_ADDR_LEN) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		/* FIXME: add access control here. Do we allow the requesting
+		 * app to have access to this resource?
+		 */
+
+		/* FIXME: arbitrary thresholds. */
+		if (limit > 200 || timeout > 100) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		/* Send msg to the bluetooth service to bind the resource */
+		uint32_t ret = send_bind_cmd_to_bluetooth(device_name);
+		if (ret) {
+			SYSCALL_SET_ONE_RET(ret)
+			break;
+		}
+
+		int iret1 = is_queue_available(Q_BLUETOOTH_DATA_IN);
+		int iret2 = is_queue_available(Q_BLUETOOTH_DATA_OUT);
+		int iret3 = is_queue_available(Q_BLUETOOTH_CMD_IN);
+		int iret4 = is_queue_available(Q_BLUETOOTH_CMD_OUT);
+		/* Or should we make this blocking? */
+		if (!iret1 || !iret2 || !iret3 || !iret4) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
+			break;
+		}
+
+		mark_queue_unavailable(Q_BLUETOOTH_DATA_IN);
+		mark_queue_unavailable(Q_BLUETOOTH_DATA_OUT);
+		mark_queue_unavailable(Q_BLUETOOTH_CMD_IN);
+		mark_queue_unavailable(Q_BLUETOOTH_CMD_OUT);
+
+		mailbox_delegate_queue_access(Q_BLUETOOTH_DATA_IN,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_DATA_OUT,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_CMD_IN,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_CMD_OUT,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+
+		SYSCALL_SET_ONE_RET(0)
+		break;
+	}
 #endif
 	case SYSCALL_DEBUG_OUTPUTS: {
 		SYSCALL_GET_ZERO_ARGS_DATA
@@ -397,33 +492,39 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_TPM_ACCESS: {
-		SYSCALL_GET_ONE_ARG
+		SYSCALL_GET_TWO_ARGS
 		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
 
-		/* FIXME: why 100? */
-		if (limit > 100) {
+		/* FIXME: if no other timeout values are used,
+		 * then it shouldn't be an input parameter.
+		 *
+		 * Also, why 100?
+		 */
+		if (limit > 100 || timeout != MAILBOX_DEFAULT_TIMEOUT_VAL)
+		{
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
 
-		int ret1 = is_queue_available(Q_TPM_IN);
-		int ret2 = is_queue_available(Q_TPM_OUT);
-		/* Or should we make this blocking? */
-		if (!ret1 || !ret2)
-		{
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
-			break;
-		}
+		int ret = is_queue_available(Q_TPM_IN);
+		if (!ret)	
+			wait_for_queue_availability(Q_TPM_IN);
+
+		ret = is_queue_available(Q_TPM_OUT);
+		if (!ret)	
+			wait_for_queue_availability(Q_TPM_OUT);
 
 		mark_queue_unavailable(Q_TPM_IN);
 		mark_queue_unavailable(Q_TPM_OUT);
 
 		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id,
 					      (limit_t) limit,
-					      MAILBOX_DEFAULT_TIMEOUT_VAL);
+					      (timeout_t) timeout);
+
 		mailbox_delegate_queue_access(Q_TPM_OUT, runtime_proc_id,
 					      (limit_t) limit,
-					      MAILBOX_DEFAULT_TIMEOUT_VAL);
+					      (timeout_t) timeout);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -513,7 +614,7 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 			file_system_read_file_blocks_late();
 #ifndef ARCH_SEC_HW
 		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
-			late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
+			 late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
 			reset_proc(runtime_proc_id);
 #endif
 	} else if (runtime_proc_id == P_UNTRUSTED) {

@@ -71,3 +71,6 @@ network/socket/socket_obj.o:network/socket/*.c
 clean:
 	find -name "*.o" | xargs rm -f
 	rm -f runtime
+	rm -f ../arch/umode/mailbox_interface/mailbox_runtime.o
+	rm -f ../util/network/lib_obj.o
+	rm -f ../util/tpm/hash.o

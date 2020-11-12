@@ -1,3 +1,5 @@
+#include <octopos/runtime.h>
+
 /* FIXME: there are a lot of repetition in these macros (also see include/os/storage.h) */
 /* FIXME: the first check on max size is always false */
 #define NETWORK_SET_ZERO_ARGS_DATA(data, size)					\
@@ -57,8 +59,13 @@ uint8_t *ip_receive(uint8_t *buf, uint16_t *size);
 int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
 		unsigned int daddr, unsigned short dport);
 int yield_network_access(void);
-int request_network_access(int count);
+int request_network_access(limit_t limit, timeout_t timeout,
+			   queue_update_callback_t callback,
+			   uint8_t *expected_pcr, uint8_t *return_pcr);
 void syscall_close_socket(void);
+#ifndef UNTRUSTED_DOMAIN
+void reset_network_queues_tracker(void);
+#endif
 
 int net_start_receive(void);
 void net_stop_receive(void);
