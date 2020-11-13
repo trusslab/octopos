@@ -163,12 +163,17 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 						  uint8_t *buf)
 {
-	SYSCALL_GET_ONE_ARG
-	uint32_t count = arg0;
+	SYSCALL_GET_TWO_ARGS
+	uint32_t limit = arg0;
+	uint32_t timeout = arg1;
 
 	/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
-	if (count > MAILBOX_NO_LIMIT_VAL) {
+	/* FIXME: enforce any limits/timeouts? 
+	 * Yes, the untrusted should be limited to MAILBOX_DEFAULT_TIMEOUT_VAL
+	 */
+	if (limit > MAILBOX_MAX_LIMIT_VAL ||
+	    timeout > MAILBOX_DEFAULT_TIMEOUT_VAL) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
@@ -201,14 +206,14 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
-	mailbox_delegate_queue_access(Q_STORAGE_CMD_IN, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
-	mailbox_delegate_queue_access(Q_STORAGE_CMD_OUT, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
-	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
-	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
+	mailbox_delegate_queue_access(Q_STORAGE_CMD_IN, runtime_proc_id,
+				      (limit_t) limit, (timeout_t) timeout);
+	mailbox_delegate_queue_access(Q_STORAGE_CMD_OUT, runtime_proc_id,
+				      (limit_t) limit, (timeout_t) timeout);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id,
+				      (limit_t) limit, (timeout_t) timeout);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
+				      (limit_t) limit, (timeout_t) timeout);
 
 	SYSCALL_SET_ONE_RET(0)
 }

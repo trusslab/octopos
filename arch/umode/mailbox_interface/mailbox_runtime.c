@@ -57,6 +57,7 @@ int write_syscall_response(uint8_t *buf);
 void *store_context(void *data);
 void *run_app(void *data);
 int send_app_measurement_to_tpm(uint8_t *path);
+void timer_tick(void);
 
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
@@ -84,13 +85,14 @@ static mailbox_state_reg_t mailbox_read_state_register(uint8_t queue_id)
 	return state;
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
+				timeout_t timeout)
 {
 	mailbox_state_reg_t state;
 
 	state = mailbox_read_state_register(queue_id);
 
-	return (state.limit == count);
+	return ((state.limit == limit) && (state.timeout == timeout));
 }
 
 int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
@@ -213,7 +215,9 @@ void runtime_core(void)
 	/* interrupt handling loop */
 	while (keep_polling) {
 		read(fd_intr, &interrupt, 1);
-		if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
+		if (interrupt == 0) {
+			timer_tick();
+		} else if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
 			printf("Error: invalid interrupt (%d)\n", interrupt);
 			exit(-1);
 		} else if (interrupt > NUM_QUEUES) {

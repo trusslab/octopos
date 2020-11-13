@@ -352,7 +352,8 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
+				timeout_t timeout)
 {
 	uint8_t opcode[2];
 	mailbox_state_reg_t state;
@@ -371,10 +372,7 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 	if (state.timeout && (state.timeout != MAILBOX_NO_TIMEOUT_VAL))
 		queue_timeouts[queue_id] = state.timeout;
 
-	if (state.limit == count)
-		return 1;
-	else
-		return 0;
+	return ((state.limit == limit) && (state.timeout == timeout));
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */

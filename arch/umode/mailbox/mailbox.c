@@ -1015,13 +1015,16 @@ static void decrement_timeouts(void)
 {
 	for (int i = 1; i <= NUM_QUEUES; i++) {
 		if (queues[i].queue_type == QUEUE_TYPE_SIMPLE ||
-		    /* FIXME: when can this happen? If it does, doesn't it imply a bug? */
+		    /* FIXME: when can this happen? If it does, doesn't it
+		     * imply a bug? */
 		    queues[i].TIMEOUT == 0 ||
 		    /* True if the original owner is using the mailbox. */
 		    queues[i].TIMEOUT == MAILBOX_NO_TIMEOUT_VAL)
 			continue;
 
 		queues[i].TIMEOUT--;
+		printf("%s [1]: queue_id = %d, timeout = %d\n", __func__,
+		       i, queues[i].TIMEOUT);
 		if (queues[i].TIMEOUT == 0) {
 			printf("%s: queue %d timed out\n", __func__, i);
 			change_back_queue_access(&queues[i]);
@@ -1034,6 +1037,8 @@ static void *run_timer(void *data)
 	while (1) {
 		sleep(1);
 		processors[P_OS].send_interrupt(0);
+		processors[P_RUNTIME1].send_interrupt(0);
+		processors[P_RUNTIME2].send_interrupt(0);
 		decrement_timeouts();
 	}
 }

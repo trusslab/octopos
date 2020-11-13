@@ -71,6 +71,13 @@ int srq_tail;
 int srq_counter;
 sem_t srq_sem;
 
+limit_t queue_limits[NUM_QUEUES + 1];
+timeout_t queue_timeouts[NUM_QUEUES + 1];
+queue_update_callback_t queue_update_callbacks[NUM_QUEUES + 1];
+
+bool has_secure_keyboard_access = false;
+bool has_secure_serial_out_access = false;
+
 #ifdef ARCH_SEC_HW
 extern sem_t interrupt_change;
 /* FIXME: during context switch, we cannot receive any interrupt.
@@ -110,6 +117,9 @@ _Bool async_syscall_mode = FALSE;
 	data = &buf[2];
 
 int change_queue = 0;
+
+bool secure_ipc_mode = false;
+static uint8_t secure_ipc_target_queue = 0;
 
 unsigned int net_debug = 0;
 pthread_t tcp_threads[2];
@@ -191,6 +201,91 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 	}
 #endif
 }
+
+static void reset_keyboard_queue_trackers(void)
+{
+	/* FIXME: redundant when called from yield_secure_keyboard() */
+	has_secure_keyboard_access = false;
+
+	queue_limits[Q_KEYBOARD] = 0;
+	queue_timeouts[Q_KEYBOARD] = 0;
+	queue_update_callbacks[Q_KEYBOARD] = NULL;
+}
+
+static void reset_serial_out_queue_trackers(void)
+{
+	/* FIXME: redundant when called from yield_secure_serial_out() */
+	has_secure_serial_out_access = false;
+
+	queue_limits[Q_SERIAL_OUT] = 0;
+	queue_timeouts[Q_SERIAL_OUT] = 0;
+	queue_update_callbacks[Q_SERIAL_OUT] = NULL;
+}
+
+static void reset_ipc_queue_trackers(void)
+{
+	/* FIXME: redundant when called from yield_secure_ipc() */
+	secure_ipc_mode = false;
+
+	queue_limits[secure_ipc_target_queue] = 0;
+	queue_timeouts[secure_ipc_target_queue] = 0;
+	queue_update_callbacks[secure_ipc_target_queue] = NULL;
+}
+
+static void queue_expired(uint8_t queue_id)
+{
+	if (queue_id == Q_KEYBOARD)
+		reset_keyboard_queue_trackers();
+	else if (queue_id == Q_SERIAL_OUT)
+		reset_serial_out_queue_trackers();
+	else if (queue_id == secure_ipc_target_queue)
+		reset_ipc_queue_trackers();
+	else if (queue_id == Q_STORAGE_CMD_IN ||
+		 queue_id == Q_STORAGE_CMD_OUT ||
+		 queue_id == Q_STORAGE_DATA_IN ||
+		 queue_id == Q_STORAGE_DATA_OUT)
+		reset_storage_queues_trackers();
+	else if (queue_id == Q_NETWORK_DATA_IN ||
+		 queue_id == Q_NETWORK_DATA_OUT)
+		reset_network_queues_tracker();
+	else
+		printf("Error: %s: invalid queue_id (%d)\n", __func__, queue_id);
+}
+
+void report_queue_usage(uint8_t queue_id)
+{
+	queue_limits[queue_id]--;
+	if (queue_update_callbacks[queue_id]) {
+		(*queue_update_callbacks[queue_id])(queue_id,
+						    queue_limits[queue_id],
+						    queue_timeouts[queue_id]);
+
+		if (queue_limits[queue_id] == 0)
+			queue_expired(queue_id);
+	}
+}
+
+void timer_tick(void)
+{
+	int i;
+
+	for (i = 1; i < (NUM_QUEUES + 1); i++) {
+		if (queue_update_callbacks[i]) {
+			queue_timeouts[i]--;
+			(*queue_update_callbacks[i])(i, queue_limits[i],
+						     queue_timeouts[i]);
+			
+			/* FIXME: this can be a little late as the queue might
+			 * have expired a little bit earlier due to the error
+			 * margin in the mailbox timeouts.
+			 */
+			if (queue_timeouts[i] == 0)
+				queue_expired(i);
+		}
+	}
+}
+
+
 
 #ifdef ARCH_UMODE
 /* network */
@@ -306,81 +401,152 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
-static int request_secure_keyboard(limit_t count)
+static int request_secure_keyboard(limit_t limit, timeout_t timeout,
+				   queue_update_callback_t callback)
 {
+	if (has_secure_keyboard_access) {
+		printf("Error: %s: already has access to secure keyboard.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
 	reset_queue_sync(Q_KEYBOARD, 0);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) limit,
+			     (uint32_t) timeout)
 
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
 
-	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
-						     (limit_t) count);
+	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
 	if (!attest_ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
 #else
-		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+		printf("%s: Error: failed to attest secure keyboard access\n",
+		       __func__);
 #endif
 		return ERR_FAULT;
 	}
+
+	has_secure_keyboard_access = true;
+
+	queue_limits[Q_KEYBOARD] = limit;
+	queue_timeouts[Q_KEYBOARD] = timeout;
+	queue_update_callbacks[Q_KEYBOARD] = callback;
 
 	return 0;
 }
 
 static int yield_secure_keyboard(void)
 {
+	if (!has_secure_keyboard_access) {
+		printf("Error: %s: does not have access to secure keyboard.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
+	has_secure_keyboard_access = false;
+
 	mailbox_yield_to_previous_owner(Q_KEYBOARD);
+
+	reset_keyboard_queue_trackers();
 
 	return 0;
 }
 
-static int request_secure_serial_out(limit_t count)
+static int request_secure_serial_out(limit_t limit, timeout_t timeout,
+				     queue_update_callback_t callback)
 {
+	if (has_secure_serial_out_access) {
+		printf("Error: %s: already has access to secure serial_out.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
 	reset_queue_sync(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) count)
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_SERIAL_OUT, (uint32_t) limit,
+			     (uint32_t) timeout);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
-						     (limit_t) count);
+						     limit, timeout);
 	if (!attest_ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
 #else
-		printf("%s: Error: failed to attest secure keyboard access\n", __func__);
+		printf("%s: Error: failed to attest secure keyboard access\n",
+		       __func__);
 #endif
 		return ERR_FAULT;
 	}
+
+	has_secure_serial_out_access = true;
+
+	queue_limits[Q_SERIAL_OUT] = limit;
+	queue_timeouts[Q_SERIAL_OUT] = timeout;
+	queue_update_callbacks[Q_SERIAL_OUT] = callback;
 
 	return 0;
 }
 
 static int yield_secure_serial_out(void)
 {
+	if (!has_secure_serial_out_access) {
+		printf("Error: %s: does not have access to secure serial_out.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
+	has_secure_serial_out_access = false;
+
 	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
 	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
 
+	reset_serial_out_queue_trackers();
+
 	return 0;
 }
 
-static void write_to_secure_serial_out(char *buf)
+static int write_to_secure_serial_out(char *buf)
 {
+	if (!has_secure_serial_out_access) {
+		printf("Error: %s: does not have access to secure serial_out.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
 	runtime_send_msg_on_queue((uint8_t *) buf, Q_SERIAL_OUT);
+
+	report_queue_usage(Q_SERIAL_OUT);
+
+	return 0;
 }
 
-static void read_char_from_secure_keyboard(char *buf)
+static int read_char_from_secure_keyboard(char *buf)
 {
 	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
+
+	if (!has_secure_keyboard_access) {
+		printf("Error: %s: does not have access to secure keyboard.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
 	runtime_recv_msg_from_queue(input_buf, Q_KEYBOARD);
+
+	report_queue_usage(Q_KEYBOARD);
+
 	*buf = (char) input_buf[0];
+
+	return 0;
 }
 
 static int inform_os_of_termination(void)
@@ -528,7 +694,8 @@ static int set_up_context(void *addr, uint32_t size)
 	context_size = size;
 	context_set = true;
 	/* Now, let's retrieve the context. */
-	int ret = request_secure_storage_access(200, 100);
+	int ret = request_secure_storage_access(100, 200,
+						MAILBOX_DEFAULT_TIMEOUT_VAL, NULL);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
@@ -554,14 +721,14 @@ static int set_up_context(void *addr, uint32_t size)
 	return 0;
 }
 
-bool secure_ipc_mode = false;
-static uint8_t secure_ipc_target_queue = 0;
-
-static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
+static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
+			      timeout_t timeout, queue_update_callback_t callback)
 {
 	bool no_response;
 	reset_queue_sync(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_IPC, target_runtime_queue_id, count)
+	SYSCALL_SET_THREE_ARGS(SYSCALL_REQUEST_SECURE_IPC,
+			       target_runtime_queue_id, (uint32_t) limit,
+			       (uint32_t) timeout)
 	change_queue = target_runtime_queue_id;
 	issue_syscall_response_or_change(buf, &no_response);
 	if (!no_response) {
@@ -572,9 +739,10 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
-						     (limit_t) count);
+						     limit, timeout);
 	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure ipc send queue access\n", __func__);
+		printf("%s: Error: failed to attest secure ipc send queue "
+		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
@@ -592,18 +760,24 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
 	secure_ipc_mode = true;
 	secure_ipc_target_queue = target_runtime_queue_id;
 
+	queue_limits[target_runtime_queue_id] = limit;
+	queue_timeouts[target_runtime_queue_id] = timeout;
+	queue_update_callbacks[target_runtime_queue_id] = callback;
+
 	return 0;
 }
 
 static int yield_secure_ipc(void)
 {
 	uint8_t qid = secure_ipc_target_queue;
-	secure_ipc_target_queue = 0;
 	secure_ipc_mode = false;
 
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
 	mailbox_yield_to_previous_owner(qid);
+	
+	reset_ipc_queue_trackers();
+	secure_ipc_target_queue = 0;
 
 #ifdef ARCH_SEC_HW
 	/* OctopOS mailbox only allows the current owner
@@ -633,6 +807,8 @@ static int send_msg_on_secure_ipc(char *msg, int size)
 
 	IPC_SET_ZERO_ARGS_DATA(msg, size)
 	runtime_send_msg_on_queue(buf, secure_ipc_target_queue);
+
+	report_queue_usage(secure_ipc_target_queue);
 
 	return 0;
 }
@@ -761,15 +937,18 @@ int send_app_measurement_to_tpm(uint8_t *path)
 {
 	reset_queue_sync(Q_TPM_IN, 0);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_TPM_ACCESS, 1);
+	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_TPM_ACCESS, 1,
+			     MAILBOX_DEFAULT_TIMEOUT_VAL);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0) {
-		printf("Error: %s: couldn't get access to the TPM queue.\n", __func__);
+		printf("Error: %s: couldn't get access to the TPM queue.\n",
+		       __func__);
 		return (int) ret0;
 	}
 
-	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, 1);
+	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, 1,
+						MAILBOX_DEFAULT_TIMEOUT_VAL);
 	if (!attest_ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
@@ -779,7 +958,7 @@ int send_app_measurement_to_tpm(uint8_t *path)
 		return ERR_FAULT;
 	}
 
-	runtime_send_msg_on_queue((uint8_t *)path, Q_TPM_IN);
+	runtime_send_msg_on_queue((uint8_t *) path, Q_TPM_IN);
 
 	return 0;
 }
@@ -886,7 +1065,8 @@ void *store_context(void *data)
 #ifdef ARCH_SEC_HW
 	async_syscall_mode = true;
 #endif
-	int ret = request_secure_storage_access(200, 100);
+	int ret = request_secure_storage_access(100, 200,
+					MAILBOX_DEFAULT_TIMEOUT_VAL, NULL);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return NULL;
@@ -974,6 +1154,12 @@ int main()
 	srq_tail = 0;
 
 	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
+
+	for (int i = 0; i < (NUM_QUEUES + 1); i++) {
+		queue_limits[i] = 0;
+		queue_timeouts[i] = 0;
+		queue_update_callbacks[i] = NULL;
+	}
 
 #ifdef ARCH_UMODE
 	ret = net_stack_init();

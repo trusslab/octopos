@@ -101,12 +101,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
-		printf("%s [1]\n", __func__);
+		SYSCALL_GET_TWO_ARGS
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
 
-		/* No more than 1000 characters */
-		if (count > 1000) {
+		/* FIXME: arbitrary thresholds */
+		/* No more than 1000 characters; no more than 100 seconds */
+		if (limit > 1000 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -118,31 +119,30 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		printf("%s [2]\n", __func__);
 		/* ARCH_SEC_HW does not check on send queue availability
 		 * because it already blocks on send. */
 		wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
-		printf("%s [3]\n", __func__);
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
-		/* FIXME: timeout should be an input to the syscall. */
 		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id,
-					      (limit_t) count, 100);
-		printf("%s [4]\n", __func__);
+					      (limit_t) limit,
+					      (timeout_t) timeout);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
+		SYSCALL_GET_TWO_ARGS
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
 
-		 /* No more than 100 characters */
-		 if (count > 100) {
-		 	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-		 	break;
-		 }
+		/* FIXME: arbitrary thresholds */
+		/* No more than 100 characters; no more than 100 seconds. */
+		if (limit > 100 || timeout > 100) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */
@@ -153,9 +153,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
-		/* FIXME: the timeout should be an input to the syscall. */
 		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id,
-					      (limit_t) count, 100);
+					      (limit_t) limit,
+					      (timeout_t) timeout);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -310,13 +310,17 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_IPC: {
-		SYSCALL_GET_TWO_ARGS
+		SYSCALL_GET_THREE_ARGS
 		uint8_t target_runtime_queue_id = arg0;
-		uint32_t count = arg1;
+		uint32_t limit = arg1;
+		uint32_t timeout = arg2;
 		uint32_t runtime_queue_id = 0;
 
-		/* No more than 200 block reads/writes */
-		if (count > 200) {
+		/* FIXME: arbitrary thresholds. */
+		/* No more than 200 block reads/writes;
+		 * no more than 100 seconds
+		 */
+		if (limit > 200 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -340,7 +344,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		int ret = set_up_secure_ipc(target_runtime_queue_id, runtime_queue_id, runtime_proc_id, count, no_response);
+		int ret = set_up_secure_ipc(target_runtime_queue_id,
+					    runtime_queue_id, runtime_proc_id,
+					    (limit_t) limit, (timeout_t) timeout,
+					    no_response);
 		if (ret) {
 			SYSCALL_SET_ONE_RET((uint32_t) ret)
 			break;
@@ -379,13 +386,14 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_TPM_ACCESS: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
+		SYSCALL_GET_TWO_ARGS
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
 
-		/* FIXME: if no other count values are used,
-		 * then it shouldn't be an input parameter.
+		/* FIXME: if no other limit/timeouts values are used,
+		 * then they shouldn't be input parameters.
 		 */
-		if (count != 1)
+		if (limit != 1 || timeout != MAILBOX_DEFAULT_TIMEOUT_VAL)
 		{
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
@@ -401,8 +409,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_TPM_IN);
 
-		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id, (limit_t) count,
-				MAILBOX_DEFAULT_TIMEOUT_VAL);
+		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id,
+					      (limit_t) limit,
+					      (timeout_t) timeout);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;

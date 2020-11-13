@@ -79,6 +79,14 @@ static int _parse_ip_port(char *str, unsigned int *addr, unsigned short *nport)
 	return 0;
 }
 
+static void queue_update_callback(uint8_t queue_id, limit_t limit,
+				  timeout_t timeout)
+{
+	/* FIXME: implement */
+	printf("%s [1]: queue_id = %d, limit = %d, timeout = %d\n", __func__,
+	       queue_id, limit, timeout);
+}
+
 static int connect_to_server(void)
 {
 	int err = 0;
@@ -105,7 +113,7 @@ static int connect_to_server(void)
 	}
 
 	printf("%s [3]\n", __func__);
-	if (gapi->request_network_access(200)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback)) {
 		printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
@@ -127,7 +135,7 @@ static int get_user_secret(char *username, char *secret)
 {
 	char success = 0;
 
-	if (gapi->request_network_access(200)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback)) {
 		insecure_printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
@@ -171,7 +179,7 @@ static int send_password_to_server(char *password)
 	char success = 0;
 	printf("%s [0.1]\n", __func__);
 
-	if (gapi->request_network_access(200)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback)) {
 		secure_printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
@@ -335,7 +343,7 @@ static int show_account_info(void)
 	char cmd, success;
 	uint32_t balance;
 
-	if (gapi->request_network_access(200)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback)) {
 		secure_printf("%s: Error: network queue access\n", session_word);
 		return -1;
 	}
@@ -387,7 +395,7 @@ static int terminate_session(void)
 {
 	printf("%s [1]\n", __func__);
 	/* FIXME: anything else to do here? */
-	if (gapi->request_network_access(200)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback)) {
 		secure_printf("%s: Error: network queue access\n", session_word);
 		return -1;
 	}
@@ -421,7 +429,6 @@ void app_main(struct runtime_api *api)
 	 * Step 2: Ask for user's username.
 	 *	   Send the username to the server and retrieve user's login secret,
 	 *	   through secure UI.
-	 *	   Store user's secret in secure storage for faster logins in the future.
 	 *	   Send the hash of the password to the server to complete login.
 	 * Step 3: Retrieve user's account information and snow securely to the user.
 	 * Step 4: Keep track of the usage of the queues (limit and timeout). Secure yield
@@ -460,14 +467,14 @@ void app_main(struct runtime_api *api)
 
 	/* Request secure keyboard/serial_out and use secure_printf from now on. */
 	/* FIXME: why 100/1000? Also, we need to specify the timeout */
-	ret = gapi->request_secure_keyboard(100);
+	ret = gapi->request_secure_keyboard(100, 10, queue_update_callback);
 	if (ret) {
 		insecure_printf("Error: could not get secure access to keyboard\n");
 		return;
 	}
 	printf("%s [3]\n", __func__);
 
-	ret = gapi->request_secure_serial_out(1000);
+	ret = gapi->request_secure_serial_out(1000, 10, queue_update_callback);
 	if (ret) {
 		gapi->yield_secure_keyboard();
 		insecure_printf("Error: could not get secure access to serial_out (log_in)\n");

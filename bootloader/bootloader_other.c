@@ -63,7 +63,9 @@ static void *handle_mailbox_interrupts(void *data)
 		read(fd_intr, &interrupt, 1);
 
 		/* FIXME: check the TPM interrupt logic */
-		if (interrupt == Q_STORAGE_DATA_OUT) {
+		if (interrupt == 0) {
+			/* ignore the timer interrupt */
+		} else if (interrupt == Q_STORAGE_DATA_OUT) {
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
 		} else if ((interrupt - NUM_QUEUES) == Q_STORAGE_DATA_OUT) {
 			sem_post(&availables[Q_STORAGE_DATA_OUT]);
