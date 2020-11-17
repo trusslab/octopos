@@ -81,8 +81,8 @@ int main(int argc, char **argv)
 		printf("PMU logs:\n");
 		break;
 	case 'v': 
-		mkfifo(FIFO_SOCKET_SERVER_LOG, 0666);
-		fd_log = open(FIFO_SOCKET_SERVER_LOG, O_RDONLY);
+		mkfifo(FIFO_APP_SERVERS_LOG, 0666);
+		fd_log = open(FIFO_APP_SERVERS_LOG, O_RDONLY);
 		printf("Socket server logs:\n");
 		break;
 	default:
@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 		remove(FIFO_PMU_LOG);
 		break;
 	case 'v': 
-		remove(FIFO_SOCKET_SERVER_LOG);
+		remove(FIFO_APP_SERVERS_LOG);
 		break;
 	default:
 		printf("Error: %s: Command not supported\n", __func__);

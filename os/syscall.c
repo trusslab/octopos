@@ -393,23 +393,29 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		/* FIXME: if no other limit/timeouts values are used,
 		 * then they shouldn't be input parameters.
 		 */
-		if (limit != 1 || timeout != MAILBOX_DEFAULT_TIMEOUT_VAL)
+		if (limit > 2 || timeout != MAILBOX_DEFAULT_TIMEOUT_VAL)
 		{
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
 
-		int ret = is_queue_available(Q_TPM_IN);
+		int ret1 = is_queue_available(Q_TPM_IN);
+		int ret2 = is_queue_available(Q_TPM_OUT);
 		/* Or should we make this blocking? */
-		if (!ret)
+		if (!ret1 || !ret2)
 		{
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
 
 		mark_queue_unavailable(Q_TPM_IN);
+		mark_queue_unavailable(Q_TPM_OUT);
 
 		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id,
+					      (limit_t) limit,
+					      (timeout_t) timeout);
+
+		mailbox_delegate_queue_access(Q_TPM_OUT, runtime_proc_id,
 					      (limit_t) limit,
 					      (timeout_t) timeout);
 

@@ -20,14 +20,14 @@ int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
 
 int fd_mailbox_log, fd_tpm_log, fd_os_log, fd_keyboard_log,
     fd_serial_out_log, fd_runtime1_log, fd_runtime2_log, fd_storage_log,
-    fd_network_log, fd_untrusted_log, fd_pmu_log, fd_socket_server_log;
+    fd_network_log, fd_untrusted_log, fd_pmu_log, fd_app_servers_log;
 
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
 pid_t mailbox_pid, tpm_pid, tpm_server_pid, tpm2_abrmd_pid,
       os_pid, keyboard_pid, serial_out_pid, runtime1_pid,
       runtime2_pid, storage_pid, network_pid, untrusted_pid,
-      socket_server_pid;
+      socket_server_pid, attest_server_pid;
 
 struct termios orig;
 
@@ -270,16 +270,24 @@ static int start_untrusted_proc(void)
 
 static int start_socket_server_proc(void)
 {
-	char *const args[] = {(char *) "socket_server", NULL};
+	/* FIXME: launch socket_server too. */
+	char *const args[] = {(char *) "bank_server", NULL};
 	char path[] = "./applications/bank_client/bank_server";
 	return start_proc(path, args, fd_socket_server_log, 0, 0, 0);
+}
+
+static int start_attest_server_proc(void)
+{
+	char *const args[] = {(char *) "attest_server", NULL};
+	char path[] = "./applications/attest_client/attest_server";
+	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
 }
 
 static void start_all_procs(void)
 {
 	mailbox_pid = start_mailbox_proc();
-	// tpm_server_pid = start_tpm_server_proc();
-	// tpm2_abrmd_pid = start_tpm2_abrmd_proc();
+	tpm_server_pid = start_tpm_server_proc();
+	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
 	tpm_pid = start_tpm_proc();
 	os_pid = start_os_proc();
 	keyboard_pid = start_keyboard_proc();
@@ -289,10 +297,11 @@ static void start_all_procs(void)
 	storage_pid = start_storage_proc();
 	network_pid = start_network_proc();
 	untrusted_pid = start_untrusted_proc();
-	/* Socket server is not part of OctopOS.
-	 * We start it here since it's useful for testing.
+	/* These servers are not part of OctopOS.
+	 * We start them here since they're useful for testing.
 	 */
 	socket_server_pid = start_socket_server_proc();
+	attest_server_pid = start_attest_server_proc();
 }
 
 static void halt_proc(uint8_t proc_id)
@@ -353,6 +362,7 @@ static void halt_all_procs(void)
 	mailbox_ready = 0;
 
 	/* Shut down the rest */
+	kill(attest_server_pid, SIGKILL);
 	kill(socket_server_pid, SIGKILL);
 
 	halt_proc(P_NETWORK);
@@ -555,9 +565,13 @@ static void *proc_reboot_handler(void *data)
 
 			sem_post(&reset_done[P_UNTRUSTED]);
 		} else if (pid == socket_server_pid) {
-			sprintf(proc_name, "Socket Server processor");
+			sprintf(proc_name, "Socket Server");
 			if (do_restart)
 				socket_server_pid = start_socket_server_proc();
+		} else if (pid == attest_server_pid) {
+			sprintf(proc_name, "Attestation Server");
+			if (do_restart)
+				attest_server_pid = start_attest_server_proc();
 		} else {
 			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 			continue;
@@ -612,7 +626,7 @@ int main(int argc, char **argv)
 	mkfifo(FIFO_NETWORK_LOG, 0666);
 	mkfifo(FIFO_UNTRUSTED_LOG, 0666);
 	mkfifo(FIFO_PMU_LOG, 0666);
-	mkfifo(FIFO_SOCKET_SERVER_LOG, 0666);
+	mkfifo(FIFO_APP_SERVERS_LOG, 0666);
 
 	fd_pmu_to_os = open(FIFO_PMU_TO_OS, O_RDWR);
 	fd_pmu_from_os = open(FIFO_PMU_FROM_OS, O_RDWR);
@@ -630,7 +644,7 @@ int main(int argc, char **argv)
 	fd_network_log = open(FIFO_NETWORK_LOG, O_RDWR);
 	fd_untrusted_log = open(FIFO_UNTRUSTED_LOG, O_RDWR);
 	fd_pmu_log = open(FIFO_PMU_LOG, O_RDWR);
-	fd_socket_server_log = open(FIFO_SOCKET_SERVER_LOG, O_RDWR);
+	fd_app_servers_log = open(FIFO_APP_SERVERS_LOG, O_RDWR);
 
 	dup2(fd_pmu_log, 1);
 	printf("%s: PMU init\n", __func__);
@@ -855,7 +869,7 @@ err_close:
 
 	/* No more pmu logs after this. */
 	close(fd_pmu_log);
-	close(fd_socket_server_log);
+	close(fd_app_servers_log);
 	close(fd_untrusted_log);
 	close(fd_network_log);
 	close(fd_storage_log);
@@ -872,7 +886,7 @@ err_close:
 	close(fd_pmu_from_os);
 	close(fd_pmu_to_os);
 	
-	remove(FIFO_SOCKET_SERVER_LOG);
+	remove(FIFO_APP_SERVERS_LOG);
 	remove(FIFO_PMU_LOG);
 	remove(FIFO_UNTRUSTED_LOG);
 	remove(FIFO_NETWORK_LOG);

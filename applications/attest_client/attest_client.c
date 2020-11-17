@@ -80,21 +80,19 @@ static void send_receive(struct runtime_api *api)
 	}
 
 	if ((len = api->read_from_socket(sock, buf, 512)) > 0) {
-		// char preserve = buf[0];
 		char uuid[ID_LENGTH];
 		char slot[3] = { 0 };
 		char nonce[NONCE_LENGTH];
+		uint8_t sig_buf[256];
 		
 		memcpy(uuid, buf + 1, ID_LENGTH);
 		memcpy(slot, buf + 1 + ID_LENGTH, 2);
 		memcpy(nonce, buf + 1 + ID_LENGTH + 2, NONCE_LENGTH);
 
 		int pcr_slot = atoi(slot);
-		api->tpm_remote_attest_requst(pcr_slot, nonce, NONCE_LENGTH);
+		api->request_tpm_attestation_report(pcr_slot, nonce,
+						    NONCE_LENGTH, sig_buf);
 
-		uint8_t sig_buf[256];
-		api->recv_msg_on_tpm(sig_buf);
-		// int op = sig_buf[0];
 		int sig_size = sig_buf[1];
 
 		uint8_t quote[4096];

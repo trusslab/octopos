@@ -23,9 +23,6 @@
 #define MIN_PROC_ID	1
 #define MAX_PROC_ID	8
 
-#define TPM_OP_EXTEND 1
-#define TPM_OP_ATTEST 2
-
 #define TPM_REP_EXTEND		0x11
 #define TPM_REP_ATTEST_SIG	0x12
 #define TPM_REP_ATTEST_QTE	0x13

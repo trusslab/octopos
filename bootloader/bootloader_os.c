@@ -10,6 +10,7 @@
 #include <semaphore.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
+#include <octopos/tpm.h>
 #include <os/file_system.h>
 #include <os/storage.h>
 #include <arch/mailbox_os.h>
@@ -106,7 +107,8 @@ void send_measurement_to_tpm(char *path)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
-	memcpy(buf, path, strlen(path) + 1);
+	buf[0] = TPM_OP_EXTEND;
+	memcpy(buf + 1, path, strlen(path) + 1);
 
 	send_message_to_tpm(buf);
 

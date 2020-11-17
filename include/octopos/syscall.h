@@ -35,9 +35,7 @@
 #define SYSCALL_CLOSE_SOCKET			20
 #define SYSCALL_DEBUG_OUTPUTS			21
 #define SYSCALL_REQUEST_TPM_ACCESS		22
-/* FIXME: rename */
-#define SYSCALL_READ_FROM_TPM			23
-#define NUM_SYSCALLS				24
+#define NUM_SYSCALLS				23
 
 /* FIXME: move somewhere else */
 /* defines for SYSCALL_ALLOCATE_SOCKET_PORT */

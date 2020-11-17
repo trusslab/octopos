@@ -666,6 +666,8 @@ static void initialize_queues(void)
 	queues[Q_TPM_OUT].fixed_proc = P_TPM;
 	queues[Q_TPM_OUT].OWNER = P_OS;
 	queues[Q_TPM_OUT].connections[P_OS] = 1;
+	queues[Q_TPM_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_TPM_OUT].connections[P_RUNTIME2] = 1;
 	queues[Q_TPM_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
 	queues[Q_TPM_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_TPM_OUT].queue_size = MAILBOX_QUEUE_SIZE;

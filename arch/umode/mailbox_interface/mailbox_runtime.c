@@ -57,7 +57,7 @@ bool has_ctx_thread = false;
 int write_syscall_response(uint8_t *buf);
 void *store_context(void *data);
 void *run_app(void *data);
-int send_app_measurement_to_tpm(uint8_t *path);
+int send_app_measurement_to_tpm(char *path);
 void timer_tick(void);
 
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
@@ -203,7 +203,7 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		return;
 	}
 
-	send_app_measurement_to_tpm((uint8_t *) path);
+	send_app_measurement_to_tpm(path);
 
 	(*app_main)(api);
 }
@@ -225,11 +225,6 @@ void runtime_core(void)
 			if ((interrupt - NUM_QUEUES) == change_queue) {
 				sem_post(&interrupt_change);
 				sem_post(&interrupts[q_runtime]);
-			/* FIXME: do we need the next two? */
-			} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
-				sem_post(&interrupts[Q_TPM_IN]);
-			} else if ((interrupt - NUM_QUEUES) == Q_TPM_OUT) {
-				sem_post(&interrupts[Q_TPM_OUT]);
 			}
 
 			/* ignore the rest */
@@ -301,9 +296,6 @@ int init_runtime(int runtime_id)
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
-	sem_init(&interrupts[Q_TPM_IN], 0, 0);
-	/* FIXME: correct init value? Also, why init here? */
-	sem_init(&interrupts[Q_TPM_OUT], 0, 0);
 
 	sem_init(&load_app_sem, 0, 0);
 
