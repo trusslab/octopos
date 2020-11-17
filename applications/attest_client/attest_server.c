@@ -124,6 +124,8 @@ void verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature, int size
 		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
 		return;
 	}
+		
+	fprintf(stdout, "Quote is successfully verified.\n");
 
 	Fapi_Finalize(&context);
 }
@@ -139,7 +141,7 @@ int main(int argc, char *argv[])
 	setenv("TSS2_LOG", "ALL+none", 1);
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s: socket_server init\n", __func__);
+	printf("%s: attest_server init\n", __func__);
 	
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) 
@@ -169,11 +171,9 @@ int main(int argc, char *argv[])
 		error("ERROR on accept");
 	
 	char msg[MSG_LENGTH];
-	char pcr_slot[3];
+	char pcr_slot[3] = "15";
 	uint8_t nonce[NONCE_LENGTH];
 	while (true) {
-		printf("Input PCR Bank: ");
-		scanf("%s", pcr_slot);
 		int ret = check_slot(pcr_slot);
 		if (!ret) {
 			gen_attest_payload(msg, pcr_slot, nonce);

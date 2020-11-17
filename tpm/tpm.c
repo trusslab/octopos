@@ -1,6 +1,7 @@
 #include <tpm/tpm.h>
 #include <tpm/libtpm.h>
 #include <octopos/mailbox.h>
+#include <octopos/tpm.h>
 #include <arch/mailbox_tpm.h>
 
 
@@ -60,16 +61,18 @@ void pcr_read_single(int slot)
 	Esys_Finalize(&context);
 }
 
-void process_request(FAPI_CONTEXT *context, uint8_t *buf)
+void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 {
 	int op = buf[0];
 	
 	if (op == TPM_OP_EXTEND) {
 		fprintf(stdout, "EXTEND REQUEST\n");
-		char content[MAILBOX_QUEUE_MSG_SIZE_LARGE] = {0};
-		memcpy(content, buf + 1, MAILBOX_QUEUE_MSG_SIZE_LARGE - 1);
+		char content[MAILBOX_QUEUE_MSG_SIZE] = {0};
+		memcpy(content, buf + 1, MAILBOX_QUEUE_MSG_SIZE - 1);
 		
-		tpm_directly_extend(TPM_USR_MEASUREMENT, content);
+		tpm_directly_extend(PROC_PCR_SLOT(proc_id), content);
+		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id, PROC_PCR_SLOT(proc_id));
+		pcr_read_single(PROC_PCR_SLOT(proc_id));
 	} else if (op == TPM_OP_ATTEST) {
 		fprintf(stdout, "ATTEST REQUEST\n");
 		uint8_t nonce[TPM_AT_NONCE_LENGTH];
@@ -83,10 +86,19 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf)
 			&signature, &signature_size, &quote_info, &pcr_event_log);
 		
 		// Send Signature
-		uint8_t sig_out[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+		uint8_t sig_out[MAILBOX_QUEUE_MSG_SIZE];
 		sig_out[0] = TPM_REP_ATTEST_SIG;
 		sig_out[1] = signature_size;
-		memcpy(&sig_out[2], signature, signature_size);
+		if (signature_size <= (MAILBOX_QUEUE_MSG_SIZE - 2) ||
+		    signature_size > ((2 * MAILBOX_QUEUE_MSG_SIZE) - 2)) {
+		    printf("Error: %s: unexpected signature_size (%d).\n",
+			   __func__, (int) signature_size);
+		    exit(-1);
+		}
+		memcpy(&sig_out[2], signature, MAILBOX_QUEUE_MSG_SIZE - 2);
+		send_response_to_queue(sig_out);
+		memcpy(sig_out, signature + (MAILBOX_QUEUE_MSG_SIZE - 2),
+		       signature_size - (MAILBOX_QUEUE_MSG_SIZE - 2));
 		send_response_to_queue(sig_out);
 
 		FILE* quote_file = fopen("quote_info", "w");
@@ -97,7 +109,7 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf)
 		free(quote_info);
 		free(pcr_event_log);
 	} else {
-		// fprintf(stderr, "Error: No identified operation %d.\n", op);
+		fprintf(stderr, "Error: No identified operation %d.\n", op);
 	}
 
 	return;
@@ -140,15 +152,12 @@ void tpm_measurement_core(FAPI_CONTEXT *context)
 
 	while (1) {
 		proc_id = read_request_get_owner_from_queue(buf);
-		/* FIXME */
-		//if (proc_id < MIN_PROC_ID || proc_id > MAX_PROC_ID) {
-		//	printf("Error: %s: unsupported proc_id (%d)\n", __func__, proc_id);
-		//	continue;
-		//}
-		//tpm_directly_extend(PROC_PCR_SLOT(proc_id), (char *) buf);
-		//printf("(proc %d) SLOT %d CHANGED TO: ", proc_id, PROC_PCR_SLOT(proc_id));
-		//pcr_read_single(PROC_PCR_SLOT(proc_id));
-		process_request(context, buf);
+		if (proc_id < MIN_PROC_ID || proc_id > MAX_PROC_ID) {
+			printf("Error: %s: unsupported proc_id (%d)\n",
+			       __func__, proc_id);
+			continue;
+		}
+		process_request(context, buf, proc_id);
 	}
 }
 

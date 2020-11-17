@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
+#include <octopos/tpm.h>
 #include <os/file_system.h>
 #include <arch/mailbox.h>
 
@@ -174,7 +175,8 @@ void send_measurement_to_tpm(char *path)
 	/* Wait for the TPM mailbox */
 	sem_wait(&availables[Q_TPM_IN]);
 
-	memcpy(buf, path, strlen(path) + 1);
+	buf[0] = TPM_OP_EXTEND;
+	memcpy(buf + 1, path, strlen(path) + 1);
 
 	send_message_to_tpm(buf);
 

@@ -37,8 +37,8 @@
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <octopos/tpm.h>
 #include <arch/mailbox_runtime.h>
-#include <tpm/tpm.h>
 
 #ifdef ARCH_SEC_HW
 #include <runtime/storage_client.h>
@@ -651,46 +651,6 @@ static int recv_msg_on_secure_ipc(char *msg, int *size)
 	return 0;
 }
 
-static int runtime_request_tpm_access(int access, int count)
-{
-	if (access == WRITE_ACCESS) {
-		reset_queue_sync(Q_TPM_DATA_IN, 0);
-		SYSCALL_SET_ONE_ARG(SYSCALL_WRITE_TO_TPM, (uint32_t)count);
-		issue_syscall(buf);
-		SYSCALL_GET_ONE_RET
-		return (int)ret0;
-	} else if (access == READ_ACCESS) {
-		SYSCALL_SET_ONE_ARG(SYSCALL_READ_FROM_TPM, (uint32_t)count);
-		issue_syscall(buf);
-		SYSCALL_GET_ONE_RET
-		return (int)ret0;
-	}
-	
-	return -1;
-}
-
-static int tpm_remote_attest_requst(int slot, char* nonce, int size)
-{
-	runtime_request_tpm_access(WRITE_ACCESS, 1);
-	runtime_request_tpm_access(READ_ACCESS, 1);
-	wait_on_queue(Q_TPM_DATA_OUT);
-
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
-	buf[0] = TPM_OP_ATTEST;
-	buf[1] = slot;
-	memcpy(&buf[2], (uint8_t *) nonce, size);
-
-	runtime_send_msg_on_queue_large(buf, Q_TPM_DATA_IN);
-
-	return 0;
-}
-
-static int recv_msg_on_tpm(uint8_t *buf)
-{
-	runtime_recv_msg_from_queue_large(buf, Q_TPM_DATA_OUT);
-	return 0;
-}
-
 static uint8_t get_runtime_proc_id(void)
 {
 	return (uint8_t) p_runtime;
@@ -798,19 +758,21 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 
 #endif
 
-int send_app_measurement_to_tpm(uint8_t *path)
+static int request_tpm_access(limit_t limit)
 {
-	reset_queue_sync(Q_TPM_IN, 0);
+	reset_queue_sync(Q_TPM_IN, MAILBOX_QUEUE_SIZE);
+	reset_queue_sync(Q_TPM_OUT, 0);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_TPM_ACCESS, 1);
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_TPM_ACCESS, limit);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0) {
-		printf("Error: %s: couldn't get access to the TPM queue.\n", __func__);
+		printf("Error: %s: syscall to get tpm access failed.\n",
+		       __func__);
 		return (int) ret0;
 	}
 
-	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, 1);
+	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, limit);
 	if (!attest_ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
@@ -820,7 +782,65 @@ int send_app_measurement_to_tpm(uint8_t *path)
 		return ERR_FAULT;
 	}
 
-	runtime_send_msg_on_queue((uint8_t *)path, Q_TPM_IN);
+	attest_ret = mailbox_attest_queue_access(Q_TPM_OUT, limit);
+	if (!attest_ret) {
+		mailbox_yield_to_previous_owner(Q_TPM_IN);
+#ifdef ARCH_SEC_HW
+		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+#else
+		printf("%s: Error: failed to attest TPM_OUT queue\n", __func__);
+#endif
+		return ERR_FAULT;
+	}
+
+	return 0;
+}
+
+int send_app_measurement_to_tpm(char *path)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	int ret;
+	
+	ret = request_tpm_access(1);
+	if (ret) {
+		printf("Error: %s: couldn't get access to TPM.\n", __func__);
+		return ret;
+	}
+
+	buf[0] = TPM_OP_EXTEND;
+	memcpy(buf + 1, path, strlen(path) + 1);
+
+	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+	/* We're not using the Q_TPM_OUT queue, so let's yield it. */
+	mailbox_yield_to_previous_owner(Q_TPM_OUT);
+
+	return 0;
+}
+
+/*
+ * @buf: the buffer to return the TPM response on.
+ */
+static int request_tpm_attestation_report(int slot, char* nonce, int size,
+					  uint8_t *buf)
+{
+	int ret;
+	
+	ret = request_tpm_access(2);
+	if (ret) {
+		printf("Error: %s: couldn't get access to TPM.\n", __func__);
+		return ret;
+	}
+
+	buf[0] = TPM_OP_ATTEST;
+	buf[1] = slot;
+	memcpy(&buf[2], (uint8_t *) nonce, size);
+
+	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
+	runtime_recv_msg_from_queue(buf + MAILBOX_QUEUE_MSG_SIZE, Q_TPM_OUT);
+	/* We're not using up the limit on the Q_TPM_OUT queue,
+	 * so let's yield it. */
+	mailbox_yield_to_previous_owner(Q_TPM_IN);
 
 	return 0;
 }
@@ -856,8 +876,7 @@ static void load_application(char *msg)
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
-		.tpm_remote_attest_requst = tpm_remote_attest_requst,
-		.recv_msg_on_tpm = recv_msg_on_tpm,
+		.request_tpm_attestation_report = request_tpm_attestation_report,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
 #ifdef ARCH_UMODE
@@ -877,19 +896,6 @@ static void load_application(char *msg)
 	load_application_arch(msg, &api);
 
 	return;
-}
-
-void runtime_request_extend(char* msg) {
-	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "./applications/bin/";
-	strcat(path, (char *) msg);
-	strcat(path, ".so");
-	
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
-	buf[0] = TPM_OP_EXTEND;
-	memcpy(&buf[1], (uint8_t *) path, sizeof(path));
-
-	runtime_request_tpm_access(WRITE_ACCESS, 1);
-	runtime_send_msg_on_queue_large(buf, Q_TPM_DATA_IN);
 }
 
 bool still_running = true;
