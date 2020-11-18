@@ -7,7 +7,7 @@ int quote_request(FAPI_CONTEXT *context, uint8_t *nonce, int slot,
 	char** quote_info, char **pcr_event_log)
 {
 	uint32_t pcr_list[1] = { slot };
-    char *certificate = NULL;
+	char *certificate = NULL;
 
 	TSS2_RC rc = Fapi_Quote(context, pcr_list, 1, "HS/SRK/AK", "TPM-Quote",
 					nonce, TPM_AT_NONCE_LENGTH,

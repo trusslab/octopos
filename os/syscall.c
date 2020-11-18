@@ -376,7 +376,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_ONE_ARG
 		uint32_t limit = arg0;
 
-		if (limit > 2) {
+		/* FIXME: why 100? */
+		if (limit > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}

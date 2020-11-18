@@ -83,7 +83,10 @@ static void send_receive(struct runtime_api *api)
 		char uuid[ID_LENGTH];
 		char slot[3] = { 0 };
 		char nonce[NONCE_LENGTH];
-		uint8_t sig_buf[256];
+		uint8_t *signature;
+		uint8_t *quote;
+		uint8_t *packet;
+		uint32_t sig_size, quote_size;
 		
 		memcpy(uuid, buf + 1, ID_LENGTH);
 		memcpy(slot, buf + 1 + ID_LENGTH, 2);
@@ -91,26 +94,27 @@ static void send_receive(struct runtime_api *api)
 
 		int pcr_slot = atoi(slot);
 		api->request_tpm_attestation_report(pcr_slot, nonce,
-						    NONCE_LENGTH, sig_buf);
+						    NONCE_LENGTH, &signature,
+						    &sig_size, &quote,
+						    &quote_size);
 
-		int sig_size = sig_buf[1];
-
-		uint8_t quote[4096];
-		quote[0] = sig_size;
-		memcpy(quote + 1, &sig_buf[2], sig_size);
-
-		FILE* quote_file = fopen("quote_info", "r");
-		fseek(quote_file, 0L, SEEK_END);
-		int quote_size = ftell(quote_file);
-		rewind(quote_file);
-		char* quote_info = (char *)malloc(quote_size);
-		fread(quote_info, quote_size, 1, quote_file);
-		fclose(quote_file);
-		memcpy(quote + 1 + sig_size, quote_info, quote_size);
-
-		send_large_packet(api, quote, 1 + sig_size + quote_size);
+		packet = (uint8_t *) malloc(sig_size + quote_size + 1);
+		if (!packet) { 
+			printf("Error: %s: couldn't allocate memory for "
+			       "packet.\n", __func__);
+			return;
+		}
 		
-		free(quote_info);
+		packet[0] = (uint8_t) sig_size;
+		memcpy(packet + 1, signature, sig_size);
+
+		memcpy(packet + 1 + sig_size, quote, quote_size);
+
+		send_large_packet(api, packet, 1 + sig_size + quote_size);
+		
+		free(packet);
+		free(quote);
+		free(signature);
 	}
 }
 
