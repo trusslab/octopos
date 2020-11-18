@@ -79,31 +79,51 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 		memcpy(nonce, buf + 2, TPM_AT_NONCE_LENGTH);
 
 		uint8_t *signature = NULL;
-		size_t signature_size = 0;
+		size_t _signature_size = 0;
 		char *quote_info = NULL;
 		char *pcr_event_log = NULL;
 		quote_request(context, nonce, buf[1],
-			&signature, &signature_size, &quote_info, &pcr_event_log);
+			&signature, &_signature_size, &quote_info,
+			&pcr_event_log);
 		
-		// Send Signature
-		uint8_t sig_out[MAILBOX_QUEUE_MSG_SIZE];
-		sig_out[0] = TPM_REP_ATTEST_SIG;
-		sig_out[1] = signature_size;
-		if (signature_size <= (MAILBOX_QUEUE_MSG_SIZE - 2) ||
-		    signature_size > ((2 * MAILBOX_QUEUE_MSG_SIZE) - 2)) {
-		    printf("Error: %s: unexpected signature_size (%d).\n",
-			   __func__, (int) signature_size);
-		    exit(-1);
-		}
-		memcpy(&sig_out[2], signature, MAILBOX_QUEUE_MSG_SIZE - 2);
-		send_response_to_queue(sig_out);
-		memcpy(sig_out, signature + (MAILBOX_QUEUE_MSG_SIZE - 2),
-		       signature_size - (MAILBOX_QUEUE_MSG_SIZE - 2));
-		send_response_to_queue(sig_out);
+		/* Send signature and quote */
+		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
+		resp_buf[0] = TPM_REP_ATTEST;
+		uint32_t signature_size = (uint32_t) _signature_size;
+		uint32_t quote_size = strlen(quote_info);
+		*((uint32_t *) &resp_buf[1]) = signature_size;
+		*((uint32_t *) &resp_buf[5]) = quote_size;
 
-		FILE* quote_file = fopen("quote_info", "w");
-		fwrite(quote_info, strlen(quote_info), 1, quote_file);
-		fclose(quote_file);
+		send_response_to_queue(resp_buf);
+
+		int off = 0;
+		while (signature_size) {
+			if (signature_size > MAILBOX_QUEUE_MSG_SIZE) {
+				memcpy(resp_buf, signature + off,
+				       MAILBOX_QUEUE_MSG_SIZE);
+				off += MAILBOX_QUEUE_MSG_SIZE;
+				signature_size -= MAILBOX_QUEUE_MSG_SIZE;
+			} else {
+				memcpy(resp_buf, signature + off,
+				       signature_size);
+				signature_size = 0;
+			}
+			send_response_to_queue(resp_buf);
+		}
+
+		off = 0;
+		while (quote_size) {
+			if (quote_size > MAILBOX_QUEUE_MSG_SIZE) {
+				memcpy(resp_buf, quote_info + off,
+				       MAILBOX_QUEUE_MSG_SIZE);
+				off += MAILBOX_QUEUE_MSG_SIZE;
+				quote_size -= MAILBOX_QUEUE_MSG_SIZE;
+			} else {
+				memcpy(resp_buf, quote_info + off, quote_size);
+				quote_size = 0;
+			}
+			send_response_to_queue(resp_buf);
+		}
 
 		free(signature);
 		free(quote_info);

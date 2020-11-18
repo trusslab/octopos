@@ -390,10 +390,12 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
 
-		/* FIXME: if no other limit/timeouts values are used,
-		 * then they shouldn't be input parameters.
+		/* FIXME: if no other timeout values are used,
+		 * then it shouldn't be an input parameter.
+		 *
+		 * Also, why 100?
 		 */
-		if (limit > 2 || timeout != MAILBOX_DEFAULT_TIMEOUT_VAL)
+		if (limit > 100 || timeout != MAILBOX_DEFAULT_TIMEOUT_VAL)
 		{
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;

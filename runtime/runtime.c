@@ -996,15 +996,16 @@ int send_app_measurement_to_tpm(char *path)
 	return 0;
 }
 
-/*
- * @buf: the buffer to return the TPM response on.
- */
-static int request_tpm_attestation_report(int slot, char* nonce, int size,
-					  uint8_t *buf)
+static int request_tpm_attestation_report(int slot, char* nonce, int nonce_size,
+					  uint8_t **signature,
+					  uint32_t *sig_size, uint8_t **quote,
+					  uint32_t *quote_size)
 {
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
-	
-	ret = request_tpm_access(2);
+
+	/* FIXME: why 20? */
+	ret = request_tpm_access(20);
 	if (ret) {
 		printf("Error: %s: couldn't get access to TPM.\n", __func__);
 		return ret;
@@ -1012,14 +1013,67 @@ static int request_tpm_attestation_report(int slot, char* nonce, int size,
 
 	buf[0] = TPM_OP_ATTEST;
 	buf[1] = slot;
-	memcpy(&buf[2], (uint8_t *) nonce, size);
+	memcpy(&buf[2], (uint8_t *) nonce, nonce_size);
 
 	runtime_send_msg_on_queue(buf, Q_TPM_IN);
 	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
-	runtime_recv_msg_from_queue(buf + MAILBOX_QUEUE_MSG_SIZE, Q_TPM_OUT);
-	/* We're not using up the limit on the Q_TPM_OUT queue,
-	 * so let's yield it. */
+
+	if (buf[0] != TPM_REP_ATTEST) {
+		printf("Error: %s: unexpected response.\n", __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	*sig_size = *((uint32_t *) &buf[1]);
+	*quote_size = *((uint32_t *) &buf[5]);
+
+	*signature = malloc(*sig_size);
+	if (!*signature) {
+		printf("Error: %s: couldn't allocate memory for signature.\n",
+		       __func__);
+		return ERR_MEMORY;
+	}
+
+	*quote = malloc(*quote_size);
+	if (!*quote) {
+		printf("Error: %s: couldn't allocate memory for quote.\n",
+		       __func__);
+		return ERR_MEMORY;
+	}
+
+	int off = 0;
+	uint32_t size = *sig_size;
+	while (size) {
+		runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
+		if (size > MAILBOX_QUEUE_MSG_SIZE) {
+			memcpy(*signature + off, buf,
+			       MAILBOX_QUEUE_MSG_SIZE);
+			off += MAILBOX_QUEUE_MSG_SIZE;
+			size -= MAILBOX_QUEUE_MSG_SIZE;
+		} else {
+			memcpy(*signature + off, buf, size);
+			size = 0;
+		}
+	}
+
+	off = 0;
+	size = *quote_size;
+	while (size) {
+		runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
+		if (size > MAILBOX_QUEUE_MSG_SIZE) {
+			memcpy(*quote + off, buf,
+			       MAILBOX_QUEUE_MSG_SIZE);
+			off += MAILBOX_QUEUE_MSG_SIZE;
+			size -= MAILBOX_QUEUE_MSG_SIZE;
+		} else {
+			memcpy(*quote + off, buf, size);
+			size = 0;
+		}
+	}
+
+	/* We're not using up the limit on the queues,
+	 * so let's yield them. */
 	mailbox_yield_to_previous_owner(Q_TPM_IN);
+	mailbox_yield_to_previous_owner(Q_TPM_OUT);
 
 	return 0;
 }
