@@ -47,6 +47,11 @@ int msg_num = 0;
 #define secure_printf(fmt, args...) loop_printf(gapi->write_to_secure_serial_out(output_buf), fmt, ##args)
 #define insecure_printf(fmt, args...) loop_printf(gapi->write_to_shell(output_buf, MAX_CHARS_PER_MESSAGE), fmt, ##args)
 
+#define ID_LENGTH 16
+#define NONCE_LENGTH 16
+#define MSG_LENGTH (1 + ID_LENGTH + 2 + NONCE_LENGTH)
+#define MAX_PACK_SIZE 256
+
 static struct socket *sock;
 static struct sock_addr skaddr;
 static int type;
@@ -83,8 +88,9 @@ static void queue_update_callback(uint8_t queue_id, limit_t limit,
 				  timeout_t timeout)
 {
 	/* FIXME: implement */
-	printf("%s [1]: queue_id = %d, limit = %d, timeout = %d\n", __func__,
-	       queue_id, limit, timeout);
+	if (limit == 0 || timeout == 0)
+		printf("%s [1]: queue_id = %d, limit = %d, timeout = %d\n",
+		       __func__, queue_id, limit, timeout);
 }
 
 static int connect_to_server(void)
@@ -180,7 +186,7 @@ static int send_password_to_server(char *password)
 	printf("%s [0.1]\n", __func__);
 
 	if (gapi->request_network_access(200, 100, queue_update_callback)) {
-		secure_printf("%s: Error: network queue access\n", __func__);
+		secure_printf("Error: network queue access (password)\n");
 		return -1;
 	}
 	
@@ -207,9 +213,114 @@ static int send_password_to_server(char *password)
 	return 0;
 }
 
+static void send_large_packet(uint8_t* data, size_t size)
+{
+	int packages = size / MAX_PACK_SIZE + 1;
+	for (int pack = 0; pack < packages; pack++) {
+		int pack_size = ((pack == packages - 1) ?
+			(size - pack * MAX_PACK_SIZE) : MAX_PACK_SIZE);
+		printf("%s [1]: pack_size = %d\n", __func__, pack_size);
+
+		if (gapi->write_to_socket(sock, data + pack * MAX_PACK_SIZE,
+					  pack_size) < 0) {
+			insecure_printf("Error: couldn't write to socket "
+					"(large packet)\n");
+			return;
+		}
+	}
+}
+
 static int perform_remote_attestation(int flag)
 {
-	/* FIXME: implement */
+	char buf[MSG_LENGTH];
+	char uuid[ID_LENGTH];
+	char slot[3] = { 0 };
+	char nonce[NONCE_LENGTH];
+	uint8_t *signature;
+	uint8_t *quote;
+	uint8_t *packet;
+	uint32_t sig_size, quote_size;
+	char pcr_slot[3] = "15";
+	char success = 0;
+
+	if (gapi->request_network_access(200, 100, queue_update_callback)) {
+		insecure_printf("Error: network queue access (remote "
+				"attestation)\n");
+		return -1;
+	}
+
+	if (gapi->write_to_socket(sock, pcr_slot, 3) < 0) {
+		insecure_printf("Error: couldn't write to socket (remote "
+				"attestation)\n");
+		return -1;
+	}
+
+	printf("%s [1]\n", __func__);
+	if (gapi->read_from_socket(sock, &success, 1) < 0) {
+		secure_printf("Error: couldn't read from socket (remote "
+			      "attestation:1)\n");
+		return -1;
+	}
+
+	printf("%s [2]\n", __func__);
+	if (success != 1) {
+		insecure_printf("Error: invalid PCR slot\n");
+		return -1;
+	}
+
+	printf("%s [3]\n", __func__);
+	if (gapi->read_from_socket(sock, buf, MSG_LENGTH) < 0) {
+		insecure_printf("Error: couldn't read from socket (remote "
+				"attestation:2)\n");
+		return -1;
+	}
+
+	memcpy(uuid, buf + 1, ID_LENGTH);
+	memcpy(slot, buf + 1 + ID_LENGTH, 2);
+	memcpy(nonce, buf + 1 + ID_LENGTH + 2, NONCE_LENGTH);
+
+	printf("%s [4]\n", __func__);
+	/* FIXME: why does the server send the slot back? We already have it. */
+	int _pcr_slot = atoi(slot);
+	gapi->request_tpm_attestation_report(_pcr_slot, nonce,
+					     NONCE_LENGTH, &signature,
+					     &sig_size, &quote,
+					     &quote_size);
+
+	printf("%s [5]\n", __func__);
+	packet = (uint8_t *) malloc(sig_size + quote_size + 1);
+	if (!packet) { 
+		insecure_printf("Error: %s: couldn't allocate memory for "
+				"packet.\n", __func__);
+		return -1;
+	}
+	
+	packet[0] = (uint8_t) sig_size;
+	memcpy(packet + 1, signature, sig_size);
+
+	memcpy(packet + 1 + sig_size, quote, quote_size);
+
+	printf("%s [6]: sig_size = %d, quote_size = %d\n", __func__, sig_size, quote_size);
+	send_large_packet(packet, 1 + sig_size + quote_size);
+	
+	free(packet);
+	free(quote);
+	free(signature);
+
+	if (gapi->read_from_socket(sock, &success, 1) < 0) {
+		secure_printf("Error: couldn't read from socket (remote "
+			      "attestation:3)\n");
+		return -1;
+	}
+
+	if (success != 1) {
+		insecure_printf("Error: attestation report not verified\n");
+		return -1;
+	}
+
+	gapi->yield_network_access();
+	printf("%s [7]\n", __func__);
+
 	return 0;
 }
 
@@ -396,6 +507,7 @@ static int terminate_session(void)
 	printf("%s [1]\n", __func__);
 	/* FIXME: anything else to do here? */
 	if (gapi->request_network_access(200, 100, queue_update_callback)) {
+		/* FIXME: don't print function names in error messages */
 		secure_printf("%s: Error: network queue access\n", session_word);
 		return -1;
 	}

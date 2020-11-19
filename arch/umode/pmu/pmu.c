@@ -273,7 +273,7 @@ static int start_socket_server_proc(void)
 	/* FIXME: launch socket_server too. */
 	char *const args[] = {(char *) "bank_server", NULL};
 	char path[] = "./applications/bank_client/bank_server";
-	return start_proc(path, args, fd_socket_server_log, 0, 0, 0);
+	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
 }
 
 static int start_attest_server_proc(void)
