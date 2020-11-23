@@ -9,6 +9,7 @@
 #include "xil_exception.h"
 #include "xintc.h"
 #include "xgpio.h"
+#include "sleep.h"
 
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
@@ -32,7 +33,9 @@ OCTOPOS_XMbox	Mbox_output,
 				Mbox_storage_cmd_in,
 				Mbox_storage_cmd_out,
 				Mbox_storage_data_in,
-				Mbox_storage_data_out;
+				Mbox_storage_data_out,
+				Mbox_untrusted,
+				Mbox_osu;
 
 sem_t			interrupts[NUM_QUEUES + 1];
 sem_t			interrupt_input;
@@ -123,27 +126,36 @@ _Bool handle_partial_message(uint8_t *message_buffer, uint8_t *queue_id, u32 byt
 /* reads from Q_OS's and Q_KEYBOARD */
 int recv_input(uint8_t *buf, uint8_t *queue_id)
 {
-	int             is_keyboard = 0, is_os1 = 0, is_os2 = 0;
+	int             is_keyboard = 0, is_os1 = 0, is_os2 = 0, is_osu = 0; 
 	static uint8_t  turn = Q_OS1;
 	uint8_t          *message_buffer;
 	u32		        bytes_read;
 
 	OCTOPOS_XMbox*          InstancePtr = NULL;
 
-	InstancePtr = sem_wait_impatient_receive_multiple(&interrupt_input, 3, &Mbox_keyboard, &Mbox_OS1, &Mbox_OS2);
+	InstancePtr = sem_wait_impatient_receive_multiple(
+		&interrupt_input, 
+		4, 
+		&Mbox_keyboard, 
+		&Mbox_OS1, 
+		&Mbox_OS2,
+		&Mbox_osu);
 
 	_SEC_HW_ASSERT_NON_VOID(InstancePtr);
 
-		if (InstancePtr == &Mbox_keyboard) {
-			sem_post(&interrupts[Q_KEYBOARD]);
-			is_keyboard = 1;
-		} else if (InstancePtr == &Mbox_OS1) {
-			sem_post(&interrupts[Q_OS1]);
-			is_os1 = 1;
-		} else if (InstancePtr == &Mbox_OS2) {
-			sem_post(&interrupts[Q_OS2]);
-			is_os2 = 1;
-		}
+	if (InstancePtr == &Mbox_keyboard) {
+		sem_post(&interrupts[Q_KEYBOARD]);
+		is_keyboard = 1;
+	} else if (InstancePtr == &Mbox_OS1) {
+		sem_post(&interrupts[Q_OS1]);
+		is_os1 = 1;
+	} else if (InstancePtr == &Mbox_OS2) {
+		sem_post(&interrupts[Q_OS2]);
+		is_os2 = 1;
+	} else if (InstancePtr == &Mbox_osu) {
+		sem_post(&interrupts[Q_OSU]);
+		is_osu = 1;
+	}
 
 	if (is_keyboard) {
 		sem_wait(&interrupts[Q_KEYBOARD]);
@@ -157,17 +169,21 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 			sem_wait(&interrupts[Q_OS2]);
 			*queue_id = Q_OS2;
 			turn = Q_OS1;
-		} else { /* is_os1 && is_os2 */
+		} else if (is_os1 && is_os2) {
 			sem_wait(&interrupts[turn]);
 			*queue_id = turn;
 			if (turn == Q_OS1)
 				turn = Q_OS2;
 			else
 				turn = Q_OS1;
+		} else if (is_osu) {
+			sem_wait(&interrupts[Q_OSU]);
+			*queue_id = Q_OSU;
 		}
 	}
 
 	switch (*queue_id) {
+		/* FIXME: duplicate code in this switch case */
 	case Q_KEYBOARD:
 		message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 
@@ -233,6 +249,32 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 					&bytes_read);
 		else
 			OCTOPOS_XMbox_Read(&Mbox_OS2,
+					(u32*)(message_buffer),
+					MAILBOX_QUEUE_MSG_SIZE,
+					&bytes_read);
+
+		if (bytes_read != MAILBOX_QUEUE_MSG_SIZE && 
+			!handle_partial_message(message_buffer, queue_id, bytes_read))
+				return 0;
+#endif
+
+		memcpy(buf ,message_buffer, MAILBOX_QUEUE_MSG_SIZE);
+
+		free((void*) message_buffer);
+		break;
+	case Q_OSU:
+		message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+		
+#ifdef HW_MAILBOX_BLOCKING
+		OCTOPOS_XMbox_ReadBlocking(&Mbox_osu, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+#else
+		if (sketch_buffer[*queue_id])
+			OCTOPOS_XMbox_Read(&Mbox_osu,
+					(u32*)(message_buffer),
+					MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset[*queue_id],
+					&bytes_read);
+		else
+			OCTOPOS_XMbox_Read(&Mbox_osu,
 					(u32*)(message_buffer),
 					MAILBOX_QUEUE_MSG_SIZE,
 					&bytes_read);
@@ -367,7 +409,10 @@ int send_cmd_to_network(uint8_t *buf)
 
 int send_cmd_to_untrusted(uint8_t *buf)
 {
-	//TODO: Implement
+	sem_wait_impatient_send(
+		&interrupts[Q_UNTRUSTED], 
+		Mbox_regs[Q_UNTRUSTED], 
+		(u32*) buf);
 	return 0;
 }
 
@@ -446,7 +491,14 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_RUNTIME2]);
 			_SEC_HW_DEBUG("Q_RUNTIME2 = %d", interrupts[Q_RUNTIME2].count);
-		} else if (callback_ref == &Mbox_storage_data_in) {
+		} else if (callback_ref == &Mbox_untrusted) {
+			/* Runtime 2 */
+			_SEC_HW_DEBUG("from Untrusted");
+
+			sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
+			sem_post(&availables[Q_UNTRUSTED]);
+			_SEC_HW_DEBUG("Q_UNTRUSTED = %d", interrupts[Q_UNTRUSTED].count);
+		}  else if (callback_ref == &Mbox_storage_data_in) {
 			/* Storage data in */
 			_SEC_HW_DEBUG("from Mbox_storage_data_in");
 
@@ -482,6 +534,13 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
 			sem_post(&availables[Q_OS2]);
 			sem_post(&interrupts[Q_OS2]);
+			sem_post(&interrupt_input);
+		} else if (callback_ref == &Mbox_osu) {
+			/* OS2 */
+			_SEC_HW_DEBUG("from Mbox_osu");
+
+			sem_post(&availables[Q_OSU]);
+			sem_post(&interrupts[Q_OSU]);
 			sem_post(&interrupt_input);
 		} else if (callback_ref == &Mbox_storage_data_out) {
 			/* Storage data out */
@@ -530,10 +589,14 @@ int init_os_mailbox(void)
 
 	OCTOPOS_XMbox_Config	*ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4,
 					*ConfigPtr_runtime1, *ConfigPtr_runtime2, *Config_storage_cmd_in,
-					*Config_storage_cmd_out, *Config_storage_data_in, *Config_storage_data_out;
+					*Config_storage_cmd_out, *Config_storage_data_in, *Config_storage_data_out,
+					*Config_untrusted, *Config_osu;
 
 	init_platform();
 	OMboxIds_init();
+
+	/* Wait until all other PL cores are loaded */
+	sleep(1);
 
 	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_output, ConfigPtr, ConfigPtr->BaseAddress);
@@ -630,6 +693,31 @@ int init_os_mailbox(void)
 		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_CMD_OUT_DEVICE_ID);
 		return -XST_FAILURE;
 	}
+
+	Config_untrusted = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_UNTRUSTED_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_untrusted, 
+		Config_untrusted,
+		Config_untrusted->BaseAddress
+		);
+	if (Status != XST_SUCCESS)
+	{
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_UNTRUSTED_DEVICE_ID);
+		return -XST_FAILURE;
+	}
+	
+	Config_osu = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_OSU_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_osu, 
+		Config_osu,
+		Config_osu->BaseAddress
+		);
+	if (Status != XST_SUCCESS)
+	{
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_OSU_DEVICE_ID);
+		return -XST_FAILURE;
+	}
+
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_output, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_output, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
@@ -642,11 +730,17 @@ int init_os_mailbox(void)
 	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_OS2, MAILBOX_DEFAULT_RX_THRESHOLD);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_OS2, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_osu, MAILBOX_DEFAULT_RX_THRESHOLD);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_osu, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_runtime1, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_runtime1, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_runtime2, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_runtime2, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_untrusted, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_untrusted, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_cmd_in, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
@@ -728,6 +822,22 @@ int init_os_mailbox(void)
 			OMboxCtrlIntrs[P_OS][Q_RUNTIME2],
 		(XInterruptHandler)handle_change_queue_interrupts,
 		(void *)Q_RUNTIME2);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc, 
+			OMboxIntrs[P_OS][Q_UNTRUSTED],
+		(XInterruptHandler)handle_mailbox_interrupts, 
+		(void*)&Mbox_untrusted);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XIntc_Connect(&intc, 
+			OMboxIntrs[P_OS][Q_OSU],
+		(XInterruptHandler)handle_mailbox_interrupts, 
+		(void*)&Mbox_osu);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
@@ -828,8 +938,10 @@ int init_os_mailbox(void)
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_KEYBOARD]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_OS1]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_OS2]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_OSU]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_RUNTIME1]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_RUNTIME2]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_UNTRUSTED]);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_6_AXI_INTC_FIT_TIMER_2_INTERRUPT_INTR);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_SERIAL_OUT]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_KEYBOARD]);
@@ -857,6 +969,8 @@ int init_os_mailbox(void)
 	Mbox_regs[Q_STORAGE_CMD_OUT] = &Mbox_storage_cmd_out;
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
 	Mbox_regs[Q_STORAGE_DATA_IN] = &Mbox_storage_data_in;
+	Mbox_regs[Q_UNTRUSTED] = &Mbox_untrusted;
+	Mbox_regs[Q_OSU] = &Mbox_osu;
 
 	Mbox_ctrl_regs[Q_KEYBOARD] = OCTOPOS_OS_Q_KEYBOARD_BASEADDR;
 	Mbox_ctrl_regs[Q_SERIAL_OUT] = OCTOPOS_OS_Q_SERIAL_OUT_BASEADDR;
@@ -870,6 +984,7 @@ int init_os_mailbox(void)
 	/* Initialize semaphores */
 	sem_init(&interrupts[Q_OS1], 0, 0);
 	sem_init(&interrupts[Q_OS2], 0, 0);
+	sem_init(&interrupts[Q_OSU], 0, 0);
 	sem_init(&interrupts[Q_KEYBOARD], 0, 0);
 	sem_init(&interrupts[Q_SERIAL_OUT], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
@@ -879,6 +994,7 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_SENSOR], 0, 0);
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
 
 	sem_init(&availables[Q_KEYBOARD], 0, 1);
 	sem_init(&availables[Q_SERIAL_OUT], 0, 1);

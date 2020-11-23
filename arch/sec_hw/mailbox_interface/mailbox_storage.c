@@ -21,7 +21,7 @@
 
 XIntc			intc;
 
-OCTOPOS_XMbox			Mbox_storage_in_2,
+OCTOPOS_XMbox	Mbox_storage_in_2,
 				Mbox_storage_out_2,
 				Mbox_storage_cmd_in,
 				Mbox_storage_cmd_out,
@@ -30,7 +30,7 @@ OCTOPOS_XMbox			Mbox_storage_in_2,
 
 sem_t			interrupts[NUM_QUEUES + 1];
 
-OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
+OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 static FATFS	fatfs;

@@ -44,7 +44,7 @@
 /* Mailbox data access parameters                              */
 /***************************************************************/
 #if defined ARCH_SEC_HW_OS
-#define XPAR_MBOX_NUM_INSTANCES 10U
+#define XPAR_MBOX_NUM_INSTANCES 12U
 #elif defined ARCH_SEC_HW_STORAGE
 #define XPAR_MBOX_NUM_INSTANCES 4U
 #elif defined ARCH_SEC_HW_RUNTIME
@@ -266,6 +266,18 @@
 #define XPAR_OS_MBOX_Q_ENCLAVE1_USE_FSL 0U
 #define XPAR_OS_MBOX_Q_ENCLAVE1_SEND_FSL 0U
 #define XPAR_OS_MBOX_Q_ENCLAVE1_RECV_FSL 0U
+
+#define XPAR_OS_MBOX_Q_UNTRUSTED_DEVICE_ID 10
+#define XPAR_OS_MBOX_Q_UNTRUSTED_BASEADDR 0x43621000U
+#define XPAR_OS_MBOX_Q_UNTRUSTED_USE_FSL 0U
+#define XPAR_OS_MBOX_Q_UNTRUSTED_SEND_FSL 0U
+#define XPAR_OS_MBOX_Q_UNTRUSTED_RECV_FSL 0U
+
+#define XPAR_OS_MBOX_Q_OSU_DEVICE_ID 11
+#define XPAR_OS_MBOX_Q_OSU_BASEADDR 0x43620000U
+#define XPAR_OS_MBOX_Q_OSU_USE_FSL 0U
+#define XPAR_OS_MBOX_Q_OSU_SEND_FSL 0U
+#define XPAR_OS_MBOX_Q_OSU_RECV_FSL 0U
 
 u32 octopos_mailbox_get_status_reg(UINTPTR base);
 void octopos_mailbox_set_status_reg(UINTPTR base, u32 value);
