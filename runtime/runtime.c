@@ -38,6 +38,7 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <octopos/tpm.h>
+#include <tpm/hash.h>
 #include <arch/mailbox_runtime.h>
 
 #ifdef ARCH_SEC_HW
@@ -975,21 +976,28 @@ static int request_tpm_access(limit_t limit)
 	return 0;
 }
 
-int send_app_measurement_to_tpm(char *path)
+int send_app_measurement_to_tpm(char *hash_buf)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
 	
-	ret = request_tpm_access(1);
+	ret = request_tpm_access(2);
 	if (ret) {
 		printf("Error: %s: couldn't get access to TPM.\n", __func__);
 		return ret;
 	}
 
 	buf[0] = TPM_OP_EXTEND;
-	memcpy(buf + 1, path, strlen(path) + 1);
 
+	/* Note that we assume that two messages are needed to send the hash.
+	 * See include/tpm/hash.h
+	 */
+	memcpy(buf + 1, hash_buf, MAILBOX_QUEUE_MSG_SIZE - 1);
 	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+	memcpy(buf, hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1,
+	       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
+	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+
 	/* We're not using the Q_TPM_OUT queue, so let's yield it. */
 	mailbox_yield_to_previous_owner(Q_TPM_OUT);
 
