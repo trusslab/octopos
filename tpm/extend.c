@@ -1,8 +1,7 @@
 #include <tpm/tpm.h>
 #include <tpm/libtpm.h>
 
-
-void tpm_directly_extend(int slot, char *path)
+void tpm_directly_extend(int slot, char *hash_buf)
 {
 	ESYS_CONTEXT *context = NULL;
 	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
@@ -22,16 +21,15 @@ void tpm_directly_extend(int slot, char *path)
 	TPML_DIGEST_VALUES digests = {
         .count = 1,
         .digests = {
-            {
-				.hashAlg = TPM2_ALG_SHA256,
-				.digest = {
-					.sha256 = { }
-                }
-            },
+		{.hashAlg = TPM2_ALG_SHA256,
+		 .digest = {
+			.sha256 = { }
+		 }
+		},
         }
 	};
 
-	int ret = prepare_extend(path, &digests);
+	int ret = prepare_extend(hash_buf, &digests);
 	if (ret) {
 		fprintf(stderr, "Extend preparation failed.\n");
 		return;

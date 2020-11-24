@@ -2,6 +2,7 @@
 #include <tpm/libtpm.h>
 #include <octopos/mailbox.h>
 #include <octopos/tpm.h>
+#include <tpm/hash.h>
 #include <arch/mailbox_tpm.h>
 
 
@@ -66,12 +67,30 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 	int op = buf[0];
 	
 	if (op == TPM_OP_EXTEND) {
-		fprintf(stdout, "EXTEND REQUEST\n");
-		char content[MAILBOX_QUEUE_MSG_SIZE] = {0};
-		memcpy(content, buf + 1, MAILBOX_QUEUE_MSG_SIZE - 1);
-		
-		tpm_directly_extend(PROC_PCR_SLOT(proc_id), content);
-		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id, PROC_PCR_SLOT(proc_id));
+		uint8_t hash_buf[TPM_EXTEND_HASH_SIZE];
+		uint8_t _proc_id;
+
+		/* Note that we assume that two messages are needed to send the hash.
+		* See include/tpm/hash.h
+		*/
+		memcpy(hash_buf, buf + 1, MAILBOX_QUEUE_MSG_SIZE - 1);
+
+		_proc_id = read_request_get_owner_from_queue(buf);
+		if (_proc_id != proc_id) {
+			printf("Error: %s: unexpected sender proc_id (%d, %d)\n",
+			       __func__, _proc_id, proc_id);
+			/* FIXME: send an error? We currently don't send a
+			 * response for the extend op and the clients don't
+			 * check either. */
+			return;
+		}
+
+		memcpy(hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1, buf,
+		       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
+
+		tpm_directly_extend(PROC_PCR_SLOT(proc_id), (char *) hash_buf);
+		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id,
+		       PROC_PCR_SLOT(proc_id));
 		pcr_read_single(PROC_PCR_SLOT(proc_id));
 	} else if (op == TPM_OP_ATTEST) {
 		fprintf(stdout, "ATTEST REQUEST\n");

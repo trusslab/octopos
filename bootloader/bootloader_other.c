@@ -16,6 +16,7 @@
 #include <octopos/tpm.h>
 #include <os/file_system.h>
 #include <os/storage.h>
+#include <tpm/hash.h>
 #include <arch/mailbox.h>
 
 int fd_out, fd_in, fd_intr;
@@ -59,6 +60,7 @@ static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
 	int spurious = 0;
+	int num_tpm_in = 0;
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
@@ -74,7 +76,9 @@ static void *handle_mailbox_interrupts(void *data)
 			 * Otherwise, we might receive some interrupts not
 			 * intended for the bootloader.
 			 */
-			return NULL;
+			num_tpm_in++;
+			if (num_tpm_in == TPM_EXTEND_HASH_NUM_MAILBOX_MSGS) 
+				return NULL;
 		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
 			sem_post(&availables[Q_TPM_IN]);
 
@@ -284,19 +288,29 @@ repeat:
 void send_measurement_to_tpm(char *path)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	char hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
+	int i;
 
 	if (untrusted)
 		return;
 
 	sem_wait(&availables[Q_TPM_IN]);
 
+	hash_file(path, hash_buf);
 	buf[0] = TPM_OP_EXTEND;
-	memcpy(buf + 1, path, strlen(path) + 1);
 
+	/* Note that we assume that two messages are needed to send the hash.
+	 * See include/tpm/hash.h
+	 */
+	memcpy(buf + 1, hash_buf, MAILBOX_QUEUE_MSG_SIZE - 1);
+	send_message_to_tpm(buf);
+	memcpy(buf, hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1,
+	       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
 	send_message_to_tpm(buf);
 
-	/* Wait for TPM to read the message */
-	sem_wait(&interrupts[Q_TPM_IN]);
+	/* Wait for TPM to read the messages */
+	for (i = 0; i < TPM_EXTEND_HASH_NUM_MAILBOX_MSGS; i++)
+		sem_wait(&interrupts[Q_TPM_IN]);
 
 	close_mailbox();
 }
