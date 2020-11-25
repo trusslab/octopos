@@ -1,8 +1,10 @@
 #include <tpm/tpm.h>
 #include <tpm/libtpm.h>
+#include <tpm/hash.h>
 
-void tpm_directly_extend(int slot, char *hash_buf)
+void tpm_directly_extend(int slot, uint8_t *hash_buf)
 {
+	char hash_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
 	ESYS_CONTEXT *context = NULL;
 	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
 	if (rc != TSS2_RC_SUCCESS) {
@@ -29,7 +31,11 @@ void tpm_directly_extend(int slot, char *hash_buf)
         }
 	};
 
-	int ret = prepare_extend(hash_buf, &digests);
+	convert_hash_to_str(hash_buf, hash_str);
+	/* FIXME: why do we need this? */
+	hash_str[2 * TPM_EXTEND_HASH_SIZE] = 0;
+
+	int ret = prepare_extend(hash_str, &digests);
 	if (ret) {
 		fprintf(stderr, "Extend preparation failed.\n");
 		return;

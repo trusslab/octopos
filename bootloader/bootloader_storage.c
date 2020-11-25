@@ -173,7 +173,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 void send_measurement_to_tpm(char *path)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	char hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
+	uint8_t hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
 	int i;
 
 	init_mailbox();
@@ -184,18 +184,17 @@ void send_measurement_to_tpm(char *path)
 	hash_file(path, hash_buf);
 	buf[0] = TPM_OP_EXTEND;
 
-	/* Note that we assume that two messages are needed to send the hash.
+	/* Note that we assume that one message is needed to send the hash.
 	 * See include/tpm/hash.h
 	 */
-	memcpy(buf + 1, hash_buf, MAILBOX_QUEUE_MSG_SIZE - 1);
+	memcpy(buf + 1, hash_buf, TPM_EXTEND_HASH_SIZE);
 	send_message_to_tpm(buf);
-	memcpy(buf, hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1,
-	       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
-	send_message_to_tpm(buf);
+	printf("%s [1]\n", __func__);
 
-	/* Wait for TPM to read the messages */
+	/* Wait for TPM to read the message(s). */
 	for (i = 0; i < TPM_EXTEND_HASH_NUM_MAILBOX_MSGS; i++)
 		sem_wait(&interrupts[Q_TPM_IN]);
+	printf("%s [2]\n", __func__);
 
 	close_mailbox();
 }

@@ -244,8 +244,10 @@ static int perform_remote_attestation(void)
 	uint32_t sig_size, quote_size;
 	char success = 0;
 	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
-	uint8_t pcr_slots[] = {0, (uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
-	uint8_t num_pcr_slots = 2;
+	//uint8_t pcr_slots[] = {0, (uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
+	//uint8_t num_pcr_slots = 2;
+	uint8_t pcr_slots[] = {(uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
+	uint8_t num_pcr_slots = 1;
 
 	if (gapi->request_network_access(200, 100, queue_update_callback)) {
 		insecure_printf("Error: network queue access (remote "

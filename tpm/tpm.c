@@ -4,7 +4,7 @@
 #include <octopos/tpm.h>
 #include <tpm/hash.h>
 #include <arch/mailbox_tpm.h>
-
+#include <openssl/sha.h>
 
 void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
 {
@@ -14,6 +14,22 @@ void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
 		}
 		fprintf(stdout, "\n");
 	}
+
+	/* print digest of pcr val */
+	fprintf(stdout, "pcr val digest: ");
+	SHA256_CTX hash_ctx;
+	SHA256_Init(&hash_ctx);
+	unsigned char hash[SHA256_DIGEST_LENGTH];
+
+	for (uint8_t i = 0; i < pcrValues->count; i++) {
+		SHA256_Update(&hash_ctx, pcrValues->digests[i].buffer, pcrValues->digests[i].size);
+	}
+	SHA256_Final(hash, &hash_ctx);
+
+	for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+		fprintf(stdout, "%02x", hash[i]);
+	}
+	fprintf(stdout, "\n");
 }
 
 void pcr_read_single(int slot)
@@ -68,27 +84,14 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 	
 	if (op == TPM_OP_EXTEND) {
 		uint8_t hash_buf[TPM_EXTEND_HASH_SIZE];
-		uint8_t _proc_id;
+		//uint8_t _proc_id;
 
 		/* Note that we assume that two messages are needed to send the hash.
 		* See include/tpm/hash.h
 		*/
 		memcpy(hash_buf, buf + 1, MAILBOX_QUEUE_MSG_SIZE - 1);
 
-		_proc_id = read_request_get_owner_from_queue(buf);
-		if (_proc_id != proc_id) {
-			printf("Error: %s: unexpected sender proc_id (%d, %d)\n",
-			       __func__, _proc_id, proc_id);
-			/* FIXME: send an error? We currently don't send a
-			 * response for the extend op and the clients don't
-			 * check either. */
-			return;
-		}
-
-		memcpy(hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1, buf,
-		       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
-
-		tpm_directly_extend(PROC_PCR_SLOT(proc_id), (char *) hash_buf);
+		tpm_directly_extend(PROC_PCR_SLOT(proc_id), hash_buf);
 		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id,
 		       PROC_PCR_SLOT(proc_id));
 		pcr_read_single(PROC_PCR_SLOT(proc_id));
