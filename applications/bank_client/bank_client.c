@@ -11,6 +11,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
+#include <octopos/tpm.h>
 #include <network/sock.h>
 #include <network/socket.h>
 
@@ -47,9 +48,10 @@ int msg_num = 0;
 #define secure_printf(fmt, args...) loop_printf(gapi->write_to_secure_serial_out(output_buf), fmt, ##args)
 #define insecure_printf(fmt, args...) loop_printf(gapi->write_to_shell(output_buf, MAX_CHARS_PER_MESSAGE), fmt, ##args)
 
-#define ID_LENGTH 16
-#define NONCE_LENGTH 16
-#define MSG_LENGTH (1 + ID_LENGTH + 2 + NONCE_LENGTH)
+//#define ID_LENGTH 16
+//#define NONCE_LENGTH 16
+//#define MSG_LENGTH (1 + ID_LENGTH + 2 + NONCE_LENGTH)
+#define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 #define MAX_PACK_SIZE 256
 
 static struct socket *sock;
@@ -230,18 +232,20 @@ static void send_large_packet(uint8_t* data, size_t size)
 	}
 }
 
-static int perform_remote_attestation(int flag)
+static int perform_remote_attestation(void)
 {
 	char buf[MSG_LENGTH];
-	char uuid[ID_LENGTH];
-	char slot[3] = { 0 };
-	char nonce[NONCE_LENGTH];
+	char uuid[TPM_AT_ID_LENGTH];
+	//char slot[3] = { 0 };
+	char nonce[TPM_AT_NONCE_LENGTH];
 	uint8_t *signature;
 	uint8_t *quote;
 	uint8_t *packet;
 	uint32_t sig_size, quote_size;
-	char pcr_slot[3] = "15";
 	char success = 0;
+	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
+	uint8_t pcr_slots[] = {0, (uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
+	uint8_t num_pcr_slots = 2;
 
 	if (gapi->request_network_access(200, 100, queue_update_callback)) {
 		insecure_printf("Error: network queue access (remote "
@@ -249,24 +253,24 @@ static int perform_remote_attestation(int flag)
 		return -1;
 	}
 
-	if (gapi->write_to_socket(sock, pcr_slot, 3) < 0) {
-		insecure_printf("Error: couldn't write to socket (remote "
-				"attestation)\n");
-		return -1;
-	}
+	//if (gapi->write_to_socket(sock, pcr_slot, 3) < 0) {
+	//	insecure_printf("Error: couldn't write to socket (remote "
+	//			"attestation)\n");
+	//	return -1;
+	//}
 
-	printf("%s [1]\n", __func__);
-	if (gapi->read_from_socket(sock, &success, 1) < 0) {
-		secure_printf("Error: couldn't read from socket (remote "
-			      "attestation:1)\n");
-		return -1;
-	}
+	//printf("%s [1]\n", __func__);
+	//if (gapi->read_from_socket(sock, &success, 1) < 0) {
+	//	secure_printf("Error: couldn't read from socket (remote "
+	//		      "attestation:1)\n");
+	//	return -1;
+	//}
 
-	printf("%s [2]\n", __func__);
-	if (success != 1) {
-		insecure_printf("Error: invalid PCR slot\n");
-		return -1;
-	}
+	//printf("%s [2]\n", __func__);
+	//if (success != 1) {
+	//	insecure_printf("Error: invalid PCR slot\n");
+	//	return -1;
+	//}
 
 	printf("%s [3]\n", __func__);
 	if (gapi->read_from_socket(sock, buf, MSG_LENGTH) < 0) {
@@ -275,16 +279,22 @@ static int perform_remote_attestation(int flag)
 		return -1;
 	}
 
-	memcpy(uuid, buf + 1, ID_LENGTH);
-	memcpy(slot, buf + 1 + ID_LENGTH, 2);
-	memcpy(nonce, buf + 1 + ID_LENGTH + 2, NONCE_LENGTH);
+	if (buf[0] != '0') {
+		insecure_printf("Error: invalid attestation request from "
+				"the server\n");
+		return -1;
+	}
+
+	memcpy(uuid, buf + 1, TPM_AT_ID_LENGTH);
+	//memcpy(slot, buf + 1 + ID_LENGTH, 2);
+	//memcpy(nonce, buf + 1 + TPM_AT_ID_LENGTH + 2, TPM_AT_NONCE_LENGTH);
+	memcpy(nonce, buf + 1 + TPM_AT_ID_LENGTH, TPM_AT_NONCE_LENGTH);
 
 	printf("%s [4]\n", __func__);
 	/* FIXME: why does the server send the slot back? We already have it. */
-	int _pcr_slot = atoi(slot);
-	gapi->request_tpm_attestation_report(_pcr_slot, nonce,
-					     NONCE_LENGTH, &signature,
-					     &sig_size, &quote,
+	//int _pcr_slot = atoi(slot);
+	gapi->request_tpm_attestation_report(pcr_slots, num_pcr_slots, nonce,
+					     &signature, &sig_size, &quote,
 					     &quote_size);
 
 	printf("%s [5]\n", __func__);
@@ -539,16 +549,17 @@ void app_main(struct runtime_api *api)
 	 *	   the app itself, keyboard, serial_out, network, and storage.
 	 *	   Upon successful attestation, establish a secure channel.
 	 * Step 2: Ask for user's username.
-	 *	   Send the username to the server and retrieve user's login secret,
-	 *	   through secure UI.
+	 *	   Send the username to the server and retrieve user's login
+	 *	   secret, through secure UI.
 	 *	   Send the hash of the password to the server to complete login.
-	 * Step 3: Retrieve user's account information and snow securely to the user.
-	 * Step 4: Keep track of the usage of the queues (limit and timeout). Secure yield
-	 *	   access when about to expire. For secure UI, show a session expiration
-	 *	   message to the user. For storage, sync what needs to be synced.
-	 *	   For network, terminate the session with the server.
+	 * Step 3: Retrieve user's account information and snow securely to the
+	 *	   user.
+	 * Step 4: Keep track of the usage of the queues (limit and timeout).
+	 *	   Secure yield access when about to expire. For secure UI,
+	 *	   show a session expiration message to the user. For network,
+	 *	   terminate the session with the server.
 	 */
-	int ret, attestation_flag;
+	int ret;
 
 	gapi = api;
 
@@ -560,12 +571,7 @@ void app_main(struct runtime_api *api)
 	}
 	printf("%s [2]\n", __func__);
 
-	/* FIXME */
-	//attestation_flag = (ATTEST_RUNTIME | ATTEST_KEYBOARD | ATTEST_SERIAL_OUT |
-	//		    ATTEST_STORAGE | ATTEST_NETWORK);
-	attestation_flag = 0;
-
-	ret = perform_remote_attestation(attestation_flag);
+	ret = perform_remote_attestation();
 	if (ret) {
 		insecure_printf("Error: remote attestation failed.\n");
 		return;

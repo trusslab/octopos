@@ -94,28 +94,53 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 		pcr_read_single(PROC_PCR_SLOT(proc_id));
 	} else if (op == TPM_OP_ATTEST) {
 		fprintf(stdout, "ATTEST REQUEST\n");
-		uint8_t nonce[TPM_AT_NONCE_LENGTH];
-		memcpy(nonce, buf + 2, TPM_AT_NONCE_LENGTH);
-
+		//uint8_t nonce[TPM_AT_NONCE_LENGTH];
+		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
 		uint8_t *signature = NULL;
 		size_t _signature_size = 0;
 		char *quote_info = NULL;
 		char *pcr_event_log = NULL;
-		quote_request(context, nonce, buf[1],
-			&signature, &_signature_size, &quote_info,
-			&pcr_event_log);
+		uint8_t num_pcr_slots = buf[1];
+		uint32_t signature_size, quote_size;
+		uint8_t i;
+		int ret, off;
+
+		if (num_pcr_slots > 24) {
+			printf("Error: %s: invalid num_pcr_slots (%d)",
+			       __func__, num_pcr_slots);
+			goto attest_error;
+		}
+
+		for (i = 0; i < num_pcr_slots; i++) {
+			ret = is_pcr_slot_attest_allowed(buf[2 + i], proc_id);
+			if (!ret) {
+				printf("Error: %s: attesting pcr slot %d for "
+				       "proc %d not allowed)", __func__,
+				       buf[2 + i], proc_id);
+				goto attest_error;
+			}
+		}
+
+		//memcpy(nonce, buf + 2, TPM_AT_NONCE_LENGTH);
+
+		ret = quote_request(context, &buf[2 + num_pcr_slots], &buf[2],
+				    num_pcr_slots, &signature, &_signature_size,
+				    &quote_info, &pcr_event_log);
+		if (ret) {
+			printf("Error: %s: quote request failed\n", __func__);
+			goto attest_error;
+		}
 		
 		/* Send signature and quote */
-		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
 		resp_buf[0] = TPM_REP_ATTEST;
-		uint32_t signature_size = (uint32_t) _signature_size;
-		uint32_t quote_size = strlen(quote_info);
+		signature_size = (uint32_t) _signature_size;
+		quote_size = strlen(quote_info);
 		*((uint32_t *) &resp_buf[1]) = signature_size;
 		*((uint32_t *) &resp_buf[5]) = quote_size;
 
 		send_response_to_queue(resp_buf);
 
-		int off = 0;
+		off = 0;
 		while (signature_size) {
 			if (signature_size > MAILBOX_QUEUE_MSG_SIZE) {
 				memcpy(resp_buf, signature + off,
@@ -147,6 +172,12 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 		free(signature);
 		free(quote_info);
 		free(pcr_event_log);
+
+		return;
+attest_error:
+		resp_buf[0] = TPM_REP_ERROR;
+		send_response_to_queue(resp_buf);
+
 	} else {
 		fprintf(stderr, "Error: No identified operation %d.\n", op);
 	}

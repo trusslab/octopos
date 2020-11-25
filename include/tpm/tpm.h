@@ -19,14 +19,11 @@
 * 23         Application specific
 */
 #define TPM_PCR_BANK(slot) (ESYS_TR_PCR0 + slot)
-#define PROC_PCR_SLOT(proc_id) (7 + proc_id)
 #define MIN_PROC_ID	1
 #define MAX_PROC_ID	8
 
-#define TPM_AT_PRESERVER_LENGTH 1
-#define TPM_AT_ID_LENGTH 16
-#define TPM_AT_NONCE_LENGTH 16
-#define TPM_AT_MSG_LENGTH (TPM_AT_PRESERVER_LENGTH + ID_LENGTH + 2 + NONCE_LENGTH)
+//#define TPM_AT_PRESERVER_LENGTH 1
+//#define TPM_AT_MSG_LENGTH (TPM_AT_PRESERVER_LENGTH + ID_LENGTH + 2 + NONCE_LENGTH)
 
 #define TPM_INIT_ERR 0x01
 #define TPM_EXTD_ERR 0x02

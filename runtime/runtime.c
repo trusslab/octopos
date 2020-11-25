@@ -1004,13 +1004,27 @@ int send_app_measurement_to_tpm(char *hash_buf)
 	return 0;
 }
 
-static int request_tpm_attestation_report(int slot, char* nonce, int nonce_size,
+static int request_tpm_attestation_report(uint8_t *pcr_slots,
+					  uint8_t num_pcr_slots, char* nonce,
 					  uint8_t **signature,
 					  uint32_t *sig_size, uint8_t **quote,
 					  uint32_t *quote_size)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
+
+	if (num_pcr_slots > 24) {
+		printf("Error: %s: invalid num_pcr_slots (%d)\n", __func__,
+		       num_pcr_slots);
+		return ERR_INVALID;
+	}
+
+	if ((num_pcr_slots + TPM_AT_NONCE_LENGTH) > (MAILBOX_QUEUE_MSG_SIZE - 2)) {
+		printf("Error: %s: content won't fit in a message (%d, %d, %d)\n",
+		       __func__, num_pcr_slots, TPM_AT_NONCE_LENGTH,
+		       MAILBOX_QUEUE_MSG_SIZE);
+		return ERR_INVALID;
+	}
 
 	/* FIXME: why 20? */
 	ret = request_tpm_access(20);
@@ -1020,8 +1034,9 @@ static int request_tpm_attestation_report(int slot, char* nonce, int nonce_size,
 	}
 
 	buf[0] = TPM_OP_ATTEST;
-	buf[1] = slot;
-	memcpy(&buf[2], (uint8_t *) nonce, nonce_size);
+	buf[1] = num_pcr_slots;
+	memcpy(&buf[2], pcr_slots, num_pcr_slots);
+	memcpy(&buf[2 + num_pcr_slots], (uint8_t *) nonce, TPM_AT_NONCE_LENGTH);
 
 	runtime_send_msg_on_queue(buf, Q_TPM_IN);
 	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);

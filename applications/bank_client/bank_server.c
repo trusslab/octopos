@@ -13,9 +13,10 @@
 #include <tss2/tss2_fapi.h>
 #include <tss2/tss2_rc.h>
 
-#define ID_LENGTH 16
-#define NONCE_LENGTH 16
-#define MSG_LENGTH (1 + ID_LENGTH + 2 + NONCE_LENGTH)
+#define TPM_AT_ID_LENGTH 16
+#define TPM_AT_NONCE_LENGTH 16
+//#define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + 2 + TPM_AT_NONCE_LENGTH)
+#define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 
 char username[32] = "BANK";
 char secret[32] = "SECRET";
@@ -28,34 +29,34 @@ static void error(const char *msg)
 	exit(1);
 }
 
-static int check_slot(char* slot)
-{
-	int slot_len = strlen(slot);
-	if (slot_len == 1) {
-		slot[1] = slot[0];
-		slot[0] = '0';
-		slot[2] = '\0';
-	} else if (slot_len > 2 || slot_len <= 0) {
-		fprintf(stderr, "Error: Invalid input %s.\n", slot);
-		return -1;
-	}
-
-	int i;
-	for (i = 0; i < strlen(slot); i++) {
-		if (!isdigit(slot[i])) {
-			fprintf(stderr, "Error: Invalid charcter %c.\n", slot[i]);
-			return -1;
-		}
-	}
-	
-	int tmp = atoi(slot);
-	if (tmp <0 || tmp > 23) {
-		fprintf(stderr, "Error: Slot %d out of range.\n", tmp);
-		return -1;
-	}
-
-	return 0;
-}
+//static int check_slot(char* slot)
+//{
+//	int slot_len = strlen(slot);
+//	if (slot_len == 1) {
+//		slot[1] = slot[0];
+//		slot[0] = '0';
+//		slot[2] = '\0';
+//	} else if (slot_len > 2 || slot_len <= 0) {
+//		fprintf(stderr, "Error: Invalid input %s.\n", slot);
+//		return -1;
+//	}
+//
+//	int i;
+//	for (i = 0; i < strlen(slot); i++) {
+//		if (!isdigit(slot[i])) {
+//			fprintf(stderr, "Error: Invalid charcter %c.\n", slot[i]);
+//			return -1;
+//		}
+//	}
+//	
+//	int tmp = atoi(slot);
+//	if (tmp <0 || tmp > 23) {
+//		fprintf(stderr, "Error: Slot %d out of range.\n", tmp);
+//		return -1;
+//	}
+//
+//	return 0;
+//}
 
 static void gen_random(char* buf, int size)
 {
@@ -78,6 +79,7 @@ static void gen_random(char* buf, int size)
 	}
 }
 
+/* FIXME: update comment below */
 /* Message structure sent to tpm attestor
  * ----------------------------------------
  * |A|B               |C |D               |
@@ -89,20 +91,22 @@ static void gen_random(char* buf, int size)
  * C: 2 bytes length pcr number
  * D: 16 bytes length nonce
  */
-static void gen_attest_payload(char* msg, char* slot, uint8_t* nonce_buf)
+//static void gen_attest_payload(char* msg, char* slot, uint8_t* nonce_buf)
+static void gen_attest_payload(char* msg, uint8_t* nonce_buf)
 {
-	char uuid[ID_LENGTH];
-	char nonce[NONCE_LENGTH];
+	char uuid[TPM_AT_ID_LENGTH];
+	char nonce[TPM_AT_NONCE_LENGTH];
 
-	gen_random(uuid, ID_LENGTH);
-	gen_random(nonce, NONCE_LENGTH);
+	gen_random(uuid, TPM_AT_ID_LENGTH);
+	gen_random(nonce, TPM_AT_NONCE_LENGTH);
 
 	msg[0] = '0';
-	memcpy(msg + 1, uuid, ID_LENGTH);
-	memcpy(msg + 1 + ID_LENGTH, slot, 2);
-	memcpy(msg + 1 + ID_LENGTH + 2, nonce, NONCE_LENGTH);
+	memcpy(msg + 1, uuid, TPM_AT_ID_LENGTH);
+	//memcpy(msg + 1 + TPM_AT_ID_LENGTH, slot, 2);
+	//memcpy(msg + 1 + TPM_AT_ID_LENGTH + 2, nonce, TPM_AT_NONCE_LENGTH);
+	memcpy(msg + 1 + TPM_AT_ID_LENGTH, nonce, TPM_AT_NONCE_LENGTH);
 
-	memcpy(nonce_buf, nonce, NONCE_LENGTH);
+	memcpy(nonce_buf, nonce, TPM_AT_NONCE_LENGTH);
 }
 
 static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
@@ -123,7 +127,8 @@ static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
 		return -1;
 	}
 
-	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, NONCE_LENGTH, quote_info,
+	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
+			      quote_info,
 			signature, size, NULL);
 	if (rc != TSS2_RC_SUCCESS) {
 		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
@@ -131,6 +136,7 @@ static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
 	}
 		
 	fprintf(stdout, "Quote is successfully verified.\n");
+	printf("%s [1]: Quote: %s.\n", __func__, quote_info);
 
 	Fapi_Finalize(&context);
 
@@ -143,7 +149,7 @@ int main(int argc, char *argv[])
 	socklen_t clilen;
 	char buffer[32];
 	struct sockaddr_in serv_addr, cli_addr;
-	int n;
+	int n, ret;
 	
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -178,30 +184,31 @@ int main(int argc, char *argv[])
 
 	/* remote attestation */
 	char msg[MSG_LENGTH];
-	char pcr_slot[3];
-	uint8_t nonce[NONCE_LENGTH];
+	//char pcr_slot[3];
+	uint8_t nonce[TPM_AT_NONCE_LENGTH];
 
-	bzero(pcr_slot, 3);
-	n = read(newsockfd, pcr_slot, 3);
-	if (n < 0)
-		error("ERROR reading from socket -- 1");
+	//bzero(pcr_slot, 3);
+	//n = read(newsockfd, pcr_slot, 3);
+	//if (n < 0)
+	//	error("ERROR reading from socket -- 1");
 
-	printf("%s [1]\n", __func__);
-	int ret = check_slot(pcr_slot);
-	if (ret) {
-		buffer[0] = 0;
-		write(newsockfd, buffer, 1);
-		error("ERROR invalid PCR slot");
-	}
-	printf("%s [2]\n", __func__);
+	//printf("%s [1]\n", __func__);
+	//int ret = check_slot(pcr_slot);
+	//if (ret) {
+	//	buffer[0] = 0;
+	//	write(newsockfd, buffer, 1);
+	//	error("ERROR invalid PCR slot");
+	//}
+	//printf("%s [2]\n", __func__);
 
-	buffer[0] = 1;
-	n = write(newsockfd, buffer, 1);
-	if (n < 0)
-		error("ERROR writing to socket -- 1");
-	printf("%s [3]\n", __func__);
+	//buffer[0] = 1;
+	//n = write(newsockfd, buffer, 1);
+	//if (n < 0)
+	//	error("ERROR writing to socket -- 1");
+	//printf("%s [3]\n", __func__);
 
-	gen_attest_payload(msg, pcr_slot, nonce);
+	//gen_attest_payload(msg, pcr_slot, nonce);
+	gen_attest_payload(msg, nonce);
 	n = write(newsockfd, msg, MSG_LENGTH);
 	if (n < 0)
 		error("ERROR writing to socket -- 2");
