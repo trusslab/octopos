@@ -6,7 +6,7 @@
 #include <arch/mailbox_tpm.h>
 #include <openssl/sha.h>
 
-void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
+static void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
 {
 	for (uint32_t i = 0; i < pcrValues->count; i++) {
 		for (size_t j = 0; j < pcrValues->digests[i].size; j++) {
@@ -15,23 +15,23 @@ void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
 		fprintf(stdout, "\n");
 	}
 
-	/* print digest of pcr val */
-	fprintf(stdout, "pcr val digest: ");
-	SHA256_CTX hash_ctx;
-	SHA256_Init(&hash_ctx);
-	unsigned char hash[SHA256_DIGEST_LENGTH];
-	//hash_buffer(pcrValues->digests[i].buffer, pcrValues->digests[i].size, hash);
+	///* print digest of pcr val */
+	//fprintf(stdout, "pcr val digest: ");
+	//SHA256_CTX hash_ctx;
+	//SHA256_Init(&hash_ctx);
+	//unsigned char hash[SHA256_DIGEST_LENGTH];
+	////hash_buffer(pcrValues->digests[i].buffer, pcrValues->digests[i].size, hash);
 
-	for (uint8_t i = 0; i < pcrValues->count; i++) {
-		SHA256_Update(&hash_ctx, pcrValues->digests[i].buffer,
-			      pcrValues->digests[i].size);
-	}
-	SHA256_Final(hash, &hash_ctx);
+	//for (uint8_t i = 0; i < pcrValues->count; i++) {
+	//	SHA256_Update(&hash_ctx, pcrValues->digests[i].buffer,
+	//		      pcrValues->digests[i].size);
+	//}
+	//SHA256_Final(hash, &hash_ctx);
 
-	print_hash_buf(hash);
+	//print_hash_buf(hash);
 }
 
-void pcr_read_single(int slot)
+static void pcr_read_single(int slot)
 {
 	ESYS_CONTEXT *context = NULL;
 	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
@@ -43,16 +43,16 @@ void pcr_read_single(int slot)
 	uint32_t pcrUpdateCounter;
 	TPML_PCR_SELECTION *pcrSelectionOut = NULL;
 	TPML_DIGEST *pcrValues = NULL;
-	
-    TPML_PCR_SELECTION pcrSelectionIn = {
-        .count = 1,
-        .pcrSelections = {
-            { .hash = TPM2_ALG_SHA256,
-              .sizeofSelect = 3,
-              .pcrSelect = { }
-            }
-        }
-    };
+
+	TPML_PCR_SELECTION pcrSelectionIn = {
+		.count = 1,
+        	.pcrSelections = {
+			{ .hash = TPM2_ALG_SHA256,
+        		  .sizeofSelect = 3,
+        		  .pcrSelect = { }
+        		}
+        	}
+	};
 
 	uint8_t selection[4] = { 
 		0 | (1 << slot) % 256,
@@ -77,7 +77,63 @@ void pcr_read_single(int slot)
 	Esys_Finalize(&context);
 }
 
-void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
+/* FIXME: this function shares a lot of code with pcr_read_single(). */
+static void pcr_read_to_buf(int slot, uint8_t *buf)
+{
+	ESYS_CONTEXT *context = NULL;
+	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
+	if (rc != TSS2_RC_SUCCESS) {
+		fprintf(stderr, "Esys_Initialize: %s\n", Tss2_RC_Decode(rc));
+		exit(1);
+	}
+
+	uint32_t pcrUpdateCounter;
+	TPML_PCR_SELECTION *pcrSelectionOut = NULL;
+	TPML_DIGEST *pcrValues = NULL;
+	
+	TPML_PCR_SELECTION pcrSelectionIn = {
+		.count = 1,
+        	.pcrSelections = {
+			{ .hash = TPM2_ALG_SHA256,
+        		  .sizeofSelect = 3,
+        		  .pcrSelect = { }
+        		}
+        	}
+	};
+
+	uint8_t selection[4] = { 
+		0 | (1 << slot) % 256,
+		0 | (1 << (slot - 8)) % 256,
+		0 | (1 << (slot - 16)) % 256,
+		0 | (1 << (slot - 24)) % 256
+	};
+	memcpy(pcrSelectionIn.pcrSelections[0].pcrSelect, selection, 4);
+
+	rc = Esys_PCR_Read(context, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, 
+			&pcrSelectionIn, &pcrUpdateCounter, &pcrSelectionOut, &pcrValues);
+	if (rc != TSS2_RC_SUCCESS) {
+		fprintf(stderr, "Esys_PCR_Read: %s\n", Tss2_RC_Decode(rc));
+		exit(1);
+	}
+
+	//pcr_print(slot, pcrValues);
+	if ((pcrValues->count != 1) ||
+	    (pcrValues->digests[0].size != TPM_EXTEND_HASH_SIZE)) {
+		fprintf(stderr, "Unexpected vals (count = %d, size = %d)\n",
+			pcrValues->count, pcrValues->digests[0].size);
+		/* FIXME: return error instead? */
+		exit(1);
+	}
+
+	memcpy(buf, pcrValues->digests[0].buffer, TPM_EXTEND_HASH_SIZE);
+
+	Esys_Free(pcrSelectionOut);
+	Esys_Free(pcrValues);
+
+	Esys_Finalize(&context);
+}
+
+static void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 {
 	int op = buf[0];
 	
@@ -89,14 +145,14 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 		* See include/tpm/hash.h
 		*/
 		memcpy(hash_buf, buf + 1, MAILBOX_QUEUE_MSG_SIZE - 1);
-		/* test start */
-		printf("%s [1]: received hash: \n", __func__);
-		print_hash_buf(hash_buf);
+		///* test start */
+		//printf("%s [1]: received hash: \n", __func__);
+		//print_hash_buf(hash_buf);
 
-		printf("(proc %d) SLOT %d CURRENT VALUE: ", proc_id,
-		       PROC_PCR_SLOT(proc_id));
-		pcr_read_single(PROC_PCR_SLOT(proc_id));
-		/* test end */
+		//printf("(proc %d) SLOT %d CURRENT VALUE: ", proc_id,
+		//       PROC_PCR_SLOT(proc_id));
+		//pcr_read_single(PROC_PCR_SLOT(proc_id));
+		///* test end */
 		tpm_directly_extend(PROC_PCR_SLOT(proc_id), hash_buf);
 		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id,
 		       PROC_PCR_SLOT(proc_id));
@@ -186,7 +242,23 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 attest_error:
 		resp_buf[0] = TPM_REP_ERROR;
 		send_response_to_queue(resp_buf);
+	} else if (op == TPM_OP_READ_PCR) {
+		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
+		uint8_t pcr_slot = buf[1];
+		int ret;
 
+		ret = is_pcr_slot_attest_allowed(pcr_slot, proc_id);
+		if (!ret) {
+			printf("Error: %s: reading pcr slot %d for proc %d not "
+			       "allowed)", __func__,pcr_slot, proc_id);
+			resp_buf[0] = TPM_REP_ERROR;
+			send_response_to_queue(resp_buf);
+			return;
+		}
+		
+		resp_buf[0] = TPM_REP_READ_PCR;
+		pcr_read_to_buf(pcr_slot, &resp_buf[1]);
+		send_response_to_queue(resp_buf);
 	} else {
 		fprintf(stderr, "Error: No identified operation %d.\n", op);
 	}
@@ -194,7 +266,7 @@ attest_error:
 	return;
 }
 
-int init_context(FAPI_CONTEXT **context)
+static int init_context(FAPI_CONTEXT **context)
 {
 	TSS2_RC rc = Fapi_Initialize(context, NULL);
 	if (rc != TSS2_RC_SUCCESS) {
@@ -224,7 +296,7 @@ int init_context(FAPI_CONTEXT **context)
 	return 0;
 }
 
-void tpm_measurement_core(FAPI_CONTEXT *context)
+static void tpm_measurement_core(FAPI_CONTEXT *context)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t proc_id;

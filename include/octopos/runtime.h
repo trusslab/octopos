@@ -18,10 +18,12 @@ typedef void (*queue_update_callback_t)(uint8_t, limit_t, timeout_t);
 struct runtime_api {
 	/* secure keyboard/serial_out */
 	int (*request_secure_keyboard)(limit_t limit, timeout_t timeout,
-				       queue_update_callback_t callback);
+				       queue_update_callback_t callback,
+				       uint8_t *expected_pcr);
 	int (*yield_secure_keyboard)(void);
 	int (*request_secure_serial_out)(limit_t limit, timeout_t timeout,
-					 queue_update_callback_t callback);
+					 queue_update_callback_t callback,
+					 uint8_t *expected_pcr);
 	int (*yield_secure_serial_out)(void);
 	int (*write_to_secure_serial_out)(char *buf);
 	int (*read_char_from_secure_keyboard)(char *buf);
@@ -45,7 +47,8 @@ struct runtime_api {
 	int (*set_up_secure_storage_key)(uint8_t *key);
 	int (*request_secure_storage_access)(uint32_t partition_size,
 					     limit_t limit, timeout_t timeout,
-					     queue_update_callback_t callback);
+					     queue_update_callback_t callback,
+					     uint8_t *expected_pcr);
 	int (*yield_secure_storage_access)(void);
 	int (*delete_and_yield_secure_storage)(void);
 	int (*write_secure_storage_blocks)(uint8_t *data, uint32_t start_block,
@@ -93,7 +96,8 @@ struct runtime_api {
 	int (*read_from_socket)(struct socket *sock, void *buf, int len);
 	int (*write_to_socket)(struct socket *sock, void *buf, int len);
 	int (*request_network_access)(limit_t limit, timeout_t timeout,
-				      queue_update_callback_t callback);
+				      queue_update_callback_t callback,
+				      uint8_t *expected_pcr);
 	int (*yield_network_access)(void);
 #endif
 };

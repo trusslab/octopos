@@ -144,9 +144,15 @@ int yield_network_access(void)
 	return 0;
 }
 
+/* FIXME: @callback and @expected_pcr can be set by the untrusted domain,
+ * but they're no ops.
+ */
 int request_network_access(limit_t limit, timeout_t timeout,
-			   queue_update_callback_t callback)
+			   queue_update_callback_t callback,
+			   uint8_t *expected_pcr)
 {
+	int ret;
+
 	printf("%s [1]\n", __func__);
 	if (has_network_access) {
 		printf("%s: Error: already has network access\n", __func__);
@@ -165,18 +171,16 @@ int request_network_access(limit_t limit, timeout_t timeout,
 		return (int) ret0;
 	printf("%s [3]\n", __func__);
 
-	int attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN,
-						     limit, timeout);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN, limit, timeout);
+	if (!ret) {
 		printf("%s: Error: failed to attest network write access\n",
 		       __func__);
 		return ERR_FAULT;
 	}
 	printf("%s [4]\n", __func__);
 
-	attest_ret = mailbox_attest_queue_access(Q_NETWORK_DATA_OUT,
-						 limit, timeout);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_NETWORK_DATA_OUT, limit, timeout);
+	if (!ret) {
 		printf("%s: Error: failed to attest network read access\n",
 		       __func__);
 		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -185,7 +189,20 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	}
 	printf("%s [5]\n", __func__);
 
-	int ret = net_start_receive();
+#ifndef UNTRUSTED_DOMAIN
+	if (expected_pcr) {
+		ret = check_proc_pcr(P_NETWORK, expected_pcr);
+		if (ret) {
+			printf("%s: Error: unexpected PCR\n", __func__);
+			wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
+			return ERR_UNEXPECTED;
+		}
+	}
+#endif
+
+	ret = net_start_receive();
 	if (ret) {
 		printf("Error: set_up_receive failed\n");
 		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);

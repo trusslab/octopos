@@ -10,3 +10,4 @@ void issue_syscall(uint8_t *buf);
 void queue_sync_getval(uint8_t queue_id, int *val);
 void wait_until_empty(uint8_t queue_id, int queue_size);
 void report_queue_usage(uint8_t queue_id);
+int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr);

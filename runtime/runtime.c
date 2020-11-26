@@ -403,9 +403,38 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
-static int request_secure_keyboard(limit_t limit, timeout_t timeout,
-				   queue_update_callback_t callback)
+/* FIXME: move somewhere else. */
+int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val);
+
+int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 {
+	uint8_t pcr_val[TPM_EXTEND_HASH_SIZE];
+	int ret;
+
+	ret = read_tpm_pcr_for_proc(proc_id, pcr_val);
+	if (ret) {
+		printf("Error: %s: read_tpm_pcr_for_proc failed\n", __func__);
+		return ret;
+	}
+
+	ret = memcmp(pcr_val, expected_pcr, TPM_EXTEND_HASH_SIZE);
+	if (ret) {
+		printf("Error: %s: pcr val doesn't match the expected val\n",
+		       __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	return 0;
+}
+
+
+static int request_secure_keyboard(limit_t limit, timeout_t timeout,
+				   queue_update_callback_t callback,
+				   uint8_t *expected_pcr)
+{
+	int ret;
+
+	printf("%s [1]\n", __func__);
 	if (has_secure_keyboard_access) {
 		printf("Error: %s: already has access to secure keyboard.\n",
 		       __func__);
@@ -416,14 +445,16 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) limit,
 			     (uint32_t) timeout)
+	printf("%s [2]\n", __func__);
 
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
+	printf("%s [3]\n", __func__);
 
-	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
+	if (!ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
 #else
@@ -432,6 +463,17 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 #endif
 		return ERR_FAULT;
 	}
+
+	if (expected_pcr) {
+		ret = check_proc_pcr(P_KEYBOARD, expected_pcr);
+		if (ret) {
+			printf("%s: Error: unexpected PCR\n", __func__);
+			mailbox_yield_to_previous_owner(Q_KEYBOARD);
+			return ERR_UNEXPECTED;
+		}
+	}
+
+	printf("%s [4]\n", __func__);
 
 	has_secure_keyboard_access = true;
 
@@ -460,8 +502,11 @@ static int yield_secure_keyboard(void)
 }
 
 static int request_secure_serial_out(limit_t limit, timeout_t timeout,
-				     queue_update_callback_t callback)
+				     queue_update_callback_t callback,
+				     uint8_t *expected_pcr)
 {
+	int ret;
+
 	if (has_secure_serial_out_access) {
 		printf("Error: %s: already has access to secure serial_out.\n",
 		       __func__);
@@ -477,9 +522,8 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 	if (ret0)
 		return (int) ret0;
 
-	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
-						     limit, timeout);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
+	if (!ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
 #else
@@ -487,6 +531,16 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 		       __func__);
 #endif
 		return ERR_FAULT;
+	}
+
+	if (expected_pcr) {
+		ret = check_proc_pcr(P_SERIAL_OUT, expected_pcr);
+		if (ret) {
+			printf("%s: Error: unexpected PCR\n", __func__);
+			wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
+			mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
+			return ERR_UNEXPECTED;
+		}
 	}
 
 	has_secure_serial_out_access = true;
@@ -697,7 +751,7 @@ static int set_up_context(void *addr, uint32_t size)
 	context_set = true;
 	/* Now, let's retrieve the context. */
 	int ret = request_secure_storage_access(100, 200,
-						MAILBOX_DEFAULT_TIMEOUT_VAL, NULL);
+				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return ret;
@@ -758,6 +812,8 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 		return ERR_FAULT;
 	}*/
 #endif
+
+	/* FIXME: check PCR. Need the proc_id for that. */	
 
 	secure_ipc_mode = true;
 	secure_ipc_target_queue = target_runtime_queue_id;
@@ -1098,6 +1154,35 @@ static int request_tpm_attestation_report(uint8_t *pcr_slots,
 	return 0;
 }
 
+int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	int ret;
+	uint8_t pcr_slot = PROC_PCR_SLOT(proc_id);
+
+	ret = request_tpm_access(1);
+	if (ret) {
+		printf("Error: %s: couldn't get access to TPM.\n", __func__);
+		return ret;
+	}
+
+	buf[0] = TPM_OP_READ_PCR;
+	buf[1] = pcr_slot;
+
+	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
+
+	if (buf[0] != TPM_REP_READ_PCR) {
+		printf("Error: %s: PCR read op failed.\n", __func__);
+		return ERR_FAULT;
+	}
+
+	//print_hash_buf(&buf[1]);
+	memcpy(pcr_val, &buf[1], TPM_EXTEND_HASH_SIZE);
+
+	return 0;
+}
+
 static void load_application(char *msg)
 {
 	struct runtime_api api = {
@@ -1202,7 +1287,7 @@ void *store_context(void *data)
 	async_syscall_mode = true;
 #endif
 	int ret = request_secure_storage_access(100, 200,
-					MAILBOX_DEFAULT_TIMEOUT_VAL, NULL);
+				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
 		return NULL;

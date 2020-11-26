@@ -126,7 +126,7 @@ static int connect_to_server(void)
 	}
 
 	printf("%s [3]\n", __func__);
-	if (gapi->request_network_access(200, 100, queue_update_callback)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback, NULL)) {
 		printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
@@ -148,7 +148,8 @@ static int get_user_secret(char *username, char *secret)
 {
 	char success = 0;
 
-	if (gapi->request_network_access(200, 100, queue_update_callback)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback,
+					 network_pcr)) {
 		insecure_printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
@@ -192,7 +193,8 @@ static int send_password_to_server(char *password)
 	char success = 0;
 	printf("%s [0.1]\n", __func__);
 
-	if (gapi->request_network_access(200, 100, queue_update_callback)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback,
+					 network_pcr)) {
 		secure_printf("Error: network queue access (password)\n");
 		return -1;
 	}
@@ -255,7 +257,7 @@ static int perform_remote_attestation(void)
 	//uint8_t pcr_slots[] = {9, 10};
 	uint8_t num_pcr_slots = 2;
 
-	if (gapi->request_network_access(200, 100, queue_update_callback)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback, NULL)) {
 		insecure_printf("Error: network queue access (remote "
 				"attestation)\n");
 		return -1;
@@ -491,7 +493,8 @@ static int show_account_info(void)
 	char cmd, success;
 	uint32_t balance;
 
-	if (gapi->request_network_access(200, 100, queue_update_callback)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback,
+					 network_pcr)) {
 		secure_printf("%s: Error: network queue access\n", session_word);
 		return -1;
 	}
@@ -543,7 +546,8 @@ static int terminate_session(void)
 {
 	printf("%s [1]\n", __func__);
 	/* FIXME: anything else to do here? */
-	if (gapi->request_network_access(200, 100, queue_update_callback)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback,
+					 network_pcr)) {
 		/* FIXME: don't print function names in error messages */
 		secure_printf("%s: Error: network queue access\n", session_word);
 		return -1;
@@ -604,6 +608,10 @@ void app_main(struct runtime_api *api)
 		return;
 	}
 
+	/* From here on, we need to check the PCR for I/O services we get access
+	 * to.
+	 */
+
 	ret = establish_secure_channel();
 	if (ret) {
 		insecure_printf("Error: couldn't establish a secure channel.\n");
@@ -612,14 +620,21 @@ void app_main(struct runtime_api *api)
 
 	/* Request secure keyboard/serial_out and use secure_printf from now on. */
 	/* FIXME: why 100/1000? Also, we need to specify the timeout */
-	ret = gapi->request_secure_keyboard(100, 10, queue_update_callback);
+	ret = gapi->request_secure_keyboard(100, 10, queue_update_callback,
+					    keyboard_pcr);
 	if (ret) {
 		insecure_printf("Error: could not get secure access to keyboard\n");
 		return;
 	}
+	/* FIXME: given that checking the keyboard PCR might take some time,
+	 * we shouldn't assume here that we have all the time that we requested.
+	 * We should again do a check here. Maybe the API can return the updated
+	 * time?
+	 */
 	printf("%s [3]\n", __func__);
 
-	ret = gapi->request_secure_serial_out(1000, 10, queue_update_callback);
+	ret = gapi->request_secure_serial_out(1000, 10, queue_update_callback,
+					      serial_out_pcr);
 	if (ret) {
 		gapi->yield_secure_keyboard();
 		insecure_printf("Error: could not get secure access to serial_out (log_in)\n");

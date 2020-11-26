@@ -60,7 +60,8 @@ int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
 		unsigned int daddr, unsigned short dport);
 int yield_network_access(void);
 int request_network_access(limit_t limit, timeout_t timeout,
-			   queue_update_callback_t callback);
+			   queue_update_callback_t callback,
+			   uint8_t *expected_pcr);
 void syscall_close_socket(void);
 #ifndef UNTRUSTED_DOMAIN
 void reset_network_queues_tracker(void);

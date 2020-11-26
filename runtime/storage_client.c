@@ -322,11 +322,15 @@ int yield_secure_storage_access(void)
 	return 0;
 }
 
+/* FIXME: @callback and @expected_pcr can be set by the untrusted domain,
+ * but they're no ops.
+ */
 static int request_secure_storage_queues_access(limit_t limit,
 						timeout_t timeout,
-						queue_update_callback_t callback)
+						queue_update_callback_t callback,
+						uint8_t *expected_pcr)
 {
-	int attest_ret;
+	int ret;
 
 	reset_queue_sync(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	reset_queue_sync(Q_STORAGE_CMD_OUT, 0);
@@ -340,17 +344,15 @@ static int request_secure_storage_queues_access(limit_t limit,
 	if (ret0)
 		return (int) ret0;
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, limit,
-						 timeout);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, limit, timeout);
+	if (!ret) {
 		printf("%s: Error: failed to attest secure storage cmd write "
 		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT, limit,
-						 timeout);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT, limit, timeout);
+	if (!ret) {
 		printf("%s: Error: failed to attest secure storage cmd read "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -358,9 +360,8 @@ static int request_secure_storage_queues_access(limit_t limit,
 		return ERR_FAULT;
 	}
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN, limit,
-						 timeout);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN, limit, timeout);
+	if (!ret) {
 		printf("%s: Error: failed to attest secure storage data write "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -369,9 +370,8 @@ static int request_secure_storage_queues_access(limit_t limit,
 		return ERR_FAULT;
 	}
 
-	attest_ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT, limit,
-						 timeout);
-	if (!attest_ret) {
+	ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT, limit, timeout);
+	if (!ret) {
 		printf("%s: Error: failed to attest secure storage data read "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -381,6 +381,24 @@ static int request_secure_storage_queues_access(limit_t limit,
 		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 		return ERR_FAULT;
 	}
+
+#ifndef UNTRUSTED_DOMAIN
+	if (expected_pcr) {
+		ret = check_proc_pcr(P_STORAGE, expected_pcr);
+		if (ret) {
+			printf("%s: Error: unexpected PCR\n", __func__);
+			wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+			wait_until_empty(Q_STORAGE_DATA_IN,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
+			mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+			return ERR_UNEXPECTED;
+		}
+	}
+#endif
+
 	has_access_to_secure_storage = true;
 
 #ifndef UNTRUSTED_DOMAIN
@@ -410,7 +428,8 @@ static int request_secure_storage_queues_access(limit_t limit,
  */
 int request_secure_storage_access(uint32_t partition_size,
 				  limit_t limit, timeout_t timeout,
-				  queue_update_callback_t callback)
+				  queue_update_callback_t callback,
+				  uint8_t *expected_pcr)
 {
 	int ret, unlock_ret, set_key_ret;
 
@@ -419,7 +438,8 @@ int request_secure_storage_access(uint32_t partition_size,
 		return ERR_INVALID;
 	}
 
-	ret = request_secure_storage_queues_access(limit, timeout, callback);	
+	ret = request_secure_storage_queues_access(limit, timeout, callback,
+						   expected_pcr);	
 	if (ret) {
 		printf("%s: Error: couldn't get access to storage queues.\n",
 		       __func__);
@@ -443,7 +463,7 @@ int request_secure_storage_access(uint32_t partition_size,
 			return create_ret;
 		}
 		ret = request_secure_storage_queues_access(limit, timeout,
-							   callback);	
+							callback, expected_pcr);	
 		if (ret) {
 			printf("%s: Error: couldn't regain access to storage "
 			       "queues.\n", __func__);

@@ -31,7 +31,7 @@ uint32_t balance = 1000;
 uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t serial_out_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
-uint8_t quote_digest[TPM_EXTEND_HASH_SIZE];
+uint8_t quote_pcr_digest[TPM_EXTEND_HASH_SIZE];
 
 static void error(const char *msg)
 {
@@ -148,6 +148,8 @@ static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
 	fprintf(stdout, "Quote is successfully verified.\n");
 	printf("%s [1]: Quote: %s.\n", __func__, quote_info);
 
+	/* FIXME: verify the quote digest. */
+
 	Fapi_Finalize(&context);
 
 	return 0;
@@ -214,9 +216,9 @@ static void generate_PCR_digests(void)
 	/* FIXME: for now, PCR 0 is just a zero buf since we don't extend it. */
 	buffers[0] = zero_pcr;
 	buffers[1] = app_pcr;
-	hash_multiple_buffers(buffers, buffer_sizes, 2, quote_digest);
-	printf("%s [1]: quote digest = ", __func__);
-	print_hash_buf(quote_digest);
+	hash_multiple_buffers(buffers, buffer_sizes, 2, quote_pcr_digest);
+	printf("%s [1]: quote's PCR digest = ", __func__);
+	print_hash_buf(quote_pcr_digest);
 
 	/* 2 PCRs -- works */
 	//uint8_t hash_buf[SHA256_DIGEST_LENGTH];
