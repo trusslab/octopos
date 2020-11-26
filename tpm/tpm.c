@@ -20,16 +20,15 @@ void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
 	SHA256_CTX hash_ctx;
 	SHA256_Init(&hash_ctx);
 	unsigned char hash[SHA256_DIGEST_LENGTH];
+	//hash_buffer(pcrValues->digests[i].buffer, pcrValues->digests[i].size, hash);
 
 	for (uint8_t i = 0; i < pcrValues->count; i++) {
-		SHA256_Update(&hash_ctx, pcrValues->digests[i].buffer, pcrValues->digests[i].size);
+		SHA256_Update(&hash_ctx, pcrValues->digests[i].buffer,
+			      pcrValues->digests[i].size);
 	}
 	SHA256_Final(hash, &hash_ctx);
 
-	for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-		fprintf(stdout, "%02x", hash[i]);
-	}
-	fprintf(stdout, "\n");
+	print_hash_buf(hash);
 }
 
 void pcr_read_single(int slot)
@@ -90,7 +89,14 @@ void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 		* See include/tpm/hash.h
 		*/
 		memcpy(hash_buf, buf + 1, MAILBOX_QUEUE_MSG_SIZE - 1);
+		/* test start */
+		printf("%s [1]: received hash: \n", __func__);
+		print_hash_buf(hash_buf);
 
+		printf("(proc %d) SLOT %d CURRENT VALUE: ", proc_id,
+		       PROC_PCR_SLOT(proc_id));
+		pcr_read_single(PROC_PCR_SLOT(proc_id));
+		/* test end */
 		tpm_directly_extend(PROC_PCR_SLOT(proc_id), hash_buf);
 		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id,
 		       PROC_PCR_SLOT(proc_id));

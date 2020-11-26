@@ -12,9 +12,14 @@
 #include <netinet/in.h>
 #include <tss2/tss2_fapi.h>
 #include <tss2/tss2_rc.h>
+#include <openssl/sha.h>
+/* octopos header files */
+#define APPLICATION
+#include <octopos/tpm.h>
+#include <tpm/hash.h>
 
-#define TPM_AT_ID_LENGTH 16
-#define TPM_AT_NONCE_LENGTH 16
+//#define TPM_AT_ID_LENGTH 16
+//#define TPM_AT_NONCE_LENGTH 16
 //#define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + 2 + TPM_AT_NONCE_LENGTH)
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 
@@ -22,6 +27,11 @@ char username[32] = "BANK";
 char secret[32] = "SECRET";
 char password[32] = "pass";
 uint32_t balance = 1000;
+
+uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t serial_out_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t quote_digest[TPM_EXTEND_HASH_SIZE];
 
 static void error(const char *msg)
 {
@@ -143,6 +153,119 @@ static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
 	return 0;
 }
 
+static void generate_PCR_digests(void)
+{
+	uint8_t app_pcr[TPM_EXTEND_HASH_SIZE];
+	uint8_t file_hash[TPM_EXTEND_HASH_SIZE];
+	uint8_t temp_hash[TPM_EXTEND_HASH_SIZE];
+	uint8_t *buffers[2];
+	uint32_t buffer_sizes[2];
+	uint8_t zero_pcr[TPM_EXTEND_HASH_SIZE];
+	memset(zero_pcr, 0x0, TPM_EXTEND_HASH_SIZE);
+
+	buffer_sizes[0] = TPM_EXTEND_HASH_SIZE;
+	buffer_sizes[1] = TPM_EXTEND_HASH_SIZE;
+	/* Wait until the keyboard file is written. */
+	/* FIXME: get rid of the wait */
+	sleep(5);
+	
+	/* Keyboard PCR */
+	hash_file((char *) "bootloader/keyboard", file_hash);
+	buffers[0] = zero_pcr;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, keyboard_pcr);
+	//memset(concat_buf, 0x0, SHA256_DIGEST_LENGTH);
+	//memcpy(concat_buf + SHA256_DIGEST_LENGTH, hash_buf, SHA256_DIGEST_LENGTH);
+	//hash_buffer(concat_buf, 2 * SHA256_DIGEST_LENGTH, hash_buf2);
+	printf("%s [1]: keyboard PCR = ", __func__);
+	print_hash_buf(keyboard_pcr);
+
+	/* Serial Out PCR */
+	hash_file((char *) "bootloader/serial_out", file_hash);
+	buffers[0] = zero_pcr;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, serial_out_pcr);
+	printf("%s [1]: serial_out PCR = ", __func__);
+	print_hash_buf(serial_out_pcr);
+
+	/* Network PCR */
+	hash_file((char *) "bootloader/network", file_hash);
+	buffers[0] = zero_pcr;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, network_pcr);
+	printf("%s [1]: network PCR = ", __func__);
+	print_hash_buf(network_pcr);
+
+	/* App PCR: two hashes are extended to PCR in this case. */
+	hash_file((char *) "bootloader/runtime1", file_hash);
+	buffers[0] = zero_pcr;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, temp_hash);
+	/* FIXME: we should read from bootloader/ too. */
+	hash_file((char *) "applications/bank_client/bank_client.so", file_hash);
+	buffers[0] = temp_hash;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, app_pcr);
+
+	printf("%s [1]: app PCR = ", __func__);
+	print_hash_buf(app_pcr);
+
+	/* Attestation quote pcr digest: PCR 0 (boot) and 14 (app) */
+	/* FIXME: for now, PCR 0 is just a zero buf since we don't extend it. */
+	buffers[0] = zero_pcr;
+	buffers[1] = app_pcr;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, quote_digest);
+	printf("%s [1]: quote digest = ", __func__);
+	print_hash_buf(quote_digest);
+
+	/* 2 PCRs -- works */
+	//uint8_t hash_buf[SHA256_DIGEST_LENGTH];
+	//uint8_t hash_buf2[SHA256_DIGEST_LENGTH];
+	//uint8_t concat_buf[2 * SHA256_DIGEST_LENGTH];
+	//uint8_t hash_buf3[SHA256_DIGEST_LENGTH];
+	///* Wait until the files are written. */
+	///* FIXME: get rid of the wait */
+	//sleep(5);
+	//hash_file((char *) "bootloader/keyboard", hash_buf);
+	//printf("%s [1]: keyboard file hash = ", __func__);
+	//print_hash_buf(hash_buf);
+	//memset(concat_buf, 0x0, SHA256_DIGEST_LENGTH);
+	//memcpy(concat_buf + SHA256_DIGEST_LENGTH, hash_buf, SHA256_DIGEST_LENGTH);
+	//hash_buffer(concat_buf, 2 * SHA256_DIGEST_LENGTH, hash_buf);
+	//printf("%s [2]: PCR for keyboard = ", __func__);
+	//print_hash_buf(hash_buf);
+
+	///* digest of PCRs */	
+	//SHA256_CTX hash_ctx2;
+	//SHA256_Init(&hash_ctx2);
+	//memset(concat_buf, 0x0, 2 * SHA256_DIGEST_LENGTH);
+	//SHA256_Update(&hash_ctx2, concat_buf, SHA256_DIGEST_LENGTH);
+	//hash_file((char *) "bootloader/keyboard", hash_buf);
+	//SHA256_Update(&hash_ctx2, hash_buf, SHA256_DIGEST_LENGTH);
+	//SHA256_Final(hash_buf3, &hash_ctx2);
+	//printf("%s [3]: PCR for keyboard (2) = ", __func__);
+	//print_hash_buf(hash_buf3);
+
+	//hash_file((char *) "bootloader/serial_out", hash_buf2);
+	//printf("%s [1]: serial_out file hash = ", __func__);
+	//print_hash_buf(hash_buf2);
+	//memset(concat_buf, 0x0, SHA256_DIGEST_LENGTH);
+	//memcpy(concat_buf + SHA256_DIGEST_LENGTH, hash_buf2, SHA256_DIGEST_LENGTH);
+	//hash_buffer(concat_buf, 2 * SHA256_DIGEST_LENGTH, hash_buf2);
+	//printf("%s [2]: PCR for serial_out = ", __func__);
+	//print_hash_buf(hash_buf2);
+
+	///* digest of PCRs */	
+	//SHA256_CTX hash_ctx;
+	//SHA256_Init(&hash_ctx);
+	//SHA256_Update(&hash_ctx, hash_buf, SHA256_DIGEST_LENGTH);
+	//SHA256_Update(&hash_ctx, hash_buf2, SHA256_DIGEST_LENGTH);
+	//SHA256_Final(hash_buf3, &hash_ctx);
+	//printf("%s [3]: digest of PCRs = ", __func__);
+	//print_hash_buf(hash_buf3);
+	///**********/
+}
+
 int main(int argc, char *argv[])
 {
 	int sockfd, newsockfd, portno;
@@ -154,7 +277,9 @@ int main(int argc, char *argv[])
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: bank_server init\n", __func__);
-	
+
+	generate_PCR_digests();	
+
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) 
 		error("ERROR opening socket");
@@ -188,9 +313,14 @@ int main(int argc, char *argv[])
 	uint8_t nonce[TPM_AT_NONCE_LENGTH];
 
 	//bzero(pcr_slot, 3);
+	bzero(buffer, 1);
 	//n = read(newsockfd, pcr_slot, 3);
-	//if (n < 0)
-	//	error("ERROR reading from socket -- 1");
+	n = read(newsockfd, buffer, 1);
+	if (n < 0)
+		error("ERROR reading from socket -- 1");
+
+	if (buffer[0] != 1)
+		error("ERROR unexpected initial cmd");
 
 	//printf("%s [1]\n", __func__);
 	//int ret = check_slot(pcr_slot);
@@ -201,11 +331,11 @@ int main(int argc, char *argv[])
 	//}
 	//printf("%s [2]\n", __func__);
 
-	//buffer[0] = 1;
-	//n = write(newsockfd, buffer, 1);
-	//if (n < 0)
-	//	error("ERROR writing to socket -- 1");
-	//printf("%s [3]\n", __func__);
+	buffer[0] = 1;
+	n = write(newsockfd, buffer, 1);
+	if (n < 0)
+		error("ERROR writing to socket -- 1");
+	printf("%s [3]\n", __func__);
 
 	//gen_attest_payload(msg, pcr_slot, nonce);
 	gen_attest_payload(msg, nonce);
@@ -258,6 +388,19 @@ int main(int argc, char *argv[])
 	if (n < 0)
 		error("ERROR writing to socket -- 3");
 	printf("%s [7]\n", __func__);
+
+	/* Send I/O service PCRs */
+	n = write(newsockfd, keyboard_pcr, TPM_EXTEND_HASH_SIZE);
+	if (n < 0)
+		error("ERROR writing to socket -- keyboard_pcr");
+
+	n = write(newsockfd, serial_out_pcr, TPM_EXTEND_HASH_SIZE);
+	if (n < 0)
+		error("ERROR writing to socket -- serial_out_pcr");
+
+	n = write(newsockfd, network_pcr, TPM_EXTEND_HASH_SIZE);
+	if (n < 0)
+		error("ERROR writing to socket -- network_pcr");
 
 	/* Receive username and compare */
 	bzero(buffer, 32);

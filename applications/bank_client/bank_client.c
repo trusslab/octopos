@@ -14,6 +14,7 @@
 #include <octopos/tpm.h>
 #include <network/sock.h>
 #include <network/socket.h>
+#include <tpm/hash.h>
 
 /* Must be smaller than each message size minus 1.
  * For secure print, the message is the same as the mailbox size.
@@ -25,6 +26,10 @@ char output_buf_full[MAX_PRINT_SIZE];
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 int num_chars = 0;
 int msg_num = 0;
+
+uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t serial_out_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 
 #define loop_printf(print_cmd, fmt, args...) {									\
 	memset(output_buf_full, 0x0, MAX_PRINT_SIZE);								\
@@ -243,11 +248,12 @@ static int perform_remote_attestation(void)
 	uint8_t *packet;
 	uint32_t sig_size, quote_size;
 	char success = 0;
+	char init_cmd = 1;
 	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
-	//uint8_t pcr_slots[] = {0, (uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
+	uint8_t pcr_slots[] = {0, (uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
 	//uint8_t num_pcr_slots = 2;
-	uint8_t pcr_slots[] = {(uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
-	uint8_t num_pcr_slots = 1;
+	//uint8_t pcr_slots[] = {9, 10};
+	uint8_t num_pcr_slots = 2;
 
 	if (gapi->request_network_access(200, 100, queue_update_callback)) {
 		insecure_printf("Error: network queue access (remote "
@@ -256,17 +262,18 @@ static int perform_remote_attestation(void)
 	}
 
 	//if (gapi->write_to_socket(sock, pcr_slot, 3) < 0) {
-	//	insecure_printf("Error: couldn't write to socket (remote "
-	//			"attestation)\n");
-	//	return -1;
-	//}
+	if (gapi->write_to_socket(sock, &init_cmd, 1) < 0) {
+		insecure_printf("Error: couldn't write to socket (remote "
+				"attestation)\n");
+		return -1;
+	}
 
-	//printf("%s [1]\n", __func__);
-	//if (gapi->read_from_socket(sock, &success, 1) < 0) {
-	//	secure_printf("Error: couldn't read from socket (remote "
-	//		      "attestation:1)\n");
-	//	return -1;
-	//}
+	printf("%s [1]\n", __func__);
+	if (gapi->read_from_socket(sock, &success, 1) < 0) {
+		secure_printf("Error: couldn't read from socket (remote "
+			      "attestation:1)\n");
+		return -1;
+	}
 
 	//printf("%s [2]\n", __func__);
 	//if (success != 1) {
@@ -293,7 +300,6 @@ static int perform_remote_attestation(void)
 	memcpy(nonce, buf + 1 + TPM_AT_ID_LENGTH, TPM_AT_NONCE_LENGTH);
 
 	printf("%s [4]\n", __func__);
-	/* FIXME: why does the server send the slot back? We already have it. */
 	//int _pcr_slot = atoi(slot);
 	gapi->request_tpm_attestation_report(pcr_slots, num_pcr_slots, nonce,
 					     &signature, &sig_size, &quote,
@@ -327,6 +333,25 @@ static int perform_remote_attestation(void)
 
 	if (success != 1) {
 		insecure_printf("Error: attestation report not verified\n");
+		return -1;
+	}
+
+	/* Receieve I/O service PCRs */
+	if (gapi->read_from_socket(sock, keyboard_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
+		secure_printf("Error: couldn't read from socket (remote "
+			      "attestation:4)\n");
+		return -1;
+	}
+
+	if (gapi->read_from_socket(sock, serial_out_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
+		secure_printf("Error: couldn't read from socket (remote "
+			      "attestation:5)\n");
+		return -1;
+	}
+
+	if (gapi->read_from_socket(sock, network_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
+		secure_printf("Error: couldn't read from socket (remote "
+			      "attestation:6)\n");
 		return -1;
 	}
 
