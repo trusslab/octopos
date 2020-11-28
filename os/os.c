@@ -24,6 +24,7 @@ static void distribute_input(void)
 	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	/* FIXME: we should use separate threads for these two */
 	recv_input(input_buf, &queue_id);
+		_SEC_HW_ERROR("queue_id %d %02x", queue_id, queue_id);
 	if (queue_id == Q_KEYBOARD) {
 		shell_process_input((char) input_buf[0]);
 	} else if (queue_id == Q_OS1) {
@@ -31,6 +32,7 @@ static void distribute_input(void)
 	} else if (queue_id == Q_OS2) {
 		process_system_call(input_buf, P_RUNTIME2);
 	} else if (queue_id == Q_OSU) {
+		_SEC_HW_ERROR("OSU INTR RECEIVED");
 		process_system_call(input_buf, P_UNTRUSTED);
 #ifdef ARCH_SEC_HW
 	} else if (queue_id == 0) {

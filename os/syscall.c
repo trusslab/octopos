@@ -441,6 +441,7 @@ static void handle_untrusted_syscall(uint8_t *buf)
 	uint16_t syscall_nr;
 
 	syscall_nr = *((uint16_t *) &buf[0]);
+		_SEC_HW_ERROR("[0] %d", syscall_nr);
 
 	switch (syscall_nr) {
 	case SYSCALL_WRITE_TO_SHELL: {
@@ -509,6 +510,7 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
 	} else if (runtime_proc_id == P_UNTRUSTED) {
+		_SEC_HW_ERROR("[0]");
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);
 	} else {

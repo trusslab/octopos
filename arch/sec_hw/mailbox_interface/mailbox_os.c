@@ -153,6 +153,7 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		sem_post(&interrupts[Q_OS2]);
 		is_os2 = 1;
 	} else if (InstancePtr == &Mbox_osu) {
+		_SEC_HW_ERROR("OSU INPUT");
 		sem_post(&interrupts[Q_OSU]);
 		is_osu = 1;
 	}
@@ -179,6 +180,7 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		} else if (is_osu) {
 			sem_wait(&interrupts[Q_OSU]);
 			*queue_id = Q_OSU;
+		_SEC_HW_ERROR("OSU INPUT2 %d", *queue_id);
 		}
 	}
 
@@ -263,9 +265,10 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		free((void*) message_buffer);
 		break;
 	case Q_OSU:
+		_SEC_HW_ERROR("OSU INPUT3 %d", *queue_id);
 		message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 		
-#ifdef HW_MAILBOX_BLOCKING
+#ifndef HW_MAILBOX_BLOCKING
 		OCTOPOS_XMbox_ReadBlocking(&Mbox_osu, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 #else
 		if (sketch_buffer[*queue_id])
@@ -279,6 +282,7 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 					MAILBOX_QUEUE_MSG_SIZE,
 					&bytes_read);
 
+		_SEC_HW_ERROR("OSU INPUT4 %02x %d", message_buffer[0], bytes_read);
 		if (bytes_read != MAILBOX_QUEUE_MSG_SIZE && 
 			!handle_partial_message(message_buffer, queue_id, bytes_read))
 				return 0;
@@ -292,6 +296,7 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		break;
 	}
 
+		_SEC_HW_ERROR("queue_id %d %02x", *queue_id, *queue_id);
 	return 0;
 }
 
@@ -493,7 +498,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			_SEC_HW_DEBUG("Q_RUNTIME2 = %d", interrupts[Q_RUNTIME2].count);
 		} else if (callback_ref == &Mbox_untrusted) {
 			/* Runtime 2 */
-			_SEC_HW_DEBUG("from Untrusted");
+			_SEC_HW_ERROR("from Untrusted");
 
 			sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_UNTRUSTED]);
@@ -536,8 +541,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&interrupts[Q_OS2]);
 			sem_post(&interrupt_input);
 		} else if (callback_ref == &Mbox_osu) {
-			/* OS2 */
-			_SEC_HW_DEBUG("from Mbox_osu");
+			/* OSU */
+			_SEC_HW_ERROR("from Mbox_osu");
 
 			sem_post(&availables[Q_OSU]);
 			sem_post(&interrupts[Q_OSU]);
