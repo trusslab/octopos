@@ -10,14 +10,14 @@
  * These numbers correspond to the pin numbers in the FPGA
  * design.
  */
-u8 OMboxIds[NUM_QUEUES][NUM_PROCESSORS] = {0};
+u8 OMboxIds[NUM_QUEUES + 1][NUM_PROCESSORS + 1] = {0};
 
 /* OMboxCtrlIntrs keeps the irq numbers for each processor.
  * These numbers correspond to the irq numbers in the FPGA
  * design.
  */
-u8 OMboxCtrlIntrs[ALL_PROCESSORS][NUM_QUEUES] = {0};
-u8 OMboxIntrs[ALL_PROCESSORS][NUM_QUEUES] = {0};
+u8 OMboxCtrlIntrs[NUM_PROCESSORS + 1][NUM_QUEUES + 1] = {0};
+u8 OMboxIntrs[NUM_PROCESSORS + 1][NUM_QUEUES + 1] = {0};
 
 /* OCTOPOS_XMbox_ConfigTable keeps processor-specific mailbox
  * parameters. These data will be used to access the mailbox
