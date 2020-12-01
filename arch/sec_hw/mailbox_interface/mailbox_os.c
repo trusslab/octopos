@@ -153,7 +153,6 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		sem_post(&interrupts[Q_OS2]);
 		is_os2 = 1;
 	} else if (InstancePtr == &Mbox_osu) {
-		_SEC_HW_ERROR("OSU INPUT");
 		sem_post(&interrupts[Q_OSU]);
 		is_osu = 1;
 	}
@@ -180,7 +179,6 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		} else if (is_osu) {
 			sem_wait(&interrupts[Q_OSU]);
 			*queue_id = Q_OSU;
-		_SEC_HW_ERROR("OSU INPUT2 %d", *queue_id);
 		}
 	}
 
@@ -265,7 +263,6 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		free((void*) message_buffer);
 		break;
 	case Q_OSU:
-		_SEC_HW_ERROR("OSU INPUT3 %d", *queue_id);
 		message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 		
 #ifndef HW_MAILBOX_BLOCKING
@@ -282,7 +279,6 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 					MAILBOX_QUEUE_MSG_SIZE,
 					&bytes_read);
 
-		_SEC_HW_ERROR("OSU INPUT4 %02x %d", message_buffer[0], bytes_read);
 		if (bytes_read != MAILBOX_QUEUE_MSG_SIZE && 
 			!handle_partial_message(message_buffer, queue_id, bytes_read))
 				return 0;
@@ -296,7 +292,6 @@ int recv_input(uint8_t *buf, uint8_t *queue_id)
 		break;
 	}
 
-		_SEC_HW_ERROR("queue_id %d %02x", *queue_id, *queue_id);
 	return 0;
 }
 
@@ -358,18 +353,18 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	u32 reg = 0;
 	
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
-	_SEC_HW_DEBUG("queue %d: ctrl reg %p", queue_id, queue_ptr);
+	_SEC_HW_ERROR("queue %d: ctrl reg %p", queue_id, queue_ptr);
 
 	reg = octopos_mailbox_calc_time_limit(reg, MAX_OCTOPOS_MAILBOX_QUOTE);
 	reg = octopos_mailbox_calc_quota_limit(reg, count * factor);
 	reg = octopos_mailbox_calc_owner(reg, OMboxIds[queue_id][proc_id]);
 
-	_SEC_HW_DEBUG("Writing: %08x", reg);
-	_SEC_HW_DEBUG("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_ERROR("Writing: %08x", reg);
+	_SEC_HW_ERROR("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 
 	octopos_mailbox_set_status_reg(queue_ptr, reg);
 
-	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_ERROR("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 }
 
 
