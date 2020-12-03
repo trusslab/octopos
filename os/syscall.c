@@ -441,7 +441,6 @@ static void handle_untrusted_syscall(uint8_t *buf)
 	uint16_t syscall_nr;
 
 	syscall_nr = *((uint16_t *) &buf[0]);
-		_SEC_HW_ERROR("[0] %d", syscall_nr);
 
 	switch (syscall_nr) {
 	case SYSCALL_WRITE_TO_SHELL: {

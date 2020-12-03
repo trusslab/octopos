@@ -353,18 +353,18 @@ void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_
 	u32 reg = 0;
 	
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
-	_SEC_HW_ERROR("queue %d: ctrl reg %p", queue_id, queue_ptr);
+	_SEC_HW_DEBUG("queue %d: ctrl reg %p", queue_id, queue_ptr);
 
 	reg = octopos_mailbox_calc_time_limit(reg, MAX_OCTOPOS_MAILBOX_QUOTE);
 	reg = octopos_mailbox_calc_quota_limit(reg, count * factor);
 	reg = octopos_mailbox_calc_owner(reg, OMboxIds[queue_id][proc_id]);
 
-	_SEC_HW_ERROR("Writing: %08x", reg);
-	_SEC_HW_ERROR("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_DEBUG("Writing: %08x", reg);
+	_SEC_HW_DEBUG("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 
 	octopos_mailbox_set_status_reg(queue_ptr, reg);
 
-	_SEC_HW_ERROR("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 }
 
 
@@ -493,7 +493,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			_SEC_HW_DEBUG("Q_RUNTIME2 = %d", interrupts[Q_RUNTIME2].count);
 		} else if (callback_ref == &Mbox_untrusted) {
 			/* Runtime 2 */
-			_SEC_HW_ERROR("from Untrusted");
+			_SEC_HW_DEBUG("from Untrusted");
 
 			sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_UNTRUSTED]);
@@ -537,7 +537,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&interrupt_input);
 		} else if (callback_ref == &Mbox_osu) {
 			/* OSU */
-			_SEC_HW_ERROR("from Mbox_osu");
+			_SEC_HW_DEBUG("from Mbox_osu");
 
 			sem_post(&availables[Q_OSU]);
 			sem_post(&interrupts[Q_OSU]);

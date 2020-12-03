@@ -31,15 +31,6 @@ static void distribute_input(void)
 	} else if (queue_id == Q_OS2) {
 		process_system_call(input_buf, P_RUNTIME2);
 	} else if (queue_id == Q_OSU) {
-		_SEC_HW_ERROR("OSU: %02x%02x%02x%02x%02x%02x%02x%02x",
-			input_buf[0], 
-			input_buf[1], 
-			input_buf[2], 
-			input_buf[3], 
-			input_buf[4], 
-			input_buf[5], 
-			input_buf[6], 
-			input_buf[7]);
 		process_system_call(input_buf, P_UNTRUSTED);
 #ifdef ARCH_SEC_HW
 	} else if (queue_id == 0) {
