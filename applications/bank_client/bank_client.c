@@ -138,7 +138,7 @@ static int connect_to_server(void)
 	}
 
 	printf("%s [5]\n", __func__);
-	gapi->yield_network_access();
+	//gapi->yield_network_access();
 	printf("%s [6]\n", __func__);
 
 	return 0;
@@ -148,11 +148,11 @@ static int get_user_secret(char *username, char *secret)
 {
 	char success = 0;
 
-	if (gapi->request_network_access(200, 100, queue_update_callback,
-					 network_pcr)) {
-		insecure_printf("%s: Error: network queue access\n", __func__);
-		return -1;
-	}
+	//if (gapi->request_network_access(200, 100, queue_update_callback,
+	//				 network_pcr)) {
+	//	insecure_printf("%s: Error: network queue access\n", __func__);
+	//	return -1;
+	//}
 	
 	printf("%s [1]\n", __func__);
 	if (gapi->write_to_socket(sock, username, 32) < 0) {
@@ -179,7 +179,7 @@ static int get_user_secret(char *username, char *secret)
 	}
 	printf("%s [5]\n", __func__);
 
-	gapi->yield_network_access();
+	//gapi->yield_network_access();
 
 	return 0;
 }
@@ -193,11 +193,11 @@ static int send_password_to_server(char *password)
 	char success = 0;
 	printf("%s [0.1]\n", __func__);
 
-	if (gapi->request_network_access(200, 100, queue_update_callback,
-					 network_pcr)) {
-		secure_printf("Error: network queue access (password)\n");
-		return -1;
-	}
+	//if (gapi->request_network_access(200, 100, queue_update_callback,
+	//				 network_pcr)) {
+	//	secure_printf("Error: network queue access (password)\n");
+	//	return -1;
+	//}
 	
 	printf("%s [1]\n", __func__);
 	if (gapi->write_to_socket(sock, password, 32) < 0) {
@@ -217,7 +217,7 @@ static int send_password_to_server(char *password)
 		return -1;
 	}
 
-	gapi->yield_network_access();
+	//gapi->yield_network_access();
 	printf("%s [4]\n", __func__);
 	return 0;
 }
@@ -257,11 +257,11 @@ static int perform_remote_attestation(void)
 	//uint8_t pcr_slots[] = {9, 10};
 	uint8_t num_pcr_slots = 2;
 
-	if (gapi->request_network_access(200, 100, queue_update_callback, NULL)) {
-		insecure_printf("Error: network queue access (remote "
-				"attestation)\n");
-		return -1;
-	}
+	//if (gapi->request_network_access(200, 100, queue_update_callback, NULL)) {
+	//	insecure_printf("Error: network queue access (remote "
+	//			"attestation)\n");
+	//	return -1;
+	//}
 
 	//if (gapi->write_to_socket(sock, pcr_slot, 3) < 0) {
 	if (gapi->write_to_socket(sock, &init_cmd, 1) < 0) {
@@ -357,7 +357,7 @@ static int perform_remote_attestation(void)
 		return -1;
 	}
 
-	gapi->yield_network_access();
+	//gapi->yield_network_access();
 	printf("%s [7]\n", __func__);
 
 	return 0;
@@ -493,11 +493,11 @@ static int show_account_info(void)
 	char cmd, success;
 	uint32_t balance;
 
-	if (gapi->request_network_access(200, 100, queue_update_callback,
-					 network_pcr)) {
-		secure_printf("%s: Error: network queue access\n", session_word);
-		return -1;
-	}
+	//if (gapi->request_network_access(200, 100, queue_update_callback,
+	//				 network_pcr)) {
+	//	secure_printf("%s: Error: network queue access\n", session_word);
+	//	return -1;
+	//}
 
 	printf("%s [1]\n", __func__);
 	cmd = 1; /* retrive account balance */
@@ -525,7 +525,7 @@ static int show_account_info(void)
 	}
 
 	printf("%s [5]\n", __func__);
-	gapi->yield_network_access();
+	//gapi->yield_network_access();
 
 	printf("%s [6]\n", __func__);
 	/*
@@ -546,12 +546,12 @@ static int terminate_session(void)
 {
 	printf("%s [1]\n", __func__);
 	/* FIXME: anything else to do here? */
-	if (gapi->request_network_access(200, 100, queue_update_callback,
-					 network_pcr)) {
-		/* FIXME: don't print function names in error messages */
-		secure_printf("%s: Error: network queue access\n", session_word);
-		return -1;
-	}
+	//if (gapi->request_network_access(200, 100, queue_update_callback,
+	//				 network_pcr)) {
+	//	/* FIXME: don't print function names in error messages */
+	//	secure_printf("%s: Error: network queue access\n", session_word);
+	//	return -1;
+	//}
 
 	printf("%s [2]\n", __func__);
 	struct socket *tmp;

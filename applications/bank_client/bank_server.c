@@ -13,6 +13,8 @@
 #include <tss2/tss2_fapi.h>
 #include <tss2/tss2_rc.h>
 #include <openssl/sha.h>
+#include <json-c/json.h>
+//#include <json-c/json_util.h>
 /* octopos header files */
 #define APPLICATION
 #include <octopos/tpm.h>
@@ -31,10 +33,12 @@ uint32_t balance = 1000;
 uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t serial_out_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
-uint8_t quote_pcr_digest[TPM_EXTEND_HASH_SIZE];
+uint8_t expected_pcr_digest[TPM_EXTEND_HASH_SIZE];
+char expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
 
 static void error(const char *msg)
 {
+	/* FIXME: prints :Success on errors */
 	perror(msg);
 	exit(1);
 }
@@ -119,7 +123,69 @@ static void gen_attest_payload(char* msg, uint8_t* nonce_buf)
 	memcpy(nonce_buf, nonce, TPM_AT_NONCE_LENGTH);
 }
 
-static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
+static const char *extract_pcr_digest(json_object *jobj)
+{
+	enum json_type type;
+	int found = 0;
+	printf("%s [1]\n", __func__);
+
+	json_object_object_foreach(jobj, key, val) {
+		type = json_object_get_type(val);
+		printf("key: %s\n", key);
+		if (!strcmp(key, "pcrDigest"))
+		    found = 1;
+		printf("found = %d\n", found);
+
+		switch (type) {
+		case json_type_string:
+			printf("%s [2]: json_type_string\n", __func__);
+			printf("%s [3]: value: %s\n", __func__, json_object_get_string(val));
+			if (found) {
+				return json_object_get_string(val);
+			}
+			break;
+
+		//case json_type_null:
+		//	//printf("json_type_null\n");
+		//	break;
+
+		//case json_type_boolean:
+		//	//printf("json_type_boolean\n");
+		//	break;
+
+		//case json_type_double:
+		//	//printf("json_type_double\n");
+		//	break;
+
+		//case json_type_int:
+		//	//printf("json_type_int\n");
+		//	break;
+
+		case json_type_object: {
+			printf("%s [4]: json_type_object\n", __func__);
+			const char *ret = extract_pcr_digest(val);
+			if (ret)
+				return ret;
+			break;
+		}
+
+		//case json_type_array:
+		//	//printf("json_type_array\n");
+		//	break;
+
+		default:
+			printf("%s [5]\n", __func__);
+			break;
+		}
+
+		found = 0;
+	}
+	printf("%s [6]\n", __func__);
+
+	return NULL;
+}
+
+static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 			int size)
 {
 	FAPI_CONTEXT *context;
@@ -134,6 +200,7 @@ static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
 		fprintf(stdout, "INFO: Profile was provisioned.\n");
 	} else if (rc != TSS2_RC_SUCCESS) {
 		fprintf(stderr, "ERROR: Fapi_Provision: %s.\n", Tss2_RC_Decode(rc));
+		Fapi_Finalize(&context);
 		return -1;
 	}
 
@@ -142,6 +209,7 @@ static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
 			signature, size, NULL);
 	if (rc != TSS2_RC_SUCCESS) {
 		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
+		Fapi_Finalize(&context);
 		return -1;
 	}
 		
@@ -149,7 +217,23 @@ static int verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature,
 	printf("%s [1]: Quote: %s.\n", __func__, quote_info);
 
 	/* FIXME: verify the quote digest. */
+	json_object *quote_jobj = json_tokener_parse(quote_info);
+	const char *pcr_digest = extract_pcr_digest(quote_jobj); 
+	if (!pcr_digest) {
+		printf("Error: %s: couldn't find the PCR digest in quote\n",
+		       __func__);
+		Fapi_Finalize(&context);
+		return -1;
+	}
 
+	if (strcmp(pcr_digest, expected_pcr_digest_str)) {
+		printf("Error: %s: pcr_digest in the quote not verified\n",
+		       __func__);
+		Fapi_Finalize(&context);
+		return -1;
+	}
+
+	printf("Error: %s: pcr_digest is successfully verified\n", __func__);
 	Fapi_Finalize(&context);
 
 	return 0;
@@ -216,10 +300,12 @@ static void generate_PCR_digests(void)
 	/* FIXME: for now, PCR 0 is just a zero buf since we don't extend it. */
 	buffers[0] = zero_pcr;
 	buffers[1] = app_pcr;
-	hash_multiple_buffers(buffers, buffer_sizes, 2, quote_pcr_digest);
-	printf("%s [1]: quote's PCR digest = ", __func__);
-	print_hash_buf(quote_pcr_digest);
-
+	hash_multiple_buffers(buffers, buffer_sizes, 2, expected_pcr_digest);
+	printf("%s [1]: expected PCR digest = ", __func__);
+	print_hash_buf(expected_pcr_digest);
+	convert_hash_to_str(expected_pcr_digest, expected_pcr_digest_str);
+	//expected_pcr_digest_str[2 * TPM_EXTEND_HASH_SIZE] = '\0';
+ 
 	/* 2 PCRs -- works */
 	//uint8_t hash_buf[SHA256_DIGEST_LENGTH];
 	//uint8_t hash_buf2[SHA256_DIGEST_LENGTH];

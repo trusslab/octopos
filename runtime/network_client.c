@@ -69,10 +69,13 @@ void ip_send_out(struct pkbuf *pkb)
 
 uint8_t *ip_receive(uint8_t *buf, uint16_t *size)
 {
+	printf("%s [1]: *size = %d\n", __func__, *size);
 	runtime_recv_msg_from_queue_large(buf, Q_NETWORK_DATA_OUT);
+	printf("%s [2]\n", __func__);
 	*size = 0;
 	NETWORK_GET_ZERO_ARGS_DATA
 	*size = data_size;
+	printf("%s [3]: *size = %d\n", __func__, *size);
 
 #ifndef UNTRUSTED_DOMAIN
 	report_queue_usage(Q_NETWORK_DATA_OUT);

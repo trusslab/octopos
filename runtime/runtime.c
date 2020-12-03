@@ -417,6 +417,10 @@ int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 		return ret;
 	}
 
+	printf("%s [1]: proc_id = %d\n", __func__, proc_id);
+	printf("%s [2]: pcr_val: ", __func__); print_hash_buf(pcr_val); printf("\n");
+	printf("%s [3]: expected_pcr: ", __func__); print_hash_buf(expected_pcr); printf("\n");
+
 	ret = memcmp(pcr_val, expected_pcr, TPM_EXTEND_HASH_SIZE);
 	if (ret) {
 		printf("Error: %s: pcr val doesn't match the expected val\n",
@@ -448,6 +452,7 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 	printf("%s [2]\n", __func__);
 
 	issue_syscall(buf);
+	printf("%s [2.1]\n", __func__);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;

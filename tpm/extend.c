@@ -32,8 +32,7 @@ void tpm_directly_extend(int slot, uint8_t *hash_buf)
 	};
 
 	convert_hash_to_str(hash_buf, hash_str);
-	/* FIXME: why do we need this? */
-	hash_str[2 * TPM_EXTEND_HASH_SIZE] = 0;
+	//hash_str[2 * TPM_EXTEND_HASH_SIZE] = 0;
 
 	int ret = prepare_extend(hash_str, &digests);
 	if (ret) {

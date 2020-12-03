@@ -136,6 +136,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_TWO_ARGS
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
+		printf("%s [1]\n", __func__);
 
 		/* FIXME: arbitrary thresholds */
 		/* No more than 100 characters; no more than 100 seconds. */
@@ -143,6 +144,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
+		printf("%s [2]\n", __func__);
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */
@@ -150,12 +152,15 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
+		printf("%s [3]\n", __func__);
 
 		mark_queue_unavailable(Q_KEYBOARD);
+		printf("%s [4]\n", __func__);
 
 		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id,
 					      (limit_t) limit,
 					      (timeout_t) timeout);
+		printf("%s [5]\n", __func__);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;

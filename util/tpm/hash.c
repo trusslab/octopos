@@ -36,11 +36,18 @@ int hash_file(char *path, uint8_t *hash_buf)
 	return 0;
 }
 
+/*
+ * @hash_buf: an array of uint8_t with a minimum size of SHA256_DIGEST_LENGTH.
+ * @hash_str: an array of char with a minimum size of
+ *	      (2 * SHA256_DIGEST_LENGTH + 1).
+ */
 void convert_hash_to_str(uint8_t *hash_buf, char *hash_str)
 {
 	for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
 		sprintf(hash_str + (i * 2), "%02x", hash_buf[i]);
 	}
+
+	hash_str[2 * SHA256_DIGEST_LENGTH] = '\0';
 }
 
 /*
