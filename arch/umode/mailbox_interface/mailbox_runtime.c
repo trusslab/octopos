@@ -58,7 +58,7 @@ bool has_ctx_thread = false;
 int write_syscall_response(uint8_t *buf);
 void *store_context(void *data);
 void *run_app(void *data);
-int send_app_measurement_to_tpm(char *hash_buf);
+int send_app_measurement_to_tpm(uint8_t *hash_buf);
 void timer_tick(void);
 
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
@@ -120,12 +120,17 @@ static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int que
 	pthread_spin_unlock(&mailbox_lock);
 }
 
+/* FIXME: remove. Just for debugging */
+int counter1 = 0;
+int counter2 = 0;
+
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
+	if (queue_id == Q_SERIAL_OUT) printf("%s [1]: Q_SERIAL_OUT: %d\n", __func__, ++counter1);
 	sem_wait(&interrupts[queue_id]);
 	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 2);
@@ -175,6 +180,22 @@ void wait_on_queue(uint8_t queue_id)
 	sem_wait(&interrupts[queue_id]);
 }
 
+int schedule_func_execution_arch(void *(*func)(void *), void *data)
+{
+	pthread_t worker_thread;
+
+	printf("%s [1]\n", __func__);
+	int ret = pthread_create(&worker_thread, NULL, (pfunc_t) func, data);
+	printf("%s [2]\n", __func__);
+	if (ret) {
+		printf("Error: couldn't launch worker thread\n");
+		return ret;
+	}
+	printf("%s [3]\n", __func__);
+
+	return 0;
+}
+
 void wait_for_app_load(void)
 {
 	sem_wait(&load_app_sem);
@@ -204,12 +225,24 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		return;
 	}
 
-	char hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
+	uint8_t hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
 	hash_file(path, hash_buf);
 
 	send_app_measurement_to_tpm(hash_buf);
 
 	(*app_main)(api);
+}
+
+/*
+ * Can be called in the app thread or in interrupt context.
+ */
+void terminate_app_thread_arch(void)
+{
+	if (pthread_self() == app_thread)
+		pthread_exit(NULL);
+	else
+		pthread_cancel(app_thread);
+		pthread_join(app_thread, NULL);
 }
 
 void runtime_core(void)
@@ -264,6 +297,7 @@ void runtime_core(void)
 				exit(-1);
 			}
 		} else {
+			if (interrupt == Q_SERIAL_OUT) printf("%s [1]: Q_SERIAL_OUT: %d\n", __func__, ++counter2);
 			sem_post(&interrupts[interrupt]);
 		}
 	}

@@ -66,6 +66,11 @@ struct runtime_api *gapi;
 
 char session_word[32];
 
+int has_network = 0;
+int has_keyboard = 0;
+int has_secure_serial_out = 0;
+int has_session_word = 0;
+
 static int _str2ip(char *str, unsigned int *ip)
 {
 	unsigned int a, b, c, d;
@@ -91,13 +96,78 @@ static int _parse_ip_port(char *str, unsigned int *addr, unsigned short *nport)
 	return 0;
 }
 
-static void queue_update_callback(uint8_t queue_id, limit_t limit,
-				  timeout_t timeout)
+int exiting = 0;
+
+static void *yield_resources(void *data)
 {
-	/* FIXME: implement */
-	if (limit == 0 || timeout == 0)
-		printf("%s [1]: queue_id = %d, limit = %d, timeout = %d\n",
-		       __func__, queue_id, limit, timeout);
+	printf("%s [1]\n", __func__);
+	if (has_secure_serial_out)
+		gapi->yield_secure_serial_out();
+
+	printf("%s [2]\n", __func__);
+	if (has_keyboard)
+		gapi->yield_secure_keyboard();
+
+	printf("%s [3]\n", __func__);
+	if (has_network)
+		gapi->yield_network_access();
+	printf("%s [4]\n", __func__);
+			
+	gapi->terminate_app();
+	printf("%s [5]\n", __func__);
+
+	return NULL;
+}
+
+/*
+ * When there is an update on the limit, this function is called in the main
+ * app context. When the update is on the timeout, it is called in the interrupt
+ * context.
+ */
+static void queue_update_callback(uint8_t queue_id, limit_t limit,
+				  timeout_t timeout, uint8_t which_update)
+{
+	printf("%s [1]: queue_id = %d, limit = %d, timeout = %d, which_update = %d\n", __func__, queue_id, limit, timeout, which_update);
+	if ((limit < 5 || timeout < 5) && !exiting) {
+		exiting = 1;
+		printf("%s [2]\n", __func__);
+		if (has_secure_serial_out && has_session_word) {
+			printf("%s [3]\n", __func__);
+			secure_printf("%s: Session is terminating. Stop using "
+				      "the app now as it is no longer secure. "
+				      "If needed, you can restart the app.\n",
+				      session_word);
+		} else if (has_secure_serial_out && !has_session_word) {
+			printf("%s [4]\n", __func__);
+			secure_printf("App is terminating. Stop using "
+				      "the app now as it is no longer secure. "
+				      "If needed, you can restart the app.\n");
+		} else { /* !has_secure_serial_out */
+			printf("%s [5]\n", __func__);
+			insecure_printf("App is terminating.\n");
+		}
+		printf("%s [6]\n", __func__);
+
+		if (which_update == LIMIT_UPDATE) {
+			printf("%s [7]\n", __func__);
+			yield_resources(NULL);	
+			printf("%s [8]\n", __func__);
+
+			gapi->terminate_app();
+			printf("%s [9]\n", __func__);
+		} else { /* which_update == TIMEOUT_UPDATE */
+			printf("%s [10]\n", __func__);
+			/* We are in the interrupt context, hence we schedule
+			 * yield_resources() to be executed in a worker_thread
+			 * thread.
+			 */
+			gapi->schedule_func_execution(yield_resources, NULL);	
+			printf("%s [11]\n", __func__);
+			//gapi->terminate_app_thread();
+			printf("%s [12]\n", __func__);
+		}
+	}
+	printf("%s [13]\n", __func__);
 }
 
 static int connect_to_server(void)
@@ -113,7 +183,7 @@ static int connect_to_server(void)
 	err = _parse_ip_port(addr, &skaddr.dst_addr,
 					&skaddr.dst_port);
 	if (err < 0) {
-		printf("address format is error\n");
+		insecure_printf("address format is error\n");
 		return err;
 	}
 
@@ -121,19 +191,21 @@ static int connect_to_server(void)
 	/* init socket */
 	sock = gapi->create_socket(AF_INET, type, 0, &skaddr);
 	if (!sock) {
-		printf("%s: Error: _socket\n", __func__);
+		insecure_printf("%s: Error: _socket\n", __func__);
 		return -1;
 	}
 
 	printf("%s [3]\n", __func__);
 	if (gapi->request_network_access(200, 100, queue_update_callback, NULL)) {
-		printf("%s: Error: network queue access\n", __func__);
+		insecure_printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
 
+	has_network = 1;
+
 	printf("%s [4]\n", __func__);
 	if (gapi->connect_socket(sock, &skaddr) < 0) {
-		printf("%s: Error: _connect\n", __func__);
+		insecure_printf("%s: Error: _connect\n", __func__);
 		return -1;
 	}
 
@@ -479,6 +551,7 @@ read_password:
 	strcpy(session_word, "SESSION");
 
 	secure_printf("Your session keyword is %s.\n", session_word);
+	has_session_word = 1;
 	secure_printf("%s: Look for the session keyword at the beginning of each line.\n", session_word);
 	secure_printf("%s: If not correct or available, stop using the app immediately.\n", session_word);
 
@@ -564,7 +637,7 @@ static int terminate_session(void)
 	}
 
 	printf("%s [5]\n", __func__);
-	gapi->yield_network_access();
+	//gapi->yield_network_access();
 	printf("%s [6]\n", __func__);
 
 	return 0;
@@ -620,7 +693,7 @@ void app_main(struct runtime_api *api)
 
 	/* Request secure keyboard/serial_out and use secure_printf from now on. */
 	/* FIXME: why 100/1000? Also, we need to specify the timeout */
-	ret = gapi->request_secure_keyboard(100, 10, queue_update_callback,
+	ret = gapi->request_secure_keyboard(100, 100, queue_update_callback,
 					    keyboard_pcr);
 	if (ret) {
 		insecure_printf("Error: could not get secure access to keyboard\n");
@@ -633,13 +706,19 @@ void app_main(struct runtime_api *api)
 	 */
 	printf("%s [3]\n", __func__);
 
-	ret = gapi->request_secure_serial_out(1000, 10, queue_update_callback,
+	has_keyboard = 1;
+
+	//ret = gapi->request_secure_serial_out(1000, 10, queue_update_callback,
+	//ret = gapi->request_secure_serial_out(7, 10, queue_update_callback,
+	ret = gapi->request_secure_serial_out(1000, 100, queue_update_callback,
 					      serial_out_pcr);
 	if (ret) {
 		gapi->yield_secure_keyboard();
 		insecure_printf("Error: could not get secure access to serial_out (log_in)\n");
 		return;
 	}
+
+	has_secure_serial_out = 1;
 
 	/* Step 2 */
 	ret = log_in();
@@ -667,7 +746,13 @@ void app_main(struct runtime_api *api)
 		return;
 	}
 
+	has_network = 0;
+	gapi->yield_network_access();
+
+	has_keyboard = 0;
 	gapi->yield_secure_keyboard();
+
+	has_secure_serial_out = 0;
 	gapi->yield_secure_serial_out();
 	/*
 	 * No more interacting with the user after this.

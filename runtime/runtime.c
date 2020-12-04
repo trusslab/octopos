@@ -65,6 +65,8 @@ int p_runtime = 0;
 int q_runtime = 0;
 int q_os = 0;
 
+bool still_running = true;
+
 uint8_t **syscall_resp_queue;
 int srq_size;
 int srq_msg_size;
@@ -260,7 +262,8 @@ void report_queue_usage(uint8_t queue_id)
 	if (queue_update_callbacks[queue_id]) {
 		(*queue_update_callbacks[queue_id])(queue_id,
 						    queue_limits[queue_id],
-						    queue_timeouts[queue_id]);
+						    queue_timeouts[queue_id],
+						    LIMIT_UPDATE);
 
 		if (queue_limits[queue_id] == 0)
 			queue_expired(queue_id);
@@ -275,7 +278,8 @@ void timer_tick(void)
 		if (queue_update_callbacks[i]) {
 			queue_timeouts[i]--;
 			(*queue_update_callbacks[i])(i, queue_limits[i],
-						     queue_timeouts[i]);
+						     queue_timeouts[i],
+						     TIMEOUT_UPDATE);
 			
 			/* FIXME: this can be a little late as the queue might
 			 * have expired a little bit earlier due to the error
@@ -491,17 +495,22 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 
 static int yield_secure_keyboard(void)
 {
+	printf("%s [1]\n", __func__);
 	if (!has_secure_keyboard_access) {
 		printf("Error: %s: does not have access to secure keyboard.\n",
 		       __func__);
 		return ERR_INVALID;
 	}
+	printf("%s [2]\n", __func__);
 
 	has_secure_keyboard_access = false;
+	printf("%s [3]\n", __func__);
 
 	mailbox_yield_to_previous_owner(Q_KEYBOARD);
+	printf("%s [4]\n", __func__);
 
 	reset_keyboard_queue_trackers();
+	printf("%s [5]\n", __func__);
 
 	return 0;
 }
@@ -899,6 +908,22 @@ static uint8_t get_runtime_queue_id(void)
 	return (uint8_t) q_runtime;
 }
 
+static void terminate_app(void)
+{
+	still_running = false;
+	inform_os_of_termination();
+
+	terminate_app_thread_arch();
+}
+
+/*
+ * func() should terminate on its own. We don't cancel it anywhere.
+ */
+static int schedule_func_execution(void *(*func)(void *), void *data)
+{
+	return schedule_func_execution_arch(func, data);
+}
+
 extern bool has_network_access;
 extern int network_access_count;
 
@@ -1037,7 +1062,7 @@ static int request_tpm_access(limit_t limit)
 	return 0;
 }
 
-int send_app_measurement_to_tpm(char *hash_buf)
+int send_app_measurement_to_tpm(uint8_t *hash_buf)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
@@ -1222,6 +1247,8 @@ static void load_application(char *msg)
 		.request_tpm_attestation_report = request_tpm_attestation_report,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
+		.terminate_app = terminate_app,
+		.schedule_func_execution = schedule_func_execution,
 #ifdef ARCH_UMODE
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
@@ -1240,8 +1267,6 @@ static void load_application(char *msg)
 
 	return;
 }
-
-bool still_running = true;
 
 void *run_app(void *load_buf)
 {

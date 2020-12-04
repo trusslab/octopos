@@ -120,15 +120,19 @@ void reset_network_queues_tracker(void)
 
 int yield_network_access(void)
 {
+	printf("%s [1]\n", __func__);
 	if (!has_network_access) {
 		printf("%s: Error: no network access to yield\n", __func__);
 		return ERR_INVALID;
 	}
+	printf("%s [2]\n", __func__);
 
 	has_network_access = false;
 	network_access_count = 0;
+	printf("%s [3]\n", __func__);
 
 	net_stop_receive();
+	printf("%s [4]\n", __func__);
 
 	/* FIXME: we should have a bounded wait here in case the network service
 	 * does not read all messages off the queue.
@@ -136,6 +140,7 @@ int yield_network_access(void)
 	 * about the leaking of the leftover messages.
 	 */
 	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	printf("%s [5]\n", __func__);
 
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
@@ -143,6 +148,7 @@ int yield_network_access(void)
 #ifndef UNTRUSTED_DOMAIN
 	reset_network_queues_tracker();
 #endif
+	printf("%s [6]\n", __func__);
 	
 	return 0;
 }

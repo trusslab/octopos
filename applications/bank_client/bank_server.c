@@ -233,7 +233,7 @@ static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 		return -1;
 	}
 
-	printf("Error: %s: pcr_digest is successfully verified\n", __func__);
+	printf("%s: pcr_digest is successfully verified\n", __func__);
 	Fapi_Finalize(&context);
 
 	return 0;

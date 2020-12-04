@@ -12,7 +12,9 @@ typedef uint32_t timeout_t;
 #define MAILBOX_MAX_LIMIT_VAL	0xFFE
 #define MAILBOX_MAX_TIMEOUT_VAL	0xFFE
 
-typedef void (*queue_update_callback_t)(uint8_t, limit_t, timeout_t);
+typedef void (*queue_update_callback_t)(uint8_t, limit_t, timeout_t, uint8_t);
+#define LIMIT_UPDATE		0
+#define TIMEOUT_UPDATE		1
 
 #ifndef UNTRUSTED_DOMAIN
 struct runtime_api {
@@ -83,6 +85,8 @@ struct runtime_api {
 	/* Local API */
 	uint8_t (*get_runtime_proc_id)(void);
 	uint8_t (*get_runtime_queue_id)(void);
+	void (*terminate_app)(void);
+	int (*schedule_func_execution)(void *(*func)(void *), void *data);
 
 #ifndef ARCH_SEC_HW
 	/* socket and network */

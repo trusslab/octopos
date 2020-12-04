@@ -166,6 +166,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
+		printf("%s [6]: INFORM_OS_OF_TERMINATION\n", __func__);
 		inform_shell_of_termination(runtime_proc_id);
 		*late_processing = SYSCALL_INFORM_OS_OF_TERMINATION;
 		SYSCALL_SET_ONE_RET(0)
