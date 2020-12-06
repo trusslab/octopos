@@ -34,6 +34,7 @@ int main(int argc, char *argv[])
 	char *name = argv[1];
 	char path[128];
 	memset(path, 0x0, 128);
+	/* FIXME: use a different path. */
 	strcpy(path, "./bootloader/");
 	strcat(path, name);
 	/* FIXME */

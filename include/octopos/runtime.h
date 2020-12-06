@@ -35,6 +35,7 @@ struct runtime_api {
 	int (*read_from_shell)(char *data, int *data_size);
 
 	/* file system */
+	/* FIXME: what's the real use of the FS API for apps? */
 	uint32_t (*open_file)(char *filename, uint32_t mode);
 	int (*write_to_file)(uint32_t fd, uint8_t *data, int size, int offset);
 	int (*read_from_file)(uint32_t fd, uint8_t *data, int size, int offset);
@@ -42,6 +43,7 @@ struct runtime_api {
 				 int num_blocks);
 	int (*read_file_blocks)(uint32_t fd, uint8_t *data, int start_block,
 				int num_blocks);
+	uint32_t (*get_file_size)(uint32_t fd);
 	int (*close_file)(uint32_t fd);
 	int (*remove_file)(char *filename);
 

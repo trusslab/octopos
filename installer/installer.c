@@ -58,8 +58,6 @@ static int copy_file_to_partition(char *filename, char *path, int do_test, char 
 	fclose(src_filep);
 	file_system_close_file(fd);
 	
-	printf("%s: total number of written blocks = %d\n", __func__, total_blocks);
-
 	if (!do_test)
 		return 0;
 
@@ -137,7 +135,30 @@ int main(int argc, char **argv)
 			       1, (char *) "./installer/copy_network");
 	copy_file_to_partition((char *) "linux", (char *) "./arch/umode/untrusted_linux/linux",
 			       1, (char *) "./installer/copy_linux");
-	
+	/* Apps */
+	copy_file_to_partition((char *) "attest_client", (char *) "./applications/bin/attest_client.so",
+			       1, (char *) "./installer/copy_attest_client.so");
+	copy_file_to_partition((char *) "bank_client", (char *) "./applications/bin/bank_client.so",
+			       1, (char *) "./installer/copy_bank_client.so");
+	copy_file_to_partition((char *) "fs_loop", (char *) "./applications/bin/fs_loop.so",
+			       1, (char *) "./installer/copy_fs_loop.so");
+	copy_file_to_partition((char *) "fs_test", (char *) "./applications/bin/fs_test.so",
+			       1, (char *) "./installer/copy_fs_test.so");
+	copy_file_to_partition((char *) "ipc_receiver", (char *) "./applications/bin/ipc_receiver.so",
+			       1, (char *) "./installer/copy_ipc_receiver.so");
+	copy_file_to_partition((char *) "ipc_sender", (char *) "./applications/bin/ipc_sender.so",
+			       1, (char *) "./installer/copy_ipc_sender.so");
+	copy_file_to_partition((char *) "secure_interact", (char *) "./applications/bin/secure_interact.so",
+			       1, (char *) "./installer/copy_secure_interact.so");
+	copy_file_to_partition((char *) "secure_login", (char *) "./applications/bin/secure_login.so",
+			       1, (char *) "./installer/copy_secure_login.so");
+	copy_file_to_partition((char *) "simple_loop", (char *) "./applications/bin/simple_loop.so",
+			       1, (char *) "./installer/copy_simple_loop.so");
+	copy_file_to_partition((char *) "socket_client", (char *) "./applications/bin/socket_client.so",
+			       1, (char *) "./installer/copy_socket_client.so");
+
+	printf("installer: total number of written blocks = %d\n", total_blocks);
+
 	close_file_system();
 	fclose(filep);
 

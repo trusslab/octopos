@@ -673,7 +673,8 @@ static int read_from_shell(char *data, int *data_size)
 
 static uint32_t open_file(char *filename, uint32_t mode)
 {
-	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename, strlen(filename))
+	SYSCALL_SET_ONE_ARG_DATA(SYSCALL_OPEN_FILE, mode, filename,
+				 strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return ret0;
@@ -695,11 +696,12 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	return (int) ret0;
 }
 
-static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
+static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block,
+			     int num_blocks)
 {
 	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_WRITE_FILE_BLOCKS, fd,
-				   (uint32_t) start_block, (uint32_t) num_blocks)
+			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
@@ -707,16 +709,18 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block, int nu
 	uint8_t queue_id = (uint8_t) ret0;
 
 	for (int i = 0; i < num_blocks; i++)
-		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
+		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE),
+						queue_id);
 
 	return num_blocks;
 }
 
-static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num_blocks)
+static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block,
+			    int num_blocks)
 {
 	reset_queue_sync(Q_STORAGE_DATA_OUT, 0);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FILE_BLOCKS, fd,
-				   (uint32_t) start_block, (uint32_t) num_blocks)
+			       (uint32_t) start_block, (uint32_t) num_blocks)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0 == 0)
@@ -725,9 +729,18 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block, int num
 	uint8_t queue_id = (uint8_t) ret0;
 
 	for (int i = 0; i < num_blocks; i++)
-		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE), queue_id);
+		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE),
+						  queue_id);
 
 	return num_blocks;
+}
+
+static uint32_t get_file_size(uint32_t fd)
+{
+	SYSCALL_SET_ONE_ARG(SYSCALL_GET_FILE_SIZE, fd)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	return (int) ret0;
 }
 
 static int close_file(uint32_t fd)
@@ -740,7 +753,8 @@ static int close_file(uint32_t fd)
 
 static int remove_file(char *filename)
 {
-	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_REMOVE_FILE, filename, strlen(filename))
+	SYSCALL_SET_ZERO_ARGS_DATA(SYSCALL_REMOVE_FILE, filename,
+				   strlen(filename))
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return (int) ret0;
@@ -1215,6 +1229,16 @@ int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 
 static void load_application(char *msg)
 {
+	/* The bound is the length of load_buf minus one (for the null
+	 * terminator)
+	 */
+	size_t msg_str_len = strlen(msg);
+	if (msg_str_len > (MAILBOX_QUEUE_MSG_SIZE - 2)) {
+		printf("Error: %s: invalid msg string len (%lu).\n", __func__,
+		       msg_str_len);
+		return;
+	}
+
 	struct runtime_api api = {
 		.request_secure_keyboard = request_secure_keyboard,
 		.yield_secure_keyboard = yield_secure_keyboard,
@@ -1229,6 +1253,7 @@ static void load_application(char *msg)
 		.read_from_file = read_from_file,
 		.write_file_blocks = write_file_blocks,
 		.read_file_blocks = read_file_blocks,
+		.get_file_size = get_file_size,
 		.close_file = close_file,
 		.remove_file = remove_file,
 		.set_up_secure_storage_key = set_up_secure_storage_key,
@@ -1263,7 +1288,68 @@ static void load_application(char *msg)
 #endif
 	};
 
-	load_application_arch(msg, &api);
+	/* Retrieve app from FS */
+	uint32_t fd = open_file(msg, FILE_OPEN_MODE);
+	if (!fd) {
+		printf("Error: %s: couldn't retrieve app.\n", __func__);
+		return;
+	}
+
+	uint32_t file_size = get_file_size(fd);
+	if (!file_size) {
+		printf("Error: %s: couldn't retrieve file size.\n", __func__);
+		close_file(fd);
+		return;
+	}
+
+	int num_blocks = file_size / STORAGE_BLOCK_SIZE;
+	if (file_size % STORAGE_BLOCK_SIZE)
+		num_blocks++;
+
+	uint8_t *file_data = (uint8_t *) malloc(num_blocks * STORAGE_BLOCK_SIZE);
+	if (!file_data) {
+		printf("Error: %s: couldn't allocate memory.\n", __func__);
+		close_file(fd);
+		return;
+	}
+
+	int num_read_blocks = read_file_blocks(fd, file_data, 0, num_blocks);
+	if (num_read_blocks != num_blocks) {
+		printf("Error: %s: couldn't read all file blocks.\n", __func__);
+		close_file(fd);
+		return;
+	}
+
+	close_file(fd);
+
+	/* write to a local file */
+	char path[2 * MAILBOX_QUEUE_MSG_SIZE];
+	memset(path, 0x0, 2 * MAILBOX_QUEUE_MSG_SIZE);
+	/* FIXME: use a different path. */
+	strcpy(path, "./bootloader/");
+	strcat(path, msg);
+	strcat(path, ".so");
+
+	FILE *filep = fopen(path, "w");
+	if (!filep) {
+		printf("Error: %s: Couldn't open the file (%s).\n", __func__,
+		       path);
+		return;
+	}
+
+	fseek(filep, 0, SEEK_SET);
+	size_t write_ret = fwrite(file_data, sizeof(uint8_t),
+				  (size_t) file_size, filep);
+	if (write_ret != (size_t) file_size) {
+		printf("Error: %s: Couldn't write to local file (%lu).\n",
+		       __func__, write_ret);
+		return;
+	}
+
+	fclose(filep);
+
+	/* Finally, run the app. */
+	load_application_arch(path, &api);
 
 	return;
 }

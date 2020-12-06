@@ -274,6 +274,7 @@ repeat:
 		read_from_storage_data_queue(buf);
 		
 		fseek(copy_filep, offset, SEEK_SET);
+		/* FIXME: check the return val from fwrite */
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
 
 		offset += STORAGE_BLOCK_SIZE;

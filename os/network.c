@@ -104,22 +104,25 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 					   uint8_t *buf)
 {
+	printf("%s [1]\n", __func__);
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 		return;
 	}
+	printf("%s [2]\n", __func__);
 
 	struct app *app = runtime_proc->app;
 	if (!app->socket_created) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
+	printf("%s [3]\n", __func__);
 
 	SYSCALL_GET_TWO_ARGS
 	uint32_t limit = arg0;
 	uint32_t timeout = arg1;
-	printf("%s [1]\n", __func__);
+	printf("%s [4]\n", __func__);
 
 	/* FIXME: arbitrary thresholds */
 	/* No more than 200 block reads/writes; no more than 100 seconds */
@@ -135,10 +138,10 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 		return;
 	}
-	printf("%s [2]\n", __func__);
+	printf("%s [5]\n", __func__);
 
 	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-	printf("%s [3]\n", __func__);
+	printf("%s [6]\n", __func__);
 
 	int ret = network_set_up_socket(app->socket_saddr, app->socket_sport,
 					app->socket_daddr, app->socket_dport);
@@ -146,7 +149,7 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 		return;
 	}
-	printf("%s [4]\n", __func__);
+	printf("%s [7]\n", __func__);
 
 	mark_queue_unavailable(Q_NETWORK_DATA_IN);
 	mark_queue_unavailable(Q_NETWORK_DATA_OUT);
@@ -155,7 +158,7 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 				      (limit_t) limit, (timeout_t) timeout);
 	mailbox_delegate_queue_access(Q_NETWORK_DATA_OUT, runtime_proc_id,
 				      (limit_t) limit, (timeout_t) timeout);
-	printf("%s [5]\n", __func__);
+	printf("%s [8]\n", __func__);
 
 	SYSCALL_SET_ONE_RET((uint32_t) 0)
 }

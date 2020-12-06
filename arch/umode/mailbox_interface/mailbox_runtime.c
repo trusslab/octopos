@@ -203,14 +203,14 @@ void wait_for_app_load(void)
 
 typedef void (*app_main_proc)(struct runtime_api *);
 
-void load_application_arch(char *msg, struct runtime_api *api)
+void load_application_arch(char *path, struct runtime_api *api)
 {
 	void *app;
-	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "./applications/bin/";
+	//char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "./applications/bin/";
 	app_main_proc app_main;
 
-	strcat(path, msg);
-	strcat(path, ".so");
+	//strcat(path, msg);
+	//strcat(path, ".so");
 	printf("opening %s\n", path);
 
 	app = dlopen(path, RTLD_LAZY);

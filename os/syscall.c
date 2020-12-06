@@ -280,6 +280,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
+	case SYSCALL_GET_FILE_SIZE: {
+		uint32_t ret;
+		SYSCALL_GET_ONE_ARG
+		ret = file_system_get_file_size(arg0);
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
 	case SYSCALL_CLOSE_FILE: {
 		uint32_t ret;
 		SYSCALL_GET_ONE_ARG

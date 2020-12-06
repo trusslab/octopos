@@ -11,7 +11,7 @@ umode:
 	for dir in $(DIRS); do \
 		$(MAKE) umode -C $$dir; \
 	done
-	./installer/installer > /dev/null 2>&1
+	./installer/installer
 	if [ ! -f $(UNTRUSTED_ROOT_FS_PARTITION_PATH) ]; then \
 		cp $(UNTRUSTED_ROOT_FS_SRC_PATH) $(UNTRUSTED_ROOT_FS_PARTITION_PATH); \
 	fi 

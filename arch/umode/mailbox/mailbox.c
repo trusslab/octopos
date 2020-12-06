@@ -892,21 +892,23 @@ static void yield_queue_access(uint8_t queue_id, uint8_t requester)
 	processors[queues[queue_id].OWNER].send_interrupt(queue_id + NUM_QUEUES);
 }
 
-static mailbox_state_reg_t attest_queue_access(uint8_t queue_id, uint8_t requester)
+static mailbox_state_reg_t attest_queue_access(uint8_t queue_id,
+					       uint8_t requester)
 {
 	mailbox_state_reg_t MAILBOX_STATE_REG_INVALID =
 		{.owner = 0x00, .limit = 0x000, .timeout = 0x000};
 
 	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
-		printf("Error: %s: SIMPLE queues don't support attestation (%d).\n",
-		       __func__, queue_id);
+		printf("Error: %s: SIMPLE queues don't support attestation "
+		       "(%d).\n", __func__, queue_id);
 		return MAILBOX_STATE_REG_INVALID;
 	}
 
 	if (requester != queues[queue_id].OWNER &&
 	    requester != queues[queue_id].fixed_proc) { 
-		printf("Error: %s: Only fixed_proc and owner can check the mailbox state (%d, %d, %d).\n",
-		       __func__, queue_id, requester, queues[queue_id].OWNER);
+		printf("Error: %s: Only fixed_proc and owner can check the "
+		       "mailbox state (%d, %d, %d).\n", __func__, queue_id,
+		       requester, queues[queue_id].OWNER);
 		return MAILBOX_STATE_REG_INVALID;
 	}
 

@@ -508,7 +508,6 @@ read_username:
 	secure_printf("Next, we will collect your password, but pay attention to these instructions.\n");
 	secure_printf("We will collect your password through a secure session.\n");
 	secure_printf("When the session is about to expire, we will send you a warning.\n");
-	/* FIXME: implement */
 	secure_printf("Do not enter any part of your password after the warning.\n\n");
 
 	secure_printf("Enter your password now (no more than 16 characters):\n");
@@ -615,7 +614,7 @@ static int show_account_info(void)
 /* Called with secure keyboard/serial_out.
  * Also, must print with session_word.
  */
-static int terminate_session(void)
+static void terminate_session(void)
 {
 	printf("%s [1]\n", __func__);
 	/* FIXME: anything else to do here? */
@@ -639,8 +638,6 @@ static int terminate_session(void)
 	printf("%s [5]\n", __func__);
 	//gapi->yield_network_access();
 	printf("%s [6]\n", __func__);
-
-	return 0;
 }
 
 extern "C" __attribute__ ((visibility ("default")))
@@ -738,13 +735,7 @@ void app_main(struct runtime_api *api)
 	printf("%s [4]\n", __func__);
 
 	/* Step 4 */
-	/* FIXME: also needs to keep track of queue usage */
-	ret = terminate_session();
-	if (ret) {
-		/* FIXME: this should never happen. */
-		secure_printf("%s: Error: couldn't successfully show account info.\n", session_word);
-		return;
-	}
+	terminate_session();
 
 	has_network = 0;
 	gapi->yield_network_access();
