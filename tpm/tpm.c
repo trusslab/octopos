@@ -31,6 +31,82 @@ static void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
 	//print_hash_buf(hash);
 }
 
+/*
+ * Return values:
+ * 0: no,
+ * 1: yes.
+ */
+static int is_proc_queue_owner(uint8_t proc_id, uint8_t queue_id)
+{
+	uint8_t owner = get_queue_owner(queue_id);
+
+	int ret = (proc_id == owner);
+
+	if (!ret)
+		printf("Error: %s: proc %d is not the owner for queue %d\n",
+		       __func__, proc_id, queue_id);
+
+	return ret;
+}
+
+/*
+ * Return values:
+ * 0: not allowed,
+ * 1: allowed.
+ */
+static int is_pcr_slot_attest_allowed(uint8_t pcr_slot, uint8_t requester)
+{
+	/* Every proc can ask for all PCR slots involved in the boot of the
+	 * shared parts of the system.
+	 */ 
+	if (BOOT_PCR_SLOT(pcr_slot))
+		return 1;
+
+	uint8_t proc_id = PCR_SLOT_PROC(pcr_slot);
+
+	/* Every proc can obviously ask for its own PCR slot */
+	if (requester == proc_id)
+		return 1;
+
+	/* If the requester is the owner of one of the queues for which proc_id
+	 * is the fixed_proc, then permission is granted.
+	 */
+	switch (proc_id) {
+	case P_KEYBOARD:
+		return is_proc_queue_owner(requester, Q_KEYBOARD);
+
+	case P_SERIAL_OUT:
+		return is_proc_queue_owner(requester, Q_SERIAL_OUT);
+
+	case P_STORAGE:
+		/* Even access to one of the queues should be enough, but
+		 * there's no harm in being stricter here.
+		 */
+		return (is_proc_queue_owner(requester, Q_STORAGE_CMD_IN) &&
+			is_proc_queue_owner(requester, Q_STORAGE_CMD_OUT) &&
+			is_proc_queue_owner(requester, Q_STORAGE_DATA_IN) &&
+			is_proc_queue_owner(requester, Q_STORAGE_DATA_OUT));
+
+	case P_NETWORK:
+		/* Even access to one of the queues should be enough, but
+		 * there's no harm in being stricter here.
+		 */
+		return (is_proc_queue_owner(requester, Q_NETWORK_DATA_IN) &&
+			is_proc_queue_owner(requester, Q_NETWORK_DATA_OUT));
+
+	case P_RUNTIME1:
+		return is_proc_queue_owner(requester, Q_RUNTIME1);
+
+	case P_RUNTIME2:
+		return is_proc_queue_owner(requester, Q_RUNTIME2);
+
+	default:
+		printf("Error: %s: unexpected proc_id (%d)\n", __func__,
+		       proc_id);
+		return 0;
+	}
+}
+
 static void pcr_read_single(int slot)
 {
 	ESYS_CONTEXT *context = NULL;
@@ -176,6 +252,12 @@ static void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id
 			goto attest_error;
 		}
 
+		/* Note that the checks here are not vulnerable to TOCTOU attacks.
+		 * This is because the TPM service is single threaded.
+		 * While we're processing the current command, no new values
+		 * can be extended to PCRs. The PCRs might get reset, but that
+		 * does not pose a confidentiality risk.
+		 */
 		for (i = 0; i < num_pcr_slots; i++) {
 			ret = is_pcr_slot_attest_allowed(buf[2 + i], proc_id);
 			if (!ret) {
@@ -247,10 +329,16 @@ attest_error:
 		uint8_t pcr_slot = buf[1];
 		int ret;
 
+		/* Note that the check here is not vulnerable to TOCTOU attacks.
+		 * This is because the TPM service is single threaded.
+		 * While we're processing the current command, no new values
+		 * can be extended to PCRs. The PCRs might get reset, but that
+		 * does not pose a confidentiality risk.
+		 */
 		ret = is_pcr_slot_attest_allowed(pcr_slot, proc_id);
 		if (!ret) {
 			printf("Error: %s: reading pcr slot %d for proc %d not "
-			       "allowed)", __func__,pcr_slot, proc_id);
+			       "allowed)", __func__, pcr_slot, proc_id);
 			resp_buf[0] = TPM_REP_ERROR;
 			send_response_to_queue(resp_buf);
 			return;

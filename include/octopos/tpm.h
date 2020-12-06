@@ -7,6 +7,7 @@
 #define TPM_REP_READ_PCR	0x13
 #define TPM_REP_ERROR		0x14
 
+/* FIXME: temp PCR mapping */
 #define PROC_PCR_SLOT(proc_id) (7 + proc_id)
 
 #define TPM_AT_ID_LENGTH 16

@@ -31,27 +31,32 @@ uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t serial_out_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 
-#define loop_printf(print_cmd, fmt, args...) {									\
-	memset(output_buf_full, 0x0, MAX_PRINT_SIZE);								\
-	memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);							\
-	num_chars = sprintf(output_buf_full, fmt, ##args);							\
-	if (num_chars > MAX_PRINT_SIZE)										\
-		num_chars = MAX_PRINT_SIZE;									\
-	msg_num = 0;												\
-	while (num_chars > 0) {											\
-		memcpy(output_buf, output_buf_full + (msg_num * MAX_CHARS_PER_MESSAGE), MAX_CHARS_PER_MESSAGE); \
-		if (num_chars > MAX_CHARS_PER_MESSAGE)								\
-			output_buf[MAX_CHARS_PER_MESSAGE] = '\0';						\
-		else												\
-			output_buf[num_chars] = '\0';								\
-		print_cmd;											\
-		msg_num++;											\
-		num_chars -= MAX_CHARS_PER_MESSAGE;								\
-	}													\
-}														\
+#define loop_printf(print_cmd, fmt, args...) {				\
+	memset(output_buf_full, 0x0, MAX_PRINT_SIZE);			\
+	memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
+	num_chars = sprintf(output_buf_full, fmt, ##args);		\
+	if (num_chars > MAX_PRINT_SIZE)					\
+		num_chars = MAX_PRINT_SIZE;				\
+	msg_num = 0;							\
+	while (num_chars > 0) {						\
+		memcpy(output_buf, output_buf_full + (msg_num *		\
+		       MAX_CHARS_PER_MESSAGE), MAX_CHARS_PER_MESSAGE);	\
+		if (num_chars > MAX_CHARS_PER_MESSAGE)			\
+			output_buf[MAX_CHARS_PER_MESSAGE] = '\0';	\
+		else							\
+			output_buf[num_chars] = '\0';			\
+		print_cmd;						\
+		msg_num++;						\
+		num_chars -= MAX_CHARS_PER_MESSAGE;			\
+	}								\
+}									\
 
-#define secure_printf(fmt, args...) loop_printf(gapi->write_to_secure_serial_out(output_buf), fmt, ##args)
-#define insecure_printf(fmt, args...) loop_printf(gapi->write_to_shell(output_buf, MAX_CHARS_PER_MESSAGE), fmt, ##args)
+#define secure_printf(fmt, args...)						\
+	loop_printf(gapi->write_to_secure_serial_out(output_buf), fmt, ##args)
+
+#define insecure_printf(fmt, args...)						\
+	loop_printf(gapi->write_to_shell(output_buf, MAX_CHARS_PER_MESSAGE),	\
+		    fmt, ##args)
 
 //#define ID_LENGTH 16
 //#define NONCE_LENGTH 16
@@ -127,7 +132,8 @@ static void *yield_resources(void *data)
 static void queue_update_callback(uint8_t queue_id, limit_t limit,
 				  timeout_t timeout, uint8_t which_update)
 {
-	printf("%s [1]: queue_id = %d, limit = %d, timeout = %d, which_update = %d\n", __func__, queue_id, limit, timeout, which_update);
+	printf("%s [1]: queue_id = %d, limit = %d, timeout = %d, which_update "
+	       "= %d\n", __func__, queue_id, limit, timeout, which_update);
 	if ((limit < 5 || timeout < 5) && !exiting) {
 		exiting = 1;
 		printf("%s [2]\n", __func__);
@@ -392,7 +398,8 @@ static int perform_remote_attestation(void)
 
 	memcpy(packet + 1 + sig_size, quote, quote_size);
 
-	printf("%s [6]: sig_size = %d, quote_size = %d\n", __func__, sig_size, quote_size);
+	printf("%s [6]: sig_size = %d, quote_size = %d\n", __func__, sig_size,
+	       quote_size);
 	send_large_packet(packet, 1 + sig_size + quote_size);
 	
 	free(packet);
@@ -453,18 +460,19 @@ static int log_in(void)
 	memset(session_word, 0x0, 32);
 	/*
 	 * Ask for user's username.
-	 * Note that this step does not need to be secure since we haven't established
-	 * any form of trust with the user yet.
-	 * Note: one might wonder if malware can pretend to be the bank_client app,
-	 * get the username, and then use that to retrieve the user's secret, allowing
-	 * it to further fool the user. This is not effective as the server won't
-	 * release the secret to an app that doesn't successfully pass the remote
-	 * attestation.
+	 * Note that this step does not need to be secure since we haven't
+	 * established any form of trust with the user yet.
+	 * Note: one might wonder if malware can pretend to be the bank_client
+	 * app, get the username, and then use that to retrieve the user's
+	 * secret, allowing it to further fool the user. This is not effective
+	 * as the server won't release the secret to an app that doesn't
+	 * successfully pass the remote attestation.
 	 */
 	printf("%s [1]\n", __func__);
 	secure_printf("This is the bank_client speaking.\n");
 	printf("%s [2]\n", __func__);
-	secure_printf("Provide your username to log in (but NOT your password yet):\n");
+	secure_printf("Provide your username to log in (but NOT your password "
+		      "yet):\n");
 	printf("%s [3]\n", __func__);
 read_username:
 	size = 0;
@@ -484,7 +492,8 @@ read_username:
 	}
 
 	if (size > 16) {
-		secure_printf("Username can't have more than 16 characters. Try again:\n");
+		secure_printf("Username can't have more than 16 characters. "
+			      "Try again:\n");
 		goto read_username;
 	}
 
@@ -493,7 +502,8 @@ read_username:
 	 */
 	ret = get_user_secret(username, secret);
 	if (ret) {
-		secure_printf("Error: could not get user's secret from the server.\n");
+		secure_printf("Error: could not get user's secret from the "
+			      "server.\n");
 		return -1;
 	}
 	printf("%s [4]\n", __func__);
@@ -505,10 +515,14 @@ read_username:
 	printf("%s [4.1]\n", __func__);
 	secure_printf("If this is NOT correct, do NOT proceed.\n\n");
 
-	secure_printf("Next, we will collect your password, but pay attention to these instructions.\n");
-	secure_printf("We will collect your password through a secure session.\n");
-	secure_printf("When the session is about to expire, we will send you a warning.\n");
-	secure_printf("Do not enter any part of your password after the warning.\n\n");
+	secure_printf("Next, we will collect your password, but pay attention "
+		      "to these instructions.\n");
+	secure_printf("We will collect your password through a secure "
+		      "session.\n");
+	secure_printf("When the session is about to expire, we will send you "
+		      "a warning.\n");
+	secure_printf("Do not enter any part of your password after the "
+		      "warning.\n\n");
 
 	secure_printf("Enter your password now (no more than 16 characters):\n");
 
@@ -531,7 +545,8 @@ read_password:
 
 	/* FIXME: enforce an upper bound on the number of retries */
 	if (size > 16) {
-		secure_printf("Password can't have more than 16 characters. Try again:\n");
+		secure_printf("Password can't have more than 16 characters. "
+			      "Try again:\n");
 		goto read_password;
 	}
 	printf("%s [4.2]\n", __func__);
@@ -551,8 +566,10 @@ read_password:
 
 	secure_printf("Your session keyword is %s.\n", session_word);
 	has_session_word = 1;
-	secure_printf("%s: Look for the session keyword at the beginning of each line.\n", session_word);
-	secure_printf("%s: If not correct or available, stop using the app immediately.\n", session_word);
+	secure_printf("%s: Look for the session keyword at the beginning of "
+		      "each line.\n", session_word);
+	secure_printf("%s: If not correct or available, stop using the app "
+		      "immediately.\n", session_word);
 
 	return 0;
 }
@@ -574,25 +591,29 @@ static int show_account_info(void)
 	printf("%s [1]\n", __func__);
 	cmd = 1; /* retrive account balance */
 	if (gapi->write_to_socket(sock, &cmd, 1) < 0) {
-		secure_printf("%s: Error: couldn't write to socket (balance)\n", session_word);
+		secure_printf("%s: Error: couldn't write to socket (balance)\n",
+			      session_word);
 		return -1;
 	}
 
 	printf("%s [2]\n", __func__);
 	if (gapi->read_from_socket(sock, &success, 1) < 0) {
-		secure_printf("%s: Error: couldn't read from socket (balance:1)\n", session_word);
+		secure_printf("%s: Error: couldn't read from socket "
+			      "(balance:1)\n", session_word);
 		return -1;
 	}
 
 	printf("%s [3]\n", __func__);
 	if (success != 1) {
-		secure_printf("%s: Error: couldn't retrieve balance\n", session_word);
+		secure_printf("%s: Error: couldn't retrieve balance\n",
+			      session_word);
 		return -1;
 	}
 
 	printf("%s [4]\n", __func__);
 	if (gapi->read_from_socket(sock, &balance, 4) < 0) {
-		secure_printf("%s: Error: couldn't read from socket (balance:2)\n", session_word);
+		secure_printf("%s: Error: couldn't read from socket "
+			      "(balance:2)\n", session_word);
 		return -1;
 	}
 
@@ -711,7 +732,8 @@ void app_main(struct runtime_api *api)
 					      serial_out_pcr);
 	if (ret) {
 		gapi->yield_secure_keyboard();
-		insecure_printf("Error: could not get secure access to serial_out (log_in)\n");
+		insecure_printf("Error: could not get secure access to "
+				"serial_out (log_in)\n");
 		return;
 	}
 
@@ -729,7 +751,8 @@ void app_main(struct runtime_api *api)
 	/* Step 3 */
 	ret = show_account_info();
 	if (ret) {
-		secure_printf("%s: Error: couldn't successfully show account info.\n", session_word);
+		secure_printf("%s: Error: couldn't successfully show account "
+			      "info.\n", session_word);
 		return;
 	}
 	printf("%s [4]\n", __func__);

@@ -2,17 +2,6 @@
 #include <tpm/tpm.h>
 #include <tpm/libtpm.h>
 
-/*
- * Return values:
- * 0: not allowed,
- * 1: allowed.
- */
-int is_pcr_slot_attest_allowed(uint8_t pcr_slot, uint8_t proc_id)
-{
-	/* FIXME: implement */
-	return 1;
-}
-
 int quote_request(FAPI_CONTEXT *context, uint8_t *nonce, uint8_t *pcr_slots,
 		  uint8_t num_pcr_slots, uint8_t **signature,
 		  size_t *signature_size, char** quote_info,

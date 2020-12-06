@@ -27,3 +27,8 @@
 
 #define TPM_INIT_ERR 0x01
 #define TPM_EXTD_ERR 0x02
+
+/* FIXME: temp PCR mapping */
+/* This is the reverse of PROC_PCR_SLOT */
+#define PCR_SLOT_PROC(pcr_slot) (pcr_slot - 7)
+#define BOOT_PCR_SLOT(pcr_slot) (pcr_slot <= 7)
