@@ -78,6 +78,7 @@ void help_boot_procs(int boot_untrusted)
 int reset_proc(uint8_t proc_id)
 {
 	int ret;
+	printf("%s [1]\n", __func__);
 
 	if (proc_id == P_STORAGE)
 		close_file_system();
@@ -85,6 +86,7 @@ int reset_proc(uint8_t proc_id)
 	ret = pmu_reset_proc(proc_id);
 	if (ret)
 		return ret;	
+	printf("%s [2]\n", __func__);
 
 	if (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2) {
 		/* set the state of runtime procs to resetting */
@@ -108,12 +110,14 @@ int reset_proc(uint8_t proc_id)
 	} else if (proc_id == P_UNTRUSTED) {
 		if (!untrusted_needs_help_with_boot) {
 			untrusted_needs_help_with_boot = 1;
+			printf("%s [3]\n", __func__);
 			return 1;
 		} else {
 			help_boot_untrusted_proc();
 			untrusted_needs_help_with_boot = 0;
 		}
 	}
+	printf("%s [4]\n", __func__);
 
 	return 0;
 }

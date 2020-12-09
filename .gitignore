@@ -28,6 +28,7 @@ bootloader/runtime2
 bootloader/linux
 installer/installer
 installer/copy*
+installer/aligned*
 tpm/tpm
 external/ibmtpm1637/tpm_server
 tpm/tpm_shutdown/tpm_shutdown

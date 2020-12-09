@@ -515,6 +515,7 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (!no_response) {
 			check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 		}
+		printf("%s [1]\n", __func__);
 		/* FIXME: use async interrupt processing instead. */
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
@@ -523,6 +524,7 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
 			 late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
 			reset_proc(runtime_proc_id);
+		printf("%s [2]\n", __func__);
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

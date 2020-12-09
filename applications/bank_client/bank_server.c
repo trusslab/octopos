@@ -251,12 +251,9 @@ static void generate_PCR_digests(void)
 
 	buffer_sizes[0] = TPM_EXTEND_HASH_SIZE;
 	buffer_sizes[1] = TPM_EXTEND_HASH_SIZE;
-	/* Wait until the keyboard file is written. */
-	/* FIXME: get rid of the wait */
-	sleep(5);
 	
 	/* Keyboard PCR */
-	hash_file((char *) "bootloader/keyboard", file_hash);
+	hash_file((char *) "./installer/aligned_keyboard", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, keyboard_pcr);
@@ -267,7 +264,7 @@ static void generate_PCR_digests(void)
 	print_hash_buf(keyboard_pcr);
 
 	/* Serial Out PCR */
-	hash_file((char *) "bootloader/serial_out", file_hash);
+	hash_file((char *) "./installer/aligned_serial_out", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, serial_out_pcr);
@@ -275,7 +272,7 @@ static void generate_PCR_digests(void)
 	print_hash_buf(serial_out_pcr);
 
 	/* Network PCR */
-	hash_file((char *) "bootloader/network", file_hash);
+	hash_file((char *) "./installer/aligned_network", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, network_pcr);
@@ -283,11 +280,10 @@ static void generate_PCR_digests(void)
 	print_hash_buf(network_pcr);
 
 	/* App PCR: two hashes are extended to PCR in this case. */
-	hash_file((char *) "bootloader/runtime1", file_hash);
+	hash_file((char *) "./installer/aligned_runtime", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, temp_hash);
-	/* FIXME: we should read from bootloader/ too. */
 	hash_file((char *) "applications/bank_client/bank_client.so", file_hash);
 	buffers[0] = temp_hash;
 	buffers[1] = file_hash;
