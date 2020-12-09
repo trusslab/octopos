@@ -153,12 +153,21 @@ int yield_network_access(void)
 	return 0;
 }
 
-/* FIXME: @callback and @expected_pcr can be set by the untrusted domain,
- * but they're no ops.
+/*
+ * @expected_pcr: if not NULL, we request the PCR val for the network service
+ * and compare it with expected_pcr.
+ * @return_pcr: if expected_pcr is NULL but return_pcr is not, we'll request
+ * and return the PCR val for the network service. This is useful because the
+ * app might not have the expected value when it first asks for network access.
+ * It can get the measured value here and compare it with the expected value
+ * later.
+ *
+ * FIXME: @callback, @expected_pcr, and @return_pcr can be set by the UNTRUSTED_DOMAIN
+ * domain, but they're no ops.
  */
 int request_network_access(limit_t limit, timeout_t timeout,
 			   queue_update_callback_t callback,
-			   uint8_t *expected_pcr)
+			   uint8_t *expected_pcr, uint8_t *return_pcr)
 {
 	int ret;
 
@@ -207,6 +216,12 @@ int request_network_access(limit_t limit, timeout_t timeout,
 			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
 			return ERR_UNEXPECTED;
+		}
+	} else if (return_pcr) {
+		ret = read_tpm_pcr_for_proc(P_NETWORK, return_pcr);
+		if (ret) {
+			printf("%s: Error: couldn't read PCR\n", __func__);
+			return ERR_FAULT;
 		}
 	}
 #endif

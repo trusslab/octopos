@@ -30,6 +30,7 @@ int msg_num = 0;
 uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t serial_out_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t measured_network_pcr[TPM_EXTEND_HASH_SIZE];
 
 #define loop_printf(print_cmd, fmt, args...) {				\
 	memset(output_buf_full, 0x0, MAX_PRINT_SIZE);			\
@@ -202,7 +203,8 @@ static int connect_to_server(void)
 	}
 
 	printf("%s [3]\n", __func__);
-	if (gapi->request_network_access(200, 100, queue_update_callback, NULL)) {
+	if (gapi->request_network_access(200, 100, queue_update_callback, NULL,
+					 measured_network_pcr)) {
 		insecure_printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
@@ -334,6 +336,7 @@ static int perform_remote_attestation(void)
 	//uint8_t num_pcr_slots = 2;
 	//uint8_t pcr_slots[] = {9, 10};
 	uint8_t num_pcr_slots = 2;
+	int ret;
 
 	//if (gapi->request_network_access(200, 100, queue_update_callback, NULL)) {
 	//	insecure_printf("Error: network queue access (remote "
@@ -437,6 +440,13 @@ static int perform_remote_attestation(void)
 	}
 
 	//gapi->yield_network_access();
+	/* check the network PCR val */
+	ret = memcmp(measured_network_pcr, network_pcr, TPM_EXTEND_HASH_SIZE);
+	if (ret) {
+		printf("Error: %s: network PCR not verified.\n", __func__);
+		return -1;
+	}
+
 	printf("%s [7]\n", __func__);
 
 	return 0;

@@ -103,7 +103,7 @@ struct runtime_api {
 	int (*write_to_socket)(struct socket *sock, void *buf, int len);
 	int (*request_network_access)(limit_t limit, timeout_t timeout,
 				      queue_update_callback_t callback,
-				      uint8_t *expected_pcr);
+				      uint8_t *expected_pcr, uint8_t *return_pcr);
 	int (*yield_network_access)(void);
 #endif
 };

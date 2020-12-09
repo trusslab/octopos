@@ -407,9 +407,6 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
-/* FIXME: move somewhere else. */
-int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val);
-
 int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 {
 	uint8_t pcr_val[TPM_EXTEND_HASH_SIZE];
