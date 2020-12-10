@@ -8,6 +8,7 @@
 #endif
 #include <unistd.h>
 #include <stdint.h>
+#include <time.h>
 
 #ifdef ARCH_UMODE
 #include <dlfcn.h>
@@ -258,36 +259,48 @@ static void queue_expired(uint8_t queue_id)
 
 void report_queue_usage(uint8_t queue_id)
 {
-	queue_limits[queue_id]--;
+	int check_expire = 0;
+
+	if (queue_limits[queue_id]) {
+		queue_limits[queue_id]--;
+		check_expire = 1;
+	}
+
 	if (queue_update_callbacks[queue_id]) {
 		(*queue_update_callbacks[queue_id])(queue_id,
 						    queue_limits[queue_id],
 						    queue_timeouts[queue_id],
 						    LIMIT_UPDATE);
-
-		if (queue_limits[queue_id] == 0)
-			queue_expired(queue_id);
 	}
+
+	if (check_expire && (queue_limits[queue_id] == 0))
+		queue_expired(queue_id);
 }
 
 void timer_tick(void)
 {
-	int i;
+	int i, check_expire;
 
 	for (i = 1; i < (NUM_QUEUES + 1); i++) {
-		if (queue_update_callbacks[i]) {
+		check_expire = 0;
+
+		if (queue_timeouts[i]) {
 			queue_timeouts[i]--;
+			check_expire = 1;
+		}
+
+		if (queue_update_callbacks[i]) {
 			(*queue_update_callbacks[i])(i, queue_limits[i],
 						     queue_timeouts[i],
 						     TIMEOUT_UPDATE);
-			
-			/* FIXME: this can be a little late as the queue might
-			 * have expired a little bit earlier due to the error
-			 * margin in the mailbox timeouts.
-			 */
-			if (queue_timeouts[i] == 0)
-				queue_expired(i);
 		}
+		
+		/* FIXME: this can be a little late as the queue might
+		 * have expired a little bit earlier due to the error
+		 * margin in the mailbox timeouts.
+		 */
+		if (check_expire && (queue_timeouts[i] == 0))
+			queue_expired(i);
 	}
 }
 
@@ -470,6 +483,13 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 		return ERR_FAULT;
 	}
 
+	/* Note: we set the limit/timeout values right after attestation and
+	 * before we call check_proc_pcr(). This is because that call issues a
+	 * syscall, which might take an arbitrary amount of time.
+	 */
+	queue_limits[Q_KEYBOARD] = limit;
+	queue_timeouts[Q_KEYBOARD] = timeout;
+
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_KEYBOARD, expected_pcr);
 		if (ret) {
@@ -481,11 +501,9 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 
 	printf("%s [4]\n", __func__);
 
-	has_secure_keyboard_access = true;
-
-	queue_limits[Q_KEYBOARD] = limit;
-	queue_timeouts[Q_KEYBOARD] = timeout;
 	queue_update_callbacks[Q_KEYBOARD] = callback;
+
+	has_secure_keyboard_access = true;
 
 	return 0;
 }
@@ -544,6 +562,13 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 		return ERR_FAULT;
 	}
 
+	/* Note: we set the limit/timeout values right after attestation and
+	 * before we call check_proc_pcr(). This is because that call issues a
+	 * syscall, which might take an arbitrary amount of time.
+	 */
+	queue_limits[Q_SERIAL_OUT] = limit;
+	queue_timeouts[Q_SERIAL_OUT] = timeout;
+
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_SERIAL_OUT, expected_pcr);
 		if (ret) {
@@ -556,8 +581,6 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 
 	has_secure_serial_out_access = true;
 
-	queue_limits[Q_SERIAL_OUT] = limit;
-	queue_timeouts[Q_SERIAL_OUT] = timeout;
 	queue_update_callbacks[Q_SERIAL_OUT] = callback;
 
 	return 0;
@@ -838,14 +861,18 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 	}*/
 #endif
 
-	/* FIXME: check PCR. Need the proc_id for that. */	
-
-	secure_ipc_mode = true;
-	secure_ipc_target_queue = target_runtime_queue_id;
 
 	queue_limits[target_runtime_queue_id] = limit;
 	queue_timeouts[target_runtime_queue_id] = timeout;
+
+	/* FIXME: check PCR. Need the proc_id for that. It needs to be done
+	 * after setting limit/timeout. See comments in other similar funcs.
+	 */	
+
 	queue_update_callbacks[target_runtime_queue_id] = callback;
+
+	secure_ipc_mode = true;
+	secure_ipc_target_queue = target_runtime_queue_id;
 
 	return 0;
 }
@@ -933,6 +960,14 @@ static void terminate_app(void)
 static int schedule_func_execution(void *(*func)(void *), void *data)
 {
 	return schedule_func_execution_arch(func, data);
+}
+
+/* FIXME: use libsodim for cryptographically-secure randomness. */
+static uint32_t get_random_uint(void)
+{
+	srand(time(NULL));
+
+	return (uint32_t) rand();	
 }
 
 extern bool has_network_access;
@@ -1271,6 +1306,7 @@ static void load_application(char *msg)
 		.get_runtime_queue_id = get_runtime_queue_id,
 		.terminate_app = terminate_app,
 		.schedule_func_execution = schedule_func_execution,
+		.get_random_uint = get_random_uint,
 #ifdef ARCH_UMODE
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,

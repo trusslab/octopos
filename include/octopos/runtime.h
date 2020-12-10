@@ -89,6 +89,7 @@ struct runtime_api {
 	uint8_t (*get_runtime_queue_id)(void);
 	void (*terminate_app)(void);
 	int (*schedule_func_execution)(void *(*func)(void *), void *data);
+	uint32_t (*get_random_uint)(void);
 
 #ifndef ARCH_SEC_HW
 	/* socket and network */

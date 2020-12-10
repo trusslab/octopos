@@ -120,9 +120,8 @@ static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int que
 	pthread_spin_unlock(&mailbox_lock);
 }
 
-/* FIXME: remove. Just for debugging */
-int counter1 = 0;
-int counter2 = 0;
+//int counter1 = 0;
+//int counter2 = 0;
 
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
@@ -130,7 +129,7 @@ static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
-	if (queue_id == Q_SERIAL_OUT) printf("%s [1]: Q_SERIAL_OUT: %d\n", __func__, ++counter1);
+	//if (queue_id == Q_SERIAL_OUT) printf("%s [1]: Q_SERIAL_OUT: %d\n", __func__, ++counter1);
 	sem_wait(&interrupts[queue_id]);
 	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 2);
@@ -297,7 +296,7 @@ void runtime_core(void)
 				exit(-1);
 			}
 		} else {
-			if (interrupt == Q_SERIAL_OUT) printf("%s [1]: Q_SERIAL_OUT: %d\n", __func__, ++counter2);
+			//if (interrupt == Q_SERIAL_OUT) printf("%s [1]: Q_SERIAL_OUT: %d\n", __func__, ++counter2);
 			sem_post(&interrupts[interrupt]);
 		}
 	}

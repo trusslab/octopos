@@ -383,6 +383,22 @@ static int request_secure_storage_queues_access(limit_t limit,
 	}
 
 #ifndef UNTRUSTED_DOMAIN
+	/* Note: we set the limit/timeout values right after attestation and
+	 * before we call check_proc_pcr(). This is because that call issues a
+	 * syscall, which might take an arbitrary amount of time.
+	 */
+	queue_limits[Q_STORAGE_CMD_IN] = limit;
+	queue_timeouts[Q_STORAGE_CMD_IN] = timeout;
+
+	queue_limits[Q_STORAGE_CMD_OUT] = limit;
+	queue_timeouts[Q_STORAGE_CMD_OUT] = timeout;
+
+	queue_limits[Q_STORAGE_DATA_IN] = limit;
+	queue_timeouts[Q_STORAGE_DATA_IN] = timeout;
+
+	queue_limits[Q_STORAGE_DATA_OUT] = limit;
+	queue_timeouts[Q_STORAGE_DATA_OUT] = timeout;
+
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_STORAGE, expected_pcr);
 		if (ret) {
@@ -397,28 +413,15 @@ static int request_secure_storage_queues_access(limit_t limit,
 			return ERR_UNEXPECTED;
 		}
 	}
+	
+	queue_update_callbacks[Q_STORAGE_CMD_IN] = callback;
+	queue_update_callbacks[Q_STORAGE_CMD_OUT] = callback;
+	queue_update_callbacks[Q_STORAGE_DATA_IN] = callback;
+	queue_update_callbacks[Q_STORAGE_DATA_OUT] = callback;
 #endif
 
 	has_access_to_secure_storage = true;
 
-#ifndef UNTRUSTED_DOMAIN
-	queue_limits[Q_STORAGE_CMD_IN] = limit;
-	queue_timeouts[Q_STORAGE_CMD_IN] = timeout;
-	queue_update_callbacks[Q_STORAGE_CMD_IN] = callback;
-
-	queue_limits[Q_STORAGE_CMD_OUT] = limit;
-	queue_timeouts[Q_STORAGE_CMD_OUT] = timeout;
-	queue_update_callbacks[Q_STORAGE_CMD_OUT] = callback;
-
-	queue_limits[Q_STORAGE_DATA_IN] = limit;
-	queue_timeouts[Q_STORAGE_DATA_IN] = timeout;
-	queue_update_callbacks[Q_STORAGE_DATA_IN] = callback;
-
-	queue_limits[Q_STORAGE_DATA_OUT] = limit;
-	queue_timeouts[Q_STORAGE_DATA_OUT] = timeout;
-	queue_update_callbacks[Q_STORAGE_DATA_OUT] = callback;
-#endif
-	
 	return 0;
 }
 

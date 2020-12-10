@@ -208,6 +208,17 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	printf("%s [5]\n", __func__);
 
 #ifndef UNTRUSTED_DOMAIN
+	/* Note: we set the limit/timeout values right after attestation and
+	 * before we call check_proc_pcr() or read_tpm_pcr_for_proc().
+	 * This is because those calls issue syscalls, which might take
+	 * arbitrary amounts of time.
+	 */
+	queue_limits[Q_NETWORK_DATA_IN] = limit;
+	queue_timeouts[Q_NETWORK_DATA_IN] = timeout;
+
+	queue_limits[Q_NETWORK_DATA_OUT] = limit;
+	queue_timeouts[Q_NETWORK_DATA_OUT] = timeout;
+
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_NETWORK, expected_pcr);
 		if (ret) {
@@ -236,24 +247,13 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	}
 	printf("%s [6]\n", __func__);
 
-	has_network_access = true;
-	network_access_count = limit;
-
 #ifndef UNTRUSTED_DOMAIN
-	printf("%s [7]\n", __func__);
-	queue_limits[Q_NETWORK_DATA_IN] = limit;
-	printf("%s [7.1]\n", __func__);
-	queue_timeouts[Q_NETWORK_DATA_IN] = timeout;
-	printf("%s [7.2]\n", __func__);
 	queue_update_callbacks[Q_NETWORK_DATA_IN] = callback;
-	printf("%s [7.3]\n", __func__);
-
-	queue_limits[Q_NETWORK_DATA_OUT] = limit;
-	printf("%s [7.4]\n", __func__);
-	queue_timeouts[Q_NETWORK_DATA_OUT] = timeout;
-	printf("%s [7.5]\n", __func__);
 	queue_update_callbacks[Q_NETWORK_DATA_OUT] = callback;
 #endif
+
+	has_network_access = true;
+	network_access_count = limit;
 	printf("%s [8]\n", __func__);
 
 	return 0;

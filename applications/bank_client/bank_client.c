@@ -384,9 +384,13 @@ static int perform_remote_attestation(void)
 
 	printf("%s [4]\n", __func__);
 	//int _pcr_slot = atoi(slot);
-	gapi->request_tpm_attestation_report(pcr_slots, num_pcr_slots, nonce,
-					     &signature, &sig_size, &quote,
-					     &quote_size);
+	if (gapi->request_tpm_attestation_report(pcr_slots, num_pcr_slots, nonce,
+						 &signature, &sig_size, &quote,
+						 &quote_size)) {
+		insecure_printf("Error: request for TPM attestation report "
+				"failed\n");
+		return -1;
+	}
 
 	printf("%s [5]\n", __func__);
 	packet = (uint8_t *) malloc(sig_size + quote_size + 1);
@@ -463,6 +467,7 @@ static int log_in(void)
 {
 	char username[32], secret[32], password[32], c;
 	int size, ret, i;
+	uint32_t rand;
 
 	memset(username, 0x0, 32);
 	memset(secret, 0x0, 32);
@@ -484,7 +489,7 @@ static int log_in(void)
 	secure_printf("Provide your username to log in (but NOT your password "
 		      "yet):\n");
 	printf("%s [3]\n", __func__);
-read_username:
+
 	size = 0;
 	/* FIXME: handle backspace in the username */
 	for (i = 0; i < 24; i++) {
@@ -502,9 +507,8 @@ read_username:
 	}
 
 	if (size > 16) {
-		secure_printf("Username can't have more than 16 characters. "
-			      "Try again:\n");
-		goto read_username;
+		secure_printf("Username can't have more than 16 characters.\n");
+		return -1;
 	}
 
 	/*
@@ -536,7 +540,6 @@ read_username:
 
 	secure_printf("Enter your password now (no more than 16 characters):\n");
 
-read_password:
 	size = 0;
 	/* FIXME: handle backspace in the password */
 	for (i = 0; i < 24; i++) {
@@ -553,11 +556,9 @@ read_password:
 		size++;
 	}
 
-	/* FIXME: enforce an upper bound on the number of retries */
 	if (size > 16) {
-		secure_printf("Password can't have more than 16 characters. "
-			      "Try again:\n");
-		goto read_password;
+		secure_printf("Password can't have more than 16 characters.\n");
+		return -1;
 	}
 	printf("%s [4.2]\n", __func__);
 
@@ -571,8 +572,8 @@ read_password:
 	secure_printf("You have successfully logged in.\n\n");
 	printf("%s [6]\n", __func__);
 
-	/* FIXME: randomly generate the session keyword. */
-	strcpy(session_word, "SESSION");
+	rand = gapi->get_random_uint();
+	sprintf(session_word, "SESSION%u", rand);
 
 	secure_printf("Your session keyword is %s.\n", session_word);
 	has_session_word = 1;
@@ -720,18 +721,13 @@ void app_main(struct runtime_api *api)
 	}
 
 	/* Request secure keyboard/serial_out and use secure_printf from now on. */
-	/* FIXME: why 100/1000? Also, we need to specify the timeout */
 	ret = gapi->request_secure_keyboard(100, 100, queue_update_callback,
 					    keyboard_pcr);
 	if (ret) {
-		insecure_printf("Error: could not get secure access to keyboard\n");
+		insecure_printf("Error: could not get secure access to "
+				"keyboard\n");
 		return;
 	}
-	/* FIXME: given that checking the keyboard PCR might take some time,
-	 * we shouldn't assume here that we have all the time that we requested.
-	 * We should again do a check here. Maybe the API can return the updated
-	 * time?
-	 */
 	printf("%s [3]\n", __func__);
 
 	has_keyboard = 1;
