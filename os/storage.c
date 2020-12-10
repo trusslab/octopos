@@ -174,6 +174,8 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	 */
 	if (limit > MAILBOX_MAX_LIMIT_VAL ||
 	    timeout > MAILBOX_DEFAULT_TIMEOUT_VAL) {
+		printf("Error: %s: limit (%d) or timeout (%d) too large\n",
+		       __func__, limit, timeout);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}

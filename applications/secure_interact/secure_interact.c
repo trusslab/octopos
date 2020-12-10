@@ -45,7 +45,7 @@ void secure_interact(struct runtime_api *api)
 
 	insecure_printf("Switching to secure interaction mode now.\n");
 
-	ret = api->request_secure_keyboard(100);
+	ret = api->request_secure_keyboard(100, 100, NULL, NULL);
 	if (ret) {
 		printf("Error: could not get secure access to keyboard\n");
 		insecure_printf("Failed to switch.\n");
@@ -54,7 +54,7 @@ void secure_interact(struct runtime_api *api)
 
 	insecure_printf("keyboard switched");
 
-	ret = api->request_secure_serial_out(200);
+	ret = api->request_secure_serial_out(200, 100, NULL, NULL);
 	if (ret) {
 		api->yield_secure_keyboard();
 		printf("Error: could not get secure access to serial_out\n");

@@ -93,10 +93,10 @@ static void send_receive(struct runtime_api *api)
 		memcpy(nonce, buf + 1 + ID_LENGTH + 2, NONCE_LENGTH);
 
 		int pcr_slot = atoi(slot);
-		api->request_tpm_attestation_report(pcr_slot, nonce,
-						    NONCE_LENGTH, &signature,
-						    &sig_size, &quote,
-						    &quote_size);
+		uint8_t pcr_slots[] = {(uint8_t) pcr_slot};
+		api->request_tpm_attestation_report(pcr_slots, 1, nonce,
+						    &signature, &sig_size,
+						    &quote, &quote_size);
 
 		packet = (uint8_t *) malloc(sig_size + quote_size + 1);
 		if (!packet) { 
@@ -142,7 +142,7 @@ void app_main(struct runtime_api *api)
 		goto out;
 	}
 
-	if (api->request_network_access(200)) {
+	if (api->request_network_access(200, 100, NULL, NULL, NULL)) {
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}

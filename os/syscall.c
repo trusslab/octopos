@@ -414,14 +414,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		int ret1 = is_queue_available(Q_TPM_IN);
-		int ret2 = is_queue_available(Q_TPM_OUT);
-		/* Or should we make this blocking? */
-		if (!ret1 || !ret2)
-		{
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
-			break;
-		}
+		int ret = is_queue_available(Q_TPM_IN);
+		if (!ret)	
+			wait_for_queue_availability(Q_TPM_IN);
+
+		ret = is_queue_available(Q_TPM_OUT);
+		if (!ret)	
+			wait_for_queue_availability(Q_TPM_OUT);
 
 		mark_queue_unavailable(Q_TPM_IN);
 		mark_queue_unavailable(Q_TPM_OUT);

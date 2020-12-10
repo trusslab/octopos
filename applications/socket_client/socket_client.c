@@ -99,7 +99,7 @@ void app_main(struct runtime_api *api)
 		goto out;
 	}
 
-	if (api->request_network_access(200)) {
+	if (api->request_network_access(200, 100, NULL, NULL, NULL)) {
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}
