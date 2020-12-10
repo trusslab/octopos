@@ -1,5 +1,7 @@
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id);
-int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count);
+/* FIXME: consolidate with arch/mailbox.h of secure_hw */
+void mailbox_yield_to_previous_owner(uint8_t queue_id);
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count);
+int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner);
 void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id);
 void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id);
 void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);

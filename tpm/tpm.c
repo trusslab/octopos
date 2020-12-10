@@ -1,6 +1,8 @@
 #include <tpm/tpm.h>
 #include <tpm/libtpm.h>
 #include <octopos/mailbox.h>
+#include <octopos/tpm.h>
+#include <tpm/hash.h>
 #include <arch/mailbox_tpm.h>
 
 
@@ -60,52 +62,148 @@ void pcr_read_single(int slot)
 	Esys_Finalize(&context);
 }
 
-void tpm_directly_extend(int slot, char *path)
+void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id)
 {
-	ESYS_CONTEXT *context = NULL;
-	TSS2_RC rc = Esys_Initialize(&context, NULL, NULL);
-	if (rc != TSS2_RC_SUCCESS) {
-		fprintf(stderr, "Esys_Initialize: %s\n", Tss2_RC_Decode(rc));
-		exit(TPM_INIT_ERR);
+	int op = buf[0];
+	
+	if (op == TPM_OP_EXTEND) {
+		uint8_t hash_buf[TPM_EXTEND_HASH_SIZE];
+		uint8_t _proc_id;
+
+		/* Note that we assume that two messages are needed to send the hash.
+		* See include/tpm/hash.h
+		*/
+		memcpy(hash_buf, buf + 1, MAILBOX_QUEUE_MSG_SIZE - 1);
+
+		_proc_id = read_request_get_owner_from_queue(buf);
+		if (_proc_id != proc_id) {
+			printf("Error: %s: unexpected sender proc_id (%d, %d)\n",
+			       __func__, _proc_id, proc_id);
+			/* FIXME: send an error? We currently don't send a
+			 * response for the extend op and the clients don't
+			 * check either. */
+			return;
+		}
+
+		memcpy(hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1, buf,
+		       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
+
+		tpm_directly_extend(PROC_PCR_SLOT(proc_id), (char *) hash_buf);
+		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id,
+		       PROC_PCR_SLOT(proc_id));
+		pcr_read_single(PROC_PCR_SLOT(proc_id));
+	} else if (op == TPM_OP_ATTEST) {
+		fprintf(stdout, "ATTEST REQUEST\n");
+		uint8_t nonce[TPM_AT_NONCE_LENGTH];
+		memcpy(nonce, buf + 2, TPM_AT_NONCE_LENGTH);
+
+		uint8_t *signature = NULL;
+		size_t _signature_size = 0;
+		char *quote_info = NULL;
+		char *pcr_event_log = NULL;
+		quote_request(context, nonce, buf[1],
+			&signature, &_signature_size, &quote_info,
+			&pcr_event_log);
+		
+		/* Send signature and quote */
+		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
+		resp_buf[0] = TPM_REP_ATTEST;
+		uint32_t signature_size = (uint32_t) _signature_size;
+		uint32_t quote_size = strlen(quote_info);
+		*((uint32_t *) &resp_buf[1]) = signature_size;
+		*((uint32_t *) &resp_buf[5]) = quote_size;
+
+		send_response_to_queue(resp_buf);
+
+		int off = 0;
+		while (signature_size) {
+			if (signature_size > MAILBOX_QUEUE_MSG_SIZE) {
+				memcpy(resp_buf, signature + off,
+				       MAILBOX_QUEUE_MSG_SIZE);
+				off += MAILBOX_QUEUE_MSG_SIZE;
+				signature_size -= MAILBOX_QUEUE_MSG_SIZE;
+			} else {
+				memcpy(resp_buf, signature + off,
+				       signature_size);
+				signature_size = 0;
+			}
+			send_response_to_queue(resp_buf);
+		}
+
+		off = 0;
+		while (quote_size) {
+			if (quote_size > MAILBOX_QUEUE_MSG_SIZE) {
+				memcpy(resp_buf, quote_info + off,
+				       MAILBOX_QUEUE_MSG_SIZE);
+				off += MAILBOX_QUEUE_MSG_SIZE;
+				quote_size -= MAILBOX_QUEUE_MSG_SIZE;
+			} else {
+				memcpy(resp_buf, quote_info + off, quote_size);
+				quote_size = 0;
+			}
+			send_response_to_queue(resp_buf);
+		}
+
+		free(signature);
+		free(quote_info);
+		free(pcr_event_log);
+	} else {
+		fprintf(stderr, "Error: No identified operation %d.\n", op);
 	}
 
-	TPML_DIGEST_VALUES digests = {
-        .count = 1,
-        .digests = {
-            {
-				.hashAlg = TPM2_ALG_SHA256,
-				.digest = {
-					.sha256 = { }
-                }
-            },
-        }
-	};
-
-	int ret = prepare_extend(path, &digests);
-	if (ret)
-		return;
-
-	rc = Esys_PCR_Extend(context, TPM_PCR_BANK(slot), ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, &digests);
-	if (rc != TSS2_RC_SUCCESS) {
-		fprintf(stderr, "Esys_PCR_Extend: %s\n", Tss2_RC_Decode(rc));
-		exit(TPM_EXTD_ERR);
-	}
+	return;
 }
 
-void tpm_measurement_core()
+int init_context(FAPI_CONTEXT **context)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	TSS2_RC rc = Fapi_Initialize(context, NULL);
+	if (rc != TSS2_RC_SUCCESS) {
+		fprintf(stderr, "Fapi_Initialize: %s\n", Tss2_RC_Decode(rc));
+		return -1;
+	}
+
+	rc = Fapi_Provision(*context, NULL, NULL, NULL);
+	if (rc == TSS2_FAPI_RC_ALREADY_PROVISIONED) {
+		fprintf(stdout, "INFO: Profile was provisioned.\n");
+	} else if (rc != TSS2_RC_SUCCESS) {
+		fprintf(stderr, "ERROR: Fapi_Provision: %s.\n", Tss2_RC_Decode(rc));
+		return -1;
+	}
+
+	/* Create AK */
+	rc = Fapi_CreateKey(*context, "HS/SRK/AK", "sign,noDa", "", NULL);
+	if (rc == TSS2_FAPI_RC_PATH_ALREADY_EXISTS) {
+		fprintf(stdout, "INFO: Key HS/SRK/AK already exists.\n");
+	} else if (rc == TSS2_RC_SUCCESS) {
+		fprintf(stdout, "INFO: Key HS/SRK/AK created.\n");
+	} else {
+		fprintf(stderr, "ERROR: Fapi_CreateKey: %s.\n", Tss2_RC_Decode(rc));
+		return -1;
+	}
+
+	return 0;
+}
+
+void tpm_measurement_core(FAPI_CONTEXT *context)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t proc_id;
 
 	while (1) {
-		read_ext_request_from_queue(buf);
-		//tpm_directly_extend(TPM_USR_MEASUREMENT, (char *)buf);
-		fprintf(stdout, "SLOT %d CHANGED TO: ", TPM_USR_MEASUREMENT);
-		//pcr_read_single(TPM_USR_MEASUREMENT);
+		proc_id = read_request_get_owner_from_queue(buf);
+		if (proc_id < MIN_PROC_ID || proc_id > MAX_PROC_ID) {
+			printf("Error: %s: unsupported proc_id (%d)\n",
+			       __func__, proc_id);
+			continue;
+		}
+		process_request(context, buf, proc_id);
 	}
 }
 
 int main(int argc, char const *argv[])
 {
+	setenv("TSS2_LOG", TSS_LOG_LVL_NONE, 1);
+
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: TPM init\n", __func__);
@@ -114,8 +212,12 @@ int main(int argc, char const *argv[])
 	if (ret)
 		return ret;
 	
-	tpm_measurement_core();
+	FAPI_CONTEXT *context = NULL;
+	init_context(&context);
+	
+	tpm_measurement_core(context);
 
+	Fapi_Finalize(&context);
 	close_tpm();
 	
 	return 0;

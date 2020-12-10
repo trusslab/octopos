@@ -10,6 +10,9 @@
 #include <os/file_system.h>
 #include <os/syscall.h>
 #include <os/storage.h>
+#ifndef ARCH_SEC_HW
+#include <os/boot.h>
+#endif
 #include <arch/mailbox_os.h>
 #ifndef ARCH_SEC_HW
 #include <arch/pmu.h>
@@ -34,6 +37,7 @@ static void distribute_input(void)
 		process_system_call(input_buf, P_UNTRUSTED);
 #ifdef ARCH_SEC_HW
 	} else if (queue_id == 0) {
+	// FIXME: What's this?
 #endif
 	} else {
 		printf("Error (%s): invalid queue_id (%d)\n", __func__, queue_id);
@@ -52,18 +56,19 @@ int main()
 		return ret;
 
 #ifndef ARCH_SEC_HW
-	release_tpm_writer(P_SERIAL_OUT);
-	release_tpm_writer(P_STORAGE);
-	release_tpm_writer(P_KEYBOARD);
-
 	connect_to_pmu();
 #endif
 
-	initialize_shell();
-	initialize_storage();
+	uint32_t partition_size = initialize_storage();
 #ifdef ARCH_UMODE
-	initialize_file_system();
+	initialize_file_system(partition_size);
 #endif
+
+#ifndef ARCH_SEC_HW
+	help_boot_procs(1);
+#endif
+
+	initialize_shell();
 
 	initialize_scheduler();
 

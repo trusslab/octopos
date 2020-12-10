@@ -90,3 +90,13 @@ AX_CODE_COVERAGE
 #AX_VALGRIND_DFLT([helgrind], [off])
 #AX_VALGRIND_DFLT([drd], [off])
 AX_VALGRIND_CHECK
+
+Problem3. TPM is in DA lockout mode
+Solution: Execute the tpm_shutdown in tpm/tpm_shutdown/ folder
+
+It was caused by abnormal shutdown of tpm that making the tpm don't receive TPM_SHUTDOWN
+signal.
+
+Update: tpm_shutdown does not always resolve the lockout problem.
+For now, a temporary hack was added to the simulator.
+To solve this issue correctly, we need to send the shutdown command to the TPM everytime we halt OctopOS.

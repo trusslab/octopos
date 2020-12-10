@@ -1,9 +1,11 @@
 /* octopos serial output code */
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <octopos/mailbox.h>
 #include <arch/mailbox_serial_out.h>
 #include <arch/defines.h>
+#include <tpm/tpm.h>
 #ifdef ARCH_SEC_HW
 #include <sleep.h>
 #endif
@@ -29,10 +31,6 @@ int main(int argc, char **argv)
 	int ret = init_serial_out();
 	if (ret)
 		return ret;
-
-#ifndef ARCH_SEC_HW
-	send_ext_request_to_queue((uint8_t *) argv[0]);
-#endif
 
 	serial_out_core();
 

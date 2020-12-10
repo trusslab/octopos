@@ -1,4 +1,8 @@
-/* OctopOS storage code for the OS */
+/* OctopOS storage code for the OS
+ *
+ * This file is used the OS and its bootloader.
+ * We use macros ROLE_... to specialize, i.e., to compile only the needed code for each.
+ */
 #include <arch/defines.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +24,8 @@
 
 uint8_t os_storage_key[STORAGE_KEY_SIZE];
 bool is_partition_locked = true;
+
+#ifdef ROLE_OS
 uint8_t os_storage_config_key[STORAGE_KEY_SIZE];
 bool is_storage_config_locked = false;
 
@@ -52,6 +58,7 @@ static int lock_storage_config(void)
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
+#endif /* ROLE_OS */
 
 /* FIXME: modified from runtime/storage_client.c */
 static int unlock_secure_storage(uint8_t *key)
@@ -64,6 +71,7 @@ static int unlock_secure_storage(uint8_t *key)
 	return (int) ret0;
 }
 
+#ifdef ROLE_OS
 /* FIXME: modified from runtime/storage_client.c */
 static int lock_secure_storage(void)
 {
@@ -74,6 +82,7 @@ static int lock_secure_storage(void)
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
 }
+#endif
 
 static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id,
 					   uint32_t partition_size)
@@ -91,6 +100,7 @@ static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id,
 	return 0;
 }
 
+#ifdef ROLE_OS
 static int storage_delete_secure_partition(int partition_id)
 {
 	STORAGE_SET_ONE_ARG(partition_id) 
@@ -108,9 +118,11 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	SYSCALL_GET_ONE_ARG
 	uint32_t partition_size = arg0;
 
-	/* sanity check on the requested size */
-	/* FIXME: hard-coded */
-	if (partition_size > 2048) {
+	/* sanity check on the requested size:
+	 * the root_fs of the untrusted domain should be
+	 * the largest partition.
+	 */
+	if (partition_size > STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE) {
 		char dummy;
 		SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
 		return;
@@ -156,21 +168,12 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
-	/* No more than 200 block reads/writes */
-	/* FIXME: hard-coded */
-	if (count > 200) {
+	if (count > MAILBOX_NO_LIMIT_VAL) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
 
-	/* Or should we make this blocking? */
-	if (!is_queue_available(Q_STORAGE_CMD_IN) ||
-	    !is_queue_available(Q_STORAGE_CMD_OUT) ||
-	    !is_queue_available(Q_STORAGE_DATA_IN) ||
-	    !is_queue_available(Q_STORAGE_DATA_OUT)) {
-		SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
-		return;
-	}
+	wait_for_storage();
 
 	if (!is_partition_locked) {
 		int ret = lock_secure_storage();
@@ -198,17 +201,14 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
-#ifdef ARCH_SEC_HW
-	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
-	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
-	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
-	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint16_t) count);
-#else
-	mailbox_change_queue_access(Q_STORAGE_CMD_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-	mailbox_change_queue_access(Q_STORAGE_CMD_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
-	mailbox_change_queue_access(Q_STORAGE_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-	mailbox_change_queue_access(Q_STORAGE_DATA_OUT, READ_ACCESS, runtime_proc_id, (uint8_t) count);
-#endif
+	mailbox_delegate_queue_access(Q_STORAGE_CMD_IN, runtime_proc_id, (limit_t) count,
+			MAILBOX_DEFAULT_TIMEOUT_VAL);
+	mailbox_delegate_queue_access(Q_STORAGE_CMD_OUT, runtime_proc_id, (limit_t) count,
+			MAILBOX_DEFAULT_TIMEOUT_VAL);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id, (limit_t) count,
+			MAILBOX_DEFAULT_TIMEOUT_VAL);
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id, (limit_t) count,
+			MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 	SYSCALL_SET_ONE_RET(0)
 }
@@ -235,6 +235,7 @@ void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
 
 	SYSCALL_SET_ONE_RET(0)
 }
+#endif /* ROLE_OS */
 
 /*
  * Check that all queues are available and that the partition is unlocked.
@@ -251,20 +252,24 @@ void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
 
+#ifdef ROLE_OS	
 	ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
+#endif
 
 	ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
 
+#ifdef ROLE_OS
 	if (is_storage_config_locked) {
 		unlock_storage_config(os_storage_config_key);
 		is_storage_config_locked = false;
 	}
+#endif
 
 	if (is_partition_locked) {
 		unlock_secure_storage(os_storage_key);
@@ -272,15 +277,19 @@ void wait_for_storage(void)
 	}
 }
 
-void initialize_storage(void)
+uint32_t initialize_storage(void)
 {
+	uint32_t partition_size = STORAGE_BOOT_PARTITION_SIZE;
+
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		os_storage_key[i] = i + 3;
 
+#ifdef ROLE_OS
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		os_storage_config_key[i] = i + 4;
 
 	set_storage_config_key(os_storage_config_key);
+#endif
 
 	/* unlock the storage (mainly needed to deal with reset-related interruptions.
 	 * won't do anything if it's the first time accessing the secure storage) */
@@ -288,7 +297,7 @@ void initialize_storage(void)
 	if (unlock_ret == ERR_EXIST) {
 		int unused_partition_id;
 		int create_ret = storage_create_secure_partition(os_storage_key,
-						&unused_partition_id, 1000);
+						&unused_partition_id, partition_size);
 		if (create_ret) {
 			printf("Error (%s): couldn't initialize the storage partition for the OS.\n",
 											__func__);
@@ -306,4 +315,6 @@ void initialize_storage(void)
 		exit(-1);
 	}
 	is_partition_locked = false;
+
+	return partition_size;
 }

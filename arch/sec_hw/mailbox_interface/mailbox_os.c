@@ -59,6 +59,7 @@ int is_queue_available(uint8_t queue_id)
 void wait_for_queue_availability(uint8_t queue_id)
 {
 	sem_wait(&availables[queue_id]);
+	sem_init(&availables[queue_id], 0, 1);
 }
 
 void mark_queue_unavailable(uint8_t queue_id)
@@ -345,24 +346,36 @@ void _mailbox_print_queue_status(uint8_t runtime_proc_id)
 	_SEC_HW_ERROR("queue %d: ctrl reg content %08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
 }
 
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id, uint16_t count)
+/*
+ * Compares limit and timeout to the max vals allowed and use
+ * the max vals if larger.
+ */
+void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
+				   limit_t limit, timeout_t timeout)
 {
+	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
+	mailbox_state_reg_t new_state;
+
 	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
-	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
-	u32 reg = 0;
-	
+	new_state.owner = OMboxIds[queue_id][proc_id];
+
+	if (limit > MAILBOX_MAX_LIMIT_VAL / factor)
+		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
+	else
+		new_state.limit = limit * factor;
+
+	if (timeout > MAILBOX_MAX_TIMEOUT_VAL)
+		new_state.timeout = MAILBOX_MAX_TIMEOUT_VAL;
+	else
+		new_state.timeout = timeout;
+
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 	_SEC_HW_DEBUG("queue %d: ctrl reg %p", queue_id, queue_ptr);
-
-	reg = octopos_mailbox_calc_time_limit(reg, MAX_OCTOPOS_MAILBOX_QUOTE);
-	reg = octopos_mailbox_calc_quota_limit(reg, count * factor);
-	reg = octopos_mailbox_calc_owner(reg, OMboxIds[queue_id][proc_id]);
-
-	_SEC_HW_DEBUG("Writing: %08x", reg);
+	_SEC_HW_DEBUG("Writing: %08x", new_state);
 	_SEC_HW_DEBUG("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 
-	octopos_mailbox_set_status_reg(queue_ptr, reg);
+	octopos_mailbox_set_status_reg(queue_ptr, *(u32 *) (&new_state));
 
 	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 }

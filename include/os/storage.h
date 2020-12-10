@@ -84,6 +84,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 						  uint8_t *buf);
 void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
 					  uint8_t *buf);
-void initialize_storage(void);
+uint32_t initialize_storage(void);
 
 #endif /* _OS_INCLUDE_STORAGE_H_ */

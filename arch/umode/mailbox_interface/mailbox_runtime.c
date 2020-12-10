@@ -18,6 +18,8 @@
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <tpm/tpm.h>
+#include <tpm/hash.h>
 #include <arch/mailbox.h>
 
 /* FIXME: also repeated in runtime.c */
@@ -49,33 +51,57 @@ sem_t load_app_sem;
 
 pthread_spinlock_t mailbox_lock;
 
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
-{
-	uint8_t opcode[4];
+pthread_t app_thread, ctx_thread;
+bool has_ctx_thread = false;
 
-	opcode[0] = MAILBOX_OPCODE_CHANGE_QUEUE_ACCESS;
+/* FIXME: move to a header file */
+int write_syscall_response(uint8_t *buf);
+void *store_context(void *data);
+void *run_app(void *data);
+int send_app_measurement_to_tpm(char *hash_buf);
+
+void mailbox_yield_to_previous_owner(uint8_t queue_id)
+{
+	uint8_t opcode[2];
+
+	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = proc_id;
 	pthread_spin_lock(&mailbox_lock);	
-	write(fd_out, opcode, 4);
+	write(fd_out, opcode, 2);
 	pthread_spin_unlock(&mailbox_lock);	
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint8_t count)
+static mailbox_state_reg_t mailbox_read_state_register(uint8_t queue_id)
 {
-	uint8_t opcode[4], ret;
+	uint8_t opcode[2];
+	mailbox_state_reg_t state;
 
 	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
 	opcode[1] = queue_id;
-	opcode[2] = access;
-	opcode[3] = count;
 	pthread_spin_lock(&mailbox_lock);	
-	write(fd_out, opcode, 4);
-	read(fd_in, &ret, 1);
-	pthread_spin_unlock(&mailbox_lock);	
+	write(fd_out, opcode, 2);
+	read(fd_in, &state, sizeof(mailbox_state_reg_t));
+	pthread_spin_unlock(&mailbox_lock);
 
-	return (int) ret; 
+	return state;
+}
+
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
+{
+	mailbox_state_reg_t state;
+
+	state = mailbox_read_state_register(queue_id);
+
+	return (state.limit == count);
+}
+
+int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
+{
+	mailbox_state_reg_t state;
+
+	state = mailbox_read_state_register(queue_id);
+
+	return (state.owner == owner);
 }
 
 static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -86,10 +112,10 @@ static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int que
 	opcode[1] = queue_id;
 	/* wait for message */
 	sem_wait(&interrupts[queue_id]);
-	pthread_spin_lock(&mailbox_lock);	
-	write(fd_out, opcode, 2), 
+	pthread_spin_lock(&mailbox_lock);
+	write(fd_out, opcode, 2);
 	read(fd_in, buf, queue_msg_size);
-	pthread_spin_unlock(&mailbox_lock);	
+	pthread_spin_unlock(&mailbox_lock);
 }
 
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -176,18 +202,13 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		return;
 	}
 
-	runtime_send_msg_on_queue_large((uint8_t *)path, Q_TPM_DATA_IN);
+	char hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
+	hash_file(path, hash_buf);
+
+	send_app_measurement_to_tpm(hash_buf);
 
 	(*app_main)(api);
 }
-
-pthread_t app_thread, ctx_thread;
-bool has_ctx_thread = false;
-
-/* FIXME: move to a header file */
-int write_syscall_response(uint8_t *buf);
-void *store_context(void *data);
-void *run_app(void *data);
 
 void runtime_core(void)
 {
@@ -201,14 +222,9 @@ void runtime_core(void)
 			printf("Error: invalid interrupt (%d)\n", interrupt);
 			exit(-1);
 		} else if (interrupt > NUM_QUEUES) {
-			if ((interrupt - NUM_QUEUES) == change_queue)
-			{
+			if ((interrupt - NUM_QUEUES) == change_queue) {
 				sem_post(&interrupt_change);
 				sem_post(&interrupts[q_runtime]);
-			}
-			else if ((interrupt - NUM_QUEUES) == Q_TPM_DATA_IN)
-			{
-				sem_post(&interrupts[Q_TPM_DATA_IN]);
 			}
 
 			/* ignore the rest */
@@ -274,23 +290,12 @@ int init_runtime(int runtime_id)
 		return -1;
 	}
 
-	//int ret = net_stack_init();
-	//if (ret) {
-	//	printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
-	//	return -1;
-	//}
-
-	mkfifo(fifo_runtime_out, 0666);
-	mkfifo(fifo_runtime_in, 0666);
-	mkfifo(fifo_runtime_intr, 0666);
-
 	fd_out = open(fifo_runtime_out, O_WRONLY);
 	fd_in = open(fifo_runtime_in, O_RDONLY);
 	fd_intr = open(fifo_runtime_intr, O_RDONLY);
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[q_runtime], 0, 0);
-	sem_init(&interrupts[Q_TPM_DATA_IN], 0, 0);
 
 	sem_init(&load_app_sem, 0, 0);
 
@@ -320,7 +325,8 @@ void close_runtime(void)
 	close(fd_in);
 	close(fd_intr);
 
-	remove(fifo_runtime_out);
-	remove(fifo_runtime_in);
-	remove(fifo_runtime_intr);
+	/* Wait to be terminated by the OS. */
+	while(1) {
+		sleep(10);
+	}
 }

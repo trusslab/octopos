@@ -37,6 +37,8 @@
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
+#include <octopos/tpm.h>
+#include <tpm/hash.h>
 #include <arch/mailbox_runtime.h>
 
 #ifdef ARCH_SEC_HW
@@ -150,6 +152,7 @@ static int read_syscall_response(uint8_t *buf)
 	srq_head = (srq_head + 1) % srq_size;
 
 	sem_post(&srq_sem);
+
 	return 0;
 }
 
@@ -305,11 +308,7 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
-#ifdef ARCH_SEC_HW
-static int request_secure_keyboard(u16 count)
-#else
-static int request_secure_keyboard(int count)
-#endif
+static int request_secure_keyboard(limit_t count)
 {
 	reset_queue_sync(Q_KEYBOARD, 0);
 
@@ -321,7 +320,7 @@ static int request_secure_keyboard(int count)
 		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_KEYBOARD,
-					READ_ACCESS, count);
+						     (limit_t) count);
 	if (!attest_ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
@@ -336,19 +335,11 @@ static int request_secure_keyboard(int count)
 
 static int yield_secure_keyboard(void)
 {
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(Q_KEYBOARD);
-#else
-	mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, P_OS);
-#endif
 	return 0;
 }
 
-#ifdef ARCH_SEC_HW
-static int request_secure_serial_out(u16 count)
-#else
-static int request_secure_serial_out(int count)
-#endif
+static int request_secure_serial_out(limit_t count)
 {
 	reset_queue_sync(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
@@ -359,7 +350,7 @@ static int request_secure_serial_out(int count)
 		return (int) ret0;
 
 	int attest_ret = mailbox_attest_queue_access(Q_SERIAL_OUT,
-					WRITE_ACCESS, count);
+						     (limit_t) count);
 	if (!attest_ret) {
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
@@ -376,11 +367,8 @@ static int yield_secure_serial_out(void)
 {
 	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
-#else
-	mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, P_OS);
-#endif
+
 	return 0;
 }
 
@@ -407,7 +395,6 @@ static int inform_os_of_termination(void)
 static int inform_os_of_pause(void)
 {
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_PAUSE)
-	//issue_syscall_noresponse(buf);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	return (int) ret0;
@@ -448,8 +435,6 @@ static int read_from_shell(char *data, int *data_size)
 #endif
 	return (int) ret0;
 }
-
-
 
 static uint32_t open_file(char *filename, uint32_t mode)
 {
@@ -573,11 +558,7 @@ static int set_up_context(void *addr, uint32_t size)
 bool secure_ipc_mode = false;
 static uint8_t secure_ipc_target_queue = 0;
 
-#ifdef ARCH_SEC_HW
-static int request_secure_ipc(uint8_t target_runtime_queue_id, u16 count)
-#else
-static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
-#endif
+static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t count)
 {
 	bool no_response;
 	reset_queue_sync(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
@@ -592,7 +573,7 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, int count)
 
 	/* FIXME: if any of the attetations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
-					WRITE_ACCESS, count);
+						     (limit_t) count);
 	if (!attest_ret) {
 		printf("%s: Error: failed to attest secure ipc send queue access\n", __func__);
 		return ERR_FAULT;
@@ -623,24 +604,24 @@ static int yield_secure_ipc(void)
 
 	wait_until_empty(qid, MAILBOX_QUEUE_SIZE);
 
-#ifdef ARCH_SEC_HW
 	mailbox_yield_to_previous_owner(qid);
-#else
-	mailbox_change_queue_access(qid, WRITE_ACCESS, P_OS);
-#endif
 
-/* ARCH_SEC_HW OctopOS mailbox only allows the current owner
- * to change/yield ownership. This is different from umode.
- * Thus, instead of explicitly yielding it, we attest it.
- * In case the other runtime refuses to yield, we forcefully
- * deplete the quota by repeatedly reading the mailbox.
- */
 #ifdef ARCH_SEC_HW
+	/* OctopOS mailbox only allows the current owner
+	 * to change/yield ownership.
+	 * Thus, instead of explicitly yielding it, we attest it.
+	 * In case the other runtime refuses to yield, we forcefully
+	 * deplete the quota by repeatedly reading the mailbox.
+	 */
 	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
 		mailbox_force_ownership(q_runtime, P_OS);
 	}
 #else
-	mailbox_change_queue_access(q_runtime, WRITE_ACCESS, P_OS);
+	/*
+	 * Or we can just wait for the timeout */
+	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
+		sleep(1);
+	}
 #endif
 
 	return 0;
@@ -777,14 +758,144 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 
 #endif
 
-static int request_runtime_extend(int count)
+static int request_tpm_access(limit_t limit)
 {
-	reset_queue_sync(Q_TPM_DATA_IN, 0);
+	reset_queue_sync(Q_TPM_IN, MAILBOX_QUEUE_SIZE);
+	reset_queue_sync(Q_TPM_OUT, 0);
 
-	SYSCALL_SET_ONE_ARG(SYSCALL_MEASUREMENT, (uint32_t)count);
+	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_TPM_ACCESS, limit);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	return (int)ret0;
+	if (ret0) {
+		printf("Error: %s: syscall to get tpm access failed.\n",
+		       __func__);
+		return (int) ret0;
+	}
+
+	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, limit);
+	if (!attest_ret) {
+		printf("%s: Error: failed to attest TPM_IN queue\n", __func__);
+		return ERR_FAULT;
+	}
+
+	attest_ret = mailbox_attest_queue_access(Q_TPM_OUT, limit);
+	if (!attest_ret) {
+		mailbox_yield_to_previous_owner(Q_TPM_IN);
+		printf("%s: Error: failed to attest TPM_OUT queue\n", __func__);
+		return ERR_FAULT;
+	}
+
+	return 0;
+}
+
+int send_app_measurement_to_tpm(char *hash_buf)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	int ret;
+	
+	ret = request_tpm_access(2);
+	if (ret) {
+		printf("Error: %s: couldn't get access to TPM.\n", __func__);
+		return ret;
+	}
+
+	buf[0] = TPM_OP_EXTEND;
+
+	/* Note that we assume that two messages are needed to send the hash.
+	 * See include/tpm/hash.h
+	 */
+	memcpy(buf + 1, hash_buf, MAILBOX_QUEUE_MSG_SIZE - 1);
+	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+	memcpy(buf, hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1,
+	       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
+	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+
+	/* We're not using the Q_TPM_OUT queue, so let's yield it. */
+	mailbox_yield_to_previous_owner(Q_TPM_OUT);
+
+	return 0;
+}
+
+static int request_tpm_attestation_report(int slot, char* nonce, int nonce_size,
+					  uint8_t **signature,
+					  uint32_t *sig_size, uint8_t **quote,
+					  uint32_t *quote_size)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	int ret;
+
+	/* FIXME: why 20? */
+	ret = request_tpm_access(20);
+	if (ret) {
+		printf("Error: %s: couldn't get access to TPM.\n", __func__);
+		return ret;
+	}
+
+	buf[0] = TPM_OP_ATTEST;
+	buf[1] = slot;
+	memcpy(&buf[2], (uint8_t *) nonce, nonce_size);
+
+	runtime_send_msg_on_queue(buf, Q_TPM_IN);
+	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
+
+	if (buf[0] != TPM_REP_ATTEST) {
+		printf("Error: %s: unexpected response.\n", __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	*sig_size = *((uint32_t *) &buf[1]);
+	*quote_size = *((uint32_t *) &buf[5]);
+
+	*signature = malloc(*sig_size);
+	if (!*signature) {
+		printf("Error: %s: couldn't allocate memory for signature.\n",
+		       __func__);
+		return ERR_MEMORY;
+	}
+
+	*quote = malloc(*quote_size);
+	if (!*quote) {
+		printf("Error: %s: couldn't allocate memory for quote.\n",
+		       __func__);
+		return ERR_MEMORY;
+	}
+
+	int off = 0;
+	uint32_t size = *sig_size;
+	while (size) {
+		runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
+		if (size > MAILBOX_QUEUE_MSG_SIZE) {
+			memcpy(*signature + off, buf,
+			       MAILBOX_QUEUE_MSG_SIZE);
+			off += MAILBOX_QUEUE_MSG_SIZE;
+			size -= MAILBOX_QUEUE_MSG_SIZE;
+		} else {
+			memcpy(*signature + off, buf, size);
+			size = 0;
+		}
+	}
+
+	off = 0;
+	size = *quote_size;
+	while (size) {
+		runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
+		if (size > MAILBOX_QUEUE_MSG_SIZE) {
+			memcpy(*quote + off, buf,
+			       MAILBOX_QUEUE_MSG_SIZE);
+			off += MAILBOX_QUEUE_MSG_SIZE;
+			size -= MAILBOX_QUEUE_MSG_SIZE;
+		} else {
+			memcpy(*quote + off, buf, size);
+			size = 0;
+		}
+	}
+
+	/* We're not using up the limit on the queues,
+	 * so let's yield them. */
+	mailbox_yield_to_previous_owner(Q_TPM_IN);
+	mailbox_yield_to_previous_owner(Q_TPM_OUT);
+
+	return 0;
 }
 
 static void load_application(char *msg)
@@ -818,6 +929,7 @@ static void load_application(char *msg)
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
+		.request_tpm_attestation_report = request_tpm_attestation_report,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
 #ifdef ARCH_UMODE
@@ -833,7 +945,6 @@ static void load_application(char *msg)
 		.yield_network_access = yield_network_access,
 #endif
 	};
-
 
 	load_application_arch(msg, &api);
 
@@ -852,13 +963,7 @@ void *run_app(void *load_buf)
 	}
 	wait_for_app_load();
 	
-#ifndef ARCH_SEC_HW
-	request_runtime_extend(200);
-#endif
 	load_application((char *) load_buf);
-#ifndef ARCH_SEC_HW
-	mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, P_OS);
-#endif
 	still_running = false;
 	inform_os_of_termination();
 
@@ -998,9 +1103,7 @@ int main()
 	net_stack_exit();
 #endif
 
-#ifdef ARCH_SEC_HW
 	close_runtime();
-#endif
 
 	return 0;
 }

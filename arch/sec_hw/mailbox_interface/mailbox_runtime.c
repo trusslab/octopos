@@ -65,7 +65,7 @@ sem_t 			load_app_sem,
 				syscall_wakeup,
 				secure_ipc_receive_sem;
 
-OCTOPOS_XMbox 			Mbox_out,
+OCTOPOS_XMbox 	Mbox_out,
 				Mbox_keyboard,
 				Mbox_Runtime1,
 				Mbox_Runtime2,
@@ -107,19 +107,7 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 	_SEC_HW_DEBUG("After yield: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
 }
 
-void mailbox_change_queue_access(uint8_t queue_id, uint8_t access, uint8_t proc_id)
-{
-	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
-
-	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
-
-	_SEC_HW_DEBUG("Before change: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
-	octopos_mailbox_deduct_and_set_owner(queue_ptr, OMboxIds[queue_id][proc_id]);
-
-	_SEC_HW_DEBUG("After change: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
-}
-
-int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 {
 	_SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
 
@@ -129,10 +117,6 @@ int mailbox_attest_queue_access(uint8_t queue_id, uint8_t access, uint16_t count
 
 	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
 	result &= octopos_mailbox_attest_quota_limit(queue_ptr, count * factor);
-	result &= octopos_mailbox_attest_time_limit_lower_bound(
-		queue_ptr, 
-		MAX_OCTOPOS_MAILBOX_QUOTE - OCTOPOS_MAILBOX_MAX_TIME_DRIFT
-		);
 
 	return result;
 }
@@ -176,7 +160,6 @@ void mailbox_force_ownership(uint8_t queue_id, uint8_t owner)
 
 	free(message_buffer);
 }
-
 
 void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 {

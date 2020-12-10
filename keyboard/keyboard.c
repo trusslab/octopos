@@ -1,7 +1,10 @@
 /* OctopOS keyboard code */
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <arch/mailbox_keyboard.h>
+#include <octopos/mailbox.h>
+#include <tpm/tpm.h>
 
 static int keyboard_core(void)
 {
@@ -27,10 +30,6 @@ int main(int argc, char **argv)
 	int ret = init_keyboard();
 	if (ret)
 		return ret;
-
-#ifndef ARCH_SEC_HW_KEYBOARD
-	send_ext_request_to_queue((uint8_t *) argv[0]);
-#endif
 
 	keyboard_core();
 

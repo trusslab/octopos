@@ -8,6 +8,7 @@
 #include <termios.h>
 #include <errno.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -19,18 +20,21 @@ int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
 
 int fd_mailbox_log, fd_tpm_log, fd_os_log, fd_keyboard_log,
     fd_serial_out_log, fd_runtime1_log, fd_runtime2_log, fd_storage_log,
-    fd_network_log, fd_untrusted_log, fd_pmu_log, fd_socket_server_log;
+    fd_network_log, fd_untrusted_log, fd_pmu_log, fd_app_servers_log;
 
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
-pid_t mailbox_pid, tpm_pid, os_pid, keyboard_pid, serial_out_pid,
-      runtime1_pid, runtime2_pid, storage_pid, network_pid,
-      untrusted_pid, socket_server_pid;
+pid_t mailbox_pid, tpm_pid, tpm_server_pid, tpm2_abrmd_pid,
+      os_pid, keyboard_pid, serial_out_pid, runtime1_pid,
+      runtime2_pid, storage_pid, network_pid, untrusted_pid,
+      socket_server_pid, attest_server_pid;
 
 struct termios orig;
 
-int do_reboot = 1;
+int do_restart = 1;
+int do_reset_queues = 1;
 int num_running_procs = 0;
+sem_t reset_done[NUM_PROCESSORS + 1];
 
 int mailbox_ready = 0;
 
@@ -104,7 +108,7 @@ static int mailbox_proc_reset_check(uint8_t proc_id)
 
 
 static int start_proc(char *path, char *const args[], int fd_log,
-		      int is_input, int is_output, int is_storage, int is_untrusted)
+		      int is_input, int is_output, int is_untrusted)
 {
 	int pipe_fds[2];
 
@@ -136,14 +140,15 @@ static int start_proc(char *path, char *const args[], int fd_log,
 		if (is_input) {
 			close(pipe_fds[1]);
 			dup2(pipe_fds[0], 0);
+			dup2(fd_log, 2);
 		} else if (is_output) {
 			close(pipe_fds[0]);
 			dup2(pipe_fds[1], 2);
-		} else if (is_storage) {
-			chdir("./storage");
 		} else if (is_untrusted) {
-			dup2(fd_log, 2);
 			dup2(pipe_fds[0], 0);
+			dup2(fd_log, 2);
+		} else {
+			dup2(fd_log, 2);
 		}
 
 		dup2(fd_log, 1);
@@ -159,8 +164,33 @@ static int start_mailbox_proc(void)
 
 	char *const args[] = {(char *) "mailbox", NULL};
 	char path[] = "./arch/umode/mailbox/mailbox";
-	ret = start_proc(path, args, fd_mailbox_log, 0, 0, 0, 0);
+	ret = start_proc(path, args, fd_mailbox_log, 0, 0, 0);
 	mailbox_ready = 1;
+
+	return ret;
+}
+
+static int start_tpm_server_proc(void)
+{
+	int ret;
+
+	char *const args[] = {(char *) "tpm_server", NULL};
+	char path[] = "./external/ibmtpm1637/tpm_server";
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
+
+	return ret;
+}
+
+static int start_tpm2_abrmd_proc(void)
+{
+	int ret;
+
+	/* FIXME: run as tss user (sudo -u tss ...) and remove --allow-root.
+	 * see docs/tpm.rst */
+	char *const args[] = {(char *) "tpm2-abrmd", (char *) "--tcti=mssim",
+			      (char *) "--allow-root", NULL};
+	char path[] = "/usr/local/sbin/tpm2-abrmd";
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
 	return ret;
 }
@@ -171,37 +201,37 @@ static int start_tpm_proc(void)
 
 	char *const args[] = {(char *) "tpm", NULL};
 	char path[] = "./tpm/tpm";
-	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0, 0);
+	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
 	return ret;
 }
 
 static int start_os_proc(void)
 {
-	char *const args[] = {(char *) "os", NULL};
-	char path[] = "./os/os";
-	return start_proc(path, args, fd_os_log, 0, 0, 0, 0);
+	char *const args[] = {(char *) "bootloader_os", (char *) "os", NULL};
+	char path[] = "./bootloader/bootloader_os";
+	return start_proc(path, args, fd_os_log, 0, 0, 0);
 }
 
 static int start_keyboard_proc(void)
 {
-	char *const args[] = {(char *) "loader", (char *) "./keyboard/keyboard.so", NULL};
-	char path[] = "./loader/loader";
-	return start_proc(path, args, fd_keyboard_log, 1, 0, 0, 0);
+	char *const args[] = {(char *) "bootloader_other", (char *) "keyboard", NULL};
+	char path[] = "./bootloader/bootloader_other";
+	return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
 }
 
 static int start_serial_out_proc(void)
 {
-	char *const args[] = {(char *) "loader", (char *) "./serial_out/serial_out.so", NULL};
-	char path[] = "./loader/loader";
-	return start_proc(path, args, fd_serial_out_log, 0, 1, 0, 0);
+	char *const args[] = {(char *) "bootloader_other", (char *) "serial_out", NULL};
+	char path[] = "./bootloader/bootloader_other";
+	return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
 }
 
 static int start_runtime_proc(char *runtime_id)
 {
 	int fd_log;
-	char *const args[] = {(char *) "runtime", runtime_id, NULL};
-	char path[] = "./runtime/runtime";
+	char *const args[] = {(char *) "bootloader", (char *) "runtime", runtime_id, NULL};
+	char path[] = "./bootloader/bootloader_other";
 	
 	if (*runtime_id == '1') {
 		fd_log = fd_runtime1_log;
@@ -212,42 +242,51 @@ static int start_runtime_proc(char *runtime_id)
 		return ERR_INVALID;
 	}
 
-	return start_proc(path, args, fd_log, 0, 0, 0, 0);
+	return start_proc(path, args, fd_log, 0, 0, 0);
 }
 
 static int start_storage_proc(void)
 {
-	char *const args[] = {(char *) "loader", (char *) "./storage.so", NULL};
-	char path[] = "../loader/loader";
-	return start_proc(path, args, fd_storage_log, 0, 0, 1, 0);
+	char *const args[] = {(char *) "bootloader_storage", (char *) "storage", NULL};
+	char path[] = "./bootloader/bootloader_storage";
+	return start_proc(path, args, fd_storage_log, 0, 0, 0);
 }
 
 static int start_network_proc(void)
 {
-	char *const args[] = {(char *) "network", NULL};
-	char path[] = "./network/network";
-	return start_proc(path, args, fd_network_log, 0, 0, 0, 0);
+	char *const args[] = {(char *) "bootloader_other", (char *) "network", NULL};
+	char path[] = "./bootloader/bootloader_other";
+	return start_proc(path, args, fd_network_log, 0, 0, 0);
 }
 
 static int start_untrusted_proc(void)
 {
-	char *const args[] = {(char *) "linux",
-		(char *) "ubda=./arch/umode/untrusted_linux/CentOS6.x-AMD64-root_fs",
+	char *const args[] = {(char *) "bootloader_other", (char *) "linux",
+		(char *) "root=/dev/octopos_blk",
 		(char *) "mem=128M", NULL};
-	char path[] = "./arch/umode/untrusted_linux/linux";
-	return start_proc(path, args, fd_untrusted_log, 0, 0, 0, 1);
+	char path[] = "./bootloader/bootloader_other";
+	return start_proc(path, args, fd_untrusted_log, 0, 0, 1);
 }
 
 static int start_socket_server_proc(void)
 {
 	char *const args[] = {(char *) "socket_server", NULL};
 	char path[] = "./applications/socket_client/socket_server";
-	return start_proc(path, args, fd_socket_server_log, 0, 0, 0, 0);
+	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
+}
+
+static int start_attest_server_proc(void)
+{
+	char *const args[] = {(char *) "attest_server", NULL};
+	char path[] = "./applications/attest_client/attest_server";
+	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
 }
 
 static void start_all_procs(void)
 {
 	mailbox_pid = start_mailbox_proc();
+	tpm_server_pid = start_tpm_server_proc();
+	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
 	tpm_pid = start_tpm_proc();
 	os_pid = start_os_proc();
 	keyboard_pid = start_keyboard_proc();
@@ -257,10 +296,11 @@ static void start_all_procs(void)
 	storage_pid = start_storage_proc();
 	network_pid = start_network_proc();
 	untrusted_pid = start_untrusted_proc();
-	/* Socket server is not part of OctopOS.
-	 * We start it here since it's useful for testing.
+	/* These servers are not part of OctopOS.
+	 * We start them here since they're useful for testing.
 	 */
 	socket_server_pid = start_socket_server_proc();
+	attest_server_pid = start_attest_server_proc();
 }
 
 static void halt_proc(uint8_t proc_id)
@@ -313,13 +353,15 @@ static void halt_proc(uint8_t proc_id)
 	}
 }
 
+/*
+ * Halts all procs other than the untrusted one.
+ */
 static void halt_all_procs(void)
 {
 	mailbox_ready = 0;
 
-	halt_proc(P_UNTRUSTED);	
-
 	/* Shut down the rest */
+	kill(attest_server_pid, SIGKILL);
 	kill(socket_server_pid, SIGKILL);
 
 	halt_proc(P_NETWORK);
@@ -337,6 +379,8 @@ static void halt_all_procs(void)
 	halt_proc(P_OS);
 	
 	kill(tpm_pid, SIGKILL);
+	kill(tpm2_abrmd_pid, SIGKILL);
+	kill(tpm_server_pid, SIGKILL);
 
 	kill(mailbox_pid, SIGKILL);
 }
@@ -345,23 +389,32 @@ static void *proc_reboot_handler(void *data)
 {
 	char proc_name[64];
 	int wstatus, ret = 0;
+	int reboot_exception = 0;
 
-	while (do_reboot || num_running_procs) {
+	while (do_restart || do_reset_queues || num_running_procs) {
 		pid_t pid = wait(&wstatus);
 		if (!(wstatus == 0 || wstatus == 9))
 			continue;
 		num_running_procs--;
 		if (pid == mailbox_pid) {
 			sprintf(proc_name, "Mailbox");
-			if (do_reboot)
-				mailbox_pid = start_mailbox_proc();
+			reboot_exception = 1;
+			sem_post(&reset_done[0]);
 		} else if (pid == tpm_pid) {
 			sprintf(proc_name, "TPM");
-			if (do_reboot)
-				tpm_pid = start_tpm_proc();
+			reboot_exception = 1;
+			sem_post(&reset_done[P_TPM]);
+		} else if (pid == tpm_server_pid) {
+			sprintf(proc_name, "TPM_server");
+			reboot_exception = 1;
+			sem_post(&reset_done[P_TPM]);
+		} else if (pid == tpm2_abrmd_pid) {
+			sprintf(proc_name, "TPM_abrmd");
+			reboot_exception = 1;
+			sem_post(&reset_done[P_TPM]);
 		} else if (pid == os_pid) {
 			sprintf(proc_name, "OS processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_OS1);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_OS1\n", __func__);
@@ -375,56 +428,71 @@ static void *proc_reboot_handler(void *data)
 				}
 
 				mailbox_reset_queue(Q_OSU);
-
-				os_pid = start_os_proc();
 			}
+
+			if (do_restart)
+				os_pid = start_os_proc();
+
+			sem_post(&reset_done[P_OS]);
 		} else if (pid == keyboard_pid) {
 			sprintf(proc_name, "Keyboard processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_KEYBOARD);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_KEYBOARD\n", __func__);
 					goto print;
 				}
-
-				keyboard_pid = start_keyboard_proc();
 			}
+
+			if (do_restart)
+				keyboard_pid = start_keyboard_proc();
+
+			sem_post(&reset_done[P_KEYBOARD]);
 		} else if (pid == serial_out_pid) {
 			sprintf(proc_name, "Serial Out processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_SERIAL_OUT);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_SERIAL_OUT\n", __func__);
 					goto print;
 				}
-
-				serial_out_pid = start_serial_out_proc();
 			}
+
+			if (do_restart)
+				serial_out_pid = start_serial_out_proc();
+
+			sem_post(&reset_done[P_SERIAL_OUT]);
 		} else if (pid == runtime1_pid) {
 			sprintf(proc_name, "Runtime1 processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_RUNTIME1);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_RUNTIME1\n", __func__);
 					goto print;
 				}
-
-				runtime1_pid = start_runtime_proc((char *) "1");
 			}
+
+			if (do_restart)
+				runtime1_pid = start_runtime_proc((char *) "1");
+
+			sem_post(&reset_done[P_RUNTIME1]);
 		} else if (pid == runtime2_pid) {
 			sprintf(proc_name, "Runtime2 processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_RUNTIME2);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_RUNTIME2\n", __func__);
 					goto print;
 				}
-
-				runtime2_pid = start_runtime_proc((char *) "2");
 			}
+
+			if (do_restart)
+				runtime2_pid = start_runtime_proc((char *) "2");
+
+			sem_post(&reset_done[P_RUNTIME2]);
 		} else if (pid == storage_pid) {
 			sprintf(proc_name, "Storage processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_STORAGE_DATA_IN);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_STORAGE_DATA_IN\n", __func__);
@@ -448,12 +516,15 @@ static void *proc_reboot_handler(void *data)
 					printf("Error: %s: couldn't reset Q_STORAGE_CMD_OUT\n", __func__);
 					goto print;
 				}
-
-				storage_pid = start_storage_proc();
 			}
+
+			if (do_restart)
+				storage_pid = start_storage_proc();
+
+			sem_post(&reset_done[P_STORAGE]);
 		} else if (pid == network_pid) {
 			sprintf(proc_name, "Network processor");
-			if (do_reboot) {
+			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_NETWORK_DATA_IN);
 				if (ret) {
 					printf("Error: %s: couldn't reset Q_NETWORK_DATA_IN\n", __func__);
@@ -477,27 +548,39 @@ static void *proc_reboot_handler(void *data)
 					printf("Error: %s: couldn't reset Q_NETWORK_CMD_OUT\n", __func__);
 					goto print;
 				}
-
-				network_pid = start_network_proc();
 			}
+
+			if (do_restart)
+				network_pid = start_network_proc();
+
+			sem_post(&reset_done[P_NETWORK]);
 		} else if (pid == untrusted_pid) {
 			sprintf(proc_name, "Untrusted processor");
-			if (do_reboot) {
+			if (do_reset_queues)
 				mailbox_reset_queue(Q_UNTRUSTED);
 
+			if (do_restart)
 				untrusted_pid = start_untrusted_proc();
-			}
+
+			sem_post(&reset_done[P_UNTRUSTED]);
 		} else if (pid == socket_server_pid) {
-			sprintf(proc_name, "Socket Server processor");
-			if (do_reboot)
+			sprintf(proc_name, "Socket Server");
+			if (do_restart)
 				socket_server_pid = start_socket_server_proc();
+		} else if (pid == attest_server_pid) {
+			sprintf(proc_name, "Attestation Server");
+			if (do_restart)
+				attest_server_pid = start_attest_server_proc();
 		} else {
 			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 			continue;
 		}
 
 print:
-		printf("%s terminated (%d)%s\n", proc_name, wstatus, (do_reboot && !ret) ? " and restarted" : "");
+		printf("%s terminated (%d)%s%s%s\n", proc_name, wstatus,
+		       (do_restart && !reboot_exception) ? " and restarted" : "",
+		       do_reset_queues && !reboot_exception ? " -- queues reset" : "",
+		       do_reset_queues && ret && !reboot_exception ? ", but unsuccessfully" : "");
 	}
 	
 	return NULL;
@@ -507,7 +590,7 @@ int main(int argc, char **argv)
 {
 	fd_set r_fds;
 	char buffer[1024];
-	int ret, len;
+	int ret, len, i;
 	int untrusted_init = 0;
 	pthread_t reboot_thread;
 
@@ -542,7 +625,7 @@ int main(int argc, char **argv)
 	mkfifo(FIFO_NETWORK_LOG, 0666);
 	mkfifo(FIFO_UNTRUSTED_LOG, 0666);
 	mkfifo(FIFO_PMU_LOG, 0666);
-	mkfifo(FIFO_SOCKET_SERVER_LOG, 0666);
+	mkfifo(FIFO_APP_SERVERS_LOG, 0666);
 
 	fd_pmu_to_os = open(FIFO_PMU_TO_OS, O_RDWR);
 	fd_pmu_from_os = open(FIFO_PMU_FROM_OS, O_RDWR);
@@ -560,10 +643,13 @@ int main(int argc, char **argv)
 	fd_network_log = open(FIFO_NETWORK_LOG, O_RDWR);
 	fd_untrusted_log = open(FIFO_UNTRUSTED_LOG, O_RDWR);
 	fd_pmu_log = open(FIFO_PMU_LOG, O_RDWR);
-	fd_socket_server_log = open(FIFO_SOCKET_SERVER_LOG, O_RDWR);
+	fd_app_servers_log = open(FIFO_APP_SERVERS_LOG, O_RDWR);
 
 	dup2(fd_pmu_log, 1);
 	printf("%s: PMU init\n", __func__);
+
+	for (i = 0; i < NUM_PROCESSORS + 1; i++)
+		sem_init(&reset_done[i], 0, 0);
 
 	ret = pthread_create(&reboot_thread, NULL, proc_reboot_handler, NULL);
 	if (ret) {
@@ -618,32 +704,119 @@ int main(int argc, char **argv)
 			if (pmu_os_buf[0] == PMU_OS_CMD_SHUTDOWN) {
 				printf("%s: shutting down\n", __func__);
 				uint32_t cmd_ret = 0;
-				mailbox_pause_delegation();
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
-					do_reboot = 0;
-					halt_all_procs();
-					goto err_join;
+					/* There are two terminate checks. The first one
+					 * is mainly to inform the OS. Here, we need to
+					 * send the response back to the OS before we
+					 * reboot since the OS needs to help the
+					 * untrusted proc to properly halt. Therefore, we
+					 * do the first check to inform the OS.
+					 * If the check is successful, we then do a second check.
+					 * The second check is protected by pausing of all delegations,
+					 * therefore, it's safe to shut down if the check passes.
+					 *
+					 * The side effect of this approach is that we might tell the OS
+					 * that we can shut down but later realize that we can't.
+					 * That's not a security problem and indeed it's the job of the OS
+					 * to not perform any more delegations after our response.
+					 * If it does, then the shutdown will fail.
+					 */
+					write(fd_pmu_to_os, &cmd_ret, 4);
+
+					do_restart = 0;
+					do_reset_queues = 0;
+					/* Halt the untrusted domain before we disable delegations
+					 * since it will need access to the storage service.
+					 */
+					halt_proc(P_UNTRUSTED);	
+					/* Give the untrusted domain time to properly terminate first. */
+					sleep(10);
+
+					mailbox_pause_delegation();
+					ret = mailbox_terminate_check();
+					if (!ret) {
+						/* allowed */
+						halt_all_procs();
+						goto err_join;
+					} else {
+						/* not allowed */
+						printf("Error: %s: shutdown not allowed (second check)\n", __func__);
+						do_restart = 1;
+						do_reset_queues = 1;
+						mailbox_resume_delegation();
+					}
 				} else {
 					/* not allowed */
+					printf("Error: %s: shutdown not allowed (first check)\n", __func__);
 					cmd_ret = (uint32_t) ERR_PERMISSION;
-					mailbox_resume_delegation();
 					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
 			} else if (pmu_os_buf[0] == PMU_OS_CMD_REBOOT) {
 				printf("%s: rebooting\n", __func__);
 				uint32_t cmd_ret = 0;
-				mailbox_pause_delegation();
 				ret = mailbox_terminate_check();
 				if (!ret) {
 					/* allowed */
-					halt_all_procs();
+					/* There are two terminate checks. The first one
+					 * is mainly to inform the OS. Here, we need to
+					 * send the response back to the OS before we
+					 * reboot since the OS needs to help the
+					 * untrusted proc to properly halt. Therefore, we
+					 * do the first check to inform the OS.
+					 * If the check is successful, we then do a second check.
+					 * The second check is protected by pausing of all delegations,
+					 * therefore, it's safe to reboot if the check passes.
+					 *
+					 * The side effect of this approach is that we might tell the OS
+					 * that we can reboot but later realize that we can't.
+					 * That's not a security problem and indeed it's the job of the OS
+					 * to not perform any more delegations after our response.
+					 * If it does, then the reboot will fail.
+					 */
+					write(fd_pmu_to_os, &cmd_ret, 4);
+
+					do_restart = 0;
+					/* Halt the untrusted domain before we disable delegations
+					 * since it will need access to the storage service.
+					 */
+					halt_proc(P_UNTRUSTED);	
+					/* Give the untrusted domain time to properly terminate first. */
+					sleep(10);
+
+					mailbox_pause_delegation();
+					ret = mailbox_terminate_check();
+					if (!ret) {
+						/* allowed */
+						halt_all_procs();
+						/* We've used the first sem in the array for the mailbox. */
+						sem_wait(&reset_done[0]);
+						sem_wait(&reset_done[P_TPM]);
+						sem_wait(&reset_done[P_TPM]);
+						sem_wait(&reset_done[P_TPM]);
+						sem_wait(&reset_done[P_OS]);
+						sem_wait(&reset_done[P_KEYBOARD]);
+						sem_wait(&reset_done[P_SERIAL_OUT]);
+						sem_wait(&reset_done[P_STORAGE]);
+						sem_wait(&reset_done[P_NETWORK]);
+						sem_wait(&reset_done[P_RUNTIME1]);
+						sem_wait(&reset_done[P_RUNTIME2]);
+						sem_wait(&reset_done[P_UNTRUSTED]);
+
+						do_restart = 1;
+						start_all_procs();
+					} else {
+						/* not allowed */
+						printf("Error: %s: reboot not allowed (second check)\n", __func__);
+						do_restart = 1;
+						mailbox_resume_delegation();
+					}
 				} 
 				else {
 					/* not allowed */
+					printf("Error: %s: reboot not allowed (first check)\n", __func__);
 					cmd_ret = (uint32_t) ERR_PERMISSION;
-					mailbox_resume_delegation();
 					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
 			} else if (pmu_os_buf[0] == PMU_OS_CMD_RESET_PROC) {
@@ -651,6 +824,11 @@ int main(int argc, char **argv)
 				uint8_t proc_id = pmu_os_buf[1];
 				if (proc_id == P_UNTRUSTED ||
 				    proc_id == P_OS) {
+					/* We send the response back to the OS before we
+					 * reset the proc since the OS needs to help the
+					 * untrusted proc to properly halt.
+					 */
+					write(fd_pmu_to_os, &cmd_ret, 4);
 					halt_proc(proc_id);
 				} else if (proc_id == P_KEYBOARD ||
 					   proc_id == P_SERIAL_OUT ||
@@ -663,17 +841,19 @@ int main(int argc, char **argv)
 					if (!ret) {
 						/* allowed */
 						halt_proc(proc_id);
+						sem_wait(&reset_done[proc_id]);
 					} else {
 						/* not allowed */
 						cmd_ret = (uint32_t) ERR_PERMISSION;
 					}
 					mailbox_resume_delegation();
+					write(fd_pmu_to_os, &cmd_ret, 4);
 				} else {
 					printf("Error: %s: invalid processor ID (%d)\n",
 					       __func__, proc_id);
 					cmd_ret = (uint32_t) ERR_INVALID;
+					write(fd_pmu_to_os, &cmd_ret, 4);
 				}
-				write(fd_pmu_to_os, &cmd_ret, 4);
 			} else {
 				printf("Error: %s: invalid command from the OS (%d)\n",
 				       __func__, pmu_os_buf[0]);
@@ -688,7 +868,7 @@ err_close:
 
 	/* No more pmu logs after this. */
 	close(fd_pmu_log);
-	close(fd_socket_server_log);
+	close(fd_app_servers_log);
 	close(fd_untrusted_log);
 	close(fd_network_log);
 	close(fd_storage_log);
@@ -705,7 +885,7 @@ err_close:
 	close(fd_pmu_from_os);
 	close(fd_pmu_to_os);
 	
-	remove(FIFO_SOCKET_SERVER_LOG);
+	remove(FIFO_APP_SERVERS_LOG);
 	remove(FIFO_PMU_LOG);
 	remove(FIFO_UNTRUSTED_LOG);
 	remove(FIFO_NETWORK_LOG);

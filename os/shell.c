@@ -23,6 +23,9 @@
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/syscall.h>
+#ifndef ARCH_SEC_HW
+#include <os/boot.h>
+#endif
 #include <arch/mailbox_os.h>
 #ifndef ARCH_SEC_HW
 #include <arch/pmu.h>
@@ -265,6 +268,7 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		output_printf("octopos$> ");
 	}
 #ifdef ARCH_SEC_HW
+	// FIXME: merge into mainline api
 	request_pmu_to_reset(runtime_proc_id);
 #endif
 
@@ -367,65 +371,36 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 	if (args[0] != NULL) {
 		if (strcmp(args[0], "halt") == 0) {
 			int ret;
-
-			/* send a halt cmd to untrusted in case it's listening */
-			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-			memcpy(&buf[1], "halt\n", 5);
-			send_cmd_to_untrusted(buf);
 #ifndef ARCH_SEC_HW
-			/* send a shutdown cmd to PMU */
-			/* FIXME: there is a race condition here.
-			 * Our halt cmd sent to the untrusted domain might trigger the PMU
-			 * to reboot it before PMU receives the shutdown cmd.
-			 */
-			ret = pmu_shutdown();
+			ret = halt_system();
+#endif
 			if (ret)
 				output_printf("Couldn't shut down\n");
-#endif
+
 			output_printf("octopos$> ");
 			return 0;
 		} else if (strcmp(args[0], "reboot") == 0) {
 			int ret;
 
-			/* Send a halt cmd to untrusted in case it's listening.
-			 * Will be automatically rebooted by the PMU.
-			 */
-			uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-			buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-			memcpy(&buf[1], "halt\n", 5);
-			send_cmd_to_untrusted(buf);
 #ifndef ARCH_SEC_HW
-			/* send a reboot cmd to PMU */
-			ret = pmu_reboot();
+			ret = reboot_system();
+#endif
 			if (ret)
 				output_printf("Couldn't reboot all processors\n");
-#endif
+
 			output_printf("octopos$> ");
 			return 0;
 		} else if (strcmp(args[0], "reset") == 0) {
 			int ret;
 			uint8_t proc_id = (uint8_t) atoi(args[1]);
 
-			if (proc_id == P_UNTRUSTED) {
-				/* Send a halt cmd to untrusted in case it's listening.
-				* Will be automatically rebooted by the PMU.
-				*/
-				uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-				buf[0] = RUNTIME_QUEUE_EXEC_APP_TAG;
-				memcpy(&buf[1], "halt\n", 5);
-				send_cmd_to_untrusted(buf);
-			}
 #ifndef ARCH_SEC_HW
-			ret = pmu_reset_proc(proc_id);
-			if (ret) {
+			ret = reset_proc(proc_id);
+			if (ret == 1 && proc_id == P_UNTRUSTED) {
+				output_printf("Enter this command again to complete "
+					      "the reset\n");
+			} else if (ret) {
 				output_printf("Couldn't reset proc %d\n", proc_id);
-			} else {
-				/* set the state of runtime procs to resetting */
-				if (proc_id == P_RUNTIME1)
-					sched_runtime_reset(P_RUNTIME1);
-				else if (proc_id == P_RUNTIME2)
-					sched_runtime_reset(P_RUNTIME2);
 			}
 #endif
 			output_printf("octopos$> ");

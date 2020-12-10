@@ -22,6 +22,7 @@
 #include <os/storage.h>
 #ifndef ARCH_SEC_HW
 #include <os/network.h>
+#include <os/boot.h>
 #endif
 #include <arch/mailbox_os.h>
 
@@ -122,11 +123,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
-#ifdef ARCH_SEC_HW
-		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint16_t) count);
-#else
-		mailbox_change_queue_access(Q_SERIAL_OUT, WRITE_ACCESS, runtime_proc_id, (uint8_t) count);
-#endif
+		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id, (limit_t) count,
+			MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -150,17 +148,15 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
-#ifdef ARCH_SEC_HW
-		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint16_t) count);
-#else
-		mailbox_change_queue_access(Q_KEYBOARD, READ_ACCESS, runtime_proc_id, (uint8_t) count);
-#endif
+		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id, (limit_t) count,
+				MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
 		inform_shell_of_termination(runtime_proc_id);
+		*late_processing = SYSCALL_INFORM_OS_OF_TERMINATION;
 		SYSCALL_SET_ONE_RET(0)
 		/* FIXME: This is a known issue that a Runtime after reset will receive stale 
 		 * syscall ret. It is due to Runtime mailbox not flushed after a reset. 
@@ -190,6 +186,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 	case SYSCALL_INFORM_OS_OF_PAUSE: {
 		inform_shell_of_pause(runtime_proc_id);
+		*late_processing = SYSCALL_INFORM_OS_OF_PAUSE;
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
@@ -252,7 +249,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_WRITE_TO_FILE: {
 		uint32_t ret;
 		SYSCALL_GET_TWO_ARGS_DATA
+		_SEC_HW_ERROR("\r[0] %d %d %d %08x", data_size, (int) arg0, (int) arg1, data);
 		ret = (uint32_t) file_system_write_to_file(arg0, data, (int) data_size, (int) arg1);
+		_SEC_HW_ERROR("\r[1] %d", ret);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
@@ -267,7 +266,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			printf("Error: read size too big. Will truncate\n");
 			size = MAILBOX_QUEUE_MSG_SIZE - 5;
 		}
+		_SEC_HW_ERROR("\r[0] %d %d %d", size, (int) arg0, (int) arg2);
 		fs_ret = file_system_read_from_file(arg0, ret_buf, size, (int) arg2);
+		_SEC_HW_ERROR("\r[1] %d %08x", fs_ret, ret_buf);
 		/* safety check */
 		if (fs_ret > size) {
 			printf("Error: unexpected return from file_system_read_from_file\n");
@@ -399,28 +400,34 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		*no_response = true;
 		break;
 	}
-	case SYSCALL_MEASUREMENT: {
+	case SYSCALL_REQUEST_TPM_ACCESS: {
 		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
+		uint32_t limit = arg0;
 
-		/* No more than 200 characters */
-		if (count > 200)
-		{
-			SYSCALL_SET_ONE_RET((uint32_t)ERR_INVALID)
-			break;
-		}
+		/* FIXME: why 100? */
+		if (limit > 100) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+ 			break;
+ 		}
 
-		int ret = is_queue_available(Q_TPM_DATA_IN);
+		int ret1 = is_queue_available(Q_TPM_IN);
+		int ret2 = is_queue_available(Q_TPM_OUT);
 		/* Or should we make this blocking? */
-		if (!ret)
+		if (!ret1 || !ret2)
 		{
-			SYSCALL_SET_ONE_RET((uint32_t)ERR_AVAILABLE)
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
 
-		mark_queue_unavailable(Q_TPM_DATA_IN);
+		mark_queue_unavailable(Q_TPM_IN);
+		mark_queue_unavailable(Q_TPM_OUT);
 
-		mailbox_change_queue_access(Q_TPM_DATA_IN, WRITE_ACCESS, runtime_proc_id, (uint8_t)count);
+		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id,
+					      (limit_t) limit,
+					      MAILBOX_DEFAULT_TIMEOUT_VAL);
+		mailbox_delegate_queue_access(Q_TPM_OUT, runtime_proc_id,
+					      (limit_t) limit,
+					      MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -508,6 +515,11 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
+#ifndef ARCH_SEC_HW
+		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
+			late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
+			reset_proc(runtime_proc_id);
+#endif
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

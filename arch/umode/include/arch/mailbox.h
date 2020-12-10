@@ -5,6 +5,7 @@
 #define FIFO_OS_IN		"/tmp/octopos_mailbox_os_in"
 #define FIFO_OS_INTR		"/tmp/octopos_mailbox_os_intr"
 #define FIFO_KEYBOARD_OUT	"/tmp/octopos_mailbox_keyboard_out"
+#define FIFO_KEYBOARD_IN	"/tmp/octopos_mailbox_keyboard_in"
 #define FIFO_KEYBOARD_INTR	"/tmp/octopos_mailbox_keyboard_intr"
 #define FIFO_SENSOR		"/tmp/octopos_mailbox_sensor"
 #define FIFO_SENSOR_INTR	"/tmp/octopos_mailbox_sensor_intr"

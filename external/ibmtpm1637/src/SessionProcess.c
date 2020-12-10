@@ -80,6 +80,8 @@ IsDAExempted(
 	     )
 {
     BOOL        result = FALSE;
+    /* FIXME: temp hack to fix DA lockout error. */
+    return TRUE;
     //
     switch(HandleGetType(handle))
 	{
