@@ -60,7 +60,8 @@ int main()
 #endif
 
 	uint32_t partition_size = initialize_storage();
-#ifdef ARCH_UMODE
+// FIXME remove ARCH_SEC_HW. initialize_file_system should be moved to boot
+#if defined(ARCH_UMODE) || defined(ARCH_SEC_HW)
 	initialize_file_system(partition_size);
 #endif
 

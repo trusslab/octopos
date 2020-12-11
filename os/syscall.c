@@ -249,9 +249,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_WRITE_TO_FILE: {
 		uint32_t ret;
 		SYSCALL_GET_TWO_ARGS_DATA
-		_SEC_HW_ERROR("\r[0] %d %d %d %08x", data_size, (int) arg0, (int) arg1, data);
 		ret = (uint32_t) file_system_write_to_file(arg0, data, (int) data_size, (int) arg1);
-		_SEC_HW_ERROR("\r[1] %d", ret);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
@@ -266,9 +264,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			printf("Error: read size too big. Will truncate\n");
 			size = MAILBOX_QUEUE_MSG_SIZE - 5;
 		}
-		_SEC_HW_ERROR("\r[0] %d %d %d", size, (int) arg0, (int) arg2);
 		fs_ret = file_system_read_from_file(arg0, ret_buf, size, (int) arg2);
-		_SEC_HW_ERROR("\r[1] %d %08x", fs_ret, ret_buf);
 		/* safety check */
 		if (fs_ret > size) {
 			printf("Error: unexpected return from file_system_read_from_file\n");
