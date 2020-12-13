@@ -352,10 +352,6 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_NETWORK_DATA_OUT]);
 				break;
-			case Q_SENSOR:
-				sem_init(&interrupts[Q_SENSOR], 0, 0);
-				sem_post(&availables[Q_SENSOR]);
-				break;
 			case Q_RUNTIME1:
 				sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 				sem_post(&availables[Q_RUNTIME1]);
@@ -411,7 +407,6 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, 0);
-	sem_init(&interrupts[Q_SENSOR], 0, 0);
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
@@ -432,7 +427,6 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_NETWORK_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_IN], 0, 1);
 	sem_init(&availables[Q_NETWORK_CMD_OUT], 0, 1);
-	sem_init(&availables[Q_SENSOR], 0, 1);
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);
 #endif

@@ -20,7 +20,7 @@
 #define	P_SERIAL_OUT		3
 #define	P_STORAGE		4
 #define	P_NETWORK		5
-#define	P_SENSOR		6
+#define	P_BLUETOOTH		6
 #define	P_RUNTIME1		7
 #define	P_RUNTIME2		8
 #define P_UNTRUSTED		9
@@ -44,14 +44,15 @@
 #define	Q_NETWORK_DATA_OUT	10
 #define	Q_NETWORK_CMD_IN	11
 #define	Q_NETWORK_CMD_OUT	12
-#define Q_SENSOR		13
-#define	Q_RUNTIME1		14
-#define	Q_RUNTIME2		15
-#define	Q_OSU			16
-#define	Q_UNTRUSTED		17
-#define Q_TPM_IN		18
-#define Q_TPM_OUT		19
-#define NUM_QUEUES		19
+#define Q_BLUETOOTH_IN		13
+#define Q_BLUETOOTH_OUT		14
+#define	Q_RUNTIME1		15
+#define	Q_RUNTIME2		16
+#define	Q_OSU			17
+#define	Q_UNTRUSTED		18
+#define Q_TPM_IN		19
+#define Q_TPM_OUT		20
+#define NUM_QUEUES		20
 
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64

@@ -251,7 +251,9 @@ void runtime_core(void)
 
 	/* interrupt handling loop */
 	while (keep_polling) {
+		//printf("%s [1]\n", __func__);
 		read(fd_intr, &interrupt, 1);
+		//printf("%s [2]: interrupt = %d\n", __func__, interrupt);
 		if (interrupt == 0) {
 			timer_tick();
 		} else if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {

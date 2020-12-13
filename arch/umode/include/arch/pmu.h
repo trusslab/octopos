@@ -30,6 +30,7 @@
 #define FIFO_RUNTIME2_LOG	"/tmp/octopos_runtime2_log"
 #define FIFO_STORAGE_LOG	"/tmp/octopos_storage_log"
 #define FIFO_NETWORK_LOG	"/tmp/octopos_network_log"
+#define FIFO_BLUETOOTH_LOG	"/tmp/octopos_bluetooth_log"
 #define FIFO_UNTRUSTED_LOG	"/tmp/octopos_untrusted_log"
 #define FIFO_PMU_LOG		"/tmp/octopos_pmu_log"
 #define FIFO_APP_SERVERS_LOG	"/tmp/octopos_app_servers_log"

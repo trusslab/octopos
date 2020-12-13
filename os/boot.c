@@ -54,6 +54,11 @@ static void help_boot_network_proc(void)
 	help_boot_proc(P_NETWORK, (char *) "network");
 }
 
+static void help_boot_bluetooth_proc(void)
+{
+	help_boot_proc(P_BLUETOOTH, (char *) "bluetooth");
+}
+
 void help_boot_runtime_proc(uint8_t runtime_proc_id)
 {
 	help_boot_proc(runtime_proc_id, (char *) "runtime");
@@ -69,6 +74,7 @@ void help_boot_procs(int boot_untrusted)
 	help_boot_keyboard_proc();
 	help_boot_serial_out_proc();
 	help_boot_network_proc();
+	help_boot_bluetooth_proc();
 	help_boot_runtime_proc(P_RUNTIME1);
 	help_boot_runtime_proc(P_RUNTIME2);
 	if (boot_untrusted)
@@ -104,6 +110,8 @@ int reset_proc(uint8_t proc_id)
 		while (!is_queue_available(Q_STORAGE_DATA_OUT));
 	} else if (proc_id == P_NETWORK) {
 		help_boot_network_proc();
+	} else if (proc_id == P_BLUETOOTH) {
+		help_boot_bluetooth_proc();
 	} else if (proc_id == P_STORAGE) {
 		uint32_t partition_size = initialize_storage();
 		initialize_file_system(partition_size);

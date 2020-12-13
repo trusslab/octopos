@@ -9,6 +9,7 @@ serial_out/serial_out
 runtime/runtime
 os/os
 network/network
+bluetooth/bluetooth
 applications/socket_client/socket_server
 applications/attest_client/attest_server
 applications/bank_client/bank_server
@@ -22,6 +23,7 @@ bootloader/keyboard
 bootloader/serial_out
 bootloader/storage
 bootloader/network
+bootloader/bluetooth
 bootloader/os
 bootloader/runtime1
 bootloader/runtime2

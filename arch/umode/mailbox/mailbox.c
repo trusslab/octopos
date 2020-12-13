@@ -57,11 +57,6 @@ static void send_interrupt(struct processor *proc, uint8_t queue_id)
 	write(proc->intr_handle, &queue_id, 1);
 }
 
-static void sensor_send_interrupt(uint8_t queue_id)
-{
-	send_interrupt(&processors[P_SENSOR], queue_id);
-}
-
 static void os_send_interrupt(uint8_t queue_id)
 {
 	send_interrupt(&processors[P_OS], queue_id);
@@ -85,6 +80,11 @@ static void storage_send_interrupt(uint8_t queue_id)
 static void network_send_interrupt(uint8_t queue_id)
 {
 	send_interrupt(&processors[P_NETWORK], queue_id);
+}
+
+static void bluetooth_send_interrupt(uint8_t queue_id)
+{
+	send_interrupt(&processors[P_BLUETOOTH], queue_id);
 }
 
 static void runtime1_send_interrupt(uint8_t queue_id)
@@ -116,7 +116,6 @@ static void initialize_processors(void)
 	mkfifo(FIFO_KEYBOARD_OUT, 0666);
 	mkfifo(FIFO_KEYBOARD_IN, 0666);
 	mkfifo(FIFO_KEYBOARD_INTR, 0666);
-	mkfifo(FIFO_SENSOR, 0666);
 	mkfifo(FIFO_SERIAL_OUT_OUT, 0666);
 	mkfifo(FIFO_SERIAL_OUT_IN, 0666);
 	mkfifo(FIFO_SERIAL_OUT_INTR, 0666);
@@ -126,6 +125,9 @@ static void initialize_processors(void)
 	mkfifo(FIFO_NETWORK_OUT, 0666);
 	mkfifo(FIFO_NETWORK_IN, 0666);
 	mkfifo(FIFO_NETWORK_INTR, 0666);
+	mkfifo(FIFO_BLUETOOTH_OUT, 0666);
+	mkfifo(FIFO_BLUETOOTH_IN, 0666);
+	mkfifo(FIFO_BLUETOOTH_INTR, 0666);
 	mkfifo(FIFO_RUNTIME1_OUT, 0666);
 	mkfifo(FIFO_RUNTIME1_IN, 0666);
 	mkfifo(FIFO_RUNTIME1_INTR, 0666);
@@ -154,12 +156,6 @@ static void initialize_processors(void)
 	processors[P_KEYBOARD].in_handle = open(FIFO_KEYBOARD_IN, O_RDWR);
 	processors[P_KEYBOARD].intr_handle = open(FIFO_KEYBOARD_INTR, O_RDWR);
 
-	/* sensor processor */
-	processors[P_SENSOR].processor_id = P_SENSOR;
-	processors[P_SENSOR].send_interrupt = sensor_send_interrupt;
-	processors[P_SENSOR].out_handle = open(FIFO_SENSOR, O_RDWR);
-	processors[P_SENSOR].in_handle = open(FIFO_SENSOR_INTR, O_RDWR);
-
 	/* serial output processor */
 	processors[P_SERIAL_OUT].processor_id = P_SERIAL_OUT;
 	processors[P_SERIAL_OUT].send_interrupt = serial_out_send_interrupt;
@@ -180,6 +176,13 @@ static void initialize_processors(void)
 	processors[P_NETWORK].out_handle = open(FIFO_NETWORK_OUT, O_RDWR);
 	processors[P_NETWORK].in_handle = open(FIFO_NETWORK_IN, O_RDWR);
 	processors[P_NETWORK].intr_handle = open(FIFO_NETWORK_INTR, O_RDWR);
+
+	/* bluetooth processor */
+	processors[P_BLUETOOTH].processor_id = P_BLUETOOTH;
+	processors[P_BLUETOOTH].send_interrupt = bluetooth_send_interrupt;
+	processors[P_BLUETOOTH].out_handle = open(FIFO_BLUETOOTH_OUT, O_RDWR);
+	processors[P_BLUETOOTH].in_handle = open(FIFO_BLUETOOTH_IN, O_RDWR);
+	processors[P_BLUETOOTH].intr_handle = open(FIFO_BLUETOOTH_INTR, O_RDWR);
 
 	/* runtime1 processor */
 	processors[P_RUNTIME1].processor_id = P_RUNTIME1;
@@ -216,6 +219,7 @@ static void close_processors(void)
 	close(processors[P_OS].in_handle);
 	close(processors[P_OS].intr_handle);
 	close(processors[P_KEYBOARD].out_handle);
+	close(processors[P_KEYBOARD].in_handle);
 	close(processors[P_KEYBOARD].intr_handle);
 	close(processors[P_SERIAL_OUT].out_handle);
 	close(processors[P_SERIAL_OUT].in_handle);
@@ -226,6 +230,9 @@ static void close_processors(void)
 	close(processors[P_NETWORK].out_handle);
 	close(processors[P_NETWORK].in_handle);
 	close(processors[P_NETWORK].intr_handle);
+	close(processors[P_BLUETOOTH].out_handle);
+	close(processors[P_BLUETOOTH].in_handle);
+	close(processors[P_BLUETOOTH].intr_handle);
 	close(processors[P_RUNTIME1].out_handle);
 	close(processors[P_RUNTIME1].in_handle);
 	close(processors[P_RUNTIME1].intr_handle);
@@ -352,6 +359,8 @@ static int any_secure_delegations(void)
 		is_queue_securely_delegated(Q_NETWORK_DATA_OUT) ||
 		is_queue_securely_delegated(Q_NETWORK_CMD_IN) ||
 		is_queue_securely_delegated(Q_NETWORK_CMD_OUT) ||
+		is_queue_securely_delegated(Q_BLUETOOTH_IN) ||
+		is_queue_securely_delegated(Q_BLUETOOTH_OUT) ||
 		is_queue_securely_delegated(Q_RUNTIME1) ||
 		is_queue_securely_delegated(Q_RUNTIME2));
 }
@@ -367,7 +376,9 @@ static int does_proc_have_secure_io(uint8_t proc_id)
 		(queues[Q_NETWORK_DATA_IN].OWNER == proc_id) ||
 		(queues[Q_NETWORK_DATA_OUT].OWNER == proc_id) ||
 		(queues[Q_NETWORK_CMD_IN].OWNER == proc_id) ||
-		(queues[Q_NETWORK_CMD_OUT].OWNER == proc_id));
+		(queues[Q_NETWORK_CMD_OUT].OWNER == proc_id) ||
+		(queues[Q_BLUETOOTH_IN].OWNER == proc_id) ||
+		(queues[Q_BLUETOOTH_OUT].OWNER == proc_id));
 }
 
 static int does_proc_have_secure_delegatation(uint8_t proc_id)
@@ -390,6 +401,10 @@ static int does_proc_have_secure_delegatation(uint8_t proc_id)
 			is_queue_securely_delegated(Q_NETWORK_DATA_OUT) ||
 			is_queue_securely_delegated(Q_NETWORK_CMD_IN) ||
 			is_queue_securely_delegated(Q_NETWORK_CMD_OUT));
+
+	case P_BLUETOOTH:
+		return (is_queue_securely_delegated(Q_BLUETOOTH_IN) ||
+			is_queue_securely_delegated(Q_BLUETOOTH_OUT));
 
 	case P_RUNTIME1:
 		return (is_queue_securely_delegated(Q_RUNTIME1) ||
@@ -421,7 +436,8 @@ static void initialize_queues(void)
 	queues[Q_OS1].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_OS1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_OS1].messages = 
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* OS queue for runtime2 */
 	queues[Q_OS2].queue_id = Q_OS2;
@@ -431,7 +447,8 @@ static void initialize_queues(void)
 	queues[Q_OS2].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_OS2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_OS2].messages = 
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* keyboard queue */
 	queues[Q_KEYBOARD].queue_id = Q_KEYBOARD;
@@ -447,7 +464,8 @@ static void initialize_queues(void)
 	queues[Q_KEYBOARD].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_KEYBOARD].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_KEYBOARD].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* serial output queue */
 	queues[Q_SERIAL_OUT].queue_id = Q_SERIAL_OUT;
@@ -463,7 +481,8 @@ static void initialize_queues(void)
 	queues[Q_SERIAL_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_SERIAL_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_SERIAL_OUT].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* storage queues */
 	queues[Q_STORAGE_DATA_IN].queue_id = Q_STORAGE_DATA_IN;
@@ -479,7 +498,8 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_IN].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE,
+					  MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
 	queues[Q_STORAGE_DATA_OUT].queue_id = Q_STORAGE_DATA_OUT;
 	queues[Q_STORAGE_DATA_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
@@ -496,12 +516,14 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_DATA_OUT].connections[P_KEYBOARD] = 1;
 	queues[Q_STORAGE_DATA_OUT].connections[P_SERIAL_OUT] = 1;
 	queues[Q_STORAGE_DATA_OUT].connections[P_NETWORK] = 1;
+	queues[Q_STORAGE_DATA_OUT].connections[P_BLUETOOTH] = 1;
 	queues[Q_STORAGE_DATA_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
 	queues[Q_STORAGE_DATA_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_STORAGE_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_STORAGE_DATA_OUT].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE,
+					  MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
 	queues[Q_STORAGE_CMD_IN].queue_id = Q_STORAGE_CMD_IN;
 	queues[Q_STORAGE_CMD_IN].queue_type = QUEUE_TYPE_FIXED_READER;
@@ -516,7 +538,8 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_STORAGE_CMD_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_STORAGE_CMD_IN].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	queues[Q_STORAGE_CMD_OUT].queue_id = Q_STORAGE_CMD_OUT;
 	queues[Q_STORAGE_CMD_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
@@ -531,7 +554,8 @@ static void initialize_queues(void)
 	queues[Q_STORAGE_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_STORAGE_CMD_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_STORAGE_CMD_OUT].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* network queues */
 	queues[Q_NETWORK_DATA_IN].queue_id = Q_NETWORK_DATA_IN;
@@ -547,7 +571,8 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_NETWORK_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_NETWORK_DATA_IN].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE,
+					  MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
 	queues[Q_NETWORK_DATA_OUT].queue_id = Q_NETWORK_DATA_OUT;
 	queues[Q_NETWORK_DATA_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
@@ -562,7 +587,8 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE_LARGE;
 	queues[Q_NETWORK_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE_LARGE;
 	queues[Q_NETWORK_DATA_OUT].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE,
+					  MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
 	queues[Q_NETWORK_CMD_IN].queue_id = Q_NETWORK_CMD_IN;
 	queues[Q_NETWORK_CMD_IN].queue_type = QUEUE_TYPE_FIXED_READER;
@@ -575,7 +601,8 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_NETWORK_CMD_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_NETWORK_CMD_IN].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	queues[Q_NETWORK_CMD_OUT].queue_id = Q_NETWORK_CMD_OUT;
 	queues[Q_NETWORK_CMD_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
@@ -588,7 +615,41 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_NETWORK_CMD_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_NETWORK_CMD_OUT].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
+
+	/* bluetooth queues */
+	queues[Q_BLUETOOTH_IN].queue_id = Q_BLUETOOTH_IN;
+	queues[Q_BLUETOOTH_IN].queue_type = QUEUE_TYPE_FIXED_READER;
+	queues[Q_BLUETOOTH_IN].fixed_proc = P_BLUETOOTH;
+	queues[Q_BLUETOOTH_IN].OWNER = P_OS;
+	queues[Q_BLUETOOTH_IN].connections[P_OS] = 1;
+	queues[Q_BLUETOOTH_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_BLUETOOTH_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_BLUETOOTH_IN].connections[P_UNTRUSTED] = 1;
+	queues[Q_BLUETOOTH_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_BLUETOOTH_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	queues[Q_BLUETOOTH_IN].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_BLUETOOTH_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_BLUETOOTH_IN].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
+
+	queues[Q_BLUETOOTH_OUT].queue_id = Q_BLUETOOTH_OUT;
+	queues[Q_BLUETOOTH_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
+	queues[Q_BLUETOOTH_OUT].fixed_proc = P_BLUETOOTH;
+	queues[Q_BLUETOOTH_OUT].OWNER = P_OS;
+	queues[Q_BLUETOOTH_OUT].connections[P_OS] = 1;
+	queues[Q_BLUETOOTH_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_BLUETOOTH_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_BLUETOOTH_OUT].connections[P_UNTRUSTED] = 1;
+	queues[Q_BLUETOOTH_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_BLUETOOTH_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	queues[Q_BLUETOOTH_OUT].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_BLUETOOTH_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_BLUETOOTH_OUT].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* runtime1 queue */
 	queues[Q_RUNTIME1].queue_id = Q_RUNTIME1;
@@ -602,7 +663,8 @@ static void initialize_queues(void)
 	queues[Q_RUNTIME1].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_RUNTIME1].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_RUNTIME1].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* runtime2 queue */
 	queues[Q_RUNTIME2].queue_id = Q_RUNTIME2;
@@ -616,7 +678,8 @@ static void initialize_queues(void)
 	queues[Q_RUNTIME2].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_RUNTIME2].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_RUNTIME2].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* OS queue for untrusted */
 	queues[Q_OSU].queue_id = Q_OSU;
@@ -626,7 +689,8 @@ static void initialize_queues(void)
 	queues[Q_OSU].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_OSU].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_OSU].messages = 
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* untrusted queue */
 	queues[Q_UNTRUSTED].queue_id = Q_UNTRUSTED;
@@ -636,7 +700,8 @@ static void initialize_queues(void)
 	queues[Q_UNTRUSTED].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_UNTRUSTED].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_UNTRUSTED].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* TPM queue */
 	queues[Q_TPM_IN].queue_id = Q_TPM_IN;
@@ -652,14 +717,16 @@ static void initialize_queues(void)
 	queues[Q_TPM_IN].connections[P_RUNTIME2] = 1;
 	queues[Q_TPM_IN].connections[P_KEYBOARD] = 1;
 	queues[Q_TPM_IN].connections[P_SERIAL_OUT] = 1;
-	queues[Q_TPM_IN].connections[P_NETWORK] = 1;
 	queues[Q_TPM_IN].connections[P_STORAGE] = 1;
+	queues[Q_TPM_IN].connections[P_NETWORK] = 1;
+	queues[Q_TPM_IN].connections[P_BLUETOOTH] = 1;
 	queues[Q_TPM_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
 	queues[Q_TPM_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_TPM_IN].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_TPM_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_TPM_IN].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 
 	queues[Q_TPM_OUT].queue_id = Q_TPM_OUT;
 	queues[Q_TPM_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
@@ -673,7 +740,8 @@ static void initialize_queues(void)
 	queues[Q_TPM_OUT].queue_size = MAILBOX_QUEUE_SIZE;
 	queues[Q_TPM_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	queues[Q_TPM_OUT].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+					  MAILBOX_QUEUE_MSG_SIZE);
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -708,6 +776,7 @@ static bool proc_has_queue_write_access(uint8_t queue_id, uint8_t proc_id)
 
 static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 {
+	//if (queue_id != Q_STORAGE_DATA_OUT) printf("%s [1]: queue_id = %d, reader_id = %d\n", __func__, queue_id, reader_id);
 	if (proc_has_queue_read_access(queue_id, reader_id)) {
 		struct queue *queue = &queues[queue_id];
 		read_queue(queue, processors[reader_id].in_handle);
@@ -729,6 +798,7 @@ static void handle_read_queue(uint8_t queue_id, uint8_t reader_id)
 
 static void handle_write_queue(uint8_t queue_id, uint8_t writer_id)
 {
+	//if (queue_id != Q_STORAGE_DATA_OUT) printf("%s [1]: queue_id = %d, writer_id = %d\n", __func__, queue_id, writer_id);
 	if (proc_has_queue_write_access(queue_id, writer_id)) {
 		write_queue(&queues[queue_id], processors[writer_id].out_handle);
 		/* send interrupt to reader */
@@ -1082,6 +1152,8 @@ int main(int argc, char **argv)
 		nfds = processors[P_STORAGE].out_handle;
 	if (processors[P_NETWORK].out_handle > nfds)
 		nfds = processors[P_NETWORK].out_handle;
+	if (processors[P_BLUETOOTH].out_handle > nfds)
+		nfds = processors[P_BLUETOOTH].out_handle;
 	if (processors[P_RUNTIME1].out_handle > nfds)
 		nfds = processors[P_RUNTIME1].out_handle;
 	if (processors[P_RUNTIME2].out_handle > nfds)
@@ -1105,6 +1177,7 @@ int main(int argc, char **argv)
 		FD_SET(processors[P_SERIAL_OUT].out_handle, &listen_fds);
 		FD_SET(processors[P_STORAGE].out_handle, &listen_fds);
 		FD_SET(processors[P_NETWORK].out_handle, &listen_fds);
+		FD_SET(processors[P_BLUETOOTH].out_handle, &listen_fds);
 		FD_SET(processors[P_RUNTIME1].out_handle, &listen_fds);
 		FD_SET(processors[P_RUNTIME2].out_handle, &listen_fds);
 		FD_SET(processors[P_UNTRUSTED].out_handle, &listen_fds);
@@ -1125,18 +1198,21 @@ int main(int argc, char **argv)
 		if (FD_ISSET(processors[P_SERIAL_OUT].out_handle, &listen_fds))
 			handle_proc_request(P_SERIAL_OUT);
 			
-		if (FD_ISSET(processors[P_RUNTIME1].out_handle, &listen_fds))
-			handle_proc_request(P_RUNTIME1);
-
-		if (FD_ISSET(processors[P_RUNTIME2].out_handle, &listen_fds))
-			handle_proc_request(P_RUNTIME2);
-			
 		if (FD_ISSET(processors[P_STORAGE].out_handle, &listen_fds))
 			handle_proc_request(P_STORAGE);
 			
 		if (FD_ISSET(processors[P_NETWORK].out_handle, &listen_fds))
 			handle_proc_request(P_NETWORK);
+
+		if (FD_ISSET(processors[P_BLUETOOTH].out_handle, &listen_fds))
+			handle_proc_request(P_BLUETOOTH);
 					
+		if (FD_ISSET(processors[P_RUNTIME1].out_handle, &listen_fds))
+			handle_proc_request(P_RUNTIME1);
+
+		if (FD_ISSET(processors[P_RUNTIME2].out_handle, &listen_fds))
+			handle_proc_request(P_RUNTIME2);
+
 		if (FD_ISSET(processors[P_UNTRUSTED].out_handle, &listen_fds))
 			handle_proc_request(P_UNTRUSTED);
 			

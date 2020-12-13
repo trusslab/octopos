@@ -20,14 +20,15 @@ int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
 
 int fd_mailbox_log, fd_tpm_log, fd_os_log, fd_keyboard_log,
     fd_serial_out_log, fd_runtime1_log, fd_runtime2_log, fd_storage_log,
-    fd_network_log, fd_untrusted_log, fd_pmu_log, fd_app_servers_log;
+    fd_network_log, fd_bluetooth_log, fd_untrusted_log, fd_pmu_log,
+    fd_app_servers_log;
 
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
-pid_t mailbox_pid, tpm_pid, tpm_server_pid, tpm2_abrmd_pid,
-      os_pid, keyboard_pid, serial_out_pid, runtime1_pid,
-      runtime2_pid, storage_pid, network_pid, untrusted_pid,
-      socket_server_pid, attest_server_pid, bank_server_pid;
+pid_t mailbox_pid, tpm_pid, tpm_server_pid, tpm2_abrmd_pid, os_pid,
+      keyboard_pid, serial_out_pid, runtime1_pid, runtime2_pid, storage_pid,
+      network_pid, bluetooth_pid, untrusted_pid, socket_server_pid,
+      attest_server_pid, bank_server_pid;
 
 struct termios orig;
 
@@ -215,14 +216,16 @@ static int start_os_proc(void)
 
 static int start_keyboard_proc(void)
 {
-	char *const args[] = {(char *) "bootloader_other", (char *) "keyboard", NULL};
+	char *const args[] = {(char *) "bootloader_other", (char *) "keyboard",
+			      NULL};
 	char path[] = "./bootloader/bootloader_other";
 	return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
 }
 
 static int start_serial_out_proc(void)
 {
-	char *const args[] = {(char *) "bootloader_other", (char *) "serial_out", NULL};
+	char *const args[] = {(char *) "bootloader_other", (char *) "serial_out",
+			      NULL};
 	char path[] = "./bootloader/bootloader_other";
 	return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
 }
@@ -230,7 +233,8 @@ static int start_serial_out_proc(void)
 static int start_runtime_proc(char *runtime_id)
 {
 	int fd_log;
-	char *const args[] = {(char *) "bootloader", (char *) "runtime", runtime_id, NULL};
+	char *const args[] = {(char *) "bootloader", (char *) "runtime",
+			      runtime_id, NULL};
 	char path[] = "./bootloader/bootloader_other";
 	
 	if (*runtime_id == '1') {
@@ -238,7 +242,8 @@ static int start_runtime_proc(char *runtime_id)
 	} else if (*runtime_id == '2') {
 		fd_log = fd_runtime2_log;
 	} else {
-		printf("Error: %s: invalid runtime ID (%c)\n", __func__, *runtime_id);
+		printf("Error: %s: invalid runtime ID (%c)\n", __func__,
+		       *runtime_id);
 		return ERR_INVALID;
 	}
 
@@ -247,16 +252,26 @@ static int start_runtime_proc(char *runtime_id)
 
 static int start_storage_proc(void)
 {
-	char *const args[] = {(char *) "bootloader_storage", (char *) "storage", NULL};
+	char *const args[] = {(char *) "bootloader_storage", (char *) "storage",
+			      NULL};
 	char path[] = "./bootloader/bootloader_storage";
 	return start_proc(path, args, fd_storage_log, 0, 0, 0);
 }
 
 static int start_network_proc(void)
 {
-	char *const args[] = {(char *) "bootloader_other", (char *) "network", NULL};
+	char *const args[] = {(char *) "bootloader_other", (char *) "network",
+			      NULL};
 	char path[] = "./bootloader/bootloader_other";
 	return start_proc(path, args, fd_network_log, 0, 0, 0);
+}
+
+static int start_bluetooth_proc(void)
+{
+	char *const args[] = {(char *) "bootloader_other", (char *) "bluetooth",
+			      NULL};
+	char path[] = "./bootloader/bootloader_other";
+	return start_proc(path, args, fd_bluetooth_log, 0, 0, 0);
 }
 
 static int start_untrusted_proc(void)
@@ -302,6 +317,7 @@ static void start_all_procs(void)
 	runtime2_pid = start_runtime_proc((char *) "2");
 	storage_pid = start_storage_proc();
 	network_pid = start_network_proc();
+	bluetooth_pid = start_bluetooth_proc();
 	untrusted_pid = start_untrusted_proc();
 	/* These servers are not part of OctopOS.
 	 * We start them here since they're useful for testing.
@@ -328,6 +344,10 @@ static void halt_proc(uint8_t proc_id)
 
 	case P_NETWORK:
 		kill(network_pid, SIGKILL);
+		break;
+
+	case P_BLUETOOTH:
+		kill(bluetooth_pid, SIGKILL);
 		break;
 
 	case P_RUNTIME1:
@@ -372,6 +392,8 @@ static void halt_all_procs(void)
 	kill(bank_server_pid, SIGKILL);
 	kill(attest_server_pid, SIGKILL);
 	kill(socket_server_pid, SIGKILL);
+
+	halt_proc(P_BLUETOOTH);
 
 	halt_proc(P_NETWORK);
 	
@@ -426,13 +448,15 @@ static void *proc_reboot_handler(void *data)
 			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_OS1);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_OS1\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_OS1\n", __func__);
 					goto print;
 				}
 
 				ret = mailbox_reset_queue(Q_OS2);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_OS2\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_OS2\n", __func__);
 					goto print;
 				}
 
@@ -448,7 +472,8 @@ static void *proc_reboot_handler(void *data)
 			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_KEYBOARD);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_KEYBOARD\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_KEYBOARD\n", __func__);
 					goto print;
 				}
 			}
@@ -462,7 +487,8 @@ static void *proc_reboot_handler(void *data)
 			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_SERIAL_OUT);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_SERIAL_OUT\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_SERIAL_OUT\n", __func__);
 					goto print;
 				}
 			}
@@ -476,7 +502,8 @@ static void *proc_reboot_handler(void *data)
 			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_RUNTIME1);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_RUNTIME1\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_RUNTIME1\n", __func__);
 					goto print;
 				}
 			}
@@ -490,7 +517,8 @@ static void *proc_reboot_handler(void *data)
 			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_RUNTIME2);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_RUNTIME2\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_RUNTIME2\n", __func__);
 					goto print;
 				}
 			}
@@ -504,25 +532,29 @@ static void *proc_reboot_handler(void *data)
 			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_STORAGE_DATA_IN);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_STORAGE_DATA_IN\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_STORAGE_DATA_IN\n", __func__);
 					goto print;
 				}
 
 				ret = mailbox_reset_queue(Q_STORAGE_DATA_OUT);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_STORAGE_DATA_OUT\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_STORAGE_DATA_OUT\n", __func__);
 					goto print;
 				}
 
 				ret = mailbox_reset_queue(Q_STORAGE_CMD_IN);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_STORAGE_CMD_IN\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_STORAGE_CMD_IN\n", __func__);
 					goto print;
 				}
 
 				ret = mailbox_reset_queue(Q_STORAGE_CMD_OUT);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_STORAGE_CMD_OUT\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_STORAGE_CMD_OUT\n", __func__);
 					goto print;
 				}
 			}
@@ -536,25 +568,29 @@ static void *proc_reboot_handler(void *data)
 			if (do_reset_queues) {
 				ret = mailbox_reset_queue(Q_NETWORK_DATA_IN);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_NETWORK_DATA_IN\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_NETWORK_DATA_IN\n", __func__);
 					goto print;
 				}
 
 				ret = mailbox_reset_queue(Q_NETWORK_DATA_OUT);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_NETWORK_DATA_OUT\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_NETWORK_DATA_OUT\n", __func__);
 					goto print;
 				}
 
 				ret = mailbox_reset_queue(Q_NETWORK_CMD_IN);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_NETWORK_CMD_IN\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_NETWORK_CMD_IN\n", __func__);
 					goto print;
 				}
 
 				ret = mailbox_reset_queue(Q_NETWORK_CMD_OUT);
 				if (ret) {
-					printf("Error: %s: couldn't reset Q_NETWORK_CMD_OUT\n", __func__);
+					printf("Error: %s: couldn't reset "
+					       "Q_NETWORK_CMD_OUT\n", __func__);
 					goto print;
 				}
 			}
@@ -563,6 +599,28 @@ static void *proc_reboot_handler(void *data)
 				network_pid = start_network_proc();
 
 			sem_post(&reset_done[P_NETWORK]);
+		} else if (pid == bluetooth_pid) {
+			sprintf(proc_name, "Bluetooth processor");
+			if (do_reset_queues) {
+				ret = mailbox_reset_queue(Q_BLUETOOTH_IN);
+				if (ret) {
+					printf("Error: %s: couldn't reset "
+					       "Q_BLUETOOTH_IN\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_BLUETOOTH_OUT);
+				if (ret) {
+					printf("Error: %s: couldn't reset "
+					       "Q_BLUETOOTH_OUT\n", __func__);
+					goto print;
+				}
+			}
+
+			if (do_restart)
+				bluetooth_pid = start_bluetooth_proc();
+
+			sem_post(&reset_done[P_BLUETOOTH]);
 		} else if (pid == untrusted_pid) {
 			sprintf(proc_name, "Untrusted processor");
 			if (do_reset_queues)
@@ -592,8 +650,10 @@ static void *proc_reboot_handler(void *data)
 print:
 		printf("%s terminated (%d)%s%s%s\n", proc_name, wstatus,
 		       (do_restart && !reboot_exception) ? " and restarted" : "",
-		       do_reset_queues && !reboot_exception ? " -- queues reset" : "",
-		       do_reset_queues && ret && !reboot_exception ? ", but unsuccessfully" : "");
+		       do_reset_queues && !reboot_exception ?
+		       " -- queues reset" : "",
+		       do_reset_queues && ret && !reboot_exception ?
+		       ", but unsuccessfully" : "");
 	}
 	
 	return NULL;
@@ -636,6 +696,7 @@ int main(int argc, char **argv)
 	mkfifo(FIFO_RUNTIME2_LOG, 0666);
 	mkfifo(FIFO_STORAGE_LOG, 0666);
 	mkfifo(FIFO_NETWORK_LOG, 0666);
+	mkfifo(FIFO_BLUETOOTH_LOG, 0666);
 	mkfifo(FIFO_UNTRUSTED_LOG, 0666);
 	mkfifo(FIFO_PMU_LOG, 0666);
 	mkfifo(FIFO_APP_SERVERS_LOG, 0666);
@@ -654,6 +715,7 @@ int main(int argc, char **argv)
 	fd_runtime2_log = open(FIFO_RUNTIME2_LOG, O_RDWR);
 	fd_storage_log = open(FIFO_STORAGE_LOG, O_RDWR);
 	fd_network_log = open(FIFO_NETWORK_LOG, O_RDWR);
+	fd_bluetooth_log = open(FIFO_BLUETOOTH_LOG, O_RDWR);
 	fd_untrusted_log = open(FIFO_UNTRUSTED_LOG, O_RDWR);
 	fd_pmu_log = open(FIFO_PMU_LOG, O_RDWR);
 	fd_app_servers_log = open(FIFO_APP_SERVERS_LOG, O_RDWR);
@@ -813,6 +875,7 @@ int main(int argc, char **argv)
 						sem_wait(&reset_done[P_SERIAL_OUT]);
 						sem_wait(&reset_done[P_STORAGE]);
 						sem_wait(&reset_done[P_NETWORK]);
+						sem_wait(&reset_done[P_BLUETOOTH]);
 						sem_wait(&reset_done[P_RUNTIME1]);
 						sem_wait(&reset_done[P_RUNTIME2]);
 						sem_wait(&reset_done[P_UNTRUSTED]);
@@ -847,6 +910,7 @@ int main(int argc, char **argv)
 					   proc_id == P_SERIAL_OUT ||
 					   proc_id == P_STORAGE ||
 					   proc_id == P_NETWORK ||
+					   proc_id == P_BLUETOOTH ||
 					   proc_id == P_RUNTIME1 ||
 					   proc_id == P_RUNTIME2) {
 					mailbox_pause_delegation();
@@ -883,6 +947,7 @@ err_close:
 	close(fd_pmu_log);
 	close(fd_app_servers_log);
 	close(fd_untrusted_log);
+	close(fd_bluetooth_log);
 	close(fd_network_log);
 	close(fd_storage_log);
 	close(fd_runtime1_log);
@@ -901,6 +966,7 @@ err_close:
 	remove(FIFO_APP_SERVERS_LOG);
 	remove(FIFO_PMU_LOG);
 	remove(FIFO_UNTRUSTED_LOG);
+	remove(FIFO_BLUETOOTH_LOG);
 	remove(FIFO_NETWORK_LOG);
 	remove(FIFO_STORAGE_LOG);
 	remove(FIFO_RUNTIME1_LOG);

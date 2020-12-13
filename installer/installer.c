@@ -163,6 +163,8 @@ int main(int argc, char **argv)
 			       (char *) "./runtime/runtime");
 	copy_file_to_partition((char *) "network",
 			       (char *) "./network/network");
+	copy_file_to_partition((char *) "bluetooth",
+			       (char *) "./bluetooth/bluetooth");
 	copy_file_to_partition((char *) "linux",
 			       (char *) "./arch/umode/untrusted_linux/linux");
 	copy_file_to_partition((char *) "attest_client",
@@ -200,6 +202,8 @@ int main(int argc, char **argv)
 				 (char *) "./installer/copy_runtime", 0);
 	copy_file_from_partition((char *) "network",
 				 (char *) "./installer/copy_network", 0);
+	copy_file_from_partition((char *) "bluetooth",
+				 (char *) "./installer/copy_bluetooth", 0);
 	copy_file_from_partition((char *) "linux",
 				 (char *) "./installer/copy_linux", 0);
 	copy_file_from_partition((char *) "attest_client",
@@ -236,6 +240,8 @@ int main(int argc, char **argv)
 				 (char *) "./installer/aligned_runtime", 1);
 	copy_file_from_partition((char *) "network",
 				 (char *) "./installer/aligned_network", 1);
+	copy_file_from_partition((char *) "bluetooth",
+				 (char *) "./installer/aligned_bluetooth", 1);
 	
 	printf("installer: total number of written blocks = %d\n", total_blocks);
 

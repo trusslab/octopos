@@ -26,8 +26,8 @@ pthread_t mailbox_thread;
 sem_t interrupts[NUM_QUEUES + 1];
 sem_t availables[NUM_QUEUES + 1];
 
-int keyboard = 0, serial_out = 0, network = 0,
-    runtime1 = 0, runtime2 = 0, untrusted = 0;
+int keyboard = 0, serial_out = 0, network = 0, bluetooth = 0, runtime1 = 0,
+    runtime2 = 0, untrusted = 0;
 
 static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
@@ -148,6 +148,14 @@ int init_mailbox(void)
 		fd_out = open(FIFO_NETWORK_OUT, O_WRONLY);
 		fd_in = open(FIFO_NETWORK_IN, O_RDONLY);
 		fd_intr = open(FIFO_NETWORK_INTR, O_RDONLY);
+	} else if (bluetooth) {
+		mkfifo(FIFO_BLUETOOTH_OUT, 0666);
+		mkfifo(FIFO_BLUETOOTH_IN, 0666);
+		mkfifo(FIFO_BLUETOOTH_INTR, 0666);
+
+		fd_out = open(FIFO_BLUETOOTH_OUT, O_WRONLY);
+		fd_in = open(FIFO_BLUETOOTH_IN, O_RDONLY);
+		fd_intr = open(FIFO_BLUETOOTH_INTR, O_RDONLY);
 	} else if (runtime1) {
 		mkfifo(FIFO_RUNTIME1_OUT, 0666);
 		mkfifo(FIFO_RUNTIME1_IN, 0666);
@@ -205,9 +213,12 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		serial_out = 1;
 	} else if (!strcmp(filename, "network")) {
 		network = 1;
+	} else if (!strcmp(filename, "bluetooth")) {
+		bluetooth = 1;
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {
-			printf("Error: %s: invalid number of args for runtime\n", __func__);
+			printf("Error: %s: invalid number of args for runtime\n",
+			       __func__);
 			exit(-1);
 		}
 		if (!strcmp(argv[0], "1")) {
@@ -215,7 +226,8 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		} else if (!strcmp(argv[0], "2")) {
 			runtime2 = 1;
 		} else {
-			printf("Error: %s: invalid runtime ID (%s)\n", __func__, argv[0]);
+			printf("Error: %s: invalid runtime ID (%s)\n", __func__,
+			       argv[0]);
 			exit(-1);
 		}
 	} else if (!strcmp(filename, "linux")) {
