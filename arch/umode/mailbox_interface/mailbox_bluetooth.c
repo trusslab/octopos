@@ -24,8 +24,8 @@ static void *handle_mailbox_interrupts(void *data)
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
-		if (interrupt == Q_BLUETOOTH_IN ||
-		    interrupt == Q_BLUETOOTH_OUT) {
+		if (interrupt == Q_BLUETOOTH_CMD_IN ||
+		    interrupt == Q_BLUETOOTH_CMD_OUT) {
 			sem_post(&interrupts[interrupt]);
 		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n",
@@ -39,10 +39,10 @@ void read_msg_from_bluetooth_queue(uint8_t *buf)
 {
 	uint8_t opcode[2];
 
-	sem_wait(&interrupts[Q_BLUETOOTH_IN]);
+	sem_wait(&interrupts[Q_BLUETOOTH_CMD_IN]);
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = Q_BLUETOOTH_IN;
+	opcode[1] = Q_BLUETOOTH_CMD_IN;
 	write(fd_out, opcode, 2);
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
@@ -51,10 +51,10 @@ void put_msg_on_bluetooth_queue(uint8_t *buf)
 {
 	uint8_t opcode[2];
 
-	sem_wait(&interrupts[Q_BLUETOOTH_OUT]);
+	sem_wait(&interrupts[Q_BLUETOOTH_CMD_OUT]);
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_BLUETOOTH_OUT;
+	opcode[1] = Q_BLUETOOTH_CMD_OUT;
 	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
@@ -66,8 +66,8 @@ int init_bluetooth(void)
 	fd_in = open(FIFO_BLUETOOTH_IN, O_RDONLY);
 	fd_intr = open(FIFO_BLUETOOTH_INTR, O_RDONLY);
 
-	sem_init(&interrupts[Q_BLUETOOTH_OUT], 0, MAILBOX_QUEUE_SIZE);
-	sem_init(&interrupts[Q_BLUETOOTH_IN], 0, 0);
+	sem_init(&interrupts[Q_BLUETOOTH_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_BLUETOOTH_CMD_IN], 0, 0);
 
 	int ret = pthread_create(&mailbox_thread, NULL,
 				 handle_mailbox_interrupts, NULL);

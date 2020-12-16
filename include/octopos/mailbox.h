@@ -44,15 +44,17 @@
 #define	Q_NETWORK_DATA_OUT	10
 #define	Q_NETWORK_CMD_IN	11
 #define	Q_NETWORK_CMD_OUT	12
-#define Q_BLUETOOTH_IN		13
-#define Q_BLUETOOTH_OUT		14
-#define	Q_RUNTIME1		15
-#define	Q_RUNTIME2		16
-#define	Q_OSU			17
-#define	Q_UNTRUSTED		18
-#define Q_TPM_IN		19
-#define Q_TPM_OUT		20
-#define NUM_QUEUES		20
+#define Q_BLUETOOTH_DATA_IN	13
+#define Q_BLUETOOTH_DATA_OUT	14
+#define Q_BLUETOOTH_CMD_IN	15
+#define Q_BLUETOOTH_CMD_OUT	16
+#define	Q_RUNTIME1		17
+#define	Q_RUNTIME2		18
+#define	Q_OSU			19
+#define	Q_UNTRUSTED		20
+#define Q_TPM_IN		21
+#define Q_TPM_OUT		22
+#define NUM_QUEUES		22
 
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64

@@ -410,6 +410,15 @@ static int request_secure_storage_queues_access(limit_t limit,
 			mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 			mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 			mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+
+			queue_limits[Q_STORAGE_CMD_IN] = 0;
+			queue_timeouts[Q_STORAGE_CMD_IN] = 0;
+			queue_limits[Q_STORAGE_CMD_OUT] = 0;
+			queue_timeouts[Q_STORAGE_CMD_OUT] = 0;
+			queue_limits[Q_STORAGE_DATA_IN] = 0;
+			queue_timeouts[Q_STORAGE_DATA_IN] = 0;
+			queue_limits[Q_STORAGE_DATA_OUT] = 0;
+			queue_timeouts[Q_STORAGE_DATA_OUT] = 0;
 			return ERR_UNEXPECTED;
 		}
 	}

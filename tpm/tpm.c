@@ -408,6 +408,16 @@ int main(int argc, char const *argv[])
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: TPM init\n", __func__);
 
+	/* Need to make sure msgs are big enough so that we don't overflow
+	 * when processing incoming msgs and preparing outgoing ones.
+	 */
+	/* FIXME: find the smallest bound. 64 is conservative. */
+	if (MAILBOX_QUEUE_MSG_SIZE < 64) {
+		printf("Error: %s: MAILBOX_QUEUE_MSG_SIZE is too small (%d).\n",
+		       __func__, MAILBOX_QUEUE_MSG_SIZE);
+		return -1;
+	}
+
 	int ret = init_tpm();
 	if (ret)
 		return ret;

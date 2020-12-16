@@ -102,10 +102,18 @@ struct runtime_api {
 	int (*connect_socket)(struct socket *sock, struct sock_addr *skaddr);
 	int (*read_from_socket)(struct socket *sock, void *buf, int len);
 	int (*write_to_socket)(struct socket *sock, void *buf, int len);
+	/* FIXME: rename to request_secure_network_access */
 	int (*request_network_access)(limit_t limit, timeout_t timeout,
 				      queue_update_callback_t callback,
 				      uint8_t *expected_pcr, uint8_t *return_pcr);
 	int (*yield_network_access)(void);
+
+	/* bluetooth */
+	int (*request_secure_bluetooth_access)(uint8_t *device_name,
+					       limit_t limit, timeout_t timeout,
+					       queue_update_callback_t callback,
+					       uint8_t *expected_pcr);
+	int (*yield_secure_bluetooth_access)(void);
 #endif
 };
 #endif /* UNTRUSTED_DOMAIN */

@@ -359,8 +359,10 @@ static int any_secure_delegations(void)
 		is_queue_securely_delegated(Q_NETWORK_DATA_OUT) ||
 		is_queue_securely_delegated(Q_NETWORK_CMD_IN) ||
 		is_queue_securely_delegated(Q_NETWORK_CMD_OUT) ||
-		is_queue_securely_delegated(Q_BLUETOOTH_IN) ||
-		is_queue_securely_delegated(Q_BLUETOOTH_OUT) ||
+		is_queue_securely_delegated(Q_BLUETOOTH_DATA_IN) ||
+		is_queue_securely_delegated(Q_BLUETOOTH_DATA_OUT) ||
+		is_queue_securely_delegated(Q_BLUETOOTH_CMD_IN) ||
+		is_queue_securely_delegated(Q_BLUETOOTH_CMD_OUT) ||
 		is_queue_securely_delegated(Q_RUNTIME1) ||
 		is_queue_securely_delegated(Q_RUNTIME2));
 }
@@ -377,8 +379,10 @@ static int does_proc_have_secure_io(uint8_t proc_id)
 		(queues[Q_NETWORK_DATA_OUT].OWNER == proc_id) ||
 		(queues[Q_NETWORK_CMD_IN].OWNER == proc_id) ||
 		(queues[Q_NETWORK_CMD_OUT].OWNER == proc_id) ||
-		(queues[Q_BLUETOOTH_IN].OWNER == proc_id) ||
-		(queues[Q_BLUETOOTH_OUT].OWNER == proc_id));
+		(queues[Q_BLUETOOTH_DATA_IN].OWNER == proc_id) ||
+		(queues[Q_BLUETOOTH_DATA_OUT].OWNER == proc_id) ||
+		(queues[Q_BLUETOOTH_CMD_IN].OWNER == proc_id) ||
+		(queues[Q_BLUETOOTH_CMD_OUT].OWNER == proc_id));
 }
 
 static int does_proc_have_secure_delegatation(uint8_t proc_id)
@@ -403,8 +407,10 @@ static int does_proc_have_secure_delegatation(uint8_t proc_id)
 			is_queue_securely_delegated(Q_NETWORK_CMD_OUT));
 
 	case P_BLUETOOTH:
-		return (is_queue_securely_delegated(Q_BLUETOOTH_IN) ||
-			is_queue_securely_delegated(Q_BLUETOOTH_OUT));
+		return (is_queue_securely_delegated(Q_BLUETOOTH_DATA_IN) ||
+			is_queue_securely_delegated(Q_BLUETOOTH_DATA_OUT) ||
+			is_queue_securely_delegated(Q_BLUETOOTH_CMD_IN) ||
+			is_queue_securely_delegated(Q_BLUETOOTH_CMD_OUT));
 
 	case P_RUNTIME1:
 		return (is_queue_securely_delegated(Q_RUNTIME1) ||
@@ -619,35 +625,67 @@ static void initialize_queues(void)
 					  MAILBOX_QUEUE_MSG_SIZE);
 
 	/* bluetooth queues */
-	queues[Q_BLUETOOTH_IN].queue_id = Q_BLUETOOTH_IN;
-	queues[Q_BLUETOOTH_IN].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_BLUETOOTH_IN].fixed_proc = P_BLUETOOTH;
-	queues[Q_BLUETOOTH_IN].OWNER = P_OS;
-	queues[Q_BLUETOOTH_IN].connections[P_OS] = 1;
-	queues[Q_BLUETOOTH_IN].connections[P_RUNTIME1] = 1;
-	queues[Q_BLUETOOTH_IN].connections[P_RUNTIME2] = 1;
-	queues[Q_BLUETOOTH_IN].connections[P_UNTRUSTED] = 1;
-	queues[Q_BLUETOOTH_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
-	queues[Q_BLUETOOTH_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
-	queues[Q_BLUETOOTH_IN].queue_size = MAILBOX_QUEUE_SIZE;
-	queues[Q_BLUETOOTH_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
-	queues[Q_BLUETOOTH_IN].messages =
+	queues[Q_BLUETOOTH_DATA_IN].queue_id = Q_BLUETOOTH_DATA_IN;
+	queues[Q_BLUETOOTH_DATA_IN].queue_type = QUEUE_TYPE_FIXED_READER;
+	queues[Q_BLUETOOTH_DATA_IN].fixed_proc = P_BLUETOOTH;
+	queues[Q_BLUETOOTH_DATA_IN].OWNER = P_OS;
+	queues[Q_BLUETOOTH_DATA_IN].connections[P_OS] = 1;
+	queues[Q_BLUETOOTH_DATA_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_BLUETOOTH_DATA_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_BLUETOOTH_DATA_IN].connections[P_UNTRUSTED] = 1;
+	queues[Q_BLUETOOTH_DATA_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_BLUETOOTH_DATA_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	queues[Q_BLUETOOTH_DATA_IN].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_BLUETOOTH_DATA_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_BLUETOOTH_DATA_IN].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE,
+					  MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+	queues[Q_BLUETOOTH_DATA_OUT].queue_id = Q_BLUETOOTH_DATA_OUT;
+	queues[Q_BLUETOOTH_DATA_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
+	queues[Q_BLUETOOTH_DATA_OUT].fixed_proc = P_BLUETOOTH;
+	queues[Q_BLUETOOTH_DATA_OUT].OWNER = P_OS;
+	queues[Q_BLUETOOTH_DATA_OUT].connections[P_OS] = 1;
+	queues[Q_BLUETOOTH_DATA_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_BLUETOOTH_DATA_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_BLUETOOTH_DATA_OUT].connections[P_UNTRUSTED] = 1;
+	queues[Q_BLUETOOTH_DATA_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_BLUETOOTH_DATA_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	queues[Q_BLUETOOTH_DATA_OUT].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_BLUETOOTH_DATA_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_BLUETOOTH_DATA_OUT].messages =
+		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE_LARGE,
+					  MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+	queues[Q_BLUETOOTH_CMD_IN].queue_id = Q_BLUETOOTH_CMD_IN;
+	queues[Q_BLUETOOTH_CMD_IN].queue_type = QUEUE_TYPE_FIXED_READER;
+	queues[Q_BLUETOOTH_CMD_IN].fixed_proc = P_BLUETOOTH;
+	queues[Q_BLUETOOTH_CMD_IN].OWNER = P_OS;
+	queues[Q_BLUETOOTH_CMD_IN].connections[P_OS] = 1;
+	queues[Q_BLUETOOTH_CMD_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_BLUETOOTH_CMD_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_BLUETOOTH_CMD_IN].connections[P_UNTRUSTED] = 1;
+	queues[Q_BLUETOOTH_CMD_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_BLUETOOTH_CMD_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	queues[Q_BLUETOOTH_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_BLUETOOTH_CMD_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_BLUETOOTH_CMD_IN].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
 					  MAILBOX_QUEUE_MSG_SIZE);
 
-	queues[Q_BLUETOOTH_OUT].queue_id = Q_BLUETOOTH_OUT;
-	queues[Q_BLUETOOTH_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_BLUETOOTH_OUT].fixed_proc = P_BLUETOOTH;
-	queues[Q_BLUETOOTH_OUT].OWNER = P_OS;
-	queues[Q_BLUETOOTH_OUT].connections[P_OS] = 1;
-	queues[Q_BLUETOOTH_OUT].connections[P_RUNTIME1] = 1;
-	queues[Q_BLUETOOTH_OUT].connections[P_RUNTIME2] = 1;
-	queues[Q_BLUETOOTH_OUT].connections[P_UNTRUSTED] = 1;
-	queues[Q_BLUETOOTH_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
-	queues[Q_BLUETOOTH_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
-	queues[Q_BLUETOOTH_OUT].queue_size = MAILBOX_QUEUE_SIZE;
-	queues[Q_BLUETOOTH_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
-	queues[Q_BLUETOOTH_OUT].messages =
+	queues[Q_BLUETOOTH_CMD_OUT].queue_id = Q_BLUETOOTH_CMD_OUT;
+	queues[Q_BLUETOOTH_CMD_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
+	queues[Q_BLUETOOTH_CMD_OUT].fixed_proc = P_BLUETOOTH;
+	queues[Q_BLUETOOTH_CMD_OUT].OWNER = P_OS;
+	queues[Q_BLUETOOTH_CMD_OUT].connections[P_OS] = 1;
+	queues[Q_BLUETOOTH_CMD_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_BLUETOOTH_CMD_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_BLUETOOTH_CMD_OUT].connections[P_UNTRUSTED] = 1;
+	queues[Q_BLUETOOTH_CMD_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
+	queues[Q_BLUETOOTH_CMD_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
+	queues[Q_BLUETOOTH_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
+	queues[Q_BLUETOOTH_CMD_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	queues[Q_BLUETOOTH_CMD_OUT].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
 					  MAILBOX_QUEUE_MSG_SIZE);
 

@@ -602,17 +602,31 @@ static void *proc_reboot_handler(void *data)
 		} else if (pid == bluetooth_pid) {
 			sprintf(proc_name, "Bluetooth processor");
 			if (do_reset_queues) {
-				ret = mailbox_reset_queue(Q_BLUETOOTH_IN);
+				ret = mailbox_reset_queue(Q_BLUETOOTH_DATA_IN);
 				if (ret) {
 					printf("Error: %s: couldn't reset "
-					       "Q_BLUETOOTH_IN\n", __func__);
+					       "Q_BLUETOOTH_DATA_IN\n", __func__);
 					goto print;
 				}
 
-				ret = mailbox_reset_queue(Q_BLUETOOTH_OUT);
+				ret = mailbox_reset_queue(Q_BLUETOOTH_DATA_OUT);
 				if (ret) {
 					printf("Error: %s: couldn't reset "
-					       "Q_BLUETOOTH_OUT\n", __func__);
+					       "Q_BLUETOOTH_DATA_OUT\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_BLUETOOTH_CMD_IN);
+				if (ret) {
+					printf("Error: %s: couldn't reset "
+					       "Q_BLUETOOTH_CMD_IN\n", __func__);
+					goto print;
+				}
+
+				ret = mailbox_reset_queue(Q_BLUETOOTH_CMD_OUT);
+				if (ret) {
+					printf("Error: %s: couldn't reset "
+					       "Q_BLUETOOTH_CMD_OUT\n", __func__);
 					goto print;
 				}
 			}

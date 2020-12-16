@@ -1,10 +1,9 @@
 #ifndef ARCH_SEC_HW
 
-/* The server for the banking app
+/* The server for the health app
  *
  * Based on:
- * socket_server.c
- * attest_server.c
+ * bank_server.c
  */
 #include <stdio.h>
 #include <stdlib.h>

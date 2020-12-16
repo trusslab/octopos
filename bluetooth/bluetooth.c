@@ -4,7 +4,162 @@
 #include <string.h>
 #include <arch/mailbox_bluetooth.h>
 #include <octopos/mailbox.h>
+#include <octopos/io.h>
+#include <octopos/bluetooth.h>
+#include <octopos/error.h>
 #include <tpm/tpm.h>
+
+uint8_t bound = 0;
+uint8_t used = 0;
+
+/* BD_ADDR for a few devices (resources). */
+#define NUM_RESOURCES	2
+/* index 0 is dummy */
+uint8_t devices[NUM_RESOURCES + 1][BD_ADDR_LEN] = {
+					{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+					{0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc},
+					{0xcb, 0xa9, 0x87, 0x65, 0x43, 0x21}};
+int bound_device_index = 0;
+
+static void process_cmd(uint8_t *buf) {
+
+	switch (buf[0]) {
+	case IO_OP_BIND_RESOURCE:
+		/* Return error if bound, used, or authenticated is set.
+		 * Return error if invalid resource name
+		 * Bind the resource to the data queues.
+		 * Set the global var "bound"
+		 * This is irreversible until reset.
+		 */
+
+		/* We don't use authentication for Bluetooth */
+
+		if (bound || used) {
+			printf("Error: %s: the bind op is invalid if bound (%d) "
+			       "or used (%d) is set.\n", __func__, bound, used);
+			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+			break;
+		}
+
+		for (int i = 1; i <= NUM_RESOURCES; i++) {
+			if (!memcmp(&buf[1], devices[i], BD_ADDR_LEN)) {
+				bound_device_index = i;
+				bound = 1;
+				break;
+			}
+		}
+
+		if (!bound) {
+			printf("Error: %s: resource ID for the bind op not "
+			       "found.\n", __func__);
+			BLUETOOTH_SET_ONE_RET(ERR_FOUND)
+			break;
+		}
+
+		BLUETOOTH_SET_ONE_RET(0)
+		break;
+
+	case IO_OP_CREATE_RESOURCE:
+		/* Create a new resource
+		 * Not usable if resource bound
+		 * Non-persistent resources deleted upon reset.
+		 * Persistent ones need a time-out.
+		 * Can provide TPM measurements if resource needs authentication
+		 */
+
+		/* No op for Bluetooth */
+		printf("Error: %s: create_resource op not supported by the "
+		       "Bluetooth service\n", __func__);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		break;
+
+	case IO_OP_QUERY_ALL_RESOURCES:
+		/* List available resources.
+		 * Not usable if resource bound
+		 */
+
+		/* Not implemented for now */
+		printf("Error: %s: list_resources op not implemented by the "
+		       "Bluetooth service (yet)\n", __func__);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		break;
+
+	case IO_OP_QUERY_STATE: {
+		/*
+		 * Bound or not?
+		 * Used or not?
+		 * If authentication is needed, is it authenticated?
+		 * If bound, resource name size and then resouce name.
+		 * TPM quote.
+		 * Other device specific info:
+		 *	network packet header
+		 */
+
+		uint8_t state[3 + BD_ADDR_LEN];
+		uint32_t state_size = 2;
+
+		state[0] = bound;
+		state[1] = used;
+		if (bound) {
+			state[2] = BD_ADDR_LEN;
+			memcpy(&state[3], devices[bound_device_index],
+			       BD_ADDR_LEN);
+			state_size += (BD_ADDR_LEN + 1);
+		}
+
+		BLUETOOTH_SET_ONE_RET_DATA(0, state, state_size)
+		break;
+	}
+
+	case IO_OP_AUTHENTICATE:
+		/*
+		 * Used when resource needs authentication.
+		 * If needed, TPM quote need to be sent for authentication.
+		 * "authenticated" global variable will be set on success
+		 */
+
+		/* No op for Bluetooth */
+		printf("Error: %s: authenticate op not supported by the "
+		       "Bluetooth service\n", __func__);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		break;
+
+	case IO_OP_SEND_DATA:
+		/*
+		 * Return error if "bound" not set.
+		 * Return error if authentication is needed and not authenticated. 
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
+		 * Process incoming data on data queue (one or multiple).
+		 */ 
+
+		/* Not implemented for now */
+		printf("Error: %s: send_data op not implemented by the "
+		       "Bluetooth service (yet)\n", __func__);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		break;
+
+	case IO_OP_RECEIVE_DATA:
+		/*
+		 * Return error if "bound" not set.
+		 * Return error if authentication is needed and not authenticated. 
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
+		 * Process incoming data on data queue (one or multiple).
+		 */ 
+
+		/* Not implemented for now */
+		printf("Error: %s: receive_data op not implemented by the "
+		       "Bluetooth service (yet)\n", __func__);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		break;
+
+	default:
+		printf("Error: %s: unknown op (%d)\n", __func__, buf[0]);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		break;
+	}
+}
 
 static int bluetooth_core(void)
 {
@@ -13,6 +168,7 @@ static int bluetooth_core(void)
 	while (1) {
 		read_msg_from_bluetooth_queue(buf);
 		printf("%s [1]: buf[0] = %d\n", __func__, buf[0]);
+		process_cmd(buf);
 		put_msg_on_bluetooth_queue(buf);
 	}
 
@@ -24,6 +180,16 @@ int main(int argc, char **argv)
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: bluetooth init\n", __func__);
+
+	/* Need to make sure msgs are big enough so that we don't overflow
+	 * when processing incoming msgs and preparing outgoing ones.
+	 */
+	/* FIXME: find the smallest bound. 64 is conservative. */
+	if (MAILBOX_QUEUE_MSG_SIZE < 64) {
+		printf("Error: %s: MAILBOX_QUEUE_MSG_SIZE is too small (%d).\n",
+		       __func__, MAILBOX_QUEUE_MSG_SIZE);
+		return -1;
+	}
 
 	int ret = init_bluetooth();
 	if (ret)

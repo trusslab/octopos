@@ -13,7 +13,9 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
+#include <octopos/io.h>
 #include <octopos/storage.h>
+#include <octopos/bluetooth.h>
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/ipc.h>
@@ -385,6 +387,71 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 	case SYSCALL_CLOSE_SOCKET: {
 		handle_close_socket_syscall(runtime_proc_id, buf);
+		break;
+	}
+
+	case SYSCALL_REQUEST_BLUETOOTH_ACCESS: {
+		SYSCALL_GET_TWO_ARGS_DATA
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
+		uint8_t *device_name = data;
+		uint8_t msg[MAILBOX_QUEUE_MSG_SIZE];
+
+		if (data_size != BD_ADDR_LEN) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		/* FIXME: add access control here. Do we allow the requesting
+		 * app to have access to this resource?
+		 */
+
+		/* FIXME: arbitrary thresholds. */
+		if (limit > 200 || timeout > 100) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
+
+		/* Send msg to the bluetooth service to bind the resource */
+		memset(msg, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+		msg[0] = IO_OP_BIND_RESOURCE;
+		memcpy(&msg[1], device_name, BD_ADDR_LEN);
+
+		uint32_t ret = send_cmd_to_bluetooth(msg);
+		if (ret) {
+			SYSCALL_SET_ONE_RET(ret)
+			break;
+		}
+
+		int iret1 = is_queue_available(Q_BLUETOOTH_DATA_IN);
+		int iret2 = is_queue_available(Q_BLUETOOTH_DATA_OUT);
+		int iret3 = is_queue_available(Q_BLUETOOTH_CMD_IN);
+		int iret4 = is_queue_available(Q_BLUETOOTH_CMD_OUT);
+		/* Or should we make this blocking? */
+		if (!iret1 || !iret2 || !iret3 || !iret4) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
+			break;
+		}
+
+		mark_queue_unavailable(Q_BLUETOOTH_DATA_IN);
+		mark_queue_unavailable(Q_BLUETOOTH_DATA_OUT);
+		mark_queue_unavailable(Q_BLUETOOTH_CMD_IN);
+		mark_queue_unavailable(Q_BLUETOOTH_CMD_OUT);
+
+		mailbox_delegate_queue_access(Q_BLUETOOTH_DATA_IN,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_DATA_OUT,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_CMD_IN,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_CMD_OUT,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+
+		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 #endif

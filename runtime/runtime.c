@@ -36,9 +36,11 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
+#include <octopos/io.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <octopos/tpm.h>
+#include <octopos/bluetooth.h>
 #include <tpm/hash.h>
 #include <arch/mailbox_runtime.h>
 
@@ -82,6 +84,7 @@ queue_update_callback_t queue_update_callbacks[NUM_QUEUES + 1];
 
 bool has_secure_keyboard_access = false;
 bool has_secure_serial_out_access = false;
+bool has_secure_bluetooth_access = false;
 
 #ifdef ARCH_SEC_HW
 extern sem_t interrupt_change;
@@ -237,6 +240,28 @@ static void reset_ipc_queue_trackers(void)
 	queue_update_callbacks[secure_ipc_target_queue] = NULL;
 }
 
+static void reset_bluetooth_queues_trackers(void)
+{
+	/* FIXME: redundant when called from yield_secure_bluetooth_access() */
+	has_secure_bluetooth_access = false;
+
+	queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+	queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+	queue_update_callbacks[Q_BLUETOOTH_CMD_IN] = NULL;
+
+	queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+	queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+	queue_update_callbacks[Q_BLUETOOTH_CMD_OUT] = NULL;
+
+	queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+	queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+	queue_update_callbacks[Q_BLUETOOTH_DATA_IN] = NULL;
+
+	queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+	queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+	queue_update_callbacks[Q_BLUETOOTH_DATA_OUT] = NULL;
+}
+
 static void queue_expired(uint8_t queue_id)
 {
 	if (queue_id == Q_KEYBOARD)
@@ -253,6 +278,11 @@ static void queue_expired(uint8_t queue_id)
 	else if (queue_id == Q_NETWORK_DATA_IN ||
 		 queue_id == Q_NETWORK_DATA_OUT)
 		reset_network_queues_tracker();
+	else if (queue_id == Q_BLUETOOTH_CMD_IN ||
+		 queue_id == Q_BLUETOOTH_CMD_OUT ||
+		 queue_id == Q_BLUETOOTH_DATA_IN ||
+		 queue_id == Q_BLUETOOTH_DATA_OUT)
+		reset_bluetooth_queues_trackers();
 	else
 		printf("Error: %s: invalid queue_id (%d)\n", __func__, queue_id);
 }
@@ -303,8 +333,6 @@ void timer_tick(void)
 			queue_expired(i);
 	}
 }
-
-
 
 #ifdef ARCH_UMODE
 /* network */
@@ -495,6 +523,9 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 		if (ret) {
 			printf("%s: Error: unexpected PCR\n", __func__);
 			mailbox_yield_to_previous_owner(Q_KEYBOARD);
+			
+			queue_limits[Q_KEYBOARD] = 0;
+			queue_timeouts[Q_KEYBOARD] = 0;
 			return ERR_UNEXPECTED;
 		}
 	}
@@ -575,6 +606,9 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 			printf("%s: Error: unexpected PCR\n", __func__);
 			wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 			mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
+
+			queue_limits[Q_SERIAL_OUT] = 0;
+			queue_timeouts[Q_SERIAL_OUT] = 0;
 			return ERR_UNEXPECTED;
 		}
 	}
@@ -1065,6 +1099,193 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 	return _write(sock, buf, len);
 }
 
+static int verify_bluetooth_service_state(uint8_t *device_name)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+	buf[0] = IO_OP_QUERY_STATE;
+	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
+	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
+	BLUETOOTH_GET_ONE_RET_DATA
+	if (ret0) {
+		printf("Error: %s: received error from the bluetooth service "
+		       "(%d)\n", __func__, ret0);
+		return (int) ret0;
+	}
+
+	/* data[0] is bound. Must be 1.
+	 * data[1] is used. Must be 0.
+	 * &data[2] is the starting addr for the bound device name.
+	 */
+	if ((_size != (3 + BD_ADDR_LEN)) || (data[0] != 1) ||
+	    (data[1] != 0) || !memcmp(&data[2], device_name, BD_ADDR_LEN)) {
+		return ERR_UNEXPECTED;
+	}
+
+	return 0;
+}
+
+static int request_secure_bluetooth_access(uint8_t *device_name,
+					   limit_t limit, timeout_t timeout,
+					   queue_update_callback_t callback,
+					   uint8_t *expected_pcr)
+{
+	int ret;
+
+	/* request access to the queues */
+	reset_queue_sync(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+	reset_queue_sync(Q_BLUETOOTH_CMD_OUT, 0);
+	reset_queue_sync(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	reset_queue_sync(Q_BLUETOOTH_DATA_OUT, 0);
+
+	SYSCALL_SET_TWO_ARGS_DATA(SYSCALL_REQUEST_BLUETOOTH_ACCESS,
+				  (uint32_t) limit, (uint32_t) timeout,
+				  device_name, BD_ADDR_LEN)
+	issue_syscall(buf);
+	SYSCALL_GET_ONE_RET
+	if (ret0)
+		return (int) ret0;
+
+	/* Verify mailbox state */
+	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_IN, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure bluetooth cmd write "
+		       "access\n", __func__);
+		return ERR_FAULT;
+	}
+
+	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_OUT, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure bluetooth cmd read "
+		       "access\n", __func__);
+		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+		return ERR_FAULT;
+	}
+
+	ret = mailbox_attest_queue_access(Q_BLUETOOTH_DATA_IN, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure bluetooth data write "
+		       "access\n", __func__);
+		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+		return ERR_FAULT;
+	}
+
+	ret = mailbox_attest_queue_access(Q_BLUETOOTH_DATA_OUT, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure bluetooth data read "
+		       "access\n", __func__);
+		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+		wait_until_empty(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+		return ERR_FAULT;
+	}
+
+#ifndef UNTRUSTED_DOMAIN
+	/* Note: we set the limit/timeout values right after attestation and
+	 * before we call check_proc_pcr(). This is because that call issues a
+	 * syscall, which might take an arbitrary amount of time.
+	 */
+	queue_limits[Q_BLUETOOTH_CMD_IN] = limit;
+	queue_timeouts[Q_BLUETOOTH_CMD_IN] = timeout;
+
+	queue_limits[Q_BLUETOOTH_CMD_OUT] = limit;
+	queue_timeouts[Q_BLUETOOTH_CMD_OUT] = timeout;
+
+	queue_limits[Q_BLUETOOTH_DATA_IN] = limit;
+	queue_timeouts[Q_BLUETOOTH_DATA_IN] = timeout;
+
+	queue_limits[Q_BLUETOOTH_DATA_OUT] = limit;
+	queue_timeouts[Q_BLUETOOTH_DATA_OUT] = timeout;
+
+	/* Verify TPM PCR val */
+	if (expected_pcr) {
+		ret = check_proc_pcr(P_BLUETOOTH, expected_pcr);
+		if (ret) {
+			/* FIXME: the next two error blocks are identical. */
+			/* FIXME: also, has a lot in common with the yield func.
+			 * (the same for other I/Os)
+			 */
+			printf("%s: Error: unexpected PCR\n", __func__);
+			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+			wait_until_empty(Q_BLUETOOTH_DATA_IN,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+			return ERR_UNEXPECTED;
+		}
+	}
+
+	/* Verify bluetooth service state */
+	ret = verify_bluetooth_service_state(device_name);
+	if (ret) {
+		printf("Error: %s: invalid state sent from the bluetooth "
+		       "service.\n", __func__);
+			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+			wait_until_empty(Q_BLUETOOTH_DATA_IN,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+			return ret;
+	}
+
+	queue_update_callbacks[Q_BLUETOOTH_CMD_IN] = callback;
+	queue_update_callbacks[Q_BLUETOOTH_CMD_OUT] = callback;
+	queue_update_callbacks[Q_BLUETOOTH_DATA_IN] = callback;
+	queue_update_callbacks[Q_BLUETOOTH_DATA_OUT] = callback;
+#endif
+
+	has_secure_bluetooth_access = true;
+
+	return 0;
+}
+
+static int yield_secure_bluetooth_access(void)
+{
+	has_secure_bluetooth_access = false;
+
+	wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+#ifndef UNTRUSTED_DOMAIN
+	reset_bluetooth_queues_trackers();
+#endif
+
+	return 0;
+}
+
 #endif
 
 static int request_tpm_access(limit_t limit)
@@ -1318,6 +1539,8 @@ static void load_application(char *msg)
 		.write_to_socket = write_to_socket,
 		.request_network_access = request_network_access,
 		.yield_network_access = yield_network_access,
+		.request_secure_bluetooth_access = request_secure_bluetooth_access,
+		.yield_secure_bluetooth_access = yield_secure_bluetooth_access,
 #endif
 	};
 
@@ -1487,9 +1710,19 @@ int main()
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 
+	/* Need to make sure msgs are big enough so that we don't overflow
+	 * when processing incoming msgs and preparing outgoing ones.
+	 */
+	/* FIXME: find the smallest bound. 64 is conservative. */
+	if (MAILBOX_QUEUE_MSG_SIZE < 64) {
+		printf("Error: %s: MAILBOX_QUEUE_MSG_SIZE is too small (%d).\n",
+		       __func__, MAILBOX_QUEUE_MSG_SIZE);
+		return -1;
+	}
+
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
-		exit(-1);
+		return -1;
 	}
 #ifdef ARCH_UMODE
 	if (argc != 2) {

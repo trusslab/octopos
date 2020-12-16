@@ -175,6 +175,8 @@ int main(int argc, char **argv)
 			       (char *) "./applications/bin/fs_loop.so");
 	copy_file_to_partition((char *) "fs_test",
 			       (char *) "./applications/bin/fs_test.so");
+	copy_file_to_partition((char *) "health_client",
+			       (char *) "./applications/bin/health_client.so");
 	copy_file_to_partition((char *) "ipc_receiver",
 			       (char *) "./applications/bin/ipc_receiver.so");
 	copy_file_to_partition((char *) "ipc_sender",
@@ -214,6 +216,8 @@ int main(int argc, char **argv)
 				 (char *) "./installer/copy_fs_loop.so", 0);
 	copy_file_from_partition((char *) "fs_test",
 				 (char *) "./installer/copy_fs_test.so", 0);
+	copy_file_from_partition((char *) "health_client",
+				 (char *) "./installer/copy_health_client.so", 0);
 	copy_file_from_partition((char *) "ipc_receiver",
 				 (char *) "./installer/copy_ipc_receiver.so", 0);
 	copy_file_from_partition((char *) "ipc_sender",

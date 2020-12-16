@@ -1,10 +1,9 @@
 #ifndef ARCH_SEC_HW
 
-/* bank_client app
+/* health_client app
  *
  * Based on:
- * socket_client.c
- * attest_client.c
+ * bank_client.c
  */
 #include <stdio.h>
 #include <string.h>
@@ -16,6 +15,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
+#include <octopos/bluetooth.h>
 #include <octopos/tpm.h>
 #include <network/sock.h>
 #include <network/socket.h>
@@ -700,6 +700,20 @@ void app_main(struct runtime_api *api)
 	int ret;
 
 	gapi = api;
+
+	uint8_t device[BD_ADDR_LEN] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc};
+
+	ret = gapi->request_secure_bluetooth_access(device, 100, 100,
+						    queue_update_callback, NULL);
+	if (ret) {
+		insecure_printf("Error: couldn't get access to bluetooth.\n");
+		return;
+	}
+	if (!ret) {
+		gapi->yield_secure_bluetooth_access();
+		insecure_printf("Got access to bluetooth.\n");
+		return;
+	}
 
 	/* Step 1 */
 	ret = connect_to_server();
