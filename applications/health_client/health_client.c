@@ -709,9 +709,15 @@ void app_main(struct runtime_api *api)
 		insecure_printf("Error: couldn't get access to bluetooth.\n");
 		return;
 	}
+
 	if (!ret) {
-		gapi->yield_secure_bluetooth_access();
 		insecure_printf("Got access to bluetooth.\n");
+		uint8_t data[BTPACKET_FIXED_DATA_SIZE];
+		data[0] = 13;
+
+		gapi->bluetooth_send_data(data, BTPACKET_FIXED_DATA_SIZE);
+
+		gapi->yield_secure_bluetooth_access();
 		return;
 	}
 

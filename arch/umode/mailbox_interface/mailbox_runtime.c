@@ -154,7 +154,8 @@ void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
 
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id)
 {
-	return _runtime_send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	return _runtime_send_msg_on_queue(buf, queue_id,
+					  MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void is_ownership_change(int *is_change)

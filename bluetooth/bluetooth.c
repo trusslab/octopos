@@ -21,10 +21,24 @@ uint8_t devices[NUM_RESOURCES + 1][BD_ADDR_LEN] = {
 					{0xcb, 0xa9, 0x87, 0x65, 0x43, 0x21}};
 int bound_device_index = 0;
 
-static void process_cmd(uint8_t *buf) {
+void (*bound_device_func)(struct btpacket *btp) = NULL;
 
+/* FIXME: move somewhere else */
+static void device1_func(struct btpacket *btp)
+{
+	printf("%s: received packet: %d\n", __func__, (uint8_t) btp->data[0]);
+}
+
+/* FIXME: move somewhere else */
+static void device2_func(struct btpacket *btp)
+{
+	printf("%s: received packet: %d\n", __func__, (uint8_t) btp->data[0]);
+}
+
+static void process_cmd(uint8_t *buf)
+{
 	switch (buf[0]) {
-	case IO_OP_BIND_RESOURCE:
+	case IO_OP_BIND_RESOURCE: {
 		/* Return error if bound, used, or authenticated is set.
 		 * Return error if invalid resource name
 		 * Bind the resource to the data queues.
@@ -33,6 +47,7 @@ static void process_cmd(uint8_t *buf) {
 		 */
 
 		/* We don't use authentication for Bluetooth */
+		printf("%s [1]\n", __func__);
 
 		if (bound || used) {
 			printf("Error: %s: the bind op is invalid if bound (%d) "
@@ -40,14 +55,31 @@ static void process_cmd(uint8_t *buf) {
 			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
 			break;
 		}
+		printf("%s [2]\n", __func__);
+
+		BLUETOOTH_GET_ZERO_ARGS_DATA
+		printf("%s [3]\n", __func__);
+		if (_size != BD_ADDR_LEN) {
+			printf("Error: %s: invalid device_name size (%d)\n",
+			       __func__, (int) _size);
+			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+			break;
+		}
+		printf("%s [4]\n", __func__);
 
 		for (int i = 1; i <= NUM_RESOURCES; i++) {
-			if (!memcmp(&buf[1], devices[i], BD_ADDR_LEN)) {
+			if (!memcmp(data, devices[i], BD_ADDR_LEN)) {
 				bound_device_index = i;
 				bound = 1;
+				/* FIXME: not scalable */
+				if (i == 1)
+					bound_device_func = device1_func;
+				else if (i == 2)
+					bound_device_func = device2_func;
 				break;
 			}
 		}
+		printf("%s [5]\n", __func__);
 
 		if (!bound) {
 			printf("Error: %s: resource ID for the bind op not "
@@ -55,9 +87,11 @@ static void process_cmd(uint8_t *buf) {
 			BLUETOOTH_SET_ONE_RET(ERR_FOUND)
 			break;
 		}
+		printf("%s [6]\n", __func__);
 
 		BLUETOOTH_SET_ONE_RET(0)
 		break;
+	}
 
 	case IO_OP_CREATE_RESOURCE:
 		/* Create a new resource
@@ -124,20 +158,42 @@ static void process_cmd(uint8_t *buf) {
 		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
 		break;
 
-	case IO_OP_SEND_DATA:
+	case IO_OP_SEND_DATA: {
 		/*
 		 * Return error if "bound" not set.
 		 * Return error if authentication is needed and not authenticated. 
 		 * If global flag "used" not set, set it.
 		 * This is irreversible until reset.
 		 * Process incoming data on data queue (one or multiple).
-		 */ 
+		 */
+		uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+		struct btpacket *btp = (struct btpacket *) buf_large;
 
-		/* Not implemented for now */
-		printf("Error: %s: send_data op not implemented by the "
-		       "Bluetooth service (yet)\n", __func__);
-		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		if (!bound) {
+			printf("Error: %s: no device is bound.\n", __func__);
+			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+			break;
+		}
+
+		used = 1;
+
+		BLUETOOTH_GET_ONE_ARG
+
+		if (arg0 != 1) {
+			printf("Error: %s: only supports sending one packet.\n",
+			       __func__);
+			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+			break;
+		}
+
+		read_from_bluetooth_data_queue(buf_large);
+
+		if (bound_device_func)
+			(*bound_device_func)(btp);
+
+		BLUETOOTH_SET_ONE_RET(0)
 		break;
+	}
 
 	case IO_OP_RECEIVE_DATA:
 		/*
@@ -148,9 +204,9 @@ static void process_cmd(uint8_t *buf) {
 		 * Process incoming data on data queue (one or multiple).
 		 */ 
 
-		/* Not implemented for now */
-		printf("Error: %s: receive_data op not implemented by the "
-		       "Bluetooth service (yet)\n", __func__);
+		/* No op for bluetooth */
+		printf("Error: %s: receive_data op not supported by the "
+		       "Bluetooth service\n", __func__);
 		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
 		break;
 
@@ -166,10 +222,10 @@ static int bluetooth_core(void)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	while (1) {
-		read_msg_from_bluetooth_queue(buf);
+		read_from_bluetooth_cmd_queue(buf);
 		printf("%s [1]: buf[0] = %d\n", __func__, buf[0]);
 		process_cmd(buf);
-		put_msg_on_bluetooth_queue(buf);
+		write_to_bluetooth_cmd_queue(buf);
 	}
 
 	return 0;

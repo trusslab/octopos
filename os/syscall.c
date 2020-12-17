@@ -90,6 +90,23 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
+/* FIXME: move somewhere else */
+static uint32_t send_bind_cmd_to_bluetooth(uint8_t *device_name)
+{
+	//uint8_t msg[MAILBOX_QUEUE_MSG_SIZE];
+	//memset(msg, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+	//msg[0] = IO_OP_BIND_RESOURCE;
+	//memcpy(&msg[1], device_name, BD_ADDR_LEN);
+	BLUETOOTH_SET_ZERO_ARGS_DATA(IO_OP_BIND_RESOURCE, device_name,
+				     BD_ADDR_LEN)
+
+	send_cmd_to_bluetooth(buf);
+
+	BLUETOOTH_GET_ONE_RET
+
+	return ret0;
+}
+
 static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
 {
 	uint16_t syscall_nr;
@@ -395,12 +412,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
 		uint8_t *device_name = data;
-		uint8_t msg[MAILBOX_QUEUE_MSG_SIZE];
+		printf("%s [1]: BT\n", __func__);
 
 		if (data_size != BD_ADDR_LEN) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
+		printf("%s [2]: BT\n", __func__);
 
 		/* FIXME: add access control here. Do we allow the requesting
 		 * app to have access to this resource?
@@ -411,17 +429,15 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
+		printf("%s [3]: BT\n", __func__);
 
 		/* Send msg to the bluetooth service to bind the resource */
-		memset(msg, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-		msg[0] = IO_OP_BIND_RESOURCE;
-		memcpy(&msg[1], device_name, BD_ADDR_LEN);
-
-		uint32_t ret = send_cmd_to_bluetooth(msg);
+		uint32_t ret = send_bind_cmd_to_bluetooth(device_name);
 		if (ret) {
 			SYSCALL_SET_ONE_RET(ret)
 			break;
 		}
+		printf("%s [4]: BT\n", __func__);
 
 		int iret1 = is_queue_available(Q_BLUETOOTH_DATA_IN);
 		int iret2 = is_queue_available(Q_BLUETOOTH_DATA_OUT);
@@ -432,6 +448,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
+		printf("%s [5]: BT\n", __func__);
 
 		mark_queue_unavailable(Q_BLUETOOTH_DATA_IN);
 		mark_queue_unavailable(Q_BLUETOOTH_DATA_OUT);
@@ -450,6 +467,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mailbox_delegate_queue_access(Q_BLUETOOTH_CMD_OUT,
 					      runtime_proc_id, (limit_t) limit,
 					      (timeout_t) timeout);
+		printf("%s [6]: BT\n", __func__);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;

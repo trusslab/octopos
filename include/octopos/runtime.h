@@ -114,6 +114,8 @@ struct runtime_api {
 					       queue_update_callback_t callback,
 					       uint8_t *expected_pcr);
 	int (*yield_secure_bluetooth_access)(void);
+	int (*bluetooth_send_data)(uint8_t *data, uint32_t len);
+	int (*bluetooth_recv_data)(uint8_t *data, uint32_t len);
 #endif
 };
 #endif /* UNTRUSTED_DOMAIN */

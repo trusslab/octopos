@@ -1,4 +1,6 @@
-void read_msg_from_bluetooth_queue(uint8_t *msg);
-void put_msg_on_bluetooth_queue(uint8_t *msg);
+void read_from_bluetooth_cmd_queue(uint8_t *buf);
+void write_to_bluetooth_cmd_queue(uint8_t *buf);
+void read_from_bluetooth_data_queue(uint8_t *buf);
+void write_to_bluetooth_data_queue(uint8_t *buf);
 int init_bluetooth(void);
 void close_bluetooth(void);

@@ -1101,18 +1101,21 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 
 static int verify_bluetooth_service_state(uint8_t *device_name)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	printf("%s [1]\n", __func__);
+	BLUETOOTH_SET_ZERO_ARGS(IO_OP_QUERY_STATE)
+	printf("%s [2]\n", __func__);
 
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-	buf[0] = IO_OP_QUERY_STATE;
 	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
 	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
+	printf("%s [3]\n", __func__);
+
 	BLUETOOTH_GET_ONE_RET_DATA
 	if (ret0) {
 		printf("Error: %s: received error from the bluetooth service "
 		       "(%d)\n", __func__, ret0);
 		return (int) ret0;
 	}
+	printf("%s [4]\n", __func__);
 
 	/* data[0] is bound. Must be 1.
 	 * data[1] is used. Must be 0.
@@ -1120,8 +1123,11 @@ static int verify_bluetooth_service_state(uint8_t *device_name)
 	 */
 	if ((_size != (3 + BD_ADDR_LEN)) || (data[0] != 1) ||
 	    (data[1] != 0) || !memcmp(&data[2], device_name, BD_ADDR_LEN)) {
+		printf("Error: %s: bluetooth service state not verified.\n",
+		       __func__);
 		return ERR_UNEXPECTED;
 	}
+	printf("%s [5]\n", __func__);
 
 	return 0;
 }
@@ -1282,6 +1288,55 @@ static int yield_secure_bluetooth_access(void)
 #ifndef UNTRUSTED_DOMAIN
 	reset_bluetooth_queues_trackers();
 #endif
+
+	return 0;
+}
+
+int bluetooth_send_data(uint8_t *data, uint32_t len)
+{
+	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	struct btpacket *btp = (struct btpacket *) buf_large;
+
+	if (len > BTPACKET_FIXED_DATA_SIZE) {
+		printf("Error: %s: can't send more than %d bytes\n", __func__,
+		       BTPACKET_FIXED_DATA_SIZE);
+		return ERR_INVALID;
+	}
+
+	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	memcpy(btp->data, data, len);
+
+	/* the arg is the number of packets */
+	BLUETOOTH_SET_ONE_ARG(IO_OP_SEND_DATA, 1)
+
+	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
+	runtime_send_msg_on_queue_large(buf_large, Q_BLUETOOTH_DATA_IN);
+	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
+
+	BLUETOOTH_GET_ONE_RET
+	if (ret0) {
+		printf("Error: %s: received error from the bluetooth service "
+		       "(%d)\n", __func__, ret0);
+		return (int) ret0;
+	}
+
+	return 0;
+}
+
+int bluetooth_recv_data(uint8_t *data, uint32_t len)
+{
+	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	struct btpacket *btp = (struct btpacket *) buf_large;
+
+	if (len > BTPACKET_FIXED_DATA_SIZE) {
+		printf("Error: %s: can't receive more than %d bytes\n",
+		       __func__, BTPACKET_FIXED_DATA_SIZE);
+		return ERR_INVALID;
+	}
+
+	runtime_recv_msg_from_queue_large(buf_large, Q_BLUETOOTH_DATA_OUT);
+
+	memcpy(data, btp->data, len);
 
 	return 0;
 }
@@ -1541,6 +1596,8 @@ static void load_application(char *msg)
 		.yield_network_access = yield_network_access,
 		.request_secure_bluetooth_access = request_secure_bluetooth_access,
 		.yield_secure_bluetooth_access = yield_secure_bluetooth_access,
+		.bluetooth_send_data = bluetooth_send_data,
+		.bluetooth_recv_data = bluetooth_recv_data,
 #endif
 	};
 
