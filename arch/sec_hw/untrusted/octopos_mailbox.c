@@ -3,6 +3,8 @@
 
 /* Template based on arch/um/drivers/random.c
  */
+#ifdef CONFIG_ARM64
+
 #include <linux/sched/signal.h>
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -508,3 +510,5 @@ module_exit(om_cleanup);
 
 MODULE_DESCRIPTION("OctopOS mailbox driver for UML");
 MODULE_LICENSE("GPL");
+
+#endif

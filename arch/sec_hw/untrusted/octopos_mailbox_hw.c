@@ -18,6 +18,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+#ifdef CONFIG_ARM64
 
 #include <linux/clk.h>
 #include <linux/device.h>
@@ -773,3 +774,5 @@ module_platform_driver(xilinx_mbox_driver);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Support Xilinx hardware mailbox");
 MODULE_AUTHOR("Zephyr Yao <z.yao@uci.edu>");
+
+#endif
