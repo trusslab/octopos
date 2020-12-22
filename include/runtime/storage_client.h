@@ -4,8 +4,13 @@
 
 /* The number of limits on the storage cmd
  * queues needed to lock the partition.
+ * FIXME: Secure HW limit is 16 per r/w. This can be fixed in hardware.
  */
-#define STORAGE_CLIENT_MIN_CMD_LIMIT	1
+#ifdef ARCH_SEC_HW
+#define STORAGE_CLIENT_MIN_CMD_LIMIT    16
+#else
+#define STORAGE_CLIENT_MIN_CMD_LIMIT    1
+#endif
 
 bool is_secure_storage_key_set(void);
 int set_up_secure_storage_key(uint8_t *key);

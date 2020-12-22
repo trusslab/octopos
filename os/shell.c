@@ -23,9 +23,13 @@
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/syscall.h>
+#ifndef ARCH_SEC_HW
 #include <os/boot.h>
+#endif
 #include <arch/mailbox_os.h>
-#include <arch/pmu.h> 
+#ifndef ARCH_SEC_HW
+#include <arch/pmu.h>
+#endif
 #include <arch/defines.h>
 
 #ifdef 	ARCH_SEC_HW
@@ -264,6 +268,7 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		output_printf("octopos$> ");
 	}
 #ifdef ARCH_SEC_HW
+	// FIXME: merge into mainline api
 	request_pmu_to_reset(runtime_proc_id);
 #endif
 
@@ -366,8 +371,9 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 	if (args[0] != NULL) {
 		if (strcmp(args[0], "halt") == 0) {
 			int ret;
-
+#ifndef ARCH_SEC_HW
 			ret = halt_system();
+#endif
 			if (ret)
 				output_printf("Couldn't shut down\n");
 
@@ -376,7 +382,9 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 		} else if (strcmp(args[0], "reboot") == 0) {
 			int ret;
 
-			ret = reboot_system();	
+#ifndef ARCH_SEC_HW
+			ret = reboot_system();
+#endif
 			if (ret)
 				output_printf("Couldn't reboot all processors\n");
 
@@ -386,6 +394,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			int ret;
 			uint8_t proc_id = (uint8_t) atoi(args[1]);
 
+#ifndef ARCH_SEC_HW
 			ret = reset_proc(proc_id);
 			if (ret == 1 && proc_id == P_UNTRUSTED) {
 				output_printf("Enter this command again to complete "
@@ -393,7 +402,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			} else if (ret) {
 				output_printf("Couldn't reset proc %d\n", proc_id);
 			}
-
+#endif
 			output_printf("octopos$> ");
 			return 0;
 		}

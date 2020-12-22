@@ -13,10 +13,10 @@
 
 #include "arch/semaphore.h"
 
-#include "xmbox.h"
+#include "arch/octopos_xmbox.h"
 
 extern int q_os;
-extern XMbox* Mbox_regs[NUM_QUEUES + 1];
+extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
 extern sem_t interrupts[NUM_QUEUES + 1];
 #endif
 

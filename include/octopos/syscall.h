@@ -6,7 +6,12 @@
 #ifndef UNTRUSTED_DOMAIN
 #include "arch/syscall.h"
 #else
+
+#ifdef CONFIG_ARM64
+#include <octopos/syscall_sechw.h>
+#else 
 #include <octopos/syscall_umode.h>
+#endif
 
 #define printf printk
 #endif
@@ -152,25 +157,25 @@
 
 #define SYSCALL_GET_ONE_ARG		\
 	uint32_t arg0;			\
-	arg0 = *((uint32_t *) &buf[2]); \
+	DESERIALIZE_32(&arg0, &buf[2]);	\
 
 #define SYSCALL_GET_TWO_ARGS		\
 	uint32_t arg0, arg1;		\
-	arg0 = *((uint32_t *) &buf[2]); \
-	arg1 = *((uint32_t *) &buf[6]); \
+	DESERIALIZE_32(&arg0, &buf[2]);	\
+	DESERIALIZE_32(&arg1, &buf[6]);	\
 
 #define SYSCALL_GET_THREE_ARGS		\
 	uint32_t arg0, arg1, arg2;	\
-	arg0 = *((uint32_t *) &buf[2]); \
-	arg1 = *((uint32_t *) &buf[6]); \
-	arg2 = *((uint32_t *) &buf[10]);\
+	DESERIALIZE_32(&arg0, &buf[2]);	\
+	DESERIALIZE_32(&arg1, &buf[6]);	\
+	DESERIALIZE_32(&arg2, &buf[10]);	\
 
 #define SYSCALL_GET_FOUR_ARGS			\
 	uint32_t arg0, arg1, arg2, arg3;	\
-	arg0 = *((uint32_t *) &buf[2]);		\
-	arg1 = *((uint32_t *) &buf[6]);		\
-	arg2 = *((uint32_t *) &buf[10]);	\
-	arg3 = *((uint32_t *) &buf[14]);	\
+	DESERIALIZE_32(&arg0, &buf[2]);	\
+	DESERIALIZE_32(&arg1, &buf[6]);	\
+	DESERIALIZE_32(&arg2, &buf[10]);	\
+	DESERIALIZE_32(&arg3, &buf[14]);	\
 
 #define SYSCALL_GET_ONE_RET				\
 	uint32_t ret0;					\
