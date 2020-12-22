@@ -336,6 +336,7 @@ static int request_secure_keyboard(limit_t count)
 static int yield_secure_keyboard(void)
 {
 	mailbox_yield_to_previous_owner(Q_KEYBOARD);
+
 	return 0;
 }
 

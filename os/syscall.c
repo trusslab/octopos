@@ -124,7 +124,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
 		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
+				MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -403,8 +403,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		/* FIXME: why 100? */
 		if (limit > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
- 			break;
- 		}
+			break;
+		}
 
 		int ret1 = is_queue_available(Q_TPM_IN);
 		int ret2 = is_queue_available(Q_TPM_OUT);
