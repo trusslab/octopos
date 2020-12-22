@@ -1,5 +1,5 @@
 /* octopos storage client */
-#ifndef CONFIG_UML /* Linux UML */
+#if !defined(CONFIG_UML) && !defined(CONFIG_ARM64) /* Linux UML or Secure HW */
 #include <arch/defines.h>
 
 #include <stdio.h>
@@ -19,12 +19,18 @@
 #include <runtime/storage_client.h>
 /* FIXME: sock.h is only needed to satisfy the dependencies in other header files */
 #include <network/sock.h>
-#else /* CONFIG_UML */
+#else /* CONFIG_UML or CONFIG_ARM64*/
 #define UNTRUSTED_DOMAIN
+
+#ifdef CONFIG_ARM64
+#define ARCH_SEC_HW
+#include <linux/delay.h>
+#endif
+
 #include <linux/module.h>
 #include <octopos/runtime/runtime.h>
 #include "storage_client.h"
-#endif /* CONFIG_UML */
+#endif /* CONFIG_UML or CONFIG_ARM64*/
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
@@ -38,7 +44,7 @@
 #define printf printk
 #endif
 
-#ifdef ARCH_SEC_HW
+#if defined(ARCH_SEC_HW) && !defined(CONFIG_ARM64)
 extern _Bool async_syscall_mode;
 #endif
 
@@ -107,7 +113,7 @@ extern _Bool async_syscall_mode;
 	}									\
 	memcpy(data, &buf[5], _size);						\
 
-#ifdef CONFIG_UML
+#if defined(CONFIG_UML) || defined(CONFIG_ARM64)
 /* FIXME: move to a header file */
 void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id);
 void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id);
@@ -232,15 +238,20 @@ static int request_secure_storage_creation(uint8_t *returned_key, uint32_t size)
 
 static void yield_secure_storage_queues_access(void)
 {
-#ifdef ARCH_SEC_HW
+#if defined(ARCH_SEC_HW) && !defined(CONFIG_ARM64)
 // FIXME: remove once we have nested interrupt. Context switch happens 
 // in interrupt context, and subsequent write/read intr will not be 
 // handled.
 if (!async_syscall_mode) {
 #endif
+
+#ifndef CONFIG_ARM64
+	// FIXME: There is a bug preventing semaphore post on Q_STORAGE_DATA_IN
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-#ifdef ARCH_SEC_HW
+#endif
+	
+#if defined(ARCH_SEC_HW) && !defined(CONFIG_ARM64)
 }
 #endif
 
@@ -282,6 +293,11 @@ static int request_secure_storage_queues_access(int count)
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
+
+	/* FIXME: wait for OS to switch the queue. Microblaze does not have this problem */
+#ifdef CONFIG_ARM64
+	udelay(100);
+#endif
 
 	/* FIXME: if any of the attetations fail, we should yield the other ones */
 	attest_ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, (limit_t) count);

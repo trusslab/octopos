@@ -3,6 +3,8 @@
 
 /* Template based on arch/um/drivers/random.c
  */
+#ifdef CONFIG_ARM64
+
 #include <linux/sched/signal.h>
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -11,15 +13,13 @@
 #include <linux/delay.h>
 #include <linux/uaccess.h>
 #include <linux/semaphore.h>
-#include <linux/timer.h>
-#include <init.h>
-#include <irq_kern.h>
-#include <os.h>
+#include <linux/init.h>
+#include <linux/slab.h>
 #define UNTRUSTED_DOMAIN
+#define ARCH_SEC_HW
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
-#include <octopos/mailbox_umode.h>
 
 #define OM_MODULE_NAME "octopos_mailbox"
 /* check include/linux/miscdevice.h to make sure this is not taken. */
@@ -29,10 +29,19 @@
 void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size);
 void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size);
 int handle_mailbox_interrupts(void *data);
-int init_octopos_mailbox_interface(void);
-void close_octopos_mailbox_interface(void);
 
-int fd_out, fd_in, fd_intr;
+u32 octopos_mailbox_get_status_reg(struct octopos_mbox_ctrl *mbox_ctrl);
+int octopos_mailbox_attest_owner_fast_hw(struct octopos_mbox_ctrl *mbox_ctrl);
+void mailbox_yield_to_previous_owner_hw(struct octopos_mbox_ctrl *mbox_ctrl);
+
+int xilinx_mbox_send_data_blocking(struct xilinx_mbox *mbox, 
+	u32 *buffer, u32 buffer_size);
+int xilinx_mbox_receive_data_blocking(struct xilinx_mbox *mbox, 
+	u32 *buffer, u32 buffer_size);
+
+extern void* mbox_map[NUM_QUEUES + 1];
+extern void* mbox_ctrl_map[NUM_QUEUES + 1];
+
 struct semaphore interrupts[NUM_QUEUES + 1];
 
 struct semaphore cmd_sem;
@@ -63,7 +72,7 @@ void callback_timer(struct timer_list *_timer)
 {
 	int i;
 
-	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
+	mod_timer(&timer, jiffies + msecs_to_jiffies(100));	
 	
 	for (i = 1; i <= NUM_QUEUES; i++) {
 		if (queue_timeouts[i] &&
@@ -183,6 +192,11 @@ static ssize_t om_dev_read(struct file *filp, char __user *buf, size_t size,
 	datasize = MAILBOX_QUEUE_MSG_SIZE - 1;
 	if (size < datasize)
 		datasize = size;
+
+	/* sec_hw new line is \r */
+#ifdef CONFIG_ARM64
+	cmd_buf[strlen(cmd_buf) - 1] = '\n';
+#endif
 	
 	ret = copy_to_user(buf, cmd_buf, datasize);
 	*offp += (datasize - ret);
@@ -204,7 +218,7 @@ static ssize_t om_dev_write(struct file *filp, const char __user *buf, size_t si
 	 */
 	if (*offp != 0)
 		return 0;
- 
+
 	while (size > 0) {
 
 		if (size < per_msg_size)
@@ -245,43 +259,39 @@ static struct miscdevice om_miscdev = {
 
 void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
-	uint8_t opcode[2];
 	unsigned long flags;
 
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = queue_id;
 	/* wait for message */
-	down(&interrupts[queue_id]);
+	// FIXME: There is a bug preventing semaphore post on Q_STORAGE_DATA_IN
+	// printk("%s %d %d %d", __func__, queue_id, queue_msg_size, interrupts[queue_id].count);
+	// down(&interrupts[queue_id]);
 	spin_lock_irqsave(&mailbox_lock, flags);
-	os_write_file(fd_out, opcode, 2), 
-	os_read_file(fd_in, buf, queue_msg_size);
+	xilinx_mbox_receive_data_blocking(mbox_map[queue_id],
+		(u32*) buf,
+		queue_msg_size);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
 static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
-	uint8_t opcode[2];
 	unsigned long flags;
 
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = queue_id;
 	spin_lock_irqsave(&mailbox_lock, flags);
-	os_write_file(fd_out, opcode, 2), 
-	os_read_file(fd_in, buf, queue_msg_size);
+	xilinx_mbox_receive_data_blocking(mbox_map[queue_id],
+		(u32*) buf,
+		queue_msg_size);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
 void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
-	uint8_t opcode[2];
 	unsigned long flags;
 
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = queue_id;
 	down(&interrupts[queue_id]);
 	spin_lock_irqsave(&mailbox_lock, flags);
-	os_write_file(fd_out, opcode, 2);
-	os_write_file(fd_out, buf, queue_msg_size);
+	xilinx_mbox_send_data_blocking(mbox_map[queue_id],
+		(u32*) buf,
+		queue_msg_size);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
@@ -340,31 +350,27 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 /* FIXME: adapted from the same func in mailbox_runtime.c */
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
-	uint8_t opcode[2];
 	unsigned long flags;
 
-	queue_limits[queue_id] = 0;
-	queue_timeouts[queue_id] = 0;
-
-	opcode[0] = MAILBOX_OPCODE_YIELD_QUEUE_ACCESS;
-	opcode[1] = queue_id;
 	spin_lock_irqsave(&mailbox_lock, flags);
-	os_write_file(fd_out, opcode, 2);
+	mailbox_yield_to_previous_owner_hw(mbox_ctrl_map[queue_id]);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
 /* FIXME: adapted from the same func in mailbox_runtime.c */
 int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 {
-	uint8_t opcode[2];
 	mailbox_state_reg_t state;
 	unsigned long flags;
+	u32 raw_state;
 
-	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
-	opcode[1] = queue_id;
 	spin_lock_irqsave(&mailbox_lock, flags);
-	os_write_file(fd_out, opcode, 2);
-	os_read_file(fd_in, &state, sizeof(mailbox_state_reg_t));
+	if (octopos_mailbox_attest_owner_fast_hw(mbox_ctrl_map[queue_id])) {
+		raw_state = octopos_mailbox_get_status_reg(mbox_ctrl_map[queue_id]);
+		memcpy(&state, &raw_state, sizeof(state));
+	} else {
+		return 0;
+	}
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 
 	if (state.limit && (state.limit != MAILBOX_NO_LIMIT_VAL))
@@ -397,10 +403,12 @@ timeout_t get_queue_timeout(uint8_t queue_id)
 
 void decrement_queue_limit(uint8_t queue_id, limit_t count)
 {
-	if (queue_limits[queue_id] <= count)
+	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
+
+	if (queue_limits[queue_id] <= count * factor)
 		queue_limits[queue_id] = 0;
 	else
-		queue_limits[queue_id] -= count;
+		queue_limits[queue_id] -= count * factor;
 }
 
 /* FIXME: move somewhere else */
@@ -411,45 +419,6 @@ static struct work_struct net_wq;
 static void net_receive_wq(struct work_struct *work)
 {
 	ond_tcp_receive();
-}
-
-static irqreturn_t om_interrupt(int irq, void *data)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t interrupt;
-	int n;
-
-	while (true) {
-		n = os_read_file(fd_intr, &interrupt, 1);
-		if (n != 1)
-			break;
-		if (interrupt == Q_UNTRUSTED) {
-			recv_msg_from_queue_no_wait(buf, Q_UNTRUSTED, MAILBOX_QUEUE_MSG_SIZE);
-			if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
-				write_syscall_response(buf);
-				up(&interrupts[Q_UNTRUSTED]);
-			} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
-				memcpy(cmd_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
-				up(&cmd_sem);
-			} else {
-				printk("Error: %s: received invalid message (%d).\n", __func__, buf[0]);
-				BUG();
-			}
-		} else if (interrupt == Q_OSU ||
-		    interrupt == Q_STORAGE_CMD_IN || interrupt == Q_STORAGE_CMD_OUT ||
-		    interrupt == Q_STORAGE_DATA_IN || interrupt == Q_STORAGE_DATA_OUT ||
-		    interrupt == Q_NETWORK_DATA_IN || interrupt == Q_NETWORK_DATA_OUT) {
-			if (interrupt == Q_NETWORK_DATA_OUT)
-				schedule_work(&net_wq);
-			up(&interrupts[interrupt]);
-		} else if (interrupt > NUM_QUEUES && interrupt <= (2 * NUM_QUEUES)) {
-			/* ignore the ownership change interrupts */
-		} else {
-			printk("Error: interrupt from an invalid queue (%d)\n", interrupt);
-			BUG();
-		}
-	}
-	return IRQ_HANDLED;
 }
 
 /* FIXME: modified from runtime.c */
@@ -476,43 +445,6 @@ static int __init om_init(void)
 {
 	int err;
 
-	err = init_octopos_mailbox_interface();
-	if (err) {
-		printk(KERN_ERR OM_MODULE_NAME ": initializing mailbox interface "
-		       "failed\n");
-		return err;
-	}
-
-	fd_out = os_open_file(FIFO_UNTRUSTED_OUT, of_write(OPENFLAGS()), 0);
-	if (fd_out < 0) {
-		printk(KERN_ERR OM_MODULE_NAME ": opening out file "
-		       "failed\n");
-		return fd_out;
-	}
-
-	fd_in = os_open_file(FIFO_UNTRUSTED_IN, of_read(OPENFLAGS()), 0);
-	if (fd_in < 0) {
-		printk(KERN_ERR OM_MODULE_NAME ": opening in file "
-		       "failed\n");
-		return fd_in;
-	}
-
-	fd_intr = os_open_file(FIFO_UNTRUSTED_INTR, of_read(OPENFLAGS()), 0);
-	if (fd_intr < 0) {
-		printk(KERN_ERR OM_MODULE_NAME ": opening intr file "
-		       "failed\n");
-		return fd_intr;
-	}
-	os_set_fd_block(fd_intr, 0);
-
-	err = um_request_irq(OCTOPOS_IRQ, fd_intr, IRQ_READ, om_interrupt,
-			     0, "octopos", NULL);
-	if (err) {
-		printk(KERN_ERR OM_MODULE_NAME ": interrupt register "
-		       "failed\n");
-		return err;
-	}
-
 	/* FIXME: is this needed? */
 	//sigio_broken(fd_intr, 1);
 
@@ -533,7 +465,7 @@ static int __init om_init(void)
 
 	sema_init(&srq_sem, MAILBOX_QUEUE_SIZE);
 
-	INIT_WORK(&net_wq, net_receive_wq);
+//	INIT_WORK(&net_wq, net_receive_wq);
 
 	spin_lock_init(&mailbox_lock);
 
@@ -542,7 +474,7 @@ static int __init om_init(void)
 	memset(queue_timeout_update_callbacks, 0x0, sizeof(queue_timeout_update_callbacks));
 
 	timer_setup(&timer, callback_timer, 0);
-	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
+	mod_timer(&timer, jiffies + msecs_to_jiffies(100));	
 
 	/* register char dev */
 	err = misc_register(&om_miscdev);
@@ -557,27 +489,26 @@ static int __init om_init(void)
 	return 0;
 }
 
-static void cleanup(void)
-{
-	free_irq_by_fd(fd_intr);
-}
-
 static void __exit om_cleanup(void)
 {
 	del_timer(&timer);
 
-	os_close_file(fd_out);
-	os_close_file(fd_in);
-	os_close_file(fd_intr);
-
-	close_octopos_mailbox_interface();
-	
 	misc_deregister(&om_miscdev);
 }
 
+/* for use by secure hardware driver */
+EXPORT_SYMBOL(interrupts);
+EXPORT_SYMBOL(cmd_buf);
+EXPORT_SYMBOL(cmd_sem);
+EXPORT_SYMBOL(write_syscall_response);
+
+/* for use by other devices */
+EXPORT_SYMBOL(om_inited);
+
 module_init(om_init);
 module_exit(om_cleanup);
-__uml_exitcall(cleanup);
 
 MODULE_DESCRIPTION("OctopOS mailbox driver for UML");
 MODULE_LICENSE("GPL");
+
+#endif

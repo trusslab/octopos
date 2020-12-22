@@ -775,22 +775,14 @@ static int request_tpm_access(limit_t limit)
 
 	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, limit);
 	if (!attest_ret) {
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-#else
 		printf("%s: Error: failed to attest TPM_IN queue\n", __func__);
-#endif
 		return ERR_FAULT;
 	}
 
 	attest_ret = mailbox_attest_queue_access(Q_TPM_OUT, limit);
 	if (!attest_ret) {
 		mailbox_yield_to_previous_owner(Q_TPM_IN);
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-#else
 		printf("%s: Error: failed to attest TPM_OUT queue\n", __func__);
-#endif
 		return ERR_FAULT;
 	}
 

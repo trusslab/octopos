@@ -24,10 +24,14 @@
 #include <linux/backing-dev.h>
 
 #include <linux/uaccess.h>
+#ifdef CONFIG_ARM64
+#define ARCH_SEC_HW
+#endif
 #define UNTRUSTED_DOMAIN
 #include <octopos/mailbox.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
+#include <octopos/error.h>
 #include "storage_client.h" 
 
 struct request_queue	*obd_queue = NULL;
@@ -36,6 +40,10 @@ struct gendisk		*obd_disk = NULL;
 struct mutex obd_lock;
 
 static struct work_struct yield_wq;
+
+extern bool om_inited;
+
+static struct timer_list timer;
 
 static void obd_yield_storage_queues(struct work_struct *work)
 {
@@ -52,6 +60,19 @@ void obd_queue_timeout_update(uint8_t queue_id, timeout_t timeout)
 	if (timeout <= MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL)
 		schedule_work(&yield_wq);
 }
+
+void delayed_obd_init(struct timer_list *_timer)
+{
+	if (om_inited) {
+		register_timeout_update_callback(Q_STORAGE_CMD_IN, obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_CMD_OUT, obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_DATA_IN, obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_DATA_OUT, obd_queue_timeout_update);
+	} else {
+		mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
+	}
+}
+
 /*
  * Process a single bvec of a bio.
  */
@@ -61,12 +82,18 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	void *mem;
 	int ret;
 	unsigned int num_blocks;
+	unsigned int factor;
 	uint8_t data_queue = (op_is_write(op)) ? Q_STORAGE_DATA_IN : Q_STORAGE_DATA_OUT;
+
+	if (!om_inited)
+		return ERR_FAULT;
 
 	if (len % STORAGE_BLOCK_SIZE)
 		BUG();
 
 	num_blocks = len / STORAGE_BLOCK_SIZE;
+	// FIXME: How is sector size defined? Replace 512 with sector size.
+	factor = 512 / STORAGE_BLOCK_SIZE;
 
 	mutex_lock(&obd_lock);
 	/* FIXME: we need to keep separate counts for each storage queue. */
@@ -92,21 +119,20 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 						    STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE);
 		if (ret) {
 			printk("Error (%s): Failed to get secure access to storage.\n", __func__);
+			mutex_unlock(&obd_lock);
 			return ret;
 		}
 	}
-
 	decrement_queue_limit(data_queue, num_blocks);
 	decrement_queue_limit(Q_STORAGE_CMD_IN, 1);
 	decrement_queue_limit(Q_STORAGE_CMD_OUT, 1);
-
 	mem = kmap_atomic(page);
 	if (!op_is_write(op)) {
-		read_secure_storage_blocks(mem + off, sector, num_blocks);
+		read_secure_storage_blocks(mem + off, sector * factor, num_blocks);
 		flush_dcache_page(page);
 	} else {
 		flush_dcache_page(page);
-		write_secure_storage_blocks(mem + off, sector, num_blocks);
+		write_secure_storage_blocks(mem + off, sector * factor, num_blocks);
 	}
 	kunmap_atomic(mem);
 
@@ -195,9 +221,16 @@ static struct kobject *obd_probe(dev_t dev, int *part, void *data)
 
 static int obd_init_disk(void)
 {
+#ifdef CONFIG_ARM64
+	obd_queue = blk_alloc_queue(GFP_KERNEL);
+	if (!obd_queue)
+		goto out;
+	blk_queue_make_request(obd_queue, obd_make_request);
+#else
 	obd_queue = blk_alloc_queue(obd_make_request, NUMA_NO_NODE);
 	if (!obd_queue)
 		goto out;
+#endif
 
 	/* This is so fdisk will align partitions on 4k, because of
 	 * direct_access API needing 4k alignment, returning a PFN
@@ -255,10 +288,15 @@ static int __init obd_init(void)
 
 	mutex_init(&obd_lock);
 
-	register_timeout_update_callback(Q_STORAGE_CMD_IN, obd_queue_timeout_update);
-	register_timeout_update_callback(Q_STORAGE_CMD_OUT, obd_queue_timeout_update);
-	register_timeout_update_callback(Q_STORAGE_DATA_IN, obd_queue_timeout_update);
-	register_timeout_update_callback(Q_STORAGE_DATA_OUT, obd_queue_timeout_update);
+	if (!om_inited) {
+		timer_setup(&timer, delayed_obd_init, 0);
+		mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
+	} else {
+		register_timeout_update_callback(Q_STORAGE_CMD_IN, obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_CMD_OUT, obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_DATA_IN, obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_DATA_OUT, obd_queue_timeout_update);
+	}
 
 	INIT_WORK(&yield_wq, obd_yield_storage_queues);
 
@@ -283,6 +321,8 @@ static void __exit obd_exit(void)
 
 	blk_unregister_region(MKDEV(OCTOPOS_BLK_MAJOR, 0), 1UL << MINORBITS);
 	unregister_blkdev(OCTOPOS_BLK_MAJOR, "octopos_blk");
+
+	del_timer(&timer);
 
 	pr_info("obd: module unloaded\n");
 }

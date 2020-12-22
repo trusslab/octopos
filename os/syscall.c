@@ -22,8 +22,8 @@
 #include <os/storage.h>
 #ifndef ARCH_SEC_HW
 #include <os/network.h>
-#endif
 #include <os/boot.h>
+#endif
 #include <arch/mailbox_os.h>
 
 #define SYSCALL_GET_ZERO_ARGS_DATA				\
@@ -45,7 +45,7 @@
 #define SYSCALL_GET_ONE_ARG_DATA				\
 	uint32_t arg0;						\
 	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[2]);				\
+	DESERIALIZE_32(&arg0, &buf[2]);	\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;		\
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
@@ -63,8 +63,8 @@
 #define SYSCALL_GET_TWO_ARGS_DATA				\
 	uint32_t arg0, arg1;					\
 	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[2]);				\
-	arg1 = *((uint32_t *) &buf[6]);				\
+	DESERIALIZE_32(&arg0, &buf[2]);	\
+	DESERIALIZE_32(&arg1, &buf[6]);	\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 11;		\
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
@@ -133,11 +133,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_ONE_ARG
 		uint32_t count = arg0;
 
-		 /* No more than 100 characters */
-		 if (count > 100) {
-		 	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-		 	break;
-		 }
+		/* No more than 100 characters */
+		if (count > 100) {
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			break;
+		}
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */
@@ -158,6 +158,30 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		inform_shell_of_termination(runtime_proc_id);
 		*late_processing = SYSCALL_INFORM_OS_OF_TERMINATION;
 		SYSCALL_SET_ONE_RET(0)
+		/* FIXME: This is a known issue that a Runtime after reset will receive stale 
+		 * syscall ret. It is due to Runtime mailbox not flushed after a reset. 
+		 *
+		 * This issue need more investigation. If PMU trigger the reset module, the mailbox
+		 * is properly reset. However, if the PL trigger the reset module using the exactly 
+		 * same GPIO output pattern, the mailbox is not reset. The peripheral reset lines 
+		 * are wired exactly the same. 
+		 *
+		 * This bug will cause a Runtime's syscall response ring buffer out of sync after a
+		 * reset. See the timing diagram below for details. 
+		 *
+		 * |------|---|-------------|-|-------------
+		 * ^ Runtime inform_shell_of_termination
+		 *        ^ OS resets the runtime
+		 *            ^OS sends syscall ret back to Runtime
+		 *                          ^ Runtime has been reset, and it missed the syscall ret
+		 *                            ^ If PMU resets, the mailbox has been reset, so no 
+		 *                              stale syscall ret will be delivered.
+		 *                            ^ If OS resets, the stale syscall ret gets delivered,
+		 *                              and causes the srq ring buffer to be out of sync.
+		 */
+#ifdef ARCH_SEC_HW
+		*no_response = true;
+#endif
 		break;
 	}
 	case SYSCALL_INFORM_OS_OF_PAUSE: {
@@ -486,10 +510,12 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
-		      file_system_read_file_blocks_late();
+			file_system_read_file_blocks_late();
+#ifndef ARCH_SEC_HW
 		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
-			 late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
+			late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
 			reset_proc(runtime_proc_id);
+#endif
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

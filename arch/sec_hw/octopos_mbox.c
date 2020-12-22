@@ -87,26 +87,6 @@ void octopos_mailbox_set_time_limit(UINTPTR base, u16 limit)
 	octopos_mailbox_set_status_reg(base, reg);
 }
 
-u32 octopos_mailbox_calc_owner(u32 reg, u8 owner)
-{
-	u32 new_reg = (OWNER_MASK & reg) | owner << 24;
-	return new_reg;
-}
-
-u32 octopos_mailbox_calc_quota_limit(u32 reg, u16 limit)
-{
-	u32 new_reg = (QUOTA_MASK & reg) | limit << 12;
-
-	return new_reg;
-}
-
-u32 octopos_mailbox_calc_time_limit(u32 reg, u16 limit)
-{
-	u32 new_reg = (TIME_MASK & reg) | limit;
-
-	return new_reg;
-}
-
 _Bool octopos_mailbox_attest_owner(UINTPTR base, u8 owner)
 {
 	Xil_AssertNonvoid(base != 0);
