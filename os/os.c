@@ -10,9 +10,13 @@
 #include <os/file_system.h>
 #include <os/syscall.h>
 #include <os/storage.h>
+#ifndef ARCH_SEC_HW
 #include <os/boot.h>
+#endif
 #include <arch/mailbox_os.h>
-#include <arch/pmu.h> 
+#ifndef ARCH_SEC_HW
+#include <arch/pmu.h>
+#endif
 #include <arch/defines.h>
 
 static void distribute_input(void)
@@ -33,6 +37,7 @@ static void distribute_input(void)
 		process_system_call(input_buf, P_UNTRUSTED);
 #ifdef ARCH_SEC_HW
 	} else if (queue_id == 0) {
+	// FIXME: What's this?
 #endif
 	} else {
 		printf("Error (%s): invalid queue_id (%d)\n", __func__, queue_id);
@@ -49,14 +54,20 @@ int main()
 	int ret = init_os_mailbox();
 	if (ret)
 		return ret;
-	
+
+#ifndef ARCH_SEC_HW
 	connect_to_pmu();
+#endif
 
 	uint32_t partition_size = initialize_storage();
-#ifdef ARCH_UMODE
+// FIXME remove ARCH_SEC_HW. initialize_file_system should be moved to boot
+#if defined(ARCH_UMODE) || defined(ARCH_SEC_HW)
 	initialize_file_system(partition_size);
 #endif
+
+#ifndef ARCH_SEC_HW
 	help_boot_procs(1);
+#endif
 
 	initialize_shell();
 

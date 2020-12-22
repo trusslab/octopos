@@ -1,7 +1,9 @@
 #ifndef OCTOPOS_SEC_HW_SYSCALL_SERIALIZER_H_
 #define OCTOPOS_SEC_HW_SYSCALL_SERIALIZER_H_
 
+#ifndef CONFIG_ARM64
 #include "xil_types.h"
+#endif
 
 #define SERIALIZE_16(arg, buf_lr)				\
 	{							\

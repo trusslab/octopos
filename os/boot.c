@@ -1,3 +1,5 @@
+#ifndef ARCH_SEC_HW_OS
+
 /* OctopOS OS support for boot, reboot, processor reset, and shutdown */
 
 #include <stdio.h>
@@ -141,3 +143,5 @@ int halt_system(void)
 
 	return ret;
 }
+
+#endif

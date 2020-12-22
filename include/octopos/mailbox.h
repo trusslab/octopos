@@ -9,7 +9,7 @@
 #define	MAILBOX_OPCODE_READ_QUEUE		0
 #define	MAILBOX_OPCODE_WRITE_QUEUE		1
 #define	MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS	2
-#define	MAILBOX_OPCODE_YIELD_QUEUE_ACCESS	3
+#define	MAILBOX_OPCODE_YIELD_QUEUE_ACCESS		3
 #define	MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS	4
 #define	MAILBOX_OPCODE_DISABLE_QUEUE_DELEGATION	5
 #define	MAILBOX_OPCODE_ENABLE_QUEUE_DELEGATION	6
@@ -17,7 +17,7 @@
 /* processor IDs */
 #define	P_OS			1
 #define	P_KEYBOARD		2
-#define	P_SERIAL_OUT		3
+#define	P_SERIAL_OUT	3
 #define	P_STORAGE		4
 #define	P_NETWORK		5
 #define	P_SENSOR		6
@@ -64,15 +64,15 @@
 #define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
 #endif
 
-typedef struct {
+typedef struct __attribute__((__packed__)) {
+#ifdef ARCH_SEC_HW
+	unsigned timeout:12;
+	unsigned limit:12;
+	unsigned owner:8; /* Proc with current access to the non-fixed end of a queue. */
+#else
 	unsigned owner:8; /* Proc with current access to the non-fixed end of a queue. */
 	unsigned limit:12;
 	unsigned timeout:12;
-
-#ifdef ARCH_SEC_HW
-	operator int() const{
-		return (owner << 24) + (limit << 12) + timeout;
-	}
 #endif
 } mailbox_state_reg_t;
 
@@ -85,8 +85,13 @@ typedef uint32_t timeout_t;
 /* FIXME: these are also defined in octopos/runtime.h */
 #define MAILBOX_MAX_LIMIT_VAL			0xFFE
 #define MAILBOX_MAX_TIMEOUT_VAL			0xFFE
+#ifndef ARCH_SEC_HW
 #define MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL	2
 #define MAILBOX_DEFAULT_TIMEOUT_VAL		6
+#else
+#define MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL	20
+#define MAILBOX_DEFAULT_TIMEOUT_VAL		60
+#endif
 
 /* FIXME: move somewhere else */
 #ifdef UNTRUSTED_DOMAIN

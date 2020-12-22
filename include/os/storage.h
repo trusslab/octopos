@@ -55,17 +55,17 @@
 
 #define STORAGE_GET_ONE_RET				\
 	uint32_t ret0;					\
-	ret0 = *((uint32_t *) &buf[0]);			\
+	DESERIALIZE_32(&ret0, &buf[0]);	\
 
 #define STORAGE_GET_TWO_RETS				\
 	uint32_t ret0, ret1;				\
-	ret0 = *((uint32_t *) &buf[0]);			\
-	ret1 = *((uint32_t *) &buf[4]);			\
+	DESERIALIZE_32(&ret0, &buf[0]);	\
+	DESERIALIZE_32(&ret1, &buf[4]);	\
 
 #define STORAGE_GET_ONE_RET_DATA(data)						\
 	uint32_t ret0;								\
 	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 5;			\
-	ret0 = *((uint32_t *) &buf[0]);						\
+	DESERIALIZE_32(&ret0, &buf[0]);	\
 	if (max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
