@@ -65,14 +65,14 @@
 #endif
 
 typedef struct __attribute__((__packed__)) {
-#ifndef ARCH_SEC_HW
-	unsigned owner:8; /* Proc with current access to the non-fixed end of a queue. */
-	unsigned limit:12;
+#ifdef ARCH_SEC_HW
 	unsigned timeout:12;
+	unsigned limit:12;
+	unsigned owner:8; /* Proc with current access to the non-fixed end of a queue. */
 #else
-	unsigned timeout:12;
-	unsigned limit:12;
 	unsigned owner:8; /* Proc with current access to the non-fixed end of a queue. */
+	unsigned limit:12;
+	unsigned timeout:12;
 #endif
 } mailbox_state_reg_t;
 

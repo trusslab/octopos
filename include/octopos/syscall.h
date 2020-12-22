@@ -6,7 +6,12 @@
 #ifndef UNTRUSTED_DOMAIN
 #include "arch/syscall.h"
 #else
+
+#ifdef CONFIG_ARM64
+#include <octopos/syscall_sechw.h>
+#else 
 #include <octopos/syscall_umode.h>
+#endif
 
 #define printf printk
 #endif
