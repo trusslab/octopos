@@ -109,6 +109,37 @@ static int _parse_ip_port(char *str, unsigned int *addr, unsigned short *nport)
 
 int exiting = 0;
 
+/* Can be called with secure keyboard/serial_out or not.
+ * Don't write to the terminal.
+ */
+static void terminate_network_session(void)
+{
+	printf("%s [1]\n", __func__);
+	/* FIXME: anything else to do here? */
+	//if (gapi->request_network_access(200, 100, queue_update_callback,
+	//				 network_pcr)) {
+	//	/* FIXME: don't print function names in error messages */
+	//	secure_printf("%s: Error: network queue access\n", session_word);
+	//	return -1;
+	//}
+
+	printf("%s [2]\n", __func__);
+	struct socket *tmp;
+	if (sock) {
+		printf("%s [3]\n", __func__);
+		tmp = sock;
+		sock = NULL;
+		gapi->close_socket(tmp);
+		printf("%s [4]\n", __func__);
+	}
+
+	printf("%s [5]\n", __func__);
+	//gapi->yield_network_access();
+	printf("%s [6]\n", __func__);
+}
+
+
+
 static void *yield_resources(void *data)
 {
 	printf("%s [1]\n", __func__);
@@ -120,8 +151,10 @@ static void *yield_resources(void *data)
 		gapi->yield_secure_keyboard();
 
 	printf("%s [3]\n", __func__);
-	if (has_network)
+	if (has_network) {
+		terminate_network_session();
 		gapi->yield_network_access();
+	}
 	printf("%s [4]\n", __func__);
 			
 	gapi->terminate_app();
@@ -358,8 +391,8 @@ static int perform_remote_attestation(void)
 
 	printf("%s [1]\n", __func__);
 	if (gapi->read_from_socket(sock, &success, 1) < 0) {
-		secure_printf("Error: couldn't read from socket (remote "
-			      "attestation:1)\n");
+		insecure_printf("Error: couldn't read from socket (remote "
+				"attestation:1)\n");
 		return -1;
 	}
 
@@ -419,8 +452,8 @@ static int perform_remote_attestation(void)
 	free(signature);
 
 	if (gapi->read_from_socket(sock, &success, 1) < 0) {
-		secure_printf("Error: couldn't read from socket (remote "
-			      "attestation:3)\n");
+		insecure_printf("Error: couldn't read from socket (remote "
+				"attestation:3)\n");
 		return -1;
 	}
 
@@ -431,20 +464,20 @@ static int perform_remote_attestation(void)
 
 	/* Receieve I/O service PCRs */
 	if (gapi->read_from_socket(sock, keyboard_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
-		secure_printf("Error: couldn't read from socket (remote "
-			      "attestation:4)\n");
+		insecure_printf("Error: couldn't read from socket (remote "
+				"attestation:4)\n");
 		return -1;
 	}
 
 	if (gapi->read_from_socket(sock, serial_out_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
-		secure_printf("Error: couldn't read from socket (remote "
-			      "attestation:5)\n");
+		insecure_printf("Error: couldn't read from socket (remote "
+				"attestation:5)\n");
 		return -1;
 	}
 
 	if (gapi->read_from_socket(sock, network_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
-		secure_printf("Error: couldn't read from socket (remote "
-			      "attestation:6)\n");
+		insecure_printf("Error: couldn't read from socket (remote "
+				"attestation:6)\n");
 		return -1;
 	}
 
@@ -648,35 +681,6 @@ static int show_account_info(void)
 	return 0;
 }
 
-/* Called with secure keyboard/serial_out.
- * Also, must print with session_word.
- */
-static void terminate_session(void)
-{
-	printf("%s [1]\n", __func__);
-	/* FIXME: anything else to do here? */
-	//if (gapi->request_network_access(200, 100, queue_update_callback,
-	//				 network_pcr)) {
-	//	/* FIXME: don't print function names in error messages */
-	//	secure_printf("%s: Error: network queue access\n", session_word);
-	//	return -1;
-	//}
-
-	printf("%s [2]\n", __func__);
-	struct socket *tmp;
-	if (sock) {
-		printf("%s [3]\n", __func__);
-		tmp = sock;
-		sock = NULL;
-		gapi->close_socket(tmp);
-		printf("%s [4]\n", __func__);
-	}
-
-	printf("%s [5]\n", __func__);
-	//gapi->yield_network_access();
-	printf("%s [6]\n", __func__);
-}
-
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
@@ -684,7 +688,7 @@ void app_main(struct runtime_api *api)
 	/*
 	 * Login.
 	 * Step 1: Connect to the server and perform remote attestation of
-	 *	   the app itself, keyboard, serial_out, network, and storage.
+	 *	   the app itself, keyboard, serial_out, and network.
 	 *	   Upon successful attestation, establish a secure channel.
 	 * Step 2: Ask for user's username.
 	 *	   Send the username to the server and retrieve user's login
@@ -750,6 +754,8 @@ void app_main(struct runtime_api *api)
 
 	has_secure_serial_out = 1;
 
+	/* From here on, our prints should use secure_printf. */
+
 	/* Step 2 */
 	ret = log_in();
 	if (ret) {
@@ -769,7 +775,7 @@ void app_main(struct runtime_api *api)
 	printf("%s [4]\n", __func__);
 
 	/* Step 4 */
-	terminate_session();
+	terminate_network_session();
 
 	has_network = 0;
 	gapi->yield_network_access();

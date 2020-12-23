@@ -1296,22 +1296,28 @@ int bluetooth_send_data(uint8_t *data, uint32_t len)
 {
 	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	struct btpacket *btp = (struct btpacket *) buf_large;
+	printf("%s [1]\n", __func__);
 
 	if (len > BTPACKET_FIXED_DATA_SIZE) {
 		printf("Error: %s: can't send more than %d bytes\n", __func__,
 		       BTPACKET_FIXED_DATA_SIZE);
 		return ERR_INVALID;
 	}
+	printf("%s [2]\n", __func__);
 
 	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 	memcpy(btp->data, data, len);
 
 	/* the arg is the number of packets */
 	BLUETOOTH_SET_ONE_ARG(IO_OP_SEND_DATA, 1)
+	printf("%s [3]\n", __func__);
 
 	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
+	printf("%s [4]\n", __func__);
 	runtime_send_msg_on_queue_large(buf_large, Q_BLUETOOTH_DATA_IN);
+	printf("%s [5]\n", __func__);
 	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
+	printf("%s [6]\n", __func__);
 
 	BLUETOOTH_GET_ONE_RET
 	if (ret0) {
@@ -1319,6 +1325,7 @@ int bluetooth_send_data(uint8_t *data, uint32_t len)
 		       "(%d)\n", __func__, ret0);
 		return (int) ret0;
 	}
+	printf("%s [7]\n", __func__);
 
 	return 0;
 }
@@ -1327,16 +1334,20 @@ int bluetooth_recv_data(uint8_t *data, uint32_t len)
 {
 	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	struct btpacket *btp = (struct btpacket *) buf_large;
+	printf("%s [1]\n", __func__);
 
 	if (len > BTPACKET_FIXED_DATA_SIZE) {
 		printf("Error: %s: can't receive more than %d bytes\n",
 		       __func__, BTPACKET_FIXED_DATA_SIZE);
 		return ERR_INVALID;
 	}
+	printf("%s [2]\n", __func__);
 
 	runtime_recv_msg_from_queue_large(buf_large, Q_BLUETOOTH_DATA_OUT);
+	printf("%s [3]\n", __func__);
 
 	memcpy(data, btp->data, len);
+	printf("%s [4]\n", __func__);
 
 	return 0;
 }

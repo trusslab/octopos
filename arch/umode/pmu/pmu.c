@@ -28,7 +28,7 @@ int fd_keyboard, fd_serial_out, fd_untrusted_in;
 pid_t mailbox_pid, tpm_pid, tpm_server_pid, tpm2_abrmd_pid, os_pid,
       keyboard_pid, serial_out_pid, runtime1_pid, runtime2_pid, storage_pid,
       network_pid, bluetooth_pid, untrusted_pid, socket_server_pid,
-      attest_server_pid, bank_server_pid;
+      attest_server_pid, bank_server_pid, health_server_pid;
 
 struct termios orig;
 
@@ -304,6 +304,13 @@ static int start_bank_server_proc(void)
 	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
 }
 
+static int start_health_server_proc(void)
+{
+	char *const args[] = {(char *) "health_server", NULL};
+	char path[] = "./applications/health_client/health_server";
+	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
+}
+
 static void start_all_procs(void)
 {
 	mailbox_pid = start_mailbox_proc();
@@ -325,6 +332,7 @@ static void start_all_procs(void)
 	socket_server_pid = start_socket_server_proc();
 	attest_server_pid = start_attest_server_proc();
 	bank_server_pid = start_bank_server_proc();
+	health_server_pid = start_health_server_proc();
 }
 
 static void halt_proc(uint8_t proc_id)
@@ -389,6 +397,7 @@ static void halt_all_procs(void)
 	mailbox_ready = 0;
 
 	/* Shut down the rest */
+	kill(health_server_pid, SIGKILL);
 	kill(bank_server_pid, SIGKILL);
 	kill(attest_server_pid, SIGKILL);
 	kill(socket_server_pid, SIGKILL);
@@ -656,6 +665,10 @@ static void *proc_reboot_handler(void *data)
 			sprintf(proc_name, "Bank Server");
 			if (do_restart)
 				bank_server_pid = start_bank_server_proc();
+		} else if (pid == health_server_pid) {
+			sprintf(proc_name, "Health Server");
+			if (do_restart)
+				health_server_pid = start_health_server_proc();
 		} else {
 			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 			continue;

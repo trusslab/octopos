@@ -28,13 +28,10 @@
 //#define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + 2 + TPM_AT_NONCE_LENGTH)
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 
-char username[32] = "BANK";
-char secret[32] = "SECRET";
-char password[32] = "pass";
-uint32_t balance = 1000;
+char device1_password[32] = "Dev1Password";
+char device2_password[32] = "Dev2Password";
 
-uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
-uint8_t serial_out_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t expected_pcr_digest[TPM_EXTEND_HASH_SIZE];
 char expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
@@ -255,24 +252,13 @@ static void generate_PCR_digests(void)
 	buffer_sizes[0] = TPM_EXTEND_HASH_SIZE;
 	buffer_sizes[1] = TPM_EXTEND_HASH_SIZE;
 	
-	/* Keyboard PCR */
-	hash_file((char *) "./installer/aligned_keyboard", file_hash);
+	/* Bluetooth PCR */
+	hash_file((char *) "./installer/aligned_bluetooth", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
-	hash_multiple_buffers(buffers, buffer_sizes, 2, keyboard_pcr);
-	//memset(concat_buf, 0x0, SHA256_DIGEST_LENGTH);
-	//memcpy(concat_buf + SHA256_DIGEST_LENGTH, hash_buf, SHA256_DIGEST_LENGTH);
-	//hash_buffer(concat_buf, 2 * SHA256_DIGEST_LENGTH, hash_buf2);
-	printf("%s [1]: keyboard PCR = ", __func__);
-	print_hash_buf(keyboard_pcr);
-
-	/* Serial Out PCR */
-	hash_file((char *) "./installer/aligned_serial_out", file_hash);
-	buffers[0] = zero_pcr;
-	buffers[1] = file_hash;
-	hash_multiple_buffers(buffers, buffer_sizes, 2, serial_out_pcr);
-	printf("%s [1]: serial_out PCR = ", __func__);
-	print_hash_buf(serial_out_pcr);
+	hash_multiple_buffers(buffers, buffer_sizes, 2, bluetooth_pcr);
+	printf("%s [1]: bluetooth PCR = ", __func__);
+	print_hash_buf(bluetooth_pcr);
 
 	/* Network PCR */
 	hash_file((char *) "./installer/aligned_network", file_hash);
@@ -287,7 +273,8 @@ static void generate_PCR_digests(void)
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, temp_hash);
-	hash_file((char *) "applications/bank_client/bank_client.so", file_hash);
+	hash_file((char *) "applications/health_client/health_client.so",
+		  file_hash);
 	buffers[0] = temp_hash;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, app_pcr);
@@ -363,7 +350,7 @@ int main(int argc, char *argv[])
 	
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s: bank_server init\n", __func__);
+	printf("%s: health_server init\n", __func__);
 
 	generate_PCR_digests();	
 
@@ -377,7 +364,7 @@ int main(int argc, char *argv[])
 	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
 		error("setsockopt(SO_REUSEADDR) failed");
 	bzero((char *) &serv_addr, sizeof(serv_addr));
-	portno = 12346;
+	portno = 12347;
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
 	serv_addr.sin_port = htons(portno);
@@ -477,82 +464,22 @@ int main(int argc, char *argv[])
 	printf("%s [7]\n", __func__);
 
 	/* Send I/O service PCRs */
-	n = write(newsockfd, keyboard_pcr, TPM_EXTEND_HASH_SIZE);
+	n = write(newsockfd, bluetooth_pcr, TPM_EXTEND_HASH_SIZE);
 	if (n < 0)
-		error("ERROR writing to socket -- keyboard_pcr");
-
-	n = write(newsockfd, serial_out_pcr, TPM_EXTEND_HASH_SIZE);
-	if (n < 0)
-		error("ERROR writing to socket -- serial_out_pcr");
+		error("ERROR writing to socket -- bluetooth_pcr");
 
 	n = write(newsockfd, network_pcr, TPM_EXTEND_HASH_SIZE);
 	if (n < 0)
 		error("ERROR writing to socket -- network_pcr");
 
-	/* Receive username and compare */
-	bzero(buffer, 32);
-	n = read(newsockfd, buffer, 32);
+	/* Send bluetooth device passwords */
+	n = write(newsockfd, device1_password, 32);
 	if (n < 0)
-		error("ERROR reading from socket -- 3");
+		error("ERROR writing to socket -- device1_password");
 
-	printf("Received username (n = %d): %s\n", n, buffer);
-
-	if (strcmp(buffer, username)) {
-		buffer[0] = 0;
-		write(newsockfd, buffer, 1);
-		error("ERROR invalid username");
-	}
-		
-	buffer[0] = 1;
-	n = write(newsockfd, buffer, 1);
+	n = write(newsockfd, device2_password, 32);
 	if (n < 0)
-		error("ERROR writing to socket -- 4");
-
-	/* Send the secret */
-	n = write(newsockfd, secret, 32);
-	if (n < 0)
-		error("ERROR writing to socket -- 5");
-
-	/* Receive password and compare */
-	bzero(buffer, 32);
-	n = read(newsockfd, buffer, 32);
-	if (n < 0)
-		error("ERROR reading from socket -- 4");
-
-	printf("Received password (n = %d): %s\n", n, buffer);
-
-	if (strcmp(buffer, password)) {
-		buffer[0] = 0;
-		write(newsockfd, buffer, 1);
-		error("ERROR invalid password");
-	}
-		
-	buffer[0] = 1;
-	n = write(newsockfd, buffer, 1);
-	if (n < 0)
-		error("ERROR writing to socket -- 6");
-
-	/* Accept and execute command to retrieve balance */
-	bzero(buffer, 32);
-	n = read(newsockfd, buffer, 1);
-	if (n < 0)
-		error("ERROR reading from socket -- 5");
-	
-	if (buffer[0] != 1) {
-		buffer[0] = 0;
-		write(newsockfd, buffer, 1);
-		error("ERROR invalid password");
-	}
-		
-	buffer[0] = 1;
-	n = write(newsockfd, buffer, 1);
-	if (n < 0)
-		error("ERROR writing to socket -- 7");
-
-	printf("Sending balance: $%d\n", balance);
-	n = write(newsockfd, &balance, 4);
-	if (n < 0)
-		error("ERROR writing to socket -- 8");
+		error("ERROR writing to socket -- device2_password");
 
 	printf("Terminating\n");
 	close(newsockfd);

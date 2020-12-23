@@ -24,12 +24,45 @@ int bound_device_index = 0;
 void (*bound_device_func)(struct btpacket *btp) = NULL;
 
 /* FIXME: move somewhere else */
+char device1_password[32] = "Dev1Password";
+int device1_authenticated = 0;
+
 static void device1_func(struct btpacket *btp)
 {
-	printf("%s: received packet: %d\n", __func__, (uint8_t) btp->data[0]);
+	if (!device1_authenticated) {
+		if (!strcmp((char *) btp->data, device1_password)) {
+			device1_authenticated = 1;
+			printf("Device1 successfully authenticated.\n");
+		} else {
+			printf("Device1 authentication failed.\n");
+		}
+
+		return;
+	}
+
+	if (btp->data[0] == 1) {
+		uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+		struct btpacket *btp2 = (struct btpacket *) buf_large;
+		printf("Device1: sending a response.\n");
+
+		strcpy((char *) btp2->data, "Success!");
+		write_to_bluetooth_data_queue(buf_large);
+		printf("%s [1]\n", __func__);
+
+		return;
+	} else if (btp->data[0] == 0) {
+		device1_authenticated = 1;
+		printf("Device1 deauthenticated.\n");
+		return;
+	}
+
+	printf("Device1 received an invalid message.\n");
 }
 
 /* FIXME: move somewhere else */
+char device2_password[32] = "Dev2Password";
+int device2_authenticated = 0;
+
 static void device2_func(struct btpacket *btp)
 {
 	printf("%s: received packet: %d\n", __func__, (uint8_t) btp->data[0]);
@@ -187,9 +220,11 @@ static void process_cmd(uint8_t *buf)
 		}
 
 		read_from_bluetooth_data_queue(buf_large);
+		printf("%s [1]\n", __func__);
 
 		if (bound_device_func)
 			(*bound_device_func)(btp);
+		printf("%s [2]\n", __func__);
 
 		BLUETOOTH_SET_ONE_RET(0)
 		break;
@@ -222,8 +257,9 @@ static int bluetooth_core(void)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	while (1) {
+		printf("%s [1]\n", __func__);
 		read_from_bluetooth_cmd_queue(buf);
-		printf("%s [1]: buf[0] = %d\n", __func__, buf[0]);
+		printf("%s [2]: buf[0] = %d\n", __func__, buf[0]);
 		process_cmd(buf);
 		write_to_bluetooth_cmd_queue(buf);
 	}

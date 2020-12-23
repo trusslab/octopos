@@ -107,7 +107,7 @@ struct bt_header {
 	uint8_t hec;
 } __attribute__((packed));
 
-#define BTPACKET_FIXED_DATA_SIZE	10
+#define BTPACKET_FIXED_DATA_SIZE	32
 
 /* Bluetooth packet
  * This is not accurate in the following ways:
