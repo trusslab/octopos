@@ -189,12 +189,10 @@ void send_measurement_to_tpm(char *path)
 	 */
 	memcpy(buf + 1, hash_buf, TPM_EXTEND_HASH_SIZE);
 	send_message_to_tpm(buf);
-	printf("%s [1]\n", __func__);
 
 	/* Wait for TPM to read the message(s). */
 	for (i = 0; i < TPM_EXTEND_HASH_NUM_MAILBOX_MSGS; i++)
 		sem_wait(&interrupts[Q_TPM_IN]);
-	printf("%s [2]\n", __func__);
 
 	close_mailbox();
 }

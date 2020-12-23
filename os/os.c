@@ -19,12 +19,10 @@ static void distribute_input(void)
 {
 	uint8_t input_buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t queue_id;
-	//printf("%s [1]\n", __func__);
 
 	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	/* FIXME: we should use separate threads for these two */
 	recv_input(input_buf, &queue_id);
-	//printf("%s [2]\n", __func__);
 	if (queue_id == Q_KEYBOARD) {
 		shell_process_input((char) input_buf[0]);
 	} else if (queue_id == Q_OS1) {

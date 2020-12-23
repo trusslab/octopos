@@ -8,7 +8,6 @@ int quote_request(FAPI_CONTEXT *context, uint8_t *nonce, uint8_t *pcr_slots,
 		  char **pcr_event_log)
 {
 	uint32_t *pcr_list = NULL;
-	//[1] = { slot };
 	char *certificate = NULL;
 	uint8_t i;
 

@@ -93,10 +93,6 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 /* FIXME: move somewhere else */
 static uint32_t send_bind_cmd_to_bluetooth(uint8_t *device_name)
 {
-	//uint8_t msg[MAILBOX_QUEUE_MSG_SIZE];
-	//memset(msg, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-	//msg[0] = IO_OP_BIND_RESOURCE;
-	//memcpy(&msg[1], device_name, BD_ADDR_LEN);
 	BLUETOOTH_SET_ZERO_ARGS_DATA(IO_OP_BIND_RESOURCE, device_name,
 				     BD_ADDR_LEN)
 
@@ -155,7 +151,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		SYSCALL_GET_TWO_ARGS
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
-		printf("%s [1]\n", __func__);
 
 		/* FIXME: arbitrary thresholds */
 		/* No more than 100 characters; no more than 100 seconds. */
@@ -163,7 +158,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		printf("%s [2]\n", __func__);
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */
@@ -171,21 +165,17 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
-		printf("%s [3]\n", __func__);
 
 		mark_queue_unavailable(Q_KEYBOARD);
-		printf("%s [4]\n", __func__);
 
 		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id,
 					      (limit_t) limit,
 					      (timeout_t) timeout);
-		printf("%s [5]\n", __func__);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
-		printf("%s [6]: INFORM_OS_OF_TERMINATION\n", __func__);
 		inform_shell_of_termination(runtime_proc_id);
 		*late_processing = SYSCALL_INFORM_OS_OF_TERMINATION;
 		SYSCALL_SET_ONE_RET(0)
@@ -412,13 +402,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
 		uint8_t *device_name = data;
-		printf("%s [1]: BT\n", __func__);
 
 		if (data_size != BD_ADDR_LEN) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		printf("%s [2]: BT\n", __func__);
 
 		/* FIXME: add access control here. Do we allow the requesting
 		 * app to have access to this resource?
@@ -429,7 +417,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
-		printf("%s [3]: BT\n", __func__);
 
 		/* Send msg to the bluetooth service to bind the resource */
 		uint32_t ret = send_bind_cmd_to_bluetooth(device_name);
@@ -437,7 +424,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET(ret)
 			break;
 		}
-		printf("%s [4]: BT\n", __func__);
 
 		int iret1 = is_queue_available(Q_BLUETOOTH_DATA_IN);
 		int iret2 = is_queue_available(Q_BLUETOOTH_DATA_OUT);
@@ -448,7 +434,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 			break;
 		}
-		printf("%s [5]: BT\n", __func__);
 
 		mark_queue_unavailable(Q_BLUETOOTH_DATA_IN);
 		mark_queue_unavailable(Q_BLUETOOTH_DATA_OUT);
@@ -467,7 +452,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		mailbox_delegate_queue_access(Q_BLUETOOTH_CMD_OUT,
 					      runtime_proc_id, (limit_t) limit,
 					      (timeout_t) timeout);
-		printf("%s [6]: BT\n", __func__);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -599,7 +583,6 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		if (!no_response) {
 			check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 		}
-		printf("%s [1]\n", __func__);
 		/* FIXME: use async interrupt processing instead. */
 		if (late_processing == SYSCALL_WRITE_FILE_BLOCKS)
 			file_system_write_file_blocks_late();
@@ -608,7 +591,6 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
 			 late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
 			reset_proc(runtime_proc_id);
-		printf("%s [2]\n", __func__);
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

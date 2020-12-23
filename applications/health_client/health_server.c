@@ -17,15 +17,11 @@
 #include <tss2/tss2_rc.h>
 #include <openssl/sha.h>
 #include <json-c/json.h>
-//#include <json-c/json_util.h>
 /* octopos header files */
 #define APPLICATION
 #include <octopos/tpm.h>
 #include <tpm/hash.h>
 
-//#define TPM_AT_ID_LENGTH 16
-//#define TPM_AT_NONCE_LENGTH 16
-//#define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + 2 + TPM_AT_NONCE_LENGTH)
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 
 char device1_password[32] = "Dev1Password";
@@ -43,40 +39,8 @@ static void error(const char *msg)
 	exit(1);
 }
 
-//static int check_slot(char* slot)
-//{
-//	int slot_len = strlen(slot);
-//	if (slot_len == 1) {
-//		slot[1] = slot[0];
-//		slot[0] = '0';
-//		slot[2] = '\0';
-//	} else if (slot_len > 2 || slot_len <= 0) {
-//		fprintf(stderr, "Error: Invalid input %s.\n", slot);
-//		return -1;
-//	}
-//
-//	int i;
-//	for (i = 0; i < strlen(slot); i++) {
-//		if (!isdigit(slot[i])) {
-//			fprintf(stderr, "Error: Invalid charcter %c.\n", slot[i]);
-//			return -1;
-//		}
-//	}
-//	
-//	int tmp = atoi(slot);
-//	if (tmp <0 || tmp > 23) {
-//		fprintf(stderr, "Error: Slot %d out of range.\n", tmp);
-//		return -1;
-//	}
-//
-//	return 0;
-//}
-
 static void gen_random(char* buf, int size)
 {
-	/* arc4random_buf works on bsd, but need lib to run on linux */
-	// arc4random_buf(nonce, NONCE_LENGTH);
-	
 	FILE* rand_handler = fopen("/dev/urandom", "r");
 	if (rand_handler) {
 		size_t ret = fread(buf, 1, size, rand_handler);
@@ -105,7 +69,6 @@ static void gen_random(char* buf, int size)
  * C: 2 bytes length pcr number
  * D: 16 bytes length nonce
  */
-//static void gen_attest_payload(char* msg, char* slot, uint8_t* nonce_buf)
 static void gen_attest_payload(char* msg, uint8_t* nonce_buf)
 {
 	char uuid[TPM_AT_ID_LENGTH];
@@ -116,8 +79,6 @@ static void gen_attest_payload(char* msg, uint8_t* nonce_buf)
 
 	msg[0] = '0';
 	memcpy(msg + 1, uuid, TPM_AT_ID_LENGTH);
-	//memcpy(msg + 1 + TPM_AT_ID_LENGTH, slot, 2);
-	//memcpy(msg + 1 + TPM_AT_ID_LENGTH + 2, nonce, TPM_AT_NONCE_LENGTH);
 	memcpy(msg + 1 + TPM_AT_ID_LENGTH, nonce, TPM_AT_NONCE_LENGTH);
 
 	memcpy(nonce_buf, nonce, TPM_AT_NONCE_LENGTH);
@@ -127,60 +88,32 @@ static const char *extract_pcr_digest(json_object *jobj)
 {
 	enum json_type type;
 	int found = 0;
-	printf("%s [1]\n", __func__);
 
 	json_object_object_foreach(jobj, key, val) {
 		type = json_object_get_type(val);
-		printf("key: %s\n", key);
 		if (!strcmp(key, "pcrDigest"))
 		    found = 1;
-		printf("found = %d\n", found);
 
 		switch (type) {
 		case json_type_string:
-			printf("%s [2]: json_type_string\n", __func__);
-			printf("%s [3]: value: %s\n", __func__, json_object_get_string(val));
 			if (found) {
 				return json_object_get_string(val);
 			}
 			break;
 
-		//case json_type_null:
-		//	//printf("json_type_null\n");
-		//	break;
-
-		//case json_type_boolean:
-		//	//printf("json_type_boolean\n");
-		//	break;
-
-		//case json_type_double:
-		//	//printf("json_type_double\n");
-		//	break;
-
-		//case json_type_int:
-		//	//printf("json_type_int\n");
-		//	break;
-
 		case json_type_object: {
-			printf("%s [4]: json_type_object\n", __func__);
 			const char *ret = extract_pcr_digest(val);
 			if (ret)
 				return ret;
 			break;
 		}
 
-		//case json_type_array:
-		//	//printf("json_type_array\n");
-		//	break;
-
 		default:
-			printf("%s [5]\n", __func__);
 			break;
 		}
 
 		found = 0;
 	}
-	printf("%s [6]\n", __func__);
 
 	return NULL;
 }
@@ -214,7 +147,6 @@ static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 	}
 		
 	fprintf(stdout, "Quote is successfully verified.\n");
-	printf("%s [1]: Quote: %s.\n", __func__, quote_info);
 
 	/* FIXME: verify the quote digest. */
 	json_object *quote_jobj = json_tokener_parse(quote_info);
@@ -257,16 +189,12 @@ static void generate_PCR_digests(void)
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, bluetooth_pcr);
-	printf("%s [1]: bluetooth PCR = ", __func__);
-	print_hash_buf(bluetooth_pcr);
 
 	/* Network PCR */
 	hash_file((char *) "./installer/aligned_network", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, network_pcr);
-	printf("%s [1]: network PCR = ", __func__);
-	print_hash_buf(network_pcr);
 
 	/* App PCR: two hashes are extended to PCR in this case. */
 	hash_file((char *) "./installer/aligned_runtime", file_hash);
@@ -279,65 +207,12 @@ static void generate_PCR_digests(void)
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, app_pcr);
 
-	printf("%s [1]: app PCR = ", __func__);
-	print_hash_buf(app_pcr);
-
 	/* Attestation quote pcr digest: PCR 0 (boot) and 14 (app) */
 	/* FIXME: for now, PCR 0 is just a zero buf since we don't extend it. */
 	buffers[0] = zero_pcr;
 	buffers[1] = app_pcr;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, expected_pcr_digest);
-	printf("%s [1]: expected PCR digest = ", __func__);
-	print_hash_buf(expected_pcr_digest);
 	convert_hash_to_str(expected_pcr_digest, expected_pcr_digest_str);
-	//expected_pcr_digest_str[2 * TPM_EXTEND_HASH_SIZE] = '\0';
- 
-	/* 2 PCRs -- works */
-	//uint8_t hash_buf[SHA256_DIGEST_LENGTH];
-	//uint8_t hash_buf2[SHA256_DIGEST_LENGTH];
-	//uint8_t concat_buf[2 * SHA256_DIGEST_LENGTH];
-	//uint8_t hash_buf3[SHA256_DIGEST_LENGTH];
-	///* Wait until the files are written. */
-	///* FIXME: get rid of the wait */
-	//sleep(5);
-	//hash_file((char *) "bootloader/keyboard", hash_buf);
-	//printf("%s [1]: keyboard file hash = ", __func__);
-	//print_hash_buf(hash_buf);
-	//memset(concat_buf, 0x0, SHA256_DIGEST_LENGTH);
-	//memcpy(concat_buf + SHA256_DIGEST_LENGTH, hash_buf, SHA256_DIGEST_LENGTH);
-	//hash_buffer(concat_buf, 2 * SHA256_DIGEST_LENGTH, hash_buf);
-	//printf("%s [2]: PCR for keyboard = ", __func__);
-	//print_hash_buf(hash_buf);
-
-	///* digest of PCRs */	
-	//SHA256_CTX hash_ctx2;
-	//SHA256_Init(&hash_ctx2);
-	//memset(concat_buf, 0x0, 2 * SHA256_DIGEST_LENGTH);
-	//SHA256_Update(&hash_ctx2, concat_buf, SHA256_DIGEST_LENGTH);
-	//hash_file((char *) "bootloader/keyboard", hash_buf);
-	//SHA256_Update(&hash_ctx2, hash_buf, SHA256_DIGEST_LENGTH);
-	//SHA256_Final(hash_buf3, &hash_ctx2);
-	//printf("%s [3]: PCR for keyboard (2) = ", __func__);
-	//print_hash_buf(hash_buf3);
-
-	//hash_file((char *) "bootloader/serial_out", hash_buf2);
-	//printf("%s [1]: serial_out file hash = ", __func__);
-	//print_hash_buf(hash_buf2);
-	//memset(concat_buf, 0x0, SHA256_DIGEST_LENGTH);
-	//memcpy(concat_buf + SHA256_DIGEST_LENGTH, hash_buf2, SHA256_DIGEST_LENGTH);
-	//hash_buffer(concat_buf, 2 * SHA256_DIGEST_LENGTH, hash_buf2);
-	//printf("%s [2]: PCR for serial_out = ", __func__);
-	//print_hash_buf(hash_buf2);
-
-	///* digest of PCRs */	
-	//SHA256_CTX hash_ctx;
-	//SHA256_Init(&hash_ctx);
-	//SHA256_Update(&hash_ctx, hash_buf, SHA256_DIGEST_LENGTH);
-	//SHA256_Update(&hash_ctx, hash_buf2, SHA256_DIGEST_LENGTH);
-	//SHA256_Final(hash_buf3, &hash_ctx);
-	//printf("%s [3]: digest of PCRs = ", __func__);
-	//print_hash_buf(hash_buf3);
-	///**********/
 }
 
 int main(int argc, char *argv[])
@@ -383,12 +258,9 @@ int main(int argc, char *argv[])
 
 	/* remote attestation */
 	char msg[MSG_LENGTH];
-	//char pcr_slot[3];
 	uint8_t nonce[TPM_AT_NONCE_LENGTH];
 
-	//bzero(pcr_slot, 3);
 	bzero(buffer, 1);
-	//n = read(newsockfd, pcr_slot, 3);
 	n = read(newsockfd, buffer, 1);
 	if (n < 0)
 		error("ERROR reading from socket -- 1");
@@ -396,27 +268,15 @@ int main(int argc, char *argv[])
 	if (buffer[0] != 1)
 		error("ERROR unexpected initial cmd");
 
-	//printf("%s [1]\n", __func__);
-	//int ret = check_slot(pcr_slot);
-	//if (ret) {
-	//	buffer[0] = 0;
-	//	write(newsockfd, buffer, 1);
-	//	error("ERROR invalid PCR slot");
-	//}
-	//printf("%s [2]\n", __func__);
-
 	buffer[0] = 1;
 	n = write(newsockfd, buffer, 1);
 	if (n < 0)
 		error("ERROR writing to socket -- 1");
-	printf("%s [3]\n", __func__);
 
-	//gen_attest_payload(msg, pcr_slot, nonce);
 	gen_attest_payload(msg, nonce);
 	n = write(newsockfd, msg, MSG_LENGTH);
 	if (n < 0)
 		error("ERROR writing to socket -- 2");
-	printf("%s [4]\n", __func__);
 	
 	uint8_t quote_buf[4096];
 	bzero(quote_buf, 4096);
@@ -425,10 +285,8 @@ int main(int argc, char *argv[])
 	uint8_t packet[256];
 	int package_size = 0;
 	do {
-		printf("%s [4.1]\n", __func__);
 		bzero(packet, 256);
 		n = read(newsockfd, packet, 256);
-		printf("%s [4.2]: n = %d\n", __func__, n);
 		if (n < 0)
 			error("ERROR reading from socket -- 2");
 
@@ -436,7 +294,6 @@ int main(int argc, char *argv[])
 		count += 1;
 		package_size += n;
 	} while (n > 0 && count < 4);
-	printf("%s [5]\n", __func__);
 
 	int sig_size = quote_buf[0];
 	uint8_t signature[256];
@@ -447,7 +304,6 @@ int main(int argc, char *argv[])
 	char *quote_info = (char *) malloc(quote_size + 1);
 	bzero(quote_info, quote_size + 1);
 	memcpy(quote_info, quote_buf + 1 + sig_size, quote_size);
-	printf("%s [6]\n", __func__);
 
 	ret = verify_quote(nonce, quote_info, signature, sig_size);
 	if (ret) {
@@ -455,13 +311,11 @@ int main(int argc, char *argv[])
 		write(newsockfd, buffer, 1);
 		error("ERROR quote verification failed");
 	}
-	printf("%s [6.1]\n", __func__);
 
 	buffer[0] = 1;
 	n = write(newsockfd, buffer, 1);
 	if (n < 0)
 		error("ERROR writing to socket -- 3");
-	printf("%s [7]\n", __func__);
 
 	/* Send I/O service PCRs */
 	n = write(newsockfd, bluetooth_pcr, TPM_EXTEND_HASH_SIZE);

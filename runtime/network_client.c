@@ -69,13 +69,10 @@ void ip_send_out(struct pkbuf *pkb)
 
 uint8_t *ip_receive(uint8_t *buf, uint16_t *size)
 {
-	printf("%s [1]: *size = %d\n", __func__, *size);
 	runtime_recv_msg_from_queue_large(buf, Q_NETWORK_DATA_OUT);
-	printf("%s [2]\n", __func__);
 	*size = 0;
 	NETWORK_GET_ZERO_ARGS_DATA
 	*size = data_size;
-	printf("%s [3]: *size = %d\n", __func__, *size);
 
 #ifndef UNTRUSTED_DOMAIN
 	report_queue_usage(Q_NETWORK_DATA_OUT);
@@ -120,19 +117,15 @@ void reset_network_queues_tracker(void)
 
 int yield_network_access(void)
 {
-	printf("%s [1]\n", __func__);
 	if (!has_network_access) {
 		printf("%s: Error: no network access to yield\n", __func__);
 		return ERR_INVALID;
 	}
-	printf("%s [2]\n", __func__);
 
 	has_network_access = false;
 	network_access_count = 0;
-	printf("%s [3]\n", __func__);
 
 	net_stop_receive();
-	printf("%s [4]\n", __func__);
 
 	/* FIXME: we should have a bounded wait here in case the network service
 	 * does not read all messages off the queue.
@@ -140,7 +133,6 @@ int yield_network_access(void)
 	 * about the leaking of the leftover messages.
 	 */
 	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-	printf("%s [5]\n", __func__);
 
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
@@ -148,7 +140,6 @@ int yield_network_access(void)
 #ifndef UNTRUSTED_DOMAIN
 	reset_network_queues_tracker();
 #endif
-	printf("%s [6]\n", __func__);
 	
 	return 0;
 }
@@ -171,7 +162,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 {
 	int ret;
 
-	printf("%s [1]\n", __func__);
 	if (has_network_access) {
 		printf("%s: Error: already has network access\n", __func__);
 		return ERR_INVALID;
@@ -179,7 +169,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 
 	reset_queue_sync(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	reset_queue_sync(Q_NETWORK_DATA_OUT, 0);
-	printf("%s [2]\n", __func__);
 
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_NETWORK_ACCESS, (uint32_t) limit,
 			     (uint32_t) timeout)
@@ -187,7 +176,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
-	printf("%s [3]\n", __func__);
 
 	ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN, limit, timeout);
 	if (!ret) {
@@ -195,7 +183,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 		       __func__);
 		return ERR_FAULT;
 	}
-	printf("%s [4]\n", __func__);
 
 	ret = mailbox_attest_queue_access(Q_NETWORK_DATA_OUT, limit, timeout);
 	if (!ret) {
@@ -205,7 +192,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 		mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 		return ERR_FAULT;
 	}
-	printf("%s [5]\n", __func__);
 
 #ifndef UNTRUSTED_DOMAIN
 	/* Note: we set the limit/timeout values right after attestation and
@@ -269,7 +255,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 #endif
 		return ERR_FAULT;
 	}
-	printf("%s [6]\n", __func__);
 
 #ifndef UNTRUSTED_DOMAIN
 	queue_update_callbacks[Q_NETWORK_DATA_IN] = callback;
@@ -278,7 +263,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 
 	has_network_access = true;
 	network_access_count = limit;
-	printf("%s [8]\n", __func__);
 
 	return 0;
 }

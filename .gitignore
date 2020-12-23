@@ -13,6 +13,7 @@ bluetooth/bluetooth
 applications/socket_client/socket_server
 applications/attest_client/attest_server
 applications/bank_client/bank_server
+applications/health_client/health_server
 arch/umode/mailbox/mailbox
 arch/umode/pmu/pmu
 arch/umode/emulator/log_view

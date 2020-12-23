@@ -12,14 +12,6 @@ void tpm_directly_extend(int slot, uint8_t *hash_buf)
 		exit(TPM_INIT_ERR);
 	}
 
-	// Esys_GetTcti(context, &tcti_context);
-	// rc = Tss2_Tcti_SetLocality(tcti_context, 0);
-	
-	// if (rc == TSS2_TCTI_RC_BAD_REFERENCE) {
-	// 	printf("TSS2_TCTI_RC_BAD_REFERENCE\n");
-	// 	return;
-	// }
-
 	TPML_DIGEST_VALUES digests = {
         .count = 1,
         .digests = {
@@ -32,7 +24,6 @@ void tpm_directly_extend(int slot, uint8_t *hash_buf)
 	};
 
 	convert_hash_to_str(hash_buf, hash_str);
-	//hash_str[2 * TPM_EXTEND_HASH_SIZE] = 0;
 
 	int ret = prepare_extend(hash_str, &digests);
 	if (ret) {

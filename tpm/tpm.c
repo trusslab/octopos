@@ -14,21 +14,6 @@ static void pcr_print(uint8_t slot, TPML_DIGEST *pcrValues)
 		}
 		fprintf(stdout, "\n");
 	}
-
-	///* print digest of pcr val */
-	//fprintf(stdout, "pcr val digest: ");
-	//SHA256_CTX hash_ctx;
-	//SHA256_Init(&hash_ctx);
-	//unsigned char hash[SHA256_DIGEST_LENGTH];
-	////hash_buffer(pcrValues->digests[i].buffer, pcrValues->digests[i].size, hash);
-
-	//for (uint8_t i = 0; i < pcrValues->count; i++) {
-	//	SHA256_Update(&hash_ctx, pcrValues->digests[i].buffer,
-	//		      pcrValues->digests[i].size);
-	//}
-	//SHA256_Final(hash, &hash_ctx);
-
-	//print_hash_buf(hash);
 }
 
 /*
@@ -138,8 +123,9 @@ static void pcr_read_single(int slot)
 	};
 	memcpy(pcrSelectionIn.pcrSelections[0].pcrSelect, selection, 4);
 
-	rc = Esys_PCR_Read(context, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, 
-			&pcrSelectionIn, &pcrUpdateCounter, &pcrSelectionOut, &pcrValues);
+	rc = Esys_PCR_Read(context, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			   &pcrSelectionIn, &pcrUpdateCounter, &pcrSelectionOut,
+			   &pcrValues);
 	if (rc != TSS2_RC_SUCCESS) {
 		fprintf(stderr, "Esys_PCR_Read: %s\n", Tss2_RC_Decode(rc));
 		exit(1);
@@ -192,7 +178,6 @@ static void pcr_read_to_buf(int slot, uint8_t *buf)
 		exit(1);
 	}
 
-	//pcr_print(slot, pcrValues);
 	if ((pcrValues->count != 1) ||
 	    (pcrValues->digests[0].size != TPM_EXTEND_HASH_SIZE)) {
 		fprintf(stderr, "Unexpected vals (count = %d, size = %d)\n",
@@ -215,27 +200,17 @@ static void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id
 	
 	if (op == TPM_OP_EXTEND) {
 		uint8_t hash_buf[TPM_EXTEND_HASH_SIZE];
-		//uint8_t _proc_id;
 
 		/* Note that we assume that two messages are needed to send the hash.
 		* See include/tpm/hash.h
 		*/
 		memcpy(hash_buf, buf + 1, MAILBOX_QUEUE_MSG_SIZE - 1);
-		///* test start */
-		//printf("%s [1]: received hash: \n", __func__);
-		//print_hash_buf(hash_buf);
-
-		//printf("(proc %d) SLOT %d CURRENT VALUE: ", proc_id,
-		//       PROC_PCR_SLOT(proc_id));
-		//pcr_read_single(PROC_PCR_SLOT(proc_id));
-		///* test end */
 		tpm_directly_extend(PROC_PCR_SLOT(proc_id), hash_buf);
 		printf("(proc %d) SLOT %d CHANGED TO: ", proc_id,
 		       PROC_PCR_SLOT(proc_id));
 		pcr_read_single(PROC_PCR_SLOT(proc_id));
 	} else if (op == TPM_OP_ATTEST) {
 		fprintf(stdout, "ATTEST REQUEST\n");
-		//uint8_t nonce[TPM_AT_NONCE_LENGTH];
 		uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
 		uint8_t *signature = NULL;
 		size_t _signature_size = 0;
@@ -267,8 +242,6 @@ static void process_request(FAPI_CONTEXT *context, uint8_t *buf, uint8_t proc_id
 				goto attest_error;
 			}
 		}
-
-		//memcpy(nonce, buf + 2, TPM_AT_NONCE_LENGTH);
 
 		ret = quote_request(context, &buf[2 + num_pcr_slots], &buf[2],
 				    num_pcr_slots, &signature, &_signature_size,

@@ -63,9 +63,6 @@ uint8_t device2_password[32];
 	loop_printf(gapi->write_to_shell(output_buf, MAX_CHARS_PER_MESSAGE),	\
 		    fmt, ##args)
 
-//#define ID_LENGTH 16
-//#define NONCE_LENGTH 16
-//#define MSG_LENGTH (1 + ID_LENGTH + 2 + NONCE_LENGTH)
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 #define MAX_PACK_SIZE 256
 
@@ -108,28 +105,12 @@ int exiting = 0;
 
 static void terminate_network_session(void)
 {
-	printf("%s [1]\n", __func__);
-	/* FIXME: anything else to do here? */
-	//if (gapi->request_network_access(200, 100, queue_update_callback,
-	//				 network_pcr)) {
-	//	/* FIXME: don't print function names in error messages */
-	//	secure_printf("%s: Error: network queue access\n", session_word);
-	//	return -1;
-	//}
-
-	printf("%s [2]\n", __func__);
 	struct socket *tmp;
 	if (sock) {
-		printf("%s [3]\n", __func__);
 		tmp = sock;
 		sock = NULL;
 		gapi->close_socket(tmp);
-		printf("%s [4]\n", __func__);
 	}
-
-	printf("%s [5]\n", __func__);
-	//gapi->yield_network_access();
-	printf("%s [6]\n", __func__);
 }
 
 static void terminate_bluetooth_session(void)
@@ -142,21 +123,17 @@ static void terminate_bluetooth_session(void)
 
 static void *yield_resources(void *data)
 {
-	printf("%s [1]\n", __func__);
 	if (has_bluetooth) {
 		terminate_bluetooth_session();
 		gapi->yield_secure_bluetooth_access();
 	}
 
-	printf("%s [3]\n", __func__);
 	if (has_network) {
 		terminate_network_session();
 		gapi->yield_network_access();
 	}
-	printf("%s [4]\n", __func__);
 			
 	gapi->terminate_app();
-	printf("%s [5]\n", __func__);
 
 	return NULL;
 }
@@ -169,32 +146,21 @@ static void *yield_resources(void *data)
 static void queue_update_callback(uint8_t queue_id, limit_t limit,
 				  timeout_t timeout, uint8_t which_update)
 {
-	printf("%s [1]: queue_id = %d, limit = %d, timeout = %d, which_update "
-	       "= %d\n", __func__, queue_id, limit, timeout, which_update);
 	if ((limit < 5 || timeout < 5) && !exiting) {
 		exiting = 1;
-		printf("%s [2]\n", __func__);
 		
 		if (which_update == LIMIT_UPDATE) {
-			printf("%s [7]\n", __func__);
 			yield_resources(NULL);	
-			printf("%s [8]\n", __func__);
 
 			gapi->terminate_app();
-			printf("%s [9]\n", __func__);
 		} else { /* which_update == TIMEOUT_UPDATE */
-			printf("%s [10]\n", __func__);
 			/* We are in the interrupt context, hence we schedule
 			 * yield_resources() to be executed in a worker_thread
 			 * thread.
 			 */
 			gapi->schedule_func_execution(yield_resources, NULL);	
-			printf("%s [11]\n", __func__);
-			//gapi->terminate_app_thread();
-			printf("%s [12]\n", __func__);
 		}
 	}
-	printf("%s [13]\n", __func__);
 }
 
 static int connect_to_server(void)
@@ -204,7 +170,6 @@ static int connect_to_server(void)
 	memset(&skaddr, 0x0, sizeof(skaddr));
 	type = SOCK_STREAM;	/* default TCP stream */
 	sock = NULL;
-	printf("%s [1]\n", __func__);
 	
 	char addr[256] = "10.0.0.2:12347";	
 	err = _parse_ip_port(addr, &skaddr.dst_addr,
@@ -214,7 +179,6 @@ static int connect_to_server(void)
 		return err;
 	}
 
-	printf("%s [2]\n", __func__);
 	/* init socket */
 	sock = gapi->create_socket(AF_INET, type, 0, &skaddr);
 	if (!sock) {
@@ -222,7 +186,6 @@ static int connect_to_server(void)
 		return -1;
 	}
 
-	printf("%s [3]\n", __func__);
 	if (gapi->request_network_access(200, 100, queue_update_callback, NULL,
 					 measured_network_pcr)) {
 		insecure_printf("%s: Error: network queue access\n", __func__);
@@ -231,40 +194,25 @@ static int connect_to_server(void)
 
 	has_network = 1;
 
-	printf("%s [4]\n", __func__);
 	if (gapi->connect_socket(sock, &skaddr) < 0) {
 		insecure_printf("%s: Error: _connect\n", __func__);
 		return -1;
 	}
-
-	printf("%s [5]\n", __func__);
-	//gapi->yield_network_access();
-	printf("%s [6]\n", __func__);
 
 	return 0;
 }
 
 static int receive_bluetooth_devices_passwords(void)
 {
-	//if (gapi->request_network_access(200, 100, queue_update_callback,
-	//				 network_pcr)) {
-	//	insecure_printf("%s: Error: network queue access\n", __func__);
-	//	return -1;
-	//}
-	printf("%s [2]\n", __func__);
 	if (gapi->read_from_socket(sock, device1_password, 32) < 0) {
 		insecure_printf("Error: couldn't read from socket (passwords:1)\n");
 		return -1;
 	}
 
-	printf("%s [4]\n", __func__);
 	if (gapi->read_from_socket(sock, device2_password, 32) < 0) {
 		insecure_printf("Error: couldn't read from socket (passwords:2)\n");
 		return -1;
 	}
-	printf("%s [5]\n", __func__);
-
-	//gapi->yield_network_access();
 
 	return 0;
 }
@@ -275,7 +223,6 @@ static void send_large_packet(uint8_t* data, size_t size)
 	for (int pack = 0; pack < packages; pack++) {
 		int pack_size = ((pack == packages - 1) ?
 			(size - pack * MAX_PACK_SIZE) : MAX_PACK_SIZE);
-		printf("%s [1]: pack_size = %d\n", __func__, pack_size);
 
 		if (gapi->write_to_socket(sock, data + pack * MAX_PACK_SIZE,
 					  pack_size) < 0) {
@@ -290,7 +237,6 @@ static int perform_remote_attestation(void)
 {
 	char buf[MSG_LENGTH];
 	char uuid[TPM_AT_ID_LENGTH];
-	//char slot[3] = { 0 };
 	char nonce[TPM_AT_NONCE_LENGTH];
 	uint8_t *signature;
 	uint8_t *quote;
@@ -300,38 +246,21 @@ static int perform_remote_attestation(void)
 	char init_cmd = 1;
 	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
 	uint8_t pcr_slots[] = {0, (uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
-	//uint8_t num_pcr_slots = 2;
-	//uint8_t pcr_slots[] = {9, 10};
 	uint8_t num_pcr_slots = 2;
 	int ret;
 
-	//if (gapi->request_network_access(200, 100, queue_update_callback, NULL)) {
-	//	insecure_printf("Error: network queue access (remote "
-	//			"attestation)\n");
-	//	return -1;
-	//}
-
-	//if (gapi->write_to_socket(sock, pcr_slot, 3) < 0) {
 	if (gapi->write_to_socket(sock, &init_cmd, 1) < 0) {
 		insecure_printf("Error: couldn't write to socket (remote "
 				"attestation)\n");
 		return -1;
 	}
 
-	printf("%s [1]\n", __func__);
 	if (gapi->read_from_socket(sock, &success, 1) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:1)\n");
 		return -1;
 	}
 
-	//printf("%s [2]\n", __func__);
-	//if (success != 1) {
-	//	insecure_printf("Error: invalid PCR slot\n");
-	//	return -1;
-	//}
-
-	printf("%s [3]\n", __func__);
 	if (gapi->read_from_socket(sock, buf, MSG_LENGTH) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:2)\n");
@@ -345,12 +274,8 @@ static int perform_remote_attestation(void)
 	}
 
 	memcpy(uuid, buf + 1, TPM_AT_ID_LENGTH);
-	//memcpy(slot, buf + 1 + ID_LENGTH, 2);
-	//memcpy(nonce, buf + 1 + TPM_AT_ID_LENGTH + 2, TPM_AT_NONCE_LENGTH);
 	memcpy(nonce, buf + 1 + TPM_AT_ID_LENGTH, TPM_AT_NONCE_LENGTH);
 
-	printf("%s [4]\n", __func__);
-	//int _pcr_slot = atoi(slot);
 	if (gapi->request_tpm_attestation_report(pcr_slots, num_pcr_slots, nonce,
 						 &signature, &sig_size, &quote,
 						 &quote_size)) {
@@ -359,7 +284,6 @@ static int perform_remote_attestation(void)
 		return -1;
 	}
 
-	printf("%s [5]\n", __func__);
 	packet = (uint8_t *) malloc(sig_size + quote_size + 1);
 	if (!packet) { 
 		insecure_printf("Error: %s: couldn't allocate memory for "
@@ -372,8 +296,6 @@ static int perform_remote_attestation(void)
 
 	memcpy(packet + 1 + sig_size, quote, quote_size);
 
-	printf("%s [6]: sig_size = %d, quote_size = %d\n", __func__, sig_size,
-	       quote_size);
 	send_large_packet(packet, 1 + sig_size + quote_size);
 	
 	free(packet);
@@ -404,15 +326,12 @@ static int perform_remote_attestation(void)
 		return -1;
 	}
 
-	//gapi->yield_network_access();
 	/* check the network PCR val */
 	ret = memcmp(measured_network_pcr, network_pcr, TPM_EXTEND_HASH_SIZE);
 	if (ret) {
 		printf("Error: %s: network PCR not verified.\n", __func__);
 		return -1;
 	}
-
-	printf("%s [7]\n", __func__);
 
 	return 0;
 }
@@ -426,9 +345,7 @@ static int establish_secure_channel(void)
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
-	printf("%s [1]\n", __func__);
 	/*
-	 * Login.
 	 * Step 1: Connect to the server and perform remote attestation of
 	 *	   the app itself, bluetooth, and network.
 	 *	   Upon successful attestation, establish a secure channel.
@@ -457,7 +374,6 @@ void app_main(struct runtime_api *api)
 		insecure_printf("Error: couldn't connect to the server.\n");
 		return;
 	}
-	printf("%s [2]\n", __func__);
 
 	ret = perform_remote_attestation();
 	if (ret) {
@@ -482,7 +398,6 @@ void app_main(struct runtime_api *api)
 				"bluetooth devices.\n");
 		return;
 	}
-	printf("%s [3]\n", __func__);
 
 	/* Step 3: authenticate & send/receive messages */
 	/* FIXME: for now, we just communciate with one bluetooth device */
@@ -499,7 +414,6 @@ void app_main(struct runtime_api *api)
 	insecure_printf("Got access to bluetooth.\n");
 
 	/* Authenticate */
-	printf("%s [4]\n", __func__);
 	gapi->bluetooth_send_data(device1_password, BTPACKET_FIXED_DATA_SIZE);
 
 	/* send/receive msgs */
@@ -507,14 +421,8 @@ void app_main(struct runtime_api *api)
 
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
 	msg[0] = 1;
-	printf("%s [5]\n", __func__);
 	gapi->bluetooth_send_data(msg, BTPACKET_FIXED_DATA_SIZE);
-	printf("%s [6]\n", __func__);
 	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
-	printf("%s [7]\n", __func__);
-
-	printf("%s [8]: Response from bluetooth device: %s\n",
-	       __func__, (char *) msg);
 
 	/* Step 4 */
 	terminate_bluetooth_session();
@@ -525,7 +433,6 @@ void app_main(struct runtime_api *api)
 
 	has_bluetooth = 0;
 	gapi->yield_secure_bluetooth_access();
-	printf("%s [5]\n", __func__);
 }
 
 #endif

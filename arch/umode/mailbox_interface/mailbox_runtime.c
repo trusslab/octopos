@@ -120,16 +120,12 @@ static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int que
 	pthread_spin_unlock(&mailbox_lock);
 }
 
-//int counter1 = 0;
-//int counter2 = 0;
-
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	uint8_t opcode[2];
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
-	//if (queue_id == Q_SERIAL_OUT) printf("%s [1]: Q_SERIAL_OUT: %d\n", __func__, ++counter1);
 	sem_wait(&interrupts[queue_id]);
 	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 2);
@@ -185,14 +181,11 @@ int schedule_func_execution_arch(void *(*func)(void *), void *data)
 {
 	pthread_t worker_thread;
 
-	printf("%s [1]\n", __func__);
 	int ret = pthread_create(&worker_thread, NULL, (pfunc_t) func, data);
-	printf("%s [2]\n", __func__);
 	if (ret) {
 		printf("Error: couldn't launch worker thread\n");
 		return ret;
 	}
-	printf("%s [3]\n", __func__);
 
 	return 0;
 }
@@ -207,11 +200,8 @@ typedef void (*app_main_proc)(struct runtime_api *);
 void load_application_arch(char *path, struct runtime_api *api)
 {
 	void *app;
-	//char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "./applications/bin/";
 	app_main_proc app_main;
 
-	//strcat(path, msg);
-	//strcat(path, ".so");
 	printf("opening %s\n", path);
 
 	app = dlopen(path, RTLD_LAZY);
@@ -253,9 +243,7 @@ void runtime_core(void)
 
 	/* interrupt handling loop */
 	while (keep_polling) {
-		//printf("%s [1]\n", __func__);
 		read(fd_intr, &interrupt, 1);
-		//printf("%s [2]: interrupt = %d\n", __func__, interrupt);
 		if (interrupt == 0) {
 			timer_tick();
 		} else if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
@@ -288,7 +276,6 @@ void runtime_core(void)
 				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
 				sem_post(&load_app_sem);
 			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
-				//TODO
 				pthread_cancel(app_thread);
 				pthread_join(app_thread, NULL);
 				int ret = pthread_create(&ctx_thread, NULL, store_context, NULL);
@@ -300,7 +287,6 @@ void runtime_core(void)
 				exit(-1);
 			}
 		} else {
-			//if (interrupt == Q_SERIAL_OUT) printf("%s [1]: Q_SERIAL_OUT: %d\n", __func__, ++counter2);
 			sem_post(&interrupts[interrupt]);
 		}
 	}

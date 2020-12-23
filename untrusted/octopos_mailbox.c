@@ -47,7 +47,6 @@ int srq_tail;
 int srq_counter;
 struct semaphore srq_sem;
 
-//struct semaphore mailbox_lock;
 spinlock_t mailbox_lock;
 
 limit_t queue_limits[NUM_QUEUES + 1];

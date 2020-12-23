@@ -459,10 +459,6 @@ int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 		return ret;
 	}
 
-	printf("%s [1]: proc_id = %d\n", __func__, proc_id);
-	printf("%s [2]: pcr_val: ", __func__); print_hash_buf(pcr_val); printf("\n");
-	printf("%s [3]: expected_pcr: ", __func__); print_hash_buf(expected_pcr); printf("\n");
-
 	ret = memcmp(pcr_val, expected_pcr, TPM_EXTEND_HASH_SIZE);
 	if (ret) {
 		printf("Error: %s: pcr val doesn't match the expected val\n",
@@ -480,7 +476,6 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 {
 	int ret;
 
-	printf("%s [1]\n", __func__);
 	if (has_secure_keyboard_access) {
 		printf("Error: %s: already has access to secure keyboard.\n",
 		       __func__);
@@ -491,14 +486,11 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_KEYBOARD, (uint32_t) limit,
 			     (uint32_t) timeout)
-	printf("%s [2]\n", __func__);
 
 	issue_syscall(buf);
-	printf("%s [2.1]\n", __func__);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
-	printf("%s [3]\n", __func__);
 
 	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
 	if (!ret) {
@@ -530,8 +522,6 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 		}
 	}
 
-	printf("%s [4]\n", __func__);
-
 	queue_update_callbacks[Q_KEYBOARD] = callback;
 
 	has_secure_keyboard_access = true;
@@ -541,22 +531,17 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 
 static int yield_secure_keyboard(void)
 {
-	printf("%s [1]\n", __func__);
 	if (!has_secure_keyboard_access) {
 		printf("Error: %s: does not have access to secure keyboard.\n",
 		       __func__);
 		return ERR_INVALID;
 	}
-	printf("%s [2]\n", __func__);
 
 	has_secure_keyboard_access = false;
-	printf("%s [3]\n", __func__);
 
 	mailbox_yield_to_previous_owner(Q_KEYBOARD);
-	printf("%s [4]\n", __func__);
 
 	reset_keyboard_queue_trackers();
-	printf("%s [5]\n", __func__);
 
 	return 0;
 }
@@ -1101,13 +1086,10 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 
 static int verify_bluetooth_service_state(uint8_t *device_name)
 {
-	printf("%s [1]\n", __func__);
 	BLUETOOTH_SET_ZERO_ARGS(IO_OP_QUERY_STATE)
-	printf("%s [2]\n", __func__);
 
 	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
 	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
-	printf("%s [3]\n", __func__);
 
 	BLUETOOTH_GET_ONE_RET_DATA
 	if (ret0) {
@@ -1115,7 +1097,6 @@ static int verify_bluetooth_service_state(uint8_t *device_name)
 		       "(%d)\n", __func__, ret0);
 		return (int) ret0;
 	}
-	printf("%s [4]\n", __func__);
 
 	/* data[0] is bound. Must be 1.
 	 * data[1] is used. Must be 0.
@@ -1127,7 +1108,6 @@ static int verify_bluetooth_service_state(uint8_t *device_name)
 		       __func__);
 		return ERR_UNEXPECTED;
 	}
-	printf("%s [5]\n", __func__);
 
 	return 0;
 }
@@ -1296,28 +1276,22 @@ int bluetooth_send_data(uint8_t *data, uint32_t len)
 {
 	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	struct btpacket *btp = (struct btpacket *) buf_large;
-	printf("%s [1]\n", __func__);
 
 	if (len > BTPACKET_FIXED_DATA_SIZE) {
 		printf("Error: %s: can't send more than %d bytes\n", __func__,
 		       BTPACKET_FIXED_DATA_SIZE);
 		return ERR_INVALID;
 	}
-	printf("%s [2]\n", __func__);
 
 	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 	memcpy(btp->data, data, len);
 
 	/* the arg is the number of packets */
 	BLUETOOTH_SET_ONE_ARG(IO_OP_SEND_DATA, 1)
-	printf("%s [3]\n", __func__);
 
 	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
-	printf("%s [4]\n", __func__);
 	runtime_send_msg_on_queue_large(buf_large, Q_BLUETOOTH_DATA_IN);
-	printf("%s [5]\n", __func__);
 	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
-	printf("%s [6]\n", __func__);
 
 	BLUETOOTH_GET_ONE_RET
 	if (ret0) {
@@ -1325,7 +1299,6 @@ int bluetooth_send_data(uint8_t *data, uint32_t len)
 		       "(%d)\n", __func__, ret0);
 		return (int) ret0;
 	}
-	printf("%s [7]\n", __func__);
 
 	return 0;
 }
@@ -1334,20 +1307,16 @@ int bluetooth_recv_data(uint8_t *data, uint32_t len)
 {
 	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	struct btpacket *btp = (struct btpacket *) buf_large;
-	printf("%s [1]\n", __func__);
 
 	if (len > BTPACKET_FIXED_DATA_SIZE) {
 		printf("Error: %s: can't receive more than %d bytes\n",
 		       __func__, BTPACKET_FIXED_DATA_SIZE);
 		return ERR_INVALID;
 	}
-	printf("%s [2]\n", __func__);
 
 	runtime_recv_msg_from_queue_large(buf_large, Q_BLUETOOTH_DATA_OUT);
-	printf("%s [3]\n", __func__);
 
 	memcpy(data, btp->data, len);
-	printf("%s [4]\n", __func__);
 
 	return 0;
 }
@@ -1540,7 +1509,6 @@ int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 		return ERR_FAULT;
 	}
 
-	//print_hash_buf(&buf[1]);
 	memcpy(pcr_val, &buf[1], TPM_EXTEND_HASH_SIZE);
 
 	return 0;

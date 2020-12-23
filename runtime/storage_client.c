@@ -283,9 +283,10 @@ void reset_storage_queues_trackers(void)
 static void yield_secure_storage_queues_access(void)
 {
 #ifdef ARCH_SEC_HW
-// FIXME: remove once we have nested interrupt. Context switch happens 
-// in interrupt context, and subsequent write/read intr will not be 
-// handled.
+/* FIXME: remove once we have nested interrupt. Context switch happens 
+ * in interrupt context, and subsequent write/read intr will not be 
+ * handled.
+ */
 if (!async_syscall_mode) {
 #endif
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
