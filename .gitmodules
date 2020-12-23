@@ -8,4 +8,6 @@
 [submodule "external/tpm2-tss"]
 	path = external/tpm2-tss
 	url = https://github.com/tpm2-software/tpm2-tss
-
+[submodule "external/ibmtpm"]
+	path = external/ibmtpm
+	url = https://github.com/trusslab/octopos_ibmtpm.git

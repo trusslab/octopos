@@ -176,7 +176,7 @@ static int start_tpm_server_proc(void)
 	int ret;
 
 	char *const args[] = {(char *) "tpm_server", NULL};
-	char path[] = "./external/ibmtpm1637/tpm_server";
+	char path[] = "./external/ibmtpm/tpm_server";
 	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
 	return ret;
