@@ -4,7 +4,8 @@
 	branch = octopos_master
 [submodule "external/tpm2-abrmd"]
 	path = external/tpm2-abrmd
-	url = https://github.com/tpm2-software/tpm2-abrmd
+	url = https://github.com/trusslab/octopos_tpm2_abrmd
+	branch = set_locality
 [submodule "external/tpm2-tss"]
 	path = external/tpm2-tss
 	url = https://github.com/tpm2-software/tpm2-tss
