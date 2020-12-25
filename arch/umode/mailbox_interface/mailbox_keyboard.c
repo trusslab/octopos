@@ -12,7 +12,7 @@
 #include <arch/mailbox.h>
 
 int fd_out, fd_intr;
-sem_t interrupt_keyboard, interrupt_tpm;
+sem_t interrupt_keyboard;
 pthread_t mailbox_thread;
 
 static void *handle_mailbox_interrupts(void *data)
@@ -62,7 +62,6 @@ int init_keyboard(void)
 	fd_intr = open(FIFO_KEYBOARD_INTR, O_RDONLY);
 
 	sem_init(&interrupt_keyboard, 0, MAILBOX_QUEUE_SIZE);
-	sem_init(&interrupt_tpm, 0, 0);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {

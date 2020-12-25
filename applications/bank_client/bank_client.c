@@ -16,9 +16,9 @@
 #include <octopos/mailbox.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
-#include <octopos/tpm.h>
 #include <network/sock.h>
 #include <network/socket.h>
+#include <tpm/tpm.h>
 #include <tpm/hash.h>
 
 /* Must be smaller than each message size minus 1.
@@ -292,11 +292,11 @@ static int perform_remote_attestation(void)
 	uint8_t *signature;
 	uint8_t *quote;
 	uint8_t *packet;
-	uint32_t sig_size, quote_size;
+	size_t sig_size, quote_size;
 	char success = 0;
 	char init_cmd = 1;
 	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
-	uint8_t pcr_slots[] = {0, (uint8_t) PROC_PCR_SLOT(runtime_proc_id)};
+	uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
 	uint8_t num_pcr_slots = 2;
 	int ret;
 

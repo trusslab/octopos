@@ -12,7 +12,7 @@
 #include <arch/mailbox.h>
 
 int fd_out, fd_in, fd_intr;
-sem_t interrupt_serial_out, interrupt_tpm;
+sem_t interrupt_serial_out;
 pthread_t mailbox_thread;
 
 static void *handle_mailbox_interrupts(void *data)
@@ -59,7 +59,6 @@ int init_serial_out(void)
 	fd_intr = open(FIFO_SERIAL_OUT_INTR, O_RDONLY);
 	
 	sem_init(&interrupt_serial_out, 0, 0);
-	sem_init(&interrupt_tpm, 0, 0);
 
 	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
 	if (ret) {

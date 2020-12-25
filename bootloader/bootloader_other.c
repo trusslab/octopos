@@ -13,9 +13,9 @@
 #include <sys/stat.h>
 #include <octopos/storage.h>
 #include <octopos/mailbox.h>
-#include <octopos/tpm.h>
 #include <os/file_system.h>
 #include <os/storage.h>
+#include <tpm/tpm.h>
 #include <tpm/hash.h>
 #include <arch/mailbox.h>
 
@@ -28,6 +28,7 @@ sem_t availables[NUM_QUEUES + 1];
 
 int keyboard = 0, serial_out = 0, network = 0, bluetooth = 0, runtime1 = 0,
     runtime2 = 0, untrusted = 0;
+uint8_t processor = 0;
 
 static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
@@ -60,29 +61,16 @@ static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
 	int spurious = 0;
-	int num_tpm_in = 0;
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
 
-		/* FIXME: check the TPM interrupt logic */
 		if (interrupt == 0) {
 			/* ignore the timer interrupt */
 		} else if (interrupt == Q_STORAGE_DATA_OUT) {
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
 		} else if ((interrupt - NUM_QUEUES) == Q_STORAGE_DATA_OUT) {
 			sem_post(&availables[Q_STORAGE_DATA_OUT]);
-		} else if (interrupt == Q_TPM_IN) {
-			sem_post(&interrupts[Q_TPM_IN]);
-			/* Block interrupts until the program is loaded.
-			 * Otherwise, we might receive some interrupts not
-			 * intended for the bootloader.
-			 */
-			num_tpm_in++;
-			if (num_tpm_in == TPM_EXTEND_HASH_NUM_MAILBOX_MSGS) 
-				return NULL;
-		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
-			sem_post(&availables[Q_TPM_IN]);
 
 		/* When the OS resets a runtime (after it's done), it is possible
 		 * for the bootloader (when trying to reload the runtime) to receive
@@ -103,25 +91,10 @@ static void *handle_mailbox_interrupts(void *data)
 	}
 }
 
-static void send_message_to_tpm(uint8_t* buf)
-{
-	uint8_t opcode[2];
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_TPM_IN;
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-}
-
 int init_mailbox(void)
 {
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
-	/* set the initial value of this one to 0 so that we can use it
-	 * to wait for the TPM to read the message.
-	 */
-	sem_init(&interrupts[Q_TPM_IN], 0, 0);
 	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 0);
-	sem_init(&availables[Q_TPM_IN], 0, 0);
 
 	/* FIXME */
 	if (keyboard) {
@@ -209,12 +182,16 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	/* FIXME */
 	if (!strcmp(filename, "keyboard")) {
 		keyboard = 1;
+		processor = P_KEYBOARD;
 	} else if (!strcmp(filename, "serial_out")) {
 		serial_out = 1;
+		processor = P_SERIAL_OUT;
 	} else if (!strcmp(filename, "network")) {
 		network = 1;
+		processor = P_NETWORK;
 	} else if (!strcmp(filename, "bluetooth")) {
 		bluetooth = 1;
+		processor = P_BLUETOOTH;
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {
 			printf("Error: %s: invalid number of args for runtime\n",
@@ -223,8 +200,10 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		}
 		if (!strcmp(argv[0], "1")) {
 			runtime1 = 1;
+			processor = P_RUNTIME1;
 		} else if (!strcmp(argv[0], "2")) {
 			runtime2 = 1;
+			processor = P_RUNTIME2;
 		} else {
 			printf("Error: %s: invalid runtime ID (%s)\n", __func__,
 			       argv[0]);
@@ -232,6 +211,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		}
 	} else if (!strcmp(filename, "linux")) {
 		untrusted = 1;
+		processor = P_UNTRUSTED;
 	} else {
 		printf("Error: %s: unknown binary\n", __func__);
 		exit(-1);
@@ -302,27 +282,7 @@ repeat:
 
 void send_measurement_to_tpm(char *path)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
-	int i;
-
-	if (untrusted)
-		return;
-
-	sem_wait(&availables[Q_TPM_IN]);
-
-	hash_file(path, hash_buf);
-	buf[0] = TPM_OP_EXTEND;
-
-	/* Note that we assume that one message is needed to send the hash.
-	 * See include/tpm/hash.h
-	 */
-	memcpy(buf + 1, hash_buf, TPM_EXTEND_HASH_SIZE);
-	send_message_to_tpm(buf);
-
-	/* Wait for TPM to read the message(s). */
-	for (i = 0; i < TPM_EXTEND_HASH_NUM_MAILBOX_MSGS; i++)
-		sem_wait(&interrupts[Q_TPM_IN]);
+	tpm_measure_service(path, processor);
 
 	close_mailbox();
 }

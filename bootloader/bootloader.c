@@ -7,6 +7,7 @@
 #include <dlfcn.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <semaphore.h>
 #include <octopos/mailbox.h>
@@ -41,8 +42,16 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	sem_t *sem;
 	char *name = argv[1];
 	char path[128];
+	
+	sem = sem_open("/tpm_sem", O_CREAT, 0644, 1);
+	if (sem == SEM_FAILED) {
+		printf("Error: couldn't open tpm semaphore.\n");
+		exit(-1);
+	}
+
 	memset(path, 0x0, 128);
 	/* FIXME: use a different path. */
 	strcpy(path, "./bootloader/");
@@ -57,8 +66,11 @@ int main(int argc, char *argv[])
 		
 	/* Add exec permission for the copied file */
 	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
-
+	
+	sem_wait(sem);
 	send_measurement_to_tpm(path);
+	sem_post(sem);
+	sem_close(sem);
 	
 	/* FIXME */
 	if (!strcmp(name, "runtime")) {
