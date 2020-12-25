@@ -9,7 +9,6 @@
 #include <octopos/io.h>
 #include <octopos/bluetooth.h>
 #include <octopos/error.h>
-#include <tpm/tpm.h>
 
 uint8_t bound = 0;
 uint8_t used = 0;

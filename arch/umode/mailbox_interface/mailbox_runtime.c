@@ -19,7 +19,6 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <tpm/tpm.h>
-#include <tpm/hash.h>
 #include <arch/mailbox.h>
 
 /* FIXME: also repeated in runtime.c */
@@ -58,7 +57,6 @@ bool has_ctx_thread = false;
 int write_syscall_response(uint8_t *buf);
 void *store_context(void *data);
 void *run_app(void *data);
-int send_app_measurement_to_tpm(uint8_t *hash_buf);
 void timer_tick(void);
 
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
@@ -216,10 +214,7 @@ void load_application_arch(char *path, struct runtime_api *api)
 		return;
 	}
 
-	uint8_t hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
-	hash_file(path, hash_buf);
-
-	send_app_measurement_to_tpm(hash_buf);
+	tpm_measure_service(path, p_runtime);
 
 	(*app_main)(api);
 }
@@ -229,11 +224,12 @@ void load_application_arch(char *path, struct runtime_api *api)
  */
 void terminate_app_thread_arch(void)
 {
-	if (pthread_self() == app_thread)
+	if (pthread_self() == app_thread) {
 		pthread_exit(NULL);
-	else
+	} else {
 		pthread_cancel(app_thread);
 		pthread_join(app_thread, NULL);
+	}
 }
 
 void runtime_core(void)

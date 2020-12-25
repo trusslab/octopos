@@ -102,11 +102,6 @@ static void untrusted_send_interrupt(uint8_t queue_id)
 	send_interrupt(&processors[P_UNTRUSTED], queue_id);
 }
 
-static void tpm_send_interrupt(uint8_t queue_id)
-{
-	send_interrupt(&processors[P_TPM], queue_id);
-}
-
 static void initialize_processors(void)
 {
 	/* initialize connections to the processors */
@@ -137,9 +132,6 @@ static void initialize_processors(void)
 	mkfifo(FIFO_UNTRUSTED_OUT, 0666);
 	mkfifo(FIFO_UNTRUSTED_IN, 0666);
 	mkfifo(FIFO_UNTRUSTED_INTR, 0666);
-	mkfifo(FIFO_TPM_OUT, 0666);
-	mkfifo(FIFO_TPM_IN, 0666);
-	mkfifo(FIFO_TPM_INTR, 0666);
 
 	/* initialize processor objects */
 	/* OS processor */
@@ -204,13 +196,6 @@ static void initialize_processors(void)
 	processors[P_UNTRUSTED].out_handle = open(FIFO_UNTRUSTED_OUT, O_RDWR);
 	processors[P_UNTRUSTED].in_handle = open(FIFO_UNTRUSTED_IN, O_RDWR);
 	processors[P_UNTRUSTED].intr_handle = open(FIFO_UNTRUSTED_INTR, O_RDWR);
-
-	/* tpm processor */
-	processors[P_TPM].processor_id = P_TPM;
-	processors[P_TPM].send_interrupt = tpm_send_interrupt;
-	processors[P_TPM].out_handle = open(FIFO_TPM_OUT, O_RDWR);
-	processors[P_TPM].in_handle = open(FIFO_TPM_IN, O_RDWR);
-	processors[P_TPM].intr_handle = open(FIFO_TPM_INTR, O_RDWR);
 }
 
 static void close_processors(void)
@@ -242,9 +227,6 @@ static void close_processors(void)
 	close(processors[P_UNTRUSTED].out_handle);
 	close(processors[P_UNTRUSTED].in_handle);
 	close(processors[P_UNTRUSTED].intr_handle);
-	close(processors[P_TPM].out_handle);
-	close(processors[P_TPM].in_handle);
-	close(processors[P_TPM].intr_handle);
 
 	remove(FIFO_OS_OUT);
 	remove(FIFO_OS_IN);
@@ -270,9 +252,6 @@ static void close_processors(void)
 	remove(FIFO_UNTRUSTED_OUT);
 	remove(FIFO_UNTRUSTED_IN);
 	remove(FIFO_UNTRUSTED_INTR);
-	remove(FIFO_TPM_OUT);
-	remove(FIFO_TPM_IN);
-	remove(FIFO_TPM_INTR);
 }
 
 static int write_queue(struct queue *queue, int out_handle)
@@ -740,46 +719,6 @@ static void initialize_queues(void)
 	queues[Q_UNTRUSTED].messages =
 		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
 					  MAILBOX_QUEUE_MSG_SIZE);
-
-	/* TPM queue */
-	queues[Q_TPM_IN].queue_id = Q_TPM_IN;
-	queues[Q_TPM_IN].queue_type = QUEUE_TYPE_FIXED_READER;
-	queues[Q_TPM_IN].fixed_proc = P_TPM;
-	queues[Q_TPM_IN].OWNER = P_OS;
-	/* This queue is connected to most other procs.
-	 * This is needed in the booting process, where
-	 * each proc needs to send its measurement to TPM.
-	 */
-	queues[Q_TPM_IN].connections[P_OS] = 1;
-	queues[Q_TPM_IN].connections[P_RUNTIME1] = 1;
-	queues[Q_TPM_IN].connections[P_RUNTIME2] = 1;
-	queues[Q_TPM_IN].connections[P_KEYBOARD] = 1;
-	queues[Q_TPM_IN].connections[P_SERIAL_OUT] = 1;
-	queues[Q_TPM_IN].connections[P_STORAGE] = 1;
-	queues[Q_TPM_IN].connections[P_NETWORK] = 1;
-	queues[Q_TPM_IN].connections[P_BLUETOOTH] = 1;
-	queues[Q_TPM_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
-	queues[Q_TPM_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
-	queues[Q_TPM_IN].queue_size = MAILBOX_QUEUE_SIZE;
-	queues[Q_TPM_IN].msg_size = MAILBOX_QUEUE_MSG_SIZE;
-	queues[Q_TPM_IN].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
-					  MAILBOX_QUEUE_MSG_SIZE);
-
-	queues[Q_TPM_OUT].queue_id = Q_TPM_OUT;
-	queues[Q_TPM_OUT].queue_type = QUEUE_TYPE_FIXED_WRITER;
-	queues[Q_TPM_OUT].fixed_proc = P_TPM;
-	queues[Q_TPM_OUT].OWNER = P_OS;
-	queues[Q_TPM_OUT].connections[P_OS] = 1;
-	queues[Q_TPM_OUT].connections[P_RUNTIME1] = 1;
-	queues[Q_TPM_OUT].connections[P_RUNTIME2] = 1;
-	queues[Q_TPM_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
-	queues[Q_TPM_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
-	queues[Q_TPM_OUT].queue_size = MAILBOX_QUEUE_SIZE;
-	queues[Q_TPM_OUT].msg_size = MAILBOX_QUEUE_MSG_SIZE;
-	queues[Q_TPM_OUT].messages =
-		allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
-					  MAILBOX_QUEUE_MSG_SIZE);
 }
 
 static bool proc_has_queue_read_access(uint8_t queue_id, uint8_t proc_id)
@@ -1011,10 +950,8 @@ static mailbox_state_reg_t attest_queue_access(uint8_t queue_id,
 	}
 
 	if (requester != queues[queue_id].OWNER &&
-	    requester != queues[queue_id].fixed_proc &&
-	    /* TPM can read the state register of any of the queues. */
-	    requester != P_TPM) { 
-		printf("Error: %s: Only fixed_proc, owner, and TPM proc can "
+	    requester != queues[queue_id].fixed_proc) { 
+		printf("Error: %s: Only fixed_proc and owner can "
 		       "check the mailbox state (%d, %d, %d).\n", __func__,
 		       queue_id, requester, queues[queue_id].OWNER);
 		return MAILBOX_STATE_REG_INVALID;
@@ -1194,8 +1131,6 @@ int main(int argc, char **argv)
 		nfds = processors[P_RUNTIME2].out_handle;
 	if (processors[P_UNTRUSTED].out_handle > nfds)
 		nfds = processors[P_UNTRUSTED].out_handle;
-	if (processors[P_TPM].out_handle > nfds)
-		nfds = processors[P_TPM].out_handle;
 	if (fd_pmu_to_mailbox > nfds)
 		nfds = fd_pmu_to_mailbox;
 
@@ -1215,7 +1150,6 @@ int main(int argc, char **argv)
 		FD_SET(processors[P_RUNTIME1].out_handle, &listen_fds);
 		FD_SET(processors[P_RUNTIME2].out_handle, &listen_fds);
 		FD_SET(processors[P_UNTRUSTED].out_handle, &listen_fds);
-		FD_SET(processors[P_TPM].out_handle, &listen_fds);
 		FD_SET(fd_pmu_to_mailbox, &listen_fds);
 
 		if (select(nfds + 1, &listen_fds, NULL, NULL, NULL) < 0) {
@@ -1249,9 +1183,6 @@ int main(int argc, char **argv)
 
 		if (FD_ISSET(processors[P_UNTRUSTED].out_handle, &listen_fds))
 			handle_proc_request(P_UNTRUSTED);
-			
-		if (FD_ISSET(processors[P_TPM].out_handle, &listen_fds))
-			handle_proc_request(P_TPM);
 			
 		if (FD_ISSET(fd_pmu_to_mailbox, &listen_fds)) {
 			uint8_t pmu_mailbox_buf[PMU_MAILBOX_BUF_SIZE];

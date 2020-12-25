@@ -10,40 +10,18 @@
 #include <semaphore.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
-#include <octopos/tpm.h>
 #include <os/file_system.h>
 #include <os/storage.h>
+#include <tpm/tpm.h>
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 
 extern int fd_out;
 extern sem_t interrupts[];
 
-/* FIXME: copied from bootloader_other.c */
-/* FIXME: move to mailbox_os.c or some shared util file*/
-static void send_message_to_tpm(uint8_t* buf)
-{
-	uint8_t opcode[2];
-
-	sem_wait(&interrupts[Q_TPM_IN]);
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_TPM_IN;
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-}
-
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	init_os_mailbox();
-	
-	/* delegate TPM mailbox to storage */
-	mark_queue_unavailable(Q_TPM_IN);
-	mailbox_delegate_queue_access(Q_TPM_IN, P_STORAGE,
-				      TPM_EXTEND_HASH_NUM_MAILBOX_MSGS,
-				      MAILBOX_DEFAULT_TIMEOUT_VAL);
-
-	wait_for_queue_availability(Q_TPM_IN);
 	
 	initialize_storage();
 
@@ -107,20 +85,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 void send_measurement_to_tpm(char *path)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
-
-	hash_file(path, hash_buf);
-	buf[0] = TPM_OP_EXTEND;
-
-	/* Note that we assume that one message is needed to send the hash.
-	 * See include/tpm/hash.h
-	 */
-	memcpy(buf + 1, hash_buf, TPM_EXTEND_HASH_SIZE);
-	send_message_to_tpm(buf);
-
-	/* Wait for TPM to read the message(s). */
-	wait_until_empty(Q_TPM_IN, MAILBOX_QUEUE_SIZE);
-	
+	tpm_measure_service(path, P_OS);
 	close_os_mailbox();
 }

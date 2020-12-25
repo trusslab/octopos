@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <openssl/sha.h>
+#include <tpm/hash.h>
 
 /*
  * @hash_buf: an array of uint8_t with a minimum size of SHA256_DIGEST_LENGTH.
