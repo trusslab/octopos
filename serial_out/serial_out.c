@@ -5,7 +5,6 @@
 #include <octopos/mailbox.h>
 #include <arch/mailbox_serial_out.h>
 #include <arch/defines.h>
-#include <tpm/tpm.h>
 #ifdef ARCH_SEC_HW
 #include <sleep.h>
 #endif

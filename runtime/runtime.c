@@ -39,8 +39,8 @@
 #include <octopos/io.h>
 #include <octopos/storage.h>
 #include <octopos/error.h>
-#include <octopos/tpm.h>
 #include <octopos/bluetooth.h>
+#include <tpm/tpm.h>
 #include <tpm/hash.h>
 #include <arch/mailbox_runtime.h>
 
@@ -1369,194 +1369,23 @@ int bluetooth_recv_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 
 #endif
 
-static int request_tpm_access(limit_t limit)
+static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_size, 
+					  char* nonce, uint8_t **signature, size_t *sig_size,
+					  uint8_t **quote, size_t *quote_size)
 {
-	reset_queue_sync(Q_TPM_IN, MAILBOX_QUEUE_SIZE);
-	reset_queue_sync(Q_TPM_OUT, 0);
-
-	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_TPM_ACCESS, limit,
-			     MAILBOX_DEFAULT_TIMEOUT_VAL);
-	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET
-	if (ret0) {
-		printf("Error: %s: syscall to get tpm access failed.\n",
-		       __func__);
-		return (int) ret0;
-	}
-
-	int attest_ret = mailbox_attest_queue_access(Q_TPM_IN, limit,
-						MAILBOX_DEFAULT_TIMEOUT_VAL);
-	if (!attest_ret) {
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-#else
-		printf("%s: Error: failed to attest TPM_IN queue\n", __func__);
-#endif
-		return ERR_FAULT;
-	}
-
-	attest_ret = mailbox_attest_queue_access(Q_TPM_OUT, limit,
-						MAILBOX_DEFAULT_TIMEOUT_VAL);
-	if (!attest_ret) {
-		mailbox_yield_to_previous_owner(Q_TPM_IN);
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-#else
-		printf("%s: Error: failed to attest TPM_OUT queue\n", __func__);
-#endif
-		return ERR_FAULT;
-	}
-
-	return 0;
-}
-
-int send_app_measurement_to_tpm(uint8_t *hash_buf)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	int ret;
+	int rc = 0;
+	rc = tpm_attest(p_runtime, (uint8_t *) nonce, pcr_list, pcr_list_size,
+			signature, sig_size, (char **) quote);
+	if (rc != 0)
+		return rc;
 	
-	ret = request_tpm_access(TPM_EXTEND_HASH_NUM_MAILBOX_MSGS);
-	if (ret) {
-		printf("Error: %s: couldn't get access to TPM.\n", __func__);
-		return ret;
-	}
-
-	buf[0] = TPM_OP_EXTEND;
-
-	/* Note that we assume that one message is needed to send the hash.
-	 * See include/tpm/hash.h
-	 */
-	memcpy(buf + 1, hash_buf, TPM_EXTEND_HASH_SIZE);
-	runtime_send_msg_on_queue(buf, Q_TPM_IN);
-
-	/* We're not using the Q_TPM_OUT queue, so let's yield it. */
-	mailbox_yield_to_previous_owner(Q_TPM_OUT);
-
-	return 0;
-}
-
-static int request_tpm_attestation_report(uint8_t *pcr_slots,
-					  uint8_t num_pcr_slots, char* nonce,
-					  uint8_t **signature,
-					  uint32_t *sig_size, uint8_t **quote,
-					  uint32_t *quote_size)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	int ret;
-
-	if (num_pcr_slots > 24) {
-		printf("Error: %s: invalid num_pcr_slots (%d)\n", __func__,
-		       num_pcr_slots);
-		return ERR_INVALID;
-	}
-
-	if ((num_pcr_slots + TPM_AT_NONCE_LENGTH) > (MAILBOX_QUEUE_MSG_SIZE - 2)) {
-		printf("Error: %s: content won't fit in a message (%d, %d, %d)\n",
-		       __func__, num_pcr_slots, TPM_AT_NONCE_LENGTH,
-		       MAILBOX_QUEUE_MSG_SIZE);
-		return ERR_INVALID;
-	}
-
-	/* FIXME: why 20? */
-	ret = request_tpm_access(20);
-	if (ret) {
-		printf("Error: %s: couldn't get access to TPM.\n", __func__);
-		return ret;
-	}
-
-	buf[0] = TPM_OP_ATTEST;
-	buf[1] = num_pcr_slots;
-	memcpy(&buf[2], pcr_slots, num_pcr_slots);
-	memcpy(&buf[2 + num_pcr_slots], (uint8_t *) nonce, TPM_AT_NONCE_LENGTH);
-
-	runtime_send_msg_on_queue(buf, Q_TPM_IN);
-	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
-
-	if (buf[0] != TPM_REP_ATTEST) {
-		printf("Error: %s: unexpected response.\n", __func__);
-		return ERR_UNEXPECTED;
-	}
-
-	*sig_size = *((uint32_t *) &buf[1]);
-	*quote_size = *((uint32_t *) &buf[5]);
-
-	*signature = malloc(*sig_size);
-	if (!*signature) {
-		printf("Error: %s: couldn't allocate memory for signature.\n",
-		       __func__);
-		return ERR_MEMORY;
-	}
-
-	*quote = malloc(*quote_size);
-	if (!*quote) {
-		printf("Error: %s: couldn't allocate memory for quote.\n",
-		       __func__);
-		return ERR_MEMORY;
-	}
-
-	int off = 0;
-	uint32_t size = *sig_size;
-	while (size) {
-		runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
-		if (size > MAILBOX_QUEUE_MSG_SIZE) {
-			memcpy(*signature + off, buf,
-			       MAILBOX_QUEUE_MSG_SIZE);
-			off += MAILBOX_QUEUE_MSG_SIZE;
-			size -= MAILBOX_QUEUE_MSG_SIZE;
-		} else {
-			memcpy(*signature + off, buf, size);
-			size = 0;
-		}
-	}
-
-	off = 0;
-	size = *quote_size;
-	while (size) {
-		runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
-		if (size > MAILBOX_QUEUE_MSG_SIZE) {
-			memcpy(*quote + off, buf,
-			       MAILBOX_QUEUE_MSG_SIZE);
-			off += MAILBOX_QUEUE_MSG_SIZE;
-			size -= MAILBOX_QUEUE_MSG_SIZE;
-		} else {
-			memcpy(*quote + off, buf, size);
-			size = 0;
-		}
-	}
-
-	/* We're not using up the limit on the queues,
-	 * so let's yield them. */
-	mailbox_yield_to_previous_owner(Q_TPM_IN);
-	mailbox_yield_to_previous_owner(Q_TPM_OUT);
-
+	*quote_size = strlen((char *) *quote);
 	return 0;
 }
 
 int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	int ret;
-	uint8_t pcr_slot = PROC_PCR_SLOT(proc_id);
-
-	ret = request_tpm_access(1);
-	if (ret) {
-		printf("Error: %s: couldn't get access to TPM.\n", __func__);
-		return ret;
-	}
-
-	buf[0] = TPM_OP_READ_PCR;
-	buf[1] = pcr_slot;
-
-	runtime_send_msg_on_queue(buf, Q_TPM_IN);
-	runtime_recv_msg_from_queue(buf, Q_TPM_OUT);
-
-	if (buf[0] != TPM_REP_READ_PCR) {
-		printf("Error: %s: PCR read op failed.\n", __func__);
-		return ERR_FAULT;
-	}
-
-	memcpy(pcr_val, &buf[1], TPM_EXTEND_HASH_SIZE);
-
+	tpm_processor_read_pcr(proc_id, pcr_val);
 	return 0;
 }
 

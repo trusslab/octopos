@@ -13,8 +13,8 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
-#include <octopos/tpm.h>
 #include <os/file_system.h>
+#include <tpm/tpm.h>
 #include <tpm/hash.h>
 #include <arch/mailbox.h>
 
@@ -33,49 +33,15 @@ sem_t availables[NUM_QUEUES + 1];
 static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
-	int num_tpm_in = 0;
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
-
-		/* FIXME: check the TPM interrupt logic */
-		if (interrupt == Q_TPM_IN) {
-			sem_post(&interrupts[Q_TPM_IN]);
-			/* Block interrupts until the program is loaded.
-			 * Otherwise, we might receive some interrupts not
-			 * intended for the bootloader.
-			 */
-			num_tpm_in++;
-			if (num_tpm_in == TPM_EXTEND_HASH_NUM_MAILBOX_MSGS) 
-				return NULL;
-		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
-			sem_post(&availables[Q_TPM_IN]);
-		} else {
-			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
-			exit(-1);
-		}
 	}
 }
 
-/* FIXME: copied from bootloader_other.c */
-static void send_message_to_tpm(uint8_t* buf)
-{
-	uint8_t opcode[2];
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_TPM_IN;
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
-}
 
 int init_mailbox(void)
 {
-	/* set the initial value of this one to 0 so that we can use it
-	 * to wait for the TPM to read the message.
-	 */
-	sem_init(&interrupts[Q_TPM_IN], 0, 0);
-	sem_init(&availables[Q_TPM_IN], 0, 0);
-
 	mkfifo(FIFO_STORAGE_OUT, 0666);
 	mkfifo(FIFO_STORAGE_INTR, 0666);
 
@@ -172,27 +138,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 void send_measurement_to_tpm(char *path)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	uint8_t hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
-	int i;
-
-	init_mailbox();
-
-	/* Wait for the TPM mailbox */
-	sem_wait(&availables[Q_TPM_IN]);
-
-	hash_file(path, hash_buf);
-	buf[0] = TPM_OP_EXTEND;
-
-	/* Note that we assume that one message is needed to send the hash.
-	 * See include/tpm/hash.h
-	 */
-	memcpy(buf + 1, hash_buf, TPM_EXTEND_HASH_SIZE);
-	send_message_to_tpm(buf);
-
-	/* Wait for TPM to read the message(s). */
-	for (i = 0; i < TPM_EXTEND_HASH_NUM_MAILBOX_MSGS; i++)
-		sem_wait(&interrupts[Q_TPM_IN]);
+	tpm_measure_service(path, P_STORAGE);
 
 	close_mailbox();
 }

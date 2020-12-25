@@ -17,14 +17,6 @@ This is a test stage implementation. So it will have some different with the tru
 
 No Certificate Authority (CA) will participate in the attestation process now.
 
-Software-Simulation Configuration
-=================================
-Since there is no CA, to test out the remote attestation, you need to disable the check of certificates for the stored endorsement keys.
-
-To make this, you need add an option in the TSS2 configuration. In general, it is located in the /usr/local/etc/tpm2-tss/fapi-config.json.
-Add the option in the configuration file like below:
-	"ek_cert_less": "yes"
-
 Run Attestation
 ===============
 After compiling the OctopOS, you can run the remote-side application:

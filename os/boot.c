@@ -12,25 +12,10 @@
 #include <os/file_system.h>
 #include <os/storage.h>
 #include <os/scheduler.h>
-#include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 #include <arch/pmu.h> 
 
 int untrusted_needs_help_with_boot = 0;
-
-void delegate_tpm_data_in_queue(uint8_t proc_id)
-{
-	wait_for_queue_availability(Q_TPM_IN);
-	mark_queue_unavailable(Q_TPM_IN);
-	mailbox_delegate_queue_access(Q_TPM_IN, proc_id,
-				      TPM_EXTEND_HASH_NUM_MAILBOX_MSGS,
-				      MAILBOX_DEFAULT_TIMEOUT_VAL);
-	/* Wait until the bootloader is done before we continue.
-	 * Otherwise, we might end up sending messages to the proc that are
-	 * not expected by the bootloader.
-	 */
-	wait_for_queue_availability(Q_TPM_IN);
-}
 
 static void help_boot_proc(uint8_t proc_id, char *filename)
 {
@@ -42,11 +27,6 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
 	printf("%s [2]: proc_id = %d\n", __func__, proc_id);
-
-	/* Help with sending measurements to TPM */
-	if (proc_id != P_UNTRUSTED)
-		delegate_tpm_data_in_queue(proc_id);
-	printf("%s [3]: proc_id = %d\n", __func__, proc_id);
 }
 
 static void help_boot_keyboard_proc(void)

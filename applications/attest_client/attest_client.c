@@ -11,11 +11,12 @@
 #include <octopos/storage.h>
 #include <network/sock.h>
 #include <network/socket.h>
+#include <tpm/tpm.h>
 
-#define ID_LENGTH 16
-#define NONCE_LENGTH 16
-#define MSG_LENGTH (1 + ID_LENGTH + 2 + NONCE_LENGTH)
-#define MAX_PACK_SIZE 256
+#define ID_LENGTH	16
+#define NONCE_LENGTH	16
+#define MSG_LENGTH	(1 + ID_LENGTH + 2 + NONCE_LENGTH)
+#define MAX_PACK_SIZE	256
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[256];
@@ -73,6 +74,10 @@ static void send_receive(struct runtime_api *api)
 {
 	char buf[MSG_LENGTH];
 	int len;
+	uint8_t *signature = NULL;
+	uint8_t *quote = NULL;
+	uint8_t *packet = NULL;
+	size_t sig_size, quote_size;
 
 	if (api->connect_socket(sock, &skaddr) < 0) {
 		printf("%s: Error: _connect\n", __func__);
@@ -81,25 +86,21 @@ static void send_receive(struct runtime_api *api)
 
 	if ((len = api->read_from_socket(sock, buf, 512)) > 0) {
 		char uuid[ID_LENGTH];
-		char slot[3] = { 0 };
+		char pcr[3] = { 0 };
 		char nonce[NONCE_LENGTH];
-		uint8_t *signature;
-		uint8_t *quote;
-		uint8_t *packet;
-		uint32_t sig_size, quote_size;
 		
 		memcpy(uuid, buf + 1, ID_LENGTH);
-		memcpy(slot, buf + 1 + ID_LENGTH, 2);
+		memcpy(pcr, buf + 1 + ID_LENGTH, 2);
 		memcpy(nonce, buf + 1 + ID_LENGTH + 2, NONCE_LENGTH);
 
-		int pcr_slot = atoi(slot);
-		uint8_t pcr_slots[] = {(uint8_t) pcr_slot};
-		api->request_tpm_attestation_report(pcr_slots, 1, nonce,
+		int pcr_selected = atoi(pcr);
+		uint32_t pcr_list[] = { (uint32_t) pcr_selected };
+		api->request_tpm_attestation_report(pcr_list, 1, nonce,
 						    &signature, &sig_size,
 						    &quote, &quote_size);
 
 		packet = (uint8_t *) malloc(sig_size + quote_size + 1);
-		if (!packet) { 
+		if (!packet) {
 			printf("Error: %s: couldn't allocate memory for "
 			       "packet.\n", __func__);
 			return;
@@ -107,7 +108,6 @@ static void send_receive(struct runtime_api *api)
 		
 		packet[0] = (uint8_t) sig_size;
 		memcpy(packet + 1, signature, sig_size);
-
 		memcpy(packet + 1 + sig_size, quote, quote_size);
 
 		send_large_packet(api, packet, 1 + sig_size + quote_size);
