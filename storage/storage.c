@@ -228,6 +228,180 @@ int bound_partition = -1;
 uint8_t config_key[STORAGE_KEY_SIZE];
 bool is_config_locked = false;
 
+#ifdef ARCH_SEC_HW_STORAGE
+/* partition creation info and locks are saved in headers */
+/* the first 1MB is reserved for headers */
+#define header_size 1024 * 128
+#define data_offset 1024 * 1024 * 1 
+
+#define create_header_offset 0
+#define lock_header_offset 15
+
+// FIXME: Copied from qspi driver
+#define DATA_OFFSET		5 /* Start of Data for Read/Write */
+#define DUMMY_SIZE		1 /* Number of dummy bytes for fast, dual and quad reads */
+
+#define PAGE_SIZE		512 /* ZCU106 flash (micron) page size is 512. 
+							 * other board may have page size up to 1024. 
+							 */
+
+#define QSPI_BUF_SIZE	PAGE_SIZE + (DATA_OFFSET + DUMMY_SIZE) * 8
+u8 CmdBfr[8];
+// u8 ReadBuffer[MAX_PAGE_SIZE + (DATA_OFFSET + DUMMY_SIZE)*8] __attribute__ ((aligned(64)));
+// u8 WriteBuffer[MAX_PAGE_SIZE + DATA_OFFSET];
+
+#define is_aligned_64(PTR) \
+	(((uintptr_t)(const void *)(PTR)) % 64 == 0)
+
+static int get_partition_data_address(int partition_number)
+{
+	int i;
+	u32 data_address = data_offset;
+
+	for (i = 0; i < partition_number; i++) {
+		data_address += partition_sizes[i];
+	}
+
+	return data_address;
+}
+
+static int partition_erase(int partition_number)
+{
+	struct partition *partition;
+	u32 header_address, data_address, status;
+
+	if (!QspiPsuPtr)
+		return ERR_FAULT;
+
+	if (i >= NUM_PARTITIONS)
+		return ERR_INVALID;
+
+	partition = &partitions[i];
+	header_address = partition_number * header_size;
+	data_address = get_partition_data_address(partition_number);
+
+	/* erase partition header */
+	status = FlashErase(QspiPsuPtr, header_address, header_size, CmdBfr);
+	if (Status != XST_SUCCESS) {
+		return ERR_FAULT;
+	}
+
+	/* erase partition data */
+	status = FlashErase(QspiPsuPtr, data_address, partition->size, CmdBfr);
+	if (Status != XST_SUCCESS) {
+		return ERR_FAULT;
+	}
+
+	return 0;
+}
+
+static int partition_read_header(int partition_number, u32 offset, u32 length, void *ptr)
+{
+	u32 header_address, status;
+
+	if (!QspiPsuPtr)
+		return ERR_FAULT;
+
+	if (i >= NUM_PARTITIONS)
+		return ERR_INVALID;
+
+	if (offset + length > header_size)
+		return ERR_INVALID;
+
+	if (!is_aligned_64(ptr))
+		return ERR_INVALID;
+
+	header_address = partition_number * header_size;
+
+	/* read partition header */
+	status = FlashRead(QspiPsuPtr, header_address + offset, length, ReadCmd, CmdBfr, (u8 *) ptr);
+	if (Status != XST_SUCCESS) {
+		return ERR_FAULT;
+	}
+
+	return length;
+}
+
+static int partition_read(int partition_number, u32 offset, u32 length, void *ptr)
+{
+	u32 data_address, status;
+	struct partition *partition;
+
+	if (!QspiPsuPtr)
+		return ERR_FAULT;
+
+	if (i >= NUM_PARTITIONS)
+		return ERR_INVALID;
+
+	partition = &partitions[i];
+	if (offset + length > partition->size)
+		return ERR_INVALID;
+
+	if (!is_aligned_64(ptr))
+		return ERR_INVALID;
+
+	data_address = get_partition_data_address(partition_number);
+
+	/* read partition header */
+	status = FlashRead(QspiPsuPtr, data_address + offset, length, ReadCmd, CmdBfr, (u8 *) ptr);
+	if (Status != XST_SUCCESS) {
+		return ERR_FAULT;
+	}
+
+	return length;
+}
+
+static int partition_write_header(int partition_number, u32 offset, u32 length, void *ptr)
+{
+	u32 header_address, status;
+
+	if (!QspiPsuPtr)
+		return ERR_FAULT;
+
+	if (i >= NUM_PARTITIONS)
+		return ERR_INVALID;
+
+	if (offset + length > header_size)
+		return ERR_INVALID;
+
+	header_address = partition_number * header_size;
+
+	/* read partition header */
+	status = FlashWrite(QspiPsuPtr, data_address + offset, length, WriteCmd, (u8 *) ptr);
+	if (Status != XST_SUCCESS) {
+		return ERR_FAULT;
+	}
+
+	return length;
+}
+
+static int partition_write(int partition_number, u32 offset, u32 length, void *ptr)
+{
+	u32 data_address, status;
+	struct partition *partition;
+
+	if (!QspiPsuPtr)
+		return ERR_FAULT;
+
+	if (i >= NUM_PARTITIONS)
+		return ERR_INVALID;
+
+	partition = &partitions[i];
+	if (offset + length > partition->size)
+		return ERR_INVALID;
+
+	data_address = get_partition_data_address(partition_number);
+
+	/* read partition header */
+	status = FlashWrite(QspiPsuPtr, data_address + offset, length, WriteCmd, (u8 *) ptr);
+	if (Status != XST_SUCCESS) {
+		return ERR_FAULT;
+	}
+
+	return length;
+}
+#endif
+
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 void initialize_storage_space(void)
 {
@@ -249,6 +423,7 @@ void initialize_storage_space(void)
 		memset(partition->lock_name, 0x0, 256);
 		sprintf(partition->lock_name, "octopos_partition_%d_lock", suffix);
 
+#ifndef ARCH_SEC_HW_STORAGE
 		FILE *filep = fop_open(partition->data_name, "r");
 		if (!filep) {
 			/* create empty file */
@@ -317,7 +492,17 @@ void initialize_storage_space(void)
 			partition->is_locked = false;
 		}
 	}
-
+#else
+	uint32_t tag = 0;
+	uint32_t size = partition_read_header(i, create_header_offset, 4, &tag);
+	if (size == 4 && tag == 1) {
+		partition->is_created = true;
+	} else {
+		partition_erase(i);
+		partition->is_locked = false;
+		continue;
+	}
+#endif
 	/* set an initial config key */
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		config_key[i] = i;
@@ -325,6 +510,7 @@ void initialize_storage_space(void)
 
 static int set_partition_key(uint8_t *data, int partition_id)
 {
+#ifndef ARCH_SEC_HW_STORAGE
 	FILE *filep = fop_open(partitions[partition_id].lock_name, "r+");
 	if (!filep) {
 		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
@@ -340,6 +526,9 @@ static int set_partition_key(uint8_t *data, int partition_id)
 		fop_close(filep);
 		return ERR_FAULT;
 	}
+#else
+	
+#endif
 
 	return 0;
 }
