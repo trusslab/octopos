@@ -380,21 +380,21 @@ u8 FSRFlag;
 
 /************************** Function Prototypes ******************************/
 
-int initialize_qspi_flash(XQspiPsu *QspiPsuInstancePtr, u16 QspiPsuDeviceId);
+int initialize_qspi_flash();
 
 int FlashReadID(XQspiPsu *QspiPsuPtr);
-int FlashErase(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 *WriteBfrPtr);
-int FlashWrite(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 Command,
+int FlashErase(u32 Address, u32 ByteCount, u8 *WriteBfrPtr);
+int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr);
-int FlashRead(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 Command,
+int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr, u8 *ReadBfrPtr);
-u32 GetRealAddr(XQspiPsu *QspiPsuPtr, u32 Address);
-int BulkErase(XQspiPsu *QspiPsuPtr, u8 *WriteBfrPtr);
-int DieErase(XQspiPsu *QspiPsuPtr, u8 *WriteBfrPtr);
-int FlashRegisterRead(XQspiPsu *QspiPsuPtr, u32 ByteCount, u8 Command, u8 *ReadBfrPtr);
-int FlashRegisterWrite(XQspiPsu *QspiPsuPtr, u32 ByteCount, u8 Command,
+u32 GetRealAddr(u32 Address);
+int BulkErase(u8 *WriteBfrPtr);
+int DieErase(u8 *WriteBfrPtr);
+int FlashRegisterRead(u32 ByteCount, u8 Command, u8 *ReadBfrPtr);
+int FlashRegisterWrite(u32 ByteCount, u8 Command,
 					u8 *WriteBfrPtr, u8 WrEn);
-int FlashEnterExit4BAddMode(XQspiPsu *QspiPsuPtr,unsigned int Enable);
+int FlashEnterExit4BAddMode(unsigned int Enable);
 int FlashEnableQuadMode(XQspiPsu *QspiPsuPtr);
 /************************** Variable Definitions *****************************/
 u8 TxBfrPtr;
@@ -613,7 +613,8 @@ u8 ReadBuffer[MAX_PAGE_SIZE + (DATA_OFFSET + DUMMY_SIZE)*8];
 u8 ReadBuffer[MAX_PAGE_SIZE + (DATA_OFFSET + DUMMY_SIZE)*8] __attribute__ ((aligned(64)));
 #endif
 u8 WriteBuffer[MAX_PAGE_SIZE + DATA_OFFSET];
-u8 CmdBfr[8];
+
+static u8 CmdBfr[8];
 
 /*****************************************************************************/
 /**
@@ -630,14 +631,15 @@ u8 CmdBfr[8];
  * @note	None.
  *
  *****************************************************************************/
-int initialize_qspi_flash(XQspiPsu *QspiPsuInstancePtr, u16 QspiPsuDeviceId)
+int initialize_qspi_flash()
 {
 	int Status;
 	u8 UniqueValue;
 	int Count;
-	int Page;
 	XQspiPsu_Config *QspiPsuConfig;
 	int ReadBfrSize;
+	u16 QspiPsuDeviceId = QSPIPSU_DEVICE_ID;
+	XQspiPsu *QspiPsuInstancePtr = &QspiPsuInstance;
 
 	ReadBfrSize = MAX_PAGE_SIZE + (DATA_OFFSET + DUMMY_SIZE)*8;
 
@@ -723,59 +725,56 @@ int initialize_qspi_flash(XQspiPsu *QspiPsuInstancePtr, u16 QspiPsuDeviceId)
 		ReadCmd, WriteCmd, StatusCmd, FSRFlag);
 
 	if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
-		Status = FlashEnterExit4BAddMode(QspiPsuInstancePtr, ENTER_4B);
+		Status = FlashEnterExit4BAddMode(ENTER_4B);
 		if (Status != XST_SUCCESS) {
 			return XST_FAILURE;
 		}
 	}
 
 // TEST FLASH >>>
-	for (UniqueValue = UNIQUE_VALUE, Count = 0;
-			Count < DataSize;
-			Count++, UniqueValue++) {
-		WriteBuffer[Count] = (u8)(UniqueValue + Test);
-	}
-
-	for (Count = 0; Count < ReadBfrSize; Count++) {
-		ReadBuffer[Count] = 0;
-	}
-
-	Status = FlashErase(QspiPsuInstancePtr, 
-			TEST_ADDRESS, 
-			DataSize, 
-			CmdBfr);
-	if (Status != XST_SUCCESS) {
-		return XST_FAILURE;
-	}
-
-	Status = FlashWrite(QspiPsuInstancePtr,
-			TEST_ADDRESS,
-			DataSize,
-			WriteCmd, 
-			WriteBuffer);
-	if (Status != XST_SUCCESS) {
-		return XST_FAILURE;
-	}
-
-	Status = FlashRead(QspiPsuInstancePtr, 
-			TEST_ADDRESS, 
-			DataSize, 
-			ReadCmd,
-			CmdBfr, 
-			ReadBuffer);
-	if (Status != XST_SUCCESS) {
-		return XST_FAILURE;
-	}
-	/*
-	 * Setup a pointer to the start of the data that was read into the read
-	 * buffer and verify the data read is the data that was written
-	 */
-	for (UniqueValue = UNIQUE_VALUE, Count = 0; Count < DataSize;
-	     Count++, UniqueValue++) {
-		if (ReadBuffer[Count] != (u8)(UniqueValue + Test)) {
-			return XST_FAILURE;
-		}
-	}
+//	for (UniqueValue = UNIQUE_VALUE, Count = 0;
+//			Count < DataSize;
+//			Count++, UniqueValue++) {
+//		WriteBuffer[Count] = (u8)(UniqueValue + Test);
+//	}
+//
+//	for (Count = 0; Count < ReadBfrSize; Count++) {
+//		ReadBuffer[Count] = 0;
+//	}
+//
+//	Status = FlashErase(TEST_ADDRESS,
+//			DataSize,
+//			CmdBfr);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+//
+//	Status = FlashWrite(TEST_ADDRESS,
+//			DataSize,
+//			WriteCmd,
+//			WriteBuffer);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+//
+//	Status = FlashRead(TEST_ADDRESS,
+//			DataSize,
+//			ReadCmd,
+//			CmdBfr,
+//			ReadBuffer);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+//	/*
+//	 * Setup a pointer to the start of the data that was read into the read
+//	 * buffer and verify the data read is the data that was written
+//	 */
+//	for (UniqueValue = UNIQUE_VALUE, Count = 0; Count < DataSize;
+//	     Count++, UniqueValue++) {
+//		if (ReadBuffer[Count] != (u8)(UniqueValue + Test)) {
+//			return XST_FAILURE;
+//		}
+//	}
 
 // TEST FLASH <<<
 
@@ -1176,7 +1175,7 @@ int FlashReadID(XQspiPsu *QspiPsuPtr)
  * @note	None.
  *
  ******************************************************************************/
-int FlashWrite(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 Command,
+int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr)
 {
 	u8 WriteEnableCmd;
@@ -1186,13 +1185,14 @@ int FlashWrite(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 Command,
 	u32 RealAddr;
 	u32 CmdByteCount;
 	int Status;
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	WriteEnableCmd = WRITE_ENABLE_CMD;
 	/*
 	 * Translate address based on type of connection
 	 * If stacked assert the slave select based on address
 	 */
-	RealAddr = GetRealAddr(QspiPsuPtr, Address);
+	RealAddr = GetRealAddr(Address);
 
 	/*
 	 * Send the write enable command to the Flash so that it can be
@@ -1321,7 +1321,7 @@ int FlashWrite(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 Command,
  * @note	None.
  *
  ******************************************************************************/
-int FlashErase(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount,
+int FlashErase(u32 Address, u32 ByteCount,
 		u8 *WriteBfrPtr)
 {
 	u8 WriteEnableCmd;
@@ -1331,6 +1331,7 @@ int FlashErase(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount,
 	u32 RealAddr;
 	u32 NumSect;
 	int Status;
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	WriteEnableCmd = WRITE_ENABLE_CMD;
 	/*
@@ -1351,14 +1352,14 @@ int FlashErase(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount,
 			/*
 			 * Call Bulk erase
 			 */
-			BulkErase(QspiPsuPtr, WriteBfrPtr);
+			BulkErase(WriteBfrPtr);
 		}
 
 		if (Flash_Config_Table[FCTIndex].NumDie > 1) {
 			/*
 			 * Call Die erase
 			 */
-			DieErase(QspiPsuPtr, WriteBfrPtr);
+			DieErase(WriteBfrPtr);
 		}
 		/*
 		 * If stacked mode, bulk erase second flash
@@ -1374,14 +1375,14 @@ int FlashErase(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount,
 				/*
 				 * Call Bulk erase
 				 */
-				BulkErase(QspiPsuPtr, WriteBfrPtr);
+				BulkErase(WriteBfrPtr);
 			}
 
 			if (Flash_Config_Table[FCTIndex].NumDie > 1) {
 				/*
 				 * Call Die erase
 				 */
-				DieErase(QspiPsuPtr, WriteBfrPtr);
+				DieErase(WriteBfrPtr);
 			}
 		}
 
@@ -1416,7 +1417,7 @@ int FlashErase(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount,
 		 * Translate address based on type of connection
 		 * If stacked assert the slave select based on address
 		 */
-		RealAddr = GetRealAddr(QspiPsuPtr, Address);
+		RealAddr = GetRealAddr(Address);
 
 		/*
 		 * Send the write enable command to the Flash so that it can be
@@ -1544,13 +1545,14 @@ int FlashErase(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount,
  * @note	None.
  *
  ******************************************************************************/
-int FlashRead(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 Command,
+int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr, u8 *ReadBfrPtr)
 {
 	u32 RealAddr;
 	u32 DiscardByteCnt;
 	u32 FlashMsgCnt;
 	int Status;
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	/* Check die boundary conditions if required for any flash */
 
@@ -1559,7 +1561,7 @@ int FlashRead(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 Command,
 	 * Translate address based on type of connection
 	 * If stacked assert the slave select based on address
 	 */
-	RealAddr = GetRealAddr(QspiPsuPtr, Address);
+	RealAddr = GetRealAddr(Address);
 
 	WriteBfrPtr[COMMAND_OFFSET]   = Command;
 	if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
@@ -1670,13 +1672,14 @@ int FlashRead(XQspiPsu *QspiPsuPtr, u32 Address, u32 ByteCount, u8 Command,
  * @note	This API can only be used for one flash at a time.
  *
  ******************************************************************************/
-int FlashRegisterWrite(XQspiPsu *QspiPsuPtr, u32 ByteCount, u8 Command,
+int FlashRegisterWrite(u32 ByteCount, u8 Command,
 					u8 *WriteBfrPtr, u8 WrEn)
 {
 	u8 WriteEnableCmd;
 	u8 ReadStatusCmd;
 	u8 FlashStatus[2];
 	int Status;
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	if (WrEn) {
 		WriteEnableCmd = WRITE_ENABLE_CMD;
@@ -1768,11 +1771,12 @@ int FlashRegisterWrite(XQspiPsu *QspiPsuPtr, u32 ByteCount, u8 Command,
  * @note	This API can only be used for one flash at a time.
  *
  ******************************************************************************/
-int FlashRegisterRead(XQspiPsu *QspiPsuPtr, u32 ByteCount,
+int FlashRegisterRead(u32 ByteCount,
 		u8 Command, u8 *ReadBfrPtr)
 {
 	u8 WriteCmd;
 	int Status;
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	WriteCmd = Command;
 	FlashMsg[0].TxBfrPtr = &WriteCmd;
@@ -1811,12 +1815,13 @@ int FlashRegisterRead(XQspiPsu *QspiPsuPtr, u32 ByteCount,
  * @note	None.
  *
  ******************************************************************************/
-int BulkErase(XQspiPsu *QspiPsuPtr, u8 *WriteBfrPtr)
+int BulkErase(u8 *WriteBfrPtr)
 {
 	u8 WriteEnableCmd;
 	u8 ReadStatusCmd;
 	u8 FlashStatus[2];
 	int Status;
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	WriteEnableCmd = WRITE_ENABLE_CMD;
 	/*
@@ -1912,13 +1917,14 @@ int BulkErase(XQspiPsu *QspiPsuPtr, u8 *WriteBfrPtr)
  * @note	None.
  *
  ******************************************************************************/
-int DieErase(XQspiPsu *QspiPsuPtr, u8 *WriteBfrPtr)
+int DieErase(u8 *WriteBfrPtr)
 {
 	u8 WriteEnableCmd;
 	u8 DieCnt;
 	u8 ReadStatusCmd;
 	u8 FlashStatus[2];
 	int Status;
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	WriteEnableCmd = WRITE_ENABLE_CMD;
 	for (DieCnt = 0;
@@ -2026,9 +2032,10 @@ int DieErase(XQspiPsu *QspiPsuPtr, u8 *WriteBfrPtr)
  *		detected.
  *
  ******************************************************************************/
-u32 GetRealAddr(XQspiPsu *QspiPsuPtr, u32 Address)
+u32 GetRealAddr(u32 Address)
 {
 	u32 RealAddr;
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	switch (QspiPsuPtr->Config.ConnectionMode) {
 	case XQSPIPSU_CONNECTION_MODE_SINGLE:
@@ -2098,7 +2105,7 @@ u32 GetRealAddr(XQspiPsu *QspiPsuPtr, u32 Address)
  *
  *
  ******************************************************************************/
-int FlashEnterExit4BAddMode(XQspiPsu *QspiPsuPtr, unsigned int Enable)
+int FlashEnterExit4BAddMode(unsigned int Enable)
 {
 	int Status;
 	u8 WriteEnableCmd;
@@ -2107,6 +2114,7 @@ int FlashEnterExit4BAddMode(XQspiPsu *QspiPsuPtr, unsigned int Enable)
 	u8 ReadStatusCmd;
 	u8 WriteBuffer[2] = {0};
 	u8 FlashStatus[2] = {0};
+	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	if (Enable) {
 		Cmd = ENTER_4B_ADDR_MODE;
@@ -2121,7 +2129,7 @@ int FlashEnterExit4BAddMode(XQspiPsu *QspiPsuPtr, unsigned int Enable)
 	case ISSI_ID_BYTE0:
 	case MICRON_ID_BYTE0:
 		WriteEnableCmd = WRITE_ENABLE_CMD;
-		GetRealAddr(QspiPsuPtr, TEST_ADDRESS);
+		GetRealAddr(TEST_ADDRESS);
 		/*
 		 * Send the write enable command to the
 		 * Flash so that it can be written to, this
@@ -2171,7 +2179,7 @@ int FlashEnterExit4BAddMode(XQspiPsu *QspiPsuPtr, unsigned int Enable)
 		break;
 	}
 
-	GetRealAddr(QspiPsuPtr, TEST_ADDRESS);
+	GetRealAddr(TEST_ADDRESS);
 
 	FlashMsg[0].TxBfrPtr = &Cmd;
 	FlashMsg[0].RxBfrPtr = NULL;
@@ -2233,7 +2241,7 @@ int FlashEnterExit4BAddMode(XQspiPsu *QspiPsuPtr, unsigned int Enable)
 	case ISSI_ID_BYTE0:
 	case MICRON_ID_BYTE0:
 		WriteDisableCmd = WRITE_DISABLE_CMD;
-		GetRealAddr(QspiPsuPtr, TEST_ADDRESS);
+		GetRealAddr(TEST_ADDRESS);
 		/*
 		 * Send the write enable command to the
 		 * Flash so that it can be written to,
@@ -2330,7 +2338,7 @@ int FlashEnableQuadMode(XQspiPsu *QspiPsuPtr)
 				return XST_FAILURE;
 			}
 
-			GetRealAddr(QspiPsuPtr, TEST_ADDRESS);
+			GetRealAddr(TEST_ADDRESS);
 
 			WriteBuffer[0] = WRITE_CONFIG_CMD;
 			WriteBuffer[1] |= 0;
@@ -2473,18 +2481,18 @@ int FlashEnableQuadMode(XQspiPsu *QspiPsuPtr)
 	return Status;
 }
 
-int main(void)
-{
-	int Status;
-
-	Status = initialize_qspi_flash(&QspiPsuInstance, QSPIPSU_DEVICE_ID);
-	if (Status != XST_SUCCESS) {
-		xil_printf("QSPIPSU Flash initialization failed\r\n");
-		return XST_FAILURE;
-	}
-
-	xil_printf("Successfully ran QSPIPSU Generic Flash Polled Example\r\n");
-	return XST_SUCCESS;
-}
+//int main(void)
+//{
+//	int Status;
+//
+//	Status = initialize_qspi_flash(&QspiPsuInstance, QSPIPSU_DEVICE_ID);
+//	if (Status != XST_SUCCESS) {
+//		xil_printf("QSPIPSU Flash initialization failed\r\n");
+//		return XST_FAILURE;
+//	}
+//
+//	xil_printf("Successfully ran QSPIPSU Generic Flash Polled Example\r\n");
+//	return XST_SUCCESS;
+//}
 
 #endif /* ARCH_SEC_HW_STORAGE */

@@ -33,31 +33,32 @@ sem_t			interrupts[NUM_QUEUES + 1];
 OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
-static FATFS	fatfs;
+//static FATFS	fatfs;
 BYTE			work[FF_MAX_SS];
 
 u32				DEBUG_STATUS_REGISTERS[30] = {0};
 
 void process_request(uint8_t *buf);
 void initialize_storage_space(void);
+int initialize_qspi_flash();
 
-static void initialize_ramfs(void)
-{
-	TCHAR *Path = "0:/";
-	FRESULT result;
-
-	result = f_mount(&fatfs, Path, 0);
-	if (result != FR_OK) {
-		SEC_HW_DEBUG_HANG();
-		return;
-	}
-	
-	result = f_mkfs(Path, FM_FAT, 0, work, sizeof work);
-	if (result != FR_OK) {
-		SEC_HW_DEBUG_HANG();
-		return;
-	}
-}
+//static void initialize_ramfs(void)
+//{
+//	TCHAR *Path = "0:/";
+//	FRESULT result;
+//
+//	result = f_mount(&fatfs, Path, 0);
+//	if (result != FR_OK) {
+//		SEC_HW_DEBUG_HANG();
+//		return;
+//	}
+//
+//	result = f_mkfs(Path, FM_FAT, 0, work, sizeof work);
+//	if (result != FR_OK) {
+//		SEC_HW_DEBUG_HANG();
+//		return;
+//	}
+//}
 
 void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 {
@@ -341,7 +342,8 @@ int init_storage(void)
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
-	initialize_ramfs();
+//	initialize_ramfs();
+	initialize_qspi_flash();
 	initialize_storage_space();
 
 	return XST_SUCCESS;
