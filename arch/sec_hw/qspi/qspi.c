@@ -94,6 +94,8 @@
 #include "xil_printf.h"
 #include "xil_cache.h"
 
+#include "arch/sec_hw.h"
+#include "sleep.h"
 /************************** Constant Definitions *****************************/
 
 /*
@@ -614,7 +616,7 @@ u8 ReadBuffer[MAX_PAGE_SIZE + (DATA_OFFSET + DUMMY_SIZE)*8] __attribute__ ((alig
 #endif
 u8 WriteBuffer[MAX_PAGE_SIZE + DATA_OFFSET];
 
-static u8 CmdBfr[8];
+u8 CmdBfr[8];
 
 /*****************************************************************************/
 /**
@@ -648,6 +650,7 @@ int initialize_qspi_flash()
 	 */
 	QspiPsuConfig = XQspiPsu_LookupConfig(QspiPsuDeviceId);
 	if (QspiPsuConfig == NULL) {
+		SEC_HW_DEBUG_HANG();
 		return XST_FAILURE;
 	}
 
@@ -656,6 +659,7 @@ int initialize_qspi_flash()
 	Status = XQspiPsu_CfgInitialize(QspiPsuInstancePtr, QspiPsuConfig,
 					QspiPsuConfig->BaseAddress);
 	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
 		return XST_FAILURE;
 	}
 
@@ -681,6 +685,7 @@ int initialize_qspi_flash()
 	 */
 	Status = FlashReadID(QspiPsuInstancePtr);
 	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
 		return XST_FAILURE;
 	}
 
@@ -699,8 +704,10 @@ int initialize_qspi_flash()
 	 * quad commands.
 	 */
 	Status = FlashEnableQuadMode(QspiPsuInstancePtr);
-	if (Status != XST_SUCCESS)
+	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
 		return XST_FAILURE;
+	}
 
 	/*
 	 * Address size and read command selection
@@ -727,54 +734,59 @@ int initialize_qspi_flash()
 	if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
 		Status = FlashEnterExit4BAddMode(ENTER_4B);
 		if (Status != XST_SUCCESS) {
+			SEC_HW_DEBUG_HANG();
 			return XST_FAILURE;
 		}
 	}
 
 // TEST FLASH >>>
-//	for (UniqueValue = UNIQUE_VALUE, Count = 0;
-//			Count < DataSize;
-//			Count++, UniqueValue++) {
-//		WriteBuffer[Count] = (u8)(UniqueValue + Test);
-//	}
-//
-//	for (Count = 0; Count < ReadBfrSize; Count++) {
-//		ReadBuffer[Count] = 0;
-//	}
-//
-//	Status = FlashErase(TEST_ADDRESS,
-//			DataSize,
-//			CmdBfr);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = FlashWrite(TEST_ADDRESS,
-//			DataSize,
-//			WriteCmd,
-//			WriteBuffer);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = FlashRead(TEST_ADDRESS,
-//			DataSize,
-//			ReadCmd,
-//			CmdBfr,
-//			ReadBuffer);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//	/*
-//	 * Setup a pointer to the start of the data that was read into the read
-//	 * buffer and verify the data read is the data that was written
-//	 */
-//	for (UniqueValue = UNIQUE_VALUE, Count = 0; Count < DataSize;
-//	     Count++, UniqueValue++) {
-//		if (ReadBuffer[Count] != (u8)(UniqueValue + Test)) {
-//			return XST_FAILURE;
-//		}
-//	}
+	for (UniqueValue = UNIQUE_VALUE, Count = 0;
+			Count < DataSize;
+			Count++, UniqueValue++) {
+		WriteBuffer[Count] = 0x01;
+	}
+
+	for (Count = 0; Count < ReadBfrSize; Count++) {
+		ReadBuffer[Count] = 0;
+	}
+
+	Status = FlashErase(TEST_ADDRESS,
+			DataSize,
+			CmdBfr);
+	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
+		return XST_FAILURE;
+	}
+
+	Status = FlashWrite(TEST_ADDRESS,
+			DataSize,
+			WriteCmd,
+			WriteBuffer);
+	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
+		return XST_FAILURE;
+	}
+
+	Status = FlashRead(TEST_ADDRESS,
+			DataSize,
+			ReadCmd,
+			CmdBfr,
+			ReadBuffer);
+	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
+		return XST_FAILURE;
+	}
+	/*
+	 * Setup a pointer to the start of the data that was read into the read
+	 * buffer and verify the data read is the data that was written
+	 */
+	for (UniqueValue = UNIQUE_VALUE, Count = 0; Count < DataSize;
+	     Count++, UniqueValue++) {
+		if (ReadBuffer[Count] != 0x01) {
+			SEC_HW_DEBUG_HANG();
+			return XST_FAILURE;
+		}
+	}
 
 // TEST FLASH <<<
 
@@ -822,6 +834,7 @@ int FlashReadID(XQspiPsu *QspiPsuPtr)
 	xil_printf("FlashID=0x%x 0x%x 0x%x\n\r", ReadBfrPtr[0], ReadBfrPtr[1],
 		   ReadBfrPtr[2]);
 
+	while(1) sleep(1);
 	/* In case of dual, read both and ensure they are same make/size */
 
 	/*

@@ -255,7 +255,7 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 							 */
 
 #define QSPI_BUF_SIZE	PAGE_SIZE + (DATA_OFFSET + DUMMY_SIZE) * 8
-static u8 CmdBfr[8];
+u8 CmdBfr[8];
 
 #define is_aligned_64(PTR) \
 	(((uintptr_t)(const void *)(PTR)) % 64 == 0)
@@ -292,6 +292,7 @@ static int partition_erase(int partition_id, int part)
 		/* erase partition header */
 		status = FlashErase(header_address, header_size, CmdBfr);
 		if (status != XST_SUCCESS) {
+			SEC_HW_DEBUG_HANG();
 			return ERR_FAULT;
 		}	
 	}
@@ -301,6 +302,7 @@ static int partition_erase(int partition_id, int part)
 		/* erase partition data */
 		status = FlashErase(data_address, partition->size, CmdBfr);
 		if (status != XST_SUCCESS) {
+			SEC_HW_DEBUG_HANG();
 			return ERR_FAULT;
 		}
 	}
@@ -318,12 +320,12 @@ static int partition_reset_key(int partition_id)
 	header_address = partition_id * header_size;
 
 	/* erase partition header */
-	status = FlashErase(
-						header_address + lock_header_offset, 
+	status = FlashErase(header_address + lock_header_offset, 
 						header_size - lock_header_offset, 
 						CmdBfr);
 
 	if (status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}	
 
@@ -340,14 +342,20 @@ static int partition_read_header(int partition_id, u32 offset, u32 length, void 
 	if (offset + length > header_size)
 		return ERR_INVALID;
 
-	if (!is_aligned_64(ptr))
+	if (!is_aligned_64(ptr)) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_INVALID;
+	}
 
 	header_address = partition_id * header_size;
 
 	/* read partition header */
-	status = FlashRead(header_address + offset, length, ReadCmd, CmdBfr, (u8 *) ptr);
+	status = FlashRead(header_address + offset, 
+					length, ReadCmd, 
+					CmdBfr, 
+					(u8 *) ptr);
 	if (status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
 
@@ -366,14 +374,21 @@ static int partition_read(int partition_id, u32 offset, u32 length, void *ptr)
 	if (offset + length > partition->size)
 		return ERR_INVALID;
 
-	if (!is_aligned_64(ptr))
+	if (!is_aligned_64(ptr)) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_INVALID;
+	}
 
 	data_address = get_partition_data_address(partition_id);
 
 	/* read partition header */
-	status = FlashRead(data_address + offset, length, ReadCmd, CmdBfr, (u8 *) ptr);
+	status = FlashRead(data_address + offset, 
+					length, 
+					ReadCmd, 
+					CmdBfr, 
+					(u8 *) ptr);
 	if (status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
 
@@ -395,6 +410,7 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 	/* read partition header */
 	status = FlashWrite(header_address + offset, length, WriteCmd, (u8 *) ptr);
 	if (status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
 
@@ -418,6 +434,7 @@ static int partition_write(int partition_id, u32 offset, u32 length, void *ptr)
 	/* read partition header */
 	status = FlashWrite(data_address + offset, length, WriteCmd, (u8 *) ptr);
 	if (status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
 
@@ -515,9 +532,9 @@ void initialize_storage_space(void)
 			partition->is_locked = false;
 		}
 #else
-		uint32_t tag = 0;
-		uint32_t size = partition_read_header(i, create_header_offset, 4, &tag);
-		if (size == 4 && tag == 1) {
+		uint8_t tag[4] __attribute__ ((aligned(64)));
+		uint32_t size = partition_read_header(i, create_header_offset, 4, tag);
+		if (size == 4 && *((int*) tag) == 1) {
 			partition->is_created = true;
 		} else {
 			partition_erase(i, ERASE_ALL);
@@ -551,16 +568,12 @@ static int set_partition_key(uint8_t *data, int partition_id)
 		return ERR_FAULT;
 	}
 #else
-	if (partitions[partition_id].is_created) {
-		uint32_t size = partition_write_header(partition_id, 
-											lock_header_offset, 
-											STORAGE_KEY_SIZE, 
-											data);
-		if (size < STORAGE_KEY_SIZE) {
-			partition_reset_key(partition_id);
-			return ERR_FAULT;
-		}
-	} else {
+	uint32_t size = partition_write_header(partition_id,
+										lock_header_offset,
+										STORAGE_KEY_SIZE,
+										data);
+	if (size < STORAGE_KEY_SIZE) {
+		partition_reset_key(partition_id);
 		return ERR_FAULT;
 	}
 #endif
@@ -752,7 +765,7 @@ void process_request(uint8_t *buf)
 #ifndef ARCH_SEC_HW_STORAGE
 		fop_seek(filep, seek_off, SEEK_SET);
 #endif
-		uint8_t data_buf[STORAGE_BLOCK_SIZE];
+		uint8_t data_buf[STORAGE_BLOCK_SIZE] __attribute__ ((aligned(64)));
 		uint32_t size = 0;
 		for (uint32_t i = 0; i < num_blocks; i++) {
 #ifndef ARCH_SEC_HW_STORAGE
@@ -894,6 +907,7 @@ void process_request(uint8_t *buf)
 		if (is_config_locked) {
 			printf("%s: Error: config is locked (create partition op)\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
+			SEC_HW_DEBUG_HANG();
 			return;
 		}
 
@@ -901,6 +915,7 @@ void process_request(uint8_t *buf)
 		if (data_size != STORAGE_KEY_SIZE) {
 			printf("%s: Error: incorrect key size\n", __func__);
 			STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+			SEC_HW_DEBUG_HANG();
 			return;
 		}
 		uint32_t partition_size = arg0;
@@ -917,12 +932,14 @@ void process_request(uint8_t *buf)
 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
 			printf("%s: Error: no partitions with the requested size available\n", __func__);
 			STORAGE_SET_TWO_RETS(ERR_AVAILABLE, 0)
+			SEC_HW_DEBUG_HANG();
 			return;
 		}
 
 		int ret = set_partition_key(data, partition_id);
 		if (ret) {
 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
+			SEC_HW_DEBUG_HANG();
 			return;
 		}
 
@@ -946,6 +963,7 @@ void process_request(uint8_t *buf)
 											&tag);
 #endif
 		if (size != 4) {
+			SEC_HW_DEBUG_HANG();
 			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 			if (size > 0) { /* partial write */
 				/* wipe the file */
