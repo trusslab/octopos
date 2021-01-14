@@ -163,6 +163,8 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
+	initialize_storage_space();
+
 	init_platform();
 
 	/* Initialize OCTOPOS_XMbox */
@@ -317,7 +319,7 @@ int init_storage(void)
 		_SEC_HW_ERROR("XIntc_Start failed");
 		return XST_FAILURE;
 	}
-	
+
 	/* Enable interrupts */
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_FIXED_INTR);
 	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR);
@@ -349,8 +351,6 @@ int init_storage(void)
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
 //	initialize_ramfs();
-
-	initialize_storage_space();
 
 	return XST_SUCCESS;
 }

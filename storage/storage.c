@@ -538,6 +538,7 @@ void initialize_storage_space(void)
 	/* set an initial config key */
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		config_key[i] = i;
+
 }
 
 static int set_partition_key(uint8_t *data, int partition_id)
@@ -613,12 +614,15 @@ static int unlock_partition(uint8_t *data, int partition_id)
 #endif
 	if (size != STORAGE_KEY_SIZE) {
 		/* TODO: if the key file is corrupted, then we might need to unlock, otherwise, we'll lose the partition. */
+		while(1) sleep(1);
 		return ERR_FAULT;
 	}
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
-		if (key[i] != data[i])
+		if (key[i] != data[i]) {
 			return ERR_INVALID;
+		}
+
 	}
 
 	partitions[partition_id].is_locked = false;
@@ -808,6 +812,7 @@ void process_request(uint8_t *buf)
 		if (data_size != STORAGE_KEY_SIZE) {
 			printf("%s: Error: incorrect key size (sent for unlocking)\n", __func__);
 			STORAGE_SET_ONE_RET(ERR_INVALID)
+			while(1) sleep(1);
 			return;
 		}
 

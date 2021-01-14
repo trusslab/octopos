@@ -741,13 +741,13 @@ int initialize_qspi_flash()
 		   " StatusCmd: 0x%x, FSRFlag: %d\n\r",
 		ReadCmd, WriteCmd, StatusCmd, FSRFlag);
 
-//	if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
-//		Status = FlashEnterExit4BAddMode(ENTER_4B);
-//		if (Status != XST_SUCCESS) {
-//			while(1) sleep(1);
-//			return XST_FAILURE;
-//		}
-//	}
+	if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
+		Status = FlashEnterExit4BAddMode(ENTER_4B);
+		if (Status != XST_SUCCESS) {
+			while(1) sleep(1);
+			return XST_FAILURE;
+		}
+	}
 
 //	for (UniqueValue = UNIQUE_VALUE, Count = 0;
 //			Count < Flash_Config_Table[FCTIndex].PageSize;
@@ -1214,6 +1214,8 @@ int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 	int Status;
 	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
+	Xil_ExceptionDisable();
+
 	WriteEnableCmd = WRITE_ENABLE_CMD;
 	/*
 	 * Translate address based on type of connection
@@ -1328,6 +1330,7 @@ int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 		}
 	}
 
+	Xil_ExceptionEnable();
 	return 0;
 }
 
@@ -1359,6 +1362,8 @@ int FlashErase(u32 Address, u32 ByteCount,
 	u32 NumSect;
 	int Status;
 	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
+
+	Xil_ExceptionDisable();
 
 	WriteEnableCmd = WRITE_ENABLE_CMD;
 	/*
@@ -1413,6 +1418,7 @@ int FlashErase(u32 Address, u32 ByteCount,
 			}
 		}
 
+		Xil_ExceptionEnable();
 		return 0;
 	}
 
@@ -1547,6 +1553,7 @@ int FlashErase(u32 Address, u32 ByteCount,
 		Address += Flash_Config_Table[FCTIndex].SectSize;
 	}
 
+	Xil_ExceptionEnable();
 	return 0;
 }
 
@@ -1581,6 +1588,7 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 	int Status;
 	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
+	Xil_ExceptionDisable();
 	/* Check die boundary conditions if required for any flash */
 
 	/* For Dual Stacked, split and read for boundary crossing */
@@ -1679,6 +1687,7 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 		return XST_FAILURE;
 	}
 
+	Xil_ExceptionEnable();
 	return 0;
 }
 
