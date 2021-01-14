@@ -6,7 +6,7 @@
 #include "xstatus.h"
 #include "xintc.h"
 
-#include "ff.h"
+//#include "ff.h"
 
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
@@ -34,7 +34,7 @@ OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 //static FATFS	fatfs;
-BYTE			work[FF_MAX_SS];
+//BYTE			work[FF_MAX_SS];
 
 u32				DEBUG_STATUS_REGISTERS[30] = {0};
 
@@ -156,6 +156,12 @@ int init_storage(void)
 					*Config_cmd_in, 
 					*Config_Data_out, 
 					*Config_Data_in;
+
+	Status = initialize_qspi_flash();
+	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
+		return XST_FAILURE;
+	}
 
 	init_platform();
 
@@ -343,12 +349,6 @@ int init_storage(void)
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
 //	initialize_ramfs();
-
-	Status = initialize_qspi_flash();
-	if (Status != XST_SUCCESS) {
-		SEC_HW_DEBUG_HANG();
-		return XST_FAILURE;
-	}
 
 	initialize_storage_space();
 

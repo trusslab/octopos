@@ -21,112 +21,112 @@
 #include "arch/syscall.h"
 
 #ifdef ARCH_SEC_HW_STORAGE
-#include "ff.h"
+//#include "ff.h"
 #include "arch/sec_hw.h"
-#define FILE FIL
-#define	SEEK_SET	0
-
-FIL* fop_open(const char *filename, const char *mode)
-{
-	FIL* filep = (FIL*) malloc(sizeof(FIL));
-	BYTE _mode;
-	FRESULT result;
-
-	if (strcmp(mode, "r") == 0) {
-		_mode = FA_READ;
-	} else if (strcmp(mode, "r+") == 0) {
-		_mode = FA_READ | FA_WRITE;
-	} else if (strcmp(mode, "w") == 0) {
-		_mode = FA_CREATE_ALWAYS | FA_WRITE;
-	} else if (strcmp(mode, "w+") == 0) {
-		_mode = FA_CREATE_ALWAYS | FA_WRITE | FA_READ;
-	} else if (strcmp(mode, "a") == 0) {
-		_mode = FA_OPEN_APPEND | FA_WRITE;
-	} else if (strcmp(mode, "a+") == 0) {
-		_mode = FA_OPEN_APPEND | FA_WRITE | FA_READ;
-	} else if (strcmp(mode, "wx") == 0) {
-		_mode = FA_CREATE_NEW | FA_WRITE;
-	} else if (strcmp(mode, "w+x") == 0) {
-		_mode = FA_CREATE_NEW | FA_WRITE | FA_READ;
-	} else {
-		return NULL;
-	}
-	
-	result = f_open(filep, filename, _mode);
-	if (result == FR_OK) {
-		return filep;
-	} else {
-		return NULL;
-	}
-
-}
-
-int fop_close(FIL *filep)
-{
-	FRESULT result;
-
-	if (!filep) {
-		SEC_HW_DEBUG_HANG();
-		return ERR_INVALID;
-	}
-
-	result = f_close(filep);
-	free(filep);
-	if (result == FR_OK) {
-		return 0;
-	} else {
-		SEC_HW_DEBUG_HANG();
-		return ERR_FAULT;
-	}
-}
-
-int fop_seek(FIL *filep, long int offset, int origin)
-{
-	FRESULT result;
-
-	if (origin != SEEK_SET) {
-		SEC_HW_DEBUG_HANG();
-		return ERR_INVALID;
-	}
-
-	result = f_lseek(filep, offset);
-	if (result == FR_OK) {
-		return 0;
-	} else {
-		SEC_HW_DEBUG_HANG();
-		return ERR_FAULT;
-	}
-}
-
-size_t fop_read(void *ptr, size_t size, size_t count, FIL *filep)
-{
-	FRESULT result;
-	UINT NumBytesRead = 0;
-	UINT _size = size * count;
-
-	result = f_read(filep, ptr, _size, &NumBytesRead);
-	if (result == FR_OK) {
-		return (size_t) NumBytesRead;
-	} else {
-		SEC_HW_DEBUG_HANG();
-		return 0;
-	}
-}
-
-size_t fop_write(void *ptr, size_t size, size_t count, FIL *filep)
-{
-	FRESULT result;
-	UINT NumBytesWrite = 0;
-	UINT _size = size * count;
-
-	result = f_write(filep, ptr, _size, &NumBytesWrite);
-	if (result == FR_OK) {
-		return (size_t) NumBytesWrite;
-	} else {
-		SEC_HW_DEBUG_HANG();
-		return 0;
-	}
-}
+//#define FILE FIL
+//#define	SEEK_SET	0
+//
+//FIL* fop_open(const char *filename, const char *mode)
+//{
+//	FIL* filep = (FIL*) malloc(sizeof(FIL));
+//	BYTE _mode;
+//	FRESULT result;
+//
+//	if (strcmp(mode, "r") == 0) {
+//		_mode = FA_READ;
+//	} else if (strcmp(mode, "r+") == 0) {
+//		_mode = FA_READ | FA_WRITE;
+//	} else if (strcmp(mode, "w") == 0) {
+//		_mode = FA_CREATE_ALWAYS | FA_WRITE;
+//	} else if (strcmp(mode, "w+") == 0) {
+//		_mode = FA_CREATE_ALWAYS | FA_WRITE | FA_READ;
+//	} else if (strcmp(mode, "a") == 0) {
+//		_mode = FA_OPEN_APPEND | FA_WRITE;
+//	} else if (strcmp(mode, "a+") == 0) {
+//		_mode = FA_OPEN_APPEND | FA_WRITE | FA_READ;
+//	} else if (strcmp(mode, "wx") == 0) {
+//		_mode = FA_CREATE_NEW | FA_WRITE;
+//	} else if (strcmp(mode, "w+x") == 0) {
+//		_mode = FA_CREATE_NEW | FA_WRITE | FA_READ;
+//	} else {
+//		return NULL;
+//	}
+//
+//	result = f_open(filep, filename, _mode);
+//	if (result == FR_OK) {
+//		return filep;
+//	} else {
+//		return NULL;
+//	}
+//
+//}
+//
+//int fop_close(FIL *filep)
+//{
+//	FRESULT result;
+//
+//	if (!filep) {
+//		SEC_HW_DEBUG_HANG();
+//		return ERR_INVALID;
+//	}
+//
+//	result = f_close(filep);
+//	free(filep);
+//	if (result == FR_OK) {
+//		return 0;
+//	} else {
+//		SEC_HW_DEBUG_HANG();
+//		return ERR_FAULT;
+//	}
+//}
+//
+//int fop_seek(FIL *filep, long int offset, int origin)
+//{
+//	FRESULT result;
+//
+//	if (origin != SEEK_SET) {
+//		SEC_HW_DEBUG_HANG();
+//		return ERR_INVALID;
+//	}
+//
+//	result = f_lseek(filep, offset);
+//	if (result == FR_OK) {
+//		return 0;
+//	} else {
+//		SEC_HW_DEBUG_HANG();
+//		return ERR_FAULT;
+//	}
+//}
+//
+//size_t fop_read(void *ptr, size_t size, size_t count, FIL *filep)
+//{
+//	FRESULT result;
+//	UINT NumBytesRead = 0;
+//	UINT _size = size * count;
+//
+//	result = f_read(filep, ptr, _size, &NumBytesRead);
+//	if (result == FR_OK) {
+//		return (size_t) NumBytesRead;
+//	} else {
+//		SEC_HW_DEBUG_HANG();
+//		return 0;
+//	}
+//}
+//
+//size_t fop_write(void *ptr, size_t size, size_t count, FIL *filep)
+//{
+//	FRESULT result;
+//	UINT NumBytesWrite = 0;
+//	UINT _size = size * count;
+//
+//	result = f_write(filep, ptr, _size, &NumBytesWrite);
+//	if (result == FR_OK) {
+//		return (size_t) NumBytesWrite;
+//	} else {
+//		SEC_HW_DEBUG_HANG();
+//		return 0;
+//	}
+//}
 #else /* ARCH_SEC_HW_STORAGE */
 
 #define fop_open fopen
@@ -232,30 +232,21 @@ bool is_config_locked = false;
 // FIXME: Move to a header file
 extern u8 ReadCmd;
 extern u8 WriteCmd;
+extern u8 CmdBfr[8];
 int FlashErase(u32 Address, u32 ByteCount, u8 *WriteBfrPtr);
 int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr);
 int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr, u8 *ReadBfrPtr);
 
-/* partition creation info and locks are saved in headers */
-/* the first 1MB is reserved for headers */
-#define header_size 1024 * 64
+/* Partition creation info and locks are saved in headers.
+ * Each header has 128B.
+ * The first 1MB is reserved for headers */
+#define header_size 128
 #define data_offset 1024 * 1024 * 1 
 
 #define create_header_offset 0
 #define lock_header_offset 15
-
-// FIXME: Copied from qspi driver
-#define DATA_OFFSET		5 /* Start of Data for Read/Write */
-#define DUMMY_SIZE		1 /* Number of dummy bytes for fast, dual and quad reads */
-
-#define PAGE_SIZE		512 /* ZCU106 flash (micron) page size is 512. 
-							 * other board may have page size up to 1024. 
-							 */
-
-#define QSPI_BUF_SIZE	PAGE_SIZE + (DATA_OFFSET + DUMMY_SIZE) * 8
-u8 CmdBfr[8];
 
 #define is_aligned_64(PTR) \
 	(((uintptr_t)(const void *)(PTR)) % 64 == 0)
