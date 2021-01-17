@@ -233,7 +233,7 @@ bool is_config_locked = false;
 extern u8 ReadCmd;
 extern u8 WriteCmd;
 extern u8 CmdBfr[8];
-int FlashErase(u32 Address, u32 ByteCount, u8 *WriteBfrPtr);
+#define QSPI_PAGE_SIZE 512
 int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr);
 int FlashRead(u32 Address, u32 ByteCount, u8 Command,
@@ -260,7 +260,7 @@ static int get_partition_data_address(int partition_id)
 	int i;
 	u32 data_address = data_offset;
 
-	for (i = 0; i < partition_id; i++) {
+	for (i = 0; i <= partition_id; i++) {
 		data_address += partition_sizes[i];
 	}
 
@@ -271,6 +271,9 @@ static int partition_erase(int partition_id, int part)
 {
 	struct partition *partition;
 	u32 header_address, data_address, status;
+	uint8_t zero_block[QSPI_PAGE_SIZE];
+
+	memset(zero_block, 0xfe, QSPI_PAGE_SIZE);
 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
@@ -281,7 +284,10 @@ static int partition_erase(int partition_id, int part)
 
 	if (part & ERASE_HEADER) {
 		/* erase partition header */
-		status = FlashErase(header_address, header_size, CmdBfr);
+		status = FlashWrite(header_address,
+						header_size,
+						WriteCmd,
+						zero_block);
 		if (status != XST_SUCCESS) {
 			SEC_HW_DEBUG_HANG();
 			return ERR_FAULT;
@@ -291,10 +297,15 @@ static int partition_erase(int partition_id, int part)
 
 	if (part & ERASE_DATA) {
 		/* erase partition data */
-		status = FlashErase(data_address, partition->size, CmdBfr);
-		if (status != XST_SUCCESS) {
-			SEC_HW_DEBUG_HANG();
-			return ERR_FAULT;
+		for (uint32_t i = 0; i < partition->size; i++) {
+			status = FlashWrite(data_address + i * QSPI_PAGE_SIZE,
+							QSPI_PAGE_SIZE,
+							WriteCmd,
+							zero_block);
+			if (status != XST_SUCCESS) {
+				SEC_HW_DEBUG_HANG();
+				return ERR_FAULT;
+			}
 		}
 	}
 
@@ -304,16 +315,20 @@ static int partition_erase(int partition_id, int part)
 static int partition_reset_key(int partition_id)
 {
 	u32 header_address, status;
+	uint8_t zero_block[header_size];
 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
+	memset(zero_block, 0x0, header_size);
+
 	header_address = partition_id * header_size;
 
 	/* erase partition header */
-	status = FlashErase(header_address + lock_header_offset, 
+	status = FlashWrite(header_address + lock_header_offset,
 						header_size - lock_header_offset, 
-						CmdBfr);
+						WriteCmd,
+						zero_block);
 
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
@@ -330,8 +345,10 @@ static int partition_read_header(int partition_id, u32 offset, u32 length, void 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
-	if (offset + length > header_size)
+	if (offset + length > header_size) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_INVALID;
+	}
 
 	if (!is_aligned_64(ptr)) {
 		SEC_HW_DEBUG_HANG();
@@ -342,14 +359,14 @@ static int partition_read_header(int partition_id, u32 offset, u32 length, void 
 
 	/* read partition header */
 	status = FlashRead(header_address + offset, 
-					length, ReadCmd, 
+					length,
+					ReadCmd,
 					CmdBfr, 
 					(u8 *) ptr);
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
-
 	return length;
 }
 
@@ -372,7 +389,7 @@ static int partition_read(int partition_id, u32 offset, u32 length, void *ptr)
 
 	data_address = get_partition_data_address(partition_id);
 
-	/* read partition header */
+	/* read partition */
 	status = FlashRead(data_address + offset, 
 					length, 
 					ReadCmd, 
@@ -393,13 +410,30 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
+	if (length > QSPI_PAGE_SIZE)
+		return ERR_INVALID;
+
 	if (offset + length > header_size)
 		return ERR_INVALID;
 
 	header_address = partition_id * header_size;
 
-	/* read partition header */
-	status = FlashWrite(header_address + offset, length, WriteCmd, (u8 *) ptr);
+	/* write partition header */
+	//status = FlashWrite(header_address + offset, length, WriteCmd, (u8 *) ptr);
+	//debug >>>
+	uint8_t bufw[512];
+	memset(bufw, 0x11, 512);
+	status = FlashWrite(0, 512, WriteCmd, (u8 *) bufw);
+
+	uint8_t key[128] __attribute__ ((aligned(64)));
+	status = FlashRead(0,
+					512,
+					ReadCmd,
+					CmdBfr,
+					key);
+
+	sleep(30);
+	//debug <<<
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
@@ -420,9 +454,12 @@ static int partition_write(int partition_id, u32 offset, u32 length, void *ptr)
 	if (offset + length > partition->size)
 		return ERR_INVALID;
 
+	if (length > QSPI_PAGE_SIZE)
+		return ERR_INVALID;
+
 	data_address = get_partition_data_address(partition_id);
 
-	/* read partition header */
+	/* write partition */
 	status = FlashWrite(data_address + offset, length, WriteCmd, (u8 *) ptr);
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
@@ -436,6 +473,7 @@ static int partition_write(int partition_id, u32 offset, u32 length, void *ptr)
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 void initialize_storage_space(void)
 {
+	uint8_t tag[4] __attribute__ ((aligned(64)));
 #ifdef ARCH_UMODE
 	chdir("./storage");
 #endif
@@ -523,11 +561,12 @@ void initialize_storage_space(void)
 			partition->is_locked = false;
 		}
 #else
-		uint8_t tag[4] __attribute__ ((aligned(64)));
 		uint32_t size = partition_read_header(i, create_header_offset, 4, tag);
 		if (size == 4 && *((int*) tag) == 1) {
 			partition->is_created = true;
 		} else {
+			// reading all ff because i erased wrong address, that's
+			// the only explaination!!!!
 			partition_erase(i, ERASE_ALL);
 			partition->is_locked = false;
 			continue;
@@ -622,10 +661,10 @@ static int unlock_partition(uint8_t *data, int partition_id)
 		if (key[i] != data[i]) {
 			return ERR_INVALID;
 		}
-
 	}
 
 	partitions[partition_id].is_locked = false;
+	sleep(5);
 	return 0;
 }
 
@@ -928,7 +967,6 @@ void process_request(uint8_t *buf)
 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
 			printf("%s: Error: no partitions with the requested size available\n", __func__);
 			STORAGE_SET_TWO_RETS(ERR_AVAILABLE, 0)
-			SEC_HW_DEBUG_HANG();
 			return;
 		}
 

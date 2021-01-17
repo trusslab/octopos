@@ -157,15 +157,13 @@ int init_storage(void)
 					*Config_Data_out, 
 					*Config_Data_in;
 
+	init_platform();
+
 	Status = initialize_qspi_flash();
 	if (Status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
 		return XST_FAILURE;
 	}
-
-	initialize_storage_space();
-
-	init_platform();
 
 	/* Initialize OCTOPOS_XMbox */
 	Config_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_STORAGE_MBOX_CMD_IN_DEVICE_ID);
@@ -351,6 +349,8 @@ int init_storage(void)
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
 //	initialize_ramfs();
+
+	initialize_storage_space();
 
 	return XST_SUCCESS;
 }
