@@ -243,7 +243,8 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
  * Each header has 128B.
  * The first 1MB is reserved for headers */
 #define header_size 128
-#define data_offset 1024 * 1024 * 1 
+#define data_offset 1024 * 1024
+#define header_offset 1024
 
 #define create_header_offset 0
 #define lock_header_offset 15
@@ -279,7 +280,7 @@ static int partition_erase(int partition_id, int part)
 		return ERR_INVALID;
 
 	partition = &partitions[partition_id];
-	header_address = partition_id * header_size;
+	header_address = header_offset + partition_id * header_size;
 	data_address = get_partition_data_address(partition_id);
 
 	if (part & ERASE_HEADER) {
@@ -291,7 +292,7 @@ static int partition_erase(int partition_id, int part)
 		if (status != XST_SUCCESS) {
 			SEC_HW_DEBUG_HANG();
 			return ERR_FAULT;
-		}	
+		}
 	}
 
 
@@ -309,6 +310,22 @@ static int partition_erase(int partition_id, int part)
 		}
 	}
 
+//	//debug >>>
+//	uint8_t bufw[64+5];
+//	memset(bufw, 0xaf, 64);
+//	status = FlashWrite(0, 64, WriteCmd, (u8 *) bufw);
+//
+//	uint8_t key[64+48] __attribute__ ((aligned(64)));
+//	memset(key, 0x0, 64);
+//	status = FlashRead(0,
+//					64,
+//					ReadCmd,
+//					CmdBfr,
+//					key);
+//
+//	sleep(30);
+//	//debug <<<
+
 	return 0;
 }
 
@@ -322,7 +339,7 @@ static int partition_reset_key(int partition_id)
 
 	memset(zero_block, 0x0, header_size);
 
-	header_address = partition_id * header_size;
+	header_address = header_offset + partition_id * header_size;
 
 	/* erase partition header */
 	status = FlashWrite(header_address + lock_header_offset,
@@ -355,7 +372,7 @@ static int partition_read_header(int partition_id, u32 offset, u32 length, void 
 		return ERR_INVALID;
 	}
 
-	header_address = partition_id * header_size;
+	header_address = header_offset + partition_id * header_size;
 
 	/* read partition header */
 	status = FlashRead(header_address + offset, 
@@ -416,21 +433,22 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 	if (offset + length > header_size)
 		return ERR_INVALID;
 
-	header_address = partition_id * header_size;
+	header_address = header_offset + partition_id * header_size;
 
 	/* write partition header */
-	//status = FlashWrite(header_address + offset, length, WriteCmd, (u8 *) ptr);
+	status = FlashWrite(header_address + offset, length, WriteCmd, (u8 *) ptr);
 	//debug >>>
-	uint8_t bufw[512];
-	memset(bufw, 0x11, 512);
-	status = FlashWrite(0, 512, WriteCmd, (u8 *) bufw);
+//	uint8_t bufw[128+5];
+//	memset(bufw, 0x99, 32);
+//	status = FlashWrite(1036, 32, WriteCmd, (u8 *) bufw);
 
-	uint8_t key[128] __attribute__ ((aligned(64)));
-	status = FlashRead(0,
-					512,
+	uint8_t bufr[128+48] __attribute__ ((aligned(64)));
+	memset(bufr, 0x0, 128+48);
+	status = FlashRead(header_offset,
+					header_size,
 					ReadCmd,
 					CmdBfr,
-					key);
+					bufr);
 
 	sleep(30);
 	//debug <<<
@@ -473,7 +491,7 @@ static int partition_write(int partition_id, u32 offset, u32 length, void *ptr)
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 void initialize_storage_space(void)
 {
-	uint8_t tag[4] __attribute__ ((aligned(64)));
+	uint8_t tag[4 + 48] __attribute__ ((aligned(64)));
 #ifdef ARCH_UMODE
 	chdir("./storage");
 #endif
@@ -562,6 +580,7 @@ void initialize_storage_space(void)
 		}
 #else
 		uint32_t size = partition_read_header(i, create_header_offset, 4, tag);
+		sleep(5);
 		if (size == 4 && *((int*) tag) == 1) {
 			partition->is_created = true;
 		} else {
@@ -656,7 +675,7 @@ static int unlock_partition(uint8_t *data, int partition_id)
 		while(1) sleep(1);
 		return ERR_FAULT;
 	}
-
+	sleep(30);
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
 		if (key[i] != data[i]) {
 			return ERR_INVALID;
@@ -664,7 +683,7 @@ static int unlock_partition(uint8_t *data, int partition_id)
 	}
 
 	partitions[partition_id].is_locked = false;
-	sleep(5);
+
 	return 0;
 }
 
