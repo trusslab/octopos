@@ -234,6 +234,8 @@ extern u8 ReadCmd;
 extern u8 WriteCmd;
 extern u8 CmdBfr[8];
 #define QSPI_PAGE_SIZE 512
+int FlashErase(u32 Address, u32 ByteCount,
+		u8 *WriteBfrPtr);
 int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr);
 int FlashRead(u32 Address, u32 ByteCount, u8 Command,
@@ -272,9 +274,9 @@ static int partition_erase(int partition_id, int part)
 {
 	struct partition *partition;
 	u32 header_address, data_address, status;
-	uint8_t zero_block[QSPI_PAGE_SIZE];
+//	uint8_t zero_block[QSPI_PAGE_SIZE + 5] __attribute__ ((aligned(64)));
 
-	memset(zero_block, 0xfe, QSPI_PAGE_SIZE);
+//	memset(zero_block, 0xfa, QSPI_PAGE_SIZE);
 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
@@ -284,11 +286,12 @@ static int partition_erase(int partition_id, int part)
 	data_address = get_partition_data_address(partition_id);
 
 	if (part & ERASE_HEADER) {
+		status = FlashErase(header_address, header_size, CmdBfr);
 		/* erase partition header */
-		status = FlashWrite(header_address,
-						header_size,
-						WriteCmd,
-						zero_block);
+//		status = FlashWrite(header_address,
+//						header_size,
+//						WriteCmd,
+//						zero_block);
 		if (status != XST_SUCCESS) {
 			SEC_HW_DEBUG_HANG();
 			return ERR_FAULT;
@@ -298,16 +301,17 @@ static int partition_erase(int partition_id, int part)
 
 	if (part & ERASE_DATA) {
 		/* erase partition data */
-		for (uint32_t i = 0; i < partition->size; i++) {
-			status = FlashWrite(data_address + i * QSPI_PAGE_SIZE,
-							QSPI_PAGE_SIZE,
-							WriteCmd,
-							zero_block);
-			if (status != XST_SUCCESS) {
-				SEC_HW_DEBUG_HANG();
-				return ERR_FAULT;
-			}
-		}
+		status = FlashErase(data_address, partition->size, CmdBfr);
+//		for (uint32_t i = 0; i < partition->size; i++) {
+//			status = FlashWrite(data_address + i * QSPI_PAGE_SIZE,
+//							QSPI_PAGE_SIZE,
+//							WriteCmd,
+//							zero_block);
+//			if (status != XST_SUCCESS) {
+//				SEC_HW_DEBUG_HANG();
+//				return ERR_FAULT;
+//			}
+//		}
 	}
 
 //	//debug >>>
@@ -332,20 +336,23 @@ static int partition_erase(int partition_id, int part)
 static int partition_reset_key(int partition_id)
 {
 	u32 header_address, status;
-	uint8_t zero_block[header_size];
+//	uint8_t zero_block[header_size] __attribute__ ((aligned(64)));
 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
-	memset(zero_block, 0x0, header_size);
+//	memset(zero_block, 0x0, header_size);
 
 	header_address = header_offset + partition_id * header_size;
 
 	/* erase partition header */
-	status = FlashWrite(header_address + lock_header_offset,
-						header_size - lock_header_offset, 
-						WriteCmd,
-						zero_block);
+	status = FlashErase(header_address + lock_header_offset,
+						header_size - lock_header_offset,
+						CmdBfr);
+//	status = FlashWrite(header_address + lock_header_offset,
+//						header_size - lock_header_offset,
+//						WriteCmd,
+//						zero_block);
 
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
@@ -369,7 +376,7 @@ static int partition_read_header(int partition_id, u32 offset, u32 length, void 
 
 	if (!is_aligned_64(ptr)) {
 		SEC_HW_DEBUG_HANG();
-		return ERR_INVALID;
+		return ERR_FAULT;
 	}
 
 	header_address = header_offset + partition_id * header_size;
@@ -401,7 +408,7 @@ static int partition_read(int partition_id, u32 offset, u32 length, void *ptr)
 
 	if (!is_aligned_64(ptr)) {
 		SEC_HW_DEBUG_HANG();
-		return ERR_INVALID;
+		return ERR_FAULT;
 	}
 
 	data_address = get_partition_data_address(partition_id);
@@ -430,27 +437,36 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 	if (length > QSPI_PAGE_SIZE)
 		return ERR_INVALID;
 
+//	if (!is_aligned_64(ptr)) {
+//		SEC_HW_DEBUG_HANG();
+//		return ERR_FAULT;
+//	}
+	uint8_t dup_buf[length + 5] __attribute__ ((aligned(64)));
+	memcpy(dup_buf, ptr, length);
+
 	if (offset + length > header_size)
 		return ERR_INVALID;
 
 	header_address = header_offset + partition_id * header_size;
 
 	/* write partition header */
-	status = FlashWrite(header_address + offset, length, WriteCmd, (u8 *) ptr);
+//	status = FlashErase(header_address + offset, length, CmdBfr);
+	// FIXME check for status errors
+	status = FlashWrite(header_address + offset, length, WriteCmd, (u8 *) dup_buf);
 	//debug >>>
 //	uint8_t bufw[128+5];
 //	memset(bufw, 0x99, 32);
 //	status = FlashWrite(1036, 32, WriteCmd, (u8 *) bufw);
 
-	uint8_t bufr[128+48] __attribute__ ((aligned(64)));
-	memset(bufr, 0x0, 128+48);
-	status = FlashRead(header_offset,
-					header_size,
-					ReadCmd,
-					CmdBfr,
-					bufr);
+//	uint8_t bufr[128 + 48] __attribute__ ((aligned(64)));
+//	memset(bufr, 0x0, 128);
+//	status = FlashRead(header_offset,
+//					header_size,
+//					ReadCmd,
+//					CmdBfr,
+//					bufr);
 
-	sleep(30);
+//	sleep(30);
 	//debug <<<
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
@@ -478,6 +494,8 @@ static int partition_write(int partition_id, u32 offset, u32 length, void *ptr)
 	data_address = get_partition_data_address(partition_id);
 
 	/* write partition */
+	status = FlashErase(data_address + offset, length, CmdBfr);
+	// FIXME check for status errors
 	status = FlashWrite(data_address + offset, length, WriteCmd, (u8 *) ptr);
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
@@ -580,8 +598,8 @@ void initialize_storage_space(void)
 		}
 #else
 		uint32_t size = partition_read_header(i, create_header_offset, 4, tag);
-		sleep(5);
-		if (size == 4 && *((int*) tag) == 1) {
+//		sleep(1);
+		if (size == 4 && tag[0] == 1) {
 			partition->is_created = true;
 		} else {
 			// reading all ff because i erased wrong address, that's
@@ -626,6 +644,16 @@ static int set_partition_key(uint8_t *data, int partition_id)
 		partition_reset_key(partition_id);
 		return ERR_FAULT;
 	}
+
+//	// debug >>>
+//	// Pass
+//	uint8_t key[STORAGE_KEY_SIZE + 48] __attribute__ ((aligned(64)));
+//	size = partition_read_header(partition_id,
+//								lock_header_offset,
+//								STORAGE_KEY_SIZE,
+//								key);
+//	sleep(30);
+//	// debug <<<
 #endif
 
 	return 0;
@@ -650,6 +678,9 @@ static int remove_partition_key(int partition_id)
 	return 0;
 }
 
+////DEBUG
+int unlock_counter = 0;
+
 static int unlock_partition(uint8_t *data, int partition_id)
 {
 #ifndef ARCH_SEC_HW_STORAGE
@@ -664,7 +695,7 @@ static int unlock_partition(uint8_t *data, int partition_id)
 	uint32_t size = (uint32_t) fop_read(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
 	fop_close(filep);
 #else
-	uint8_t key[STORAGE_KEY_SIZE] __attribute__ ((aligned(64)));
+	uint8_t key[STORAGE_KEY_SIZE + 48] __attribute__ ((aligned(64)));
 	uint32_t size = partition_read_header(partition_id,
 										lock_header_offset,
 										STORAGE_KEY_SIZE,
@@ -675,7 +706,13 @@ static int unlock_partition(uint8_t *data, int partition_id)
 		while(1) sleep(1);
 		return ERR_FAULT;
 	}
-	sleep(30);
+//	// DEBUG
+	if (partition_id == 0) {
+		if (unlock_counter == 1)
+			sleep(30);
+		unlock_counter++;
+	}
+
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
 		if (key[i] != data[i]) {
 			return ERR_INVALID;
@@ -1004,16 +1041,15 @@ void process_request(uint8_t *buf)
 		}
 
 		fop_seek(filep, 0, SEEK_SET);
-#endif
 		uint32_t tag = 1;
-#ifndef ARCH_SEC_HW_STORAGE
 		uint32_t size = (uint32_t) fop_write(&tag, sizeof(uint8_t), 4, filep);
 		fop_close(filep);
 #else
+		uint8_t tag[4] __attribute__ ((aligned(64)));
+		tag[0] = 1;
 		uint32_t size = partition_write_header(partition_id,
 											create_header_offset,
-											4,
-											&tag);
+											4, tag);
 #endif
 		if (size != 4) {
 			SEC_HW_DEBUG_HANG();

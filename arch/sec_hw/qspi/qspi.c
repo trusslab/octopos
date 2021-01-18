@@ -338,7 +338,7 @@
 /*
  * Flash address to which data is to be written.
  */
-#define TEST_ADDRESS		0x000000
+#define TEST_ADDRESS		0x000400
 
 
 #define UNIQUE_VALUE		0x06
@@ -750,12 +750,12 @@ int initialize_qspi_flash()
 		}
 	}
 
-	for (UniqueValue = UNIQUE_VALUE, Count = 0;
-			Count < Flash_Config_Table[FCTIndex].PageSize;
-			Count++, UniqueValue++) {
-//		WriteBuffer[Count] = (u8)(UniqueValue + Test);
-		WriteBuffer[Count] = 0xac;
-	}
+//	for (UniqueValue = UNIQUE_VALUE, Count = 0;
+//			Count < Flash_Config_Table[FCTIndex].PageSize;
+//			Count++, UniqueValue++) {
+////		WriteBuffer[Count] = (u8)(UniqueValue + Test);
+//		WriteBuffer[Count] = 0xac;
+//	}
 //
 //	for (Count = 0; Count < ReadBfrSize; Count++) {
 //		ReadBuffer[Count] = 0;
@@ -806,19 +806,40 @@ int initialize_qspi_flash()
 //	}
 //
 	//debug >>>
-//	uint8_t bufw[512 + 5];
-//	memset(WriteBuffer, 0xAD, 512);
-	Status = FlashWrite(0, 512, WriteCmd, (u8 *) WriteBuffer);
-sleep(1);
-//	uint8_t bufr[512+48] __attribute__ ((aligned(64)));
-//	memset(ReadBuffer, 0x0, 512);
-	Status = FlashRead(0,
-					512,
-					ReadCmd,
-					CmdBfr,
-					ReadBuffer);
+	FlashErase(1024, 1024, CmdBfr);
 
-	sleep(30);
+////	uint8_t bufw[512 + 5] __attribute__ ((aligned(64)));
+//	memset(WriteBuffer, 0xD3, 512);
+//	Status = FlashWrite(1024, 512, WriteCmd, (u8 *) WriteBuffer);
+////sleep(1);
+//	Status = FlashWrite(1024 + 512, 512, WriteCmd, (u8 *) WriteBuffer);
+////sleep(1);
+//	memset(ReadBuffer, 0x0, 512);
+//	Status = FlashRead(1024, 512, ReadCmd, CmdBfr, ReadBuffer);
+//	sleep(5);
+////
+////		if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
+////			Status = FlashEnterExit4BAddMode(EXIT_4B);
+////			if (Status != XST_SUCCESS) {
+////				while(1) sleep(1);
+////				return XST_FAILURE;
+////			}
+////		}
+////		if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
+////			Status = FlashEnterExit4BAddMode(ENTER_4B);
+////			if (Status != XST_SUCCESS) {
+////				while(1) sleep(1);
+////				return XST_FAILURE;
+////			}
+////		}
+//
+//	FlashErase(1024, 1024, CmdBfr);
+//	memset(WriteBuffer, 0xA1, 512);
+//	Status = FlashWrite(1024, 512, WriteCmd, (u8 *) WriteBuffer);
+////	uint8_t bufr[512+48] __attribute__ ((aligned(64)));
+//	memset(ReadBuffer, 0x0, 512);
+//	Status = FlashRead(1024, 512, ReadCmd, CmdBfr, ReadBuffer);
+//	sleep(5);
 	//debug <<<
 
 	qspi_device_inited = TRUE;
