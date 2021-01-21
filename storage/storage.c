@@ -245,7 +245,7 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
  * Each header has 128B.
  * The first 1MB is reserved for headers */
 #define header_size 128
-#define data_offset 1024 * 1024
+#define data_offset 1048600
 #define header_offset 1024
 
 #define create_header_offset 0
@@ -441,7 +441,7 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 //		SEC_HW_DEBUG_HANG();
 //		return ERR_FAULT;
 //	}
-	uint8_t dup_buf[length + 5] __attribute__ ((aligned(64)));
+	uint8_t dup_buf[length + 5];
 	memcpy(dup_buf, ptr, length);
 
 	if (offset + length > header_size)
@@ -491,17 +491,22 @@ static int partition_write(int partition_id, u32 offset, u32 length, void *ptr)
 	if (length > QSPI_PAGE_SIZE)
 		return ERR_INVALID;
 
+	uint8_t dup_buf[length + 5];
+	memcpy(dup_buf, ptr, length);
+
+
 	data_address = get_partition_data_address(partition_id);
 
 	/* write partition */
 	status = FlashErase(data_address + offset, length, CmdBfr);
 	// FIXME check for status errors
-	status = FlashWrite(data_address + offset, length, WriteCmd, (u8 *) ptr);
+	status = FlashWrite(data_address + offset, length, WriteCmd, (u8 *) dup_buf);
+//	status = FlashWrite(data_address + offset + 24, 4, WriteCmd, (u8 *) dup_buf + 24);
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
-
+//	sleep(5);
 	return length;
 }
 #endif
@@ -706,12 +711,12 @@ static int unlock_partition(uint8_t *data, int partition_id)
 		while(1) sleep(1);
 		return ERR_FAULT;
 	}
-//	// DEBUG
-	if (partition_id == 0) {
-		if (unlock_counter == 1)
-			sleep(30);
-		unlock_counter++;
-	}
+	// DEBUG
+//	if (partition_id == 0) {
+//		if (unlock_counter == 1)
+//			sleep(30);
+//		unlock_counter++;
+//	}
 
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
 		if (key[i] != data[i]) {
@@ -748,6 +753,7 @@ void process_request(uint8_t *buf)
 	/* write */
 	if (buf[0] == STORAGE_OP_WRITE) {
 		if (!is_queue_set_bound) {
+			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: no partition is bound to queue set\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
@@ -756,12 +762,14 @@ void process_request(uint8_t *buf)
 		int partition_id = bound_partition;
 
 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
+			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: invalid partition ID\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
 
 		if (partitions[partition_id].is_locked) {
+			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
@@ -781,6 +789,7 @@ void process_request(uint8_t *buf)
 		uint32_t start_block = arg0;
 		uint32_t num_blocks = arg1;
 		if (start_block + num_blocks > partitions[partition_id].size) {
+			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: invalid args\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 #ifndef ARCH_SEC_HW_STORAGE
@@ -792,17 +801,29 @@ void process_request(uint8_t *buf)
 #ifndef ARCH_SEC_HW_STORAGE
 		fop_seek(filep, seek_off, SEEK_SET);
 #endif
-		uint8_t data_buf[STORAGE_BLOCK_SIZE];
+		uint8_t data_buf[STORAGE_BLOCK_SIZE + 5];
 		uint32_t size = 0;
 		for (uint32_t i = 0; i < num_blocks; i++) {
 			read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
 #ifndef ARCH_SEC_HW_STORAGE
 			size += (uint32_t) fop_write(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 #else
+//			data_buf[24] = 0xaa;
+//			data_buf[25] = 0xab;
+//			data_buf[26] = 0xac;
+//			data_buf[27] = 0xad;
+
 			size += partition_write(partition_id, 
 									seek_off + i * STORAGE_BLOCK_SIZE, 
 									STORAGE_BLOCK_SIZE, 
 									data_buf);
+
+			uint8_t data_buf_rd_dbg[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
+			partition_read(partition_id,
+									seek_off + i * STORAGE_BLOCK_SIZE,
+									STORAGE_BLOCK_SIZE,
+									data_buf_rd_dbg);
+			sleep(5);
 #endif
 		}
 		STORAGE_SET_ONE_RET(size);
@@ -811,6 +832,7 @@ void process_request(uint8_t *buf)
 #endif
 	} else if (buf[0] == STORAGE_OP_READ) { /* read */
 		if (!is_queue_set_bound) {
+			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: no partition is bound to queue set\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
@@ -819,12 +841,14 @@ void process_request(uint8_t *buf)
 		int partition_id = bound_partition;
 
 		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
+			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: invalid partition ID\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
 		}
 
 		if (partitions[partition_id].is_locked) {
+			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: partition is locked\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 			return;
@@ -844,6 +868,7 @@ void process_request(uint8_t *buf)
 		uint32_t start_block = arg0;
 		uint32_t num_blocks = arg1;
 		if (start_block + num_blocks > partitions[partition_id].size) {
+			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: invalid args\n", __func__);
 			STORAGE_SET_ONE_RET(0)
 #ifndef ARCH_SEC_HW_STORAGE
@@ -855,7 +880,7 @@ void process_request(uint8_t *buf)
 #ifndef ARCH_SEC_HW_STORAGE
 		fop_seek(filep, seek_off, SEEK_SET);
 #endif
-		uint8_t data_buf[STORAGE_BLOCK_SIZE] __attribute__ ((aligned(64)));
+		uint8_t data_buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
 		uint32_t size = 0;
 		for (uint32_t i = 0; i < num_blocks; i++) {
 #ifndef ARCH_SEC_HW_STORAGE
@@ -865,6 +890,7 @@ void process_request(uint8_t *buf)
 									seek_off + i * STORAGE_BLOCK_SIZE, 
 									STORAGE_BLOCK_SIZE, 
 									data_buf);
+//			sleep(5);
 #endif
 			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 		}
