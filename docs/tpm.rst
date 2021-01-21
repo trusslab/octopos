@@ -45,20 +45,6 @@ Then use the following command to build and install the library:
 
 $ make install
 
-
-Setting up the TPM simulator
-============================
-We recommend use the TPM simulator to prevent potential unrecoverable damage to real chips.
-We include the IBM's Software TPM 2.0 in our repo which locates at external/ibmtpm/. 
-
-When installing the library, we build the simulator as well.
-
-To create a custom TPM environment, you can do:
-
-$ ./external/ibmtpm/tpm_server &
-$ sudo -u tss tpm2-abrmd --tcti=mssim
-
-
 Potential problems
 ==================
 Problem 1. Recipe for target 'tss' failed
