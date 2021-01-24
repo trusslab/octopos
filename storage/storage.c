@@ -229,10 +229,51 @@ uint8_t config_key[STORAGE_KEY_SIZE];
 bool is_config_locked = false;
 
 #ifdef ARCH_SEC_HW_STORAGE
+/* The next writable page number in each partition.
+ * Page 0 is reserved as an empty page, so that
+ * unmapped virtual pages will read FF.
+ */
+u32 partition_head[NUM_PARTITIONS] = {1};
+
+/* page_map translates a virtual page number to a
+ * physical page number.
+ */
+/* FIXME: currently support up to 1000 virtual pages. */
+u32 page_map[NUM_PARTITIONS][1000] = {0};
+
 // FIXME: Move to a header file
+
+typedef struct{
+	u32 SectSize;		/* Individual sector size or combined sector
+				 * size in case of parallel config
+				 */
+	u32 NumSect;		/* Total no. of sectors in one/two
+				 * flash devices
+				 */
+	u32 PageSize;		/* Individual page size or
+				 * combined page size in case of parallel
+				 * config
+				 */
+	u32 NumPage;		/* Total no. of pages in one/two flash
+				 * devices
+				 */
+	u32 FlashDeviceSize;	/* This is the size of one flash device
+				 * NOT the combination of both devices,
+				 * if present
+				 */
+	u8 ManufacturerID;	/* Manufacturer ID - used to identify make */
+	u8 DeviceIDMemSize;	/* Byte of device ID indicating the
+				 * memory size
+				 */
+	u32 SectMask;		/* Mask to get sector start address */
+	u8 NumDie;		/* No. of die forming a single flash */
+} FlashInfo;
+
+extern u32 FCTIndex;
 extern u8 ReadCmd;
 extern u8 WriteCmd;
 extern u8 CmdBfr[8];
+extern FlashInfo Flash_Config_Table[];
 #define QSPI_PAGE_SIZE 512
 int FlashErase(u32 Address, u32 ByteCount,
 		u8 *WriteBfrPtr);
@@ -258,16 +299,36 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 #define ERASE_DATA		0x01
 #define ERASE_ALL		0x11
 
-static int get_partition_data_address(int partition_id)
+static u32 get_partition_base_address(int partition_id)
 {
 	int i;
-	u32 data_address = data_offset;
+	u32 address = data_offset;
 
 	for (i = 0; i <= partition_id; i++) {
-		data_address += partition_sizes[i];
+		address += partition_sizes[i];
 	}
 
-	return data_address;
+	return address;
+}
+
+static u32 get_partition_phy_page_address(int partition_id, int page_id)
+{
+	u32 address;
+	u32 base_address = get_partition_base_address(partition_id);
+	u32 phy_page = page_map[partition_id][page_id];
+
+	/* Check if translated phy page goes beyond allocated partition size */
+	// FIXME: rm this check. this should never happen unless my code has a glitch.
+	if (phy_page >= partition_sizes[partition_id] /
+			Flash_Config_Table[FCTIndex].PageSize) {
+		SEC_HW_DEBUG_HANG();
+		return 0;
+	}
+
+	address = base_address +
+			phy_page * Flash_Config_Table[FCTIndex].PageSize;
+
+	return address;
 }
 
 static int partition_erase(int partition_id, int part)
@@ -283,7 +344,7 @@ static int partition_erase(int partition_id, int part)
 
 	partition = &partitions[partition_id];
 	header_address = header_offset + partition_id * header_size;
-	data_address = get_partition_data_address(partition_id);
+	data_address = get_partition_base_address(partition_id);
 
 	if (part & ERASE_HEADER) {
 		status = FlashErase(header_address, header_size, CmdBfr);
@@ -302,33 +363,7 @@ static int partition_erase(int partition_id, int part)
 	if (part & ERASE_DATA) {
 		/* erase partition data */
 		status = FlashErase(data_address, partition->size, CmdBfr);
-//		for (uint32_t i = 0; i < partition->size; i++) {
-//			status = FlashWrite(data_address + i * QSPI_PAGE_SIZE,
-//							QSPI_PAGE_SIZE,
-//							WriteCmd,
-//							zero_block);
-//			if (status != XST_SUCCESS) {
-//				SEC_HW_DEBUG_HANG();
-//				return ERR_FAULT;
-//			}
-//		}
 	}
-
-//	//debug >>>
-//	uint8_t bufw[64+5];
-//	memset(bufw, 0xaf, 64);
-//	status = FlashWrite(0, 64, WriteCmd, (u8 *) bufw);
-//
-//	uint8_t key[64+48] __attribute__ ((aligned(64)));
-//	memset(key, 0x0, 64);
-//	status = FlashRead(0,
-//					64,
-//					ReadCmd,
-//					CmdBfr,
-//					key);
-//
-//	sleep(30);
-//	//debug <<<
 
 	return 0;
 }
@@ -341,18 +376,12 @@ static int partition_reset_key(int partition_id)
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
-//	memset(zero_block, 0x0, header_size);
-
 	header_address = header_offset + partition_id * header_size;
 
 	/* erase partition header */
 	status = FlashErase(header_address + lock_header_offset,
 						header_size - lock_header_offset,
 						CmdBfr);
-//	status = FlashWrite(header_address + lock_header_offset,
-//						header_size - lock_header_offset,
-//						WriteCmd,
-//						zero_block);
 
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
@@ -394,37 +423,39 @@ static int partition_read_header(int partition_id, u32 offset, u32 length, void 
 	return length;
 }
 
-static int partition_read(int partition_id, u32 offset, u32 length, void *ptr)
+static int partition_read(int partition_id, int page_id, void *ptr)
 {
 	u32 data_address, status;
-	struct partition *partition;
 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
-	partition = &partitions[partition_id];
-	if (offset + length > partition->size)
-		return ERR_INVALID;
+	/* Check if requested page id goes beyond allocated partition size */
+	if (page_id >= partition_sizes[partition_id] /
+			Flash_Config_Table[FCTIndex].PageSize) {
+		return ERR_PERMISSION;
+	}
 
 	if (!is_aligned_64(ptr)) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
 
-	data_address = get_partition_data_address(partition_id);
+	data_address = get_partition_phy_page_address(partition_id, page_id);
 
 	/* read partition */
-	status = FlashRead(data_address + offset, 
-					length, 
+	status = FlashRead(data_address,
+					STORAGE_BLOCK_SIZE,
 					ReadCmd, 
 					CmdBfr, 
 					(u8 *) ptr);
+
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
 
-	return length;
+	return STORAGE_BLOCK_SIZE;
 }
 
 static int partition_write_header(int partition_id, u32 offset, u32 length, void *ptr)
@@ -476,38 +507,35 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 	return length;
 }
 
-static int partition_write(int partition_id, u32 offset, u32 length, void *ptr)
+static int partition_write(int partition_id, int page_id, void *ptr)
 {
 	u32 data_address, status;
-	struct partition *partition;
 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
-	partition = &partitions[partition_id];
-	if (offset + length > partition->size)
-		return ERR_INVALID;
+	/* Check if requested page id goes beyond allocated partition size */
+	if (page_id >= partition_sizes[partition_id] /
+			Flash_Config_Table[FCTIndex].PageSize) {
+		return ERR_PERMISSION;
+	}
 
-	if (length > QSPI_PAGE_SIZE)
-		return ERR_INVALID;
+	page_map[partition_id][page_id] = partition_head[partition_id];
+	partition_head[partition_id] += 1;
 
-	uint8_t dup_buf[length + 5];
-	memcpy(dup_buf, ptr, length);
+	data_address = get_partition_phy_page_address(partition_id, page_id);
 
+	status = FlashWrite(data_address, STORAGE_BLOCK_SIZE, WriteCmd, (u8 *) ptr);
 
-	data_address = get_partition_data_address(partition_id);
-
-	/* write partition */
-	status = FlashErase(data_address + offset, length, CmdBfr);
-	// FIXME check for status errors
-	status = FlashWrite(data_address + offset, length, WriteCmd, (u8 *) dup_buf);
-//	status = FlashWrite(data_address + offset + 24, 4, WriteCmd, (u8 *) dup_buf + 24);
 	if (status != XST_SUCCESS) {
+		/* In case of a bad write, map the bad virt page to page zero.
+		 * The partial written data will never be reachable. */
+		page_map[partition_id][page_id] = 0;
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
-//	sleep(5);
-	return length;
+
+	return STORAGE_BLOCK_SIZE;
 }
 #endif
 
@@ -515,6 +543,13 @@ static int partition_write(int partition_id, u32 offset, u32 length, void *ptr)
 void initialize_storage_space(void)
 {
 	uint8_t tag[4 + 48] __attribute__ ((aligned(64)));
+
+#ifdef ARCH_SEC_HW
+	/* OctopOS block size must be smaller than a physical page size */
+	if (STORAGE_BLOCK_SIZE > Flash_Config_Table[FCTIndex].PageSize)
+		SEC_HW_DEBUG_HANG();
+#endif
+
 #ifdef ARCH_UMODE
 	chdir("./storage");
 #endif
@@ -797,8 +832,8 @@ void process_request(uint8_t *buf)
 #endif
 			return;
 		}
-		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
 #ifndef ARCH_SEC_HW_STORAGE
+		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
 		fop_seek(filep, seek_off, SEEK_SET);
 #endif
 		uint8_t data_buf[STORAGE_BLOCK_SIZE + 5];
@@ -808,22 +843,17 @@ void process_request(uint8_t *buf)
 #ifndef ARCH_SEC_HW_STORAGE
 			size += (uint32_t) fop_write(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 #else
-//			data_buf[24] = 0xaa;
-//			data_buf[25] = 0xab;
-//			data_buf[26] = 0xac;
-//			data_buf[27] = 0xad;
 
 			size += partition_write(partition_id, 
-									seek_off + i * STORAGE_BLOCK_SIZE, 
-									STORAGE_BLOCK_SIZE, 
+									start_block + i,
 									data_buf);
 
-			uint8_t data_buf_rd_dbg[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
-			partition_read(partition_id,
-									seek_off + i * STORAGE_BLOCK_SIZE,
-									STORAGE_BLOCK_SIZE,
-									data_buf_rd_dbg);
-			sleep(5);
+//			uint8_t data_buf_rd_dbg[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
+//			partition_read(partition_id,
+//									seek_off + i * STORAGE_BLOCK_SIZE,
+//									STORAGE_BLOCK_SIZE,
+//									data_buf_rd_dbg);
+//			sleep(5);
 #endif
 		}
 		STORAGE_SET_ONE_RET(size);
@@ -876,8 +906,8 @@ void process_request(uint8_t *buf)
 #endif
 			return;
 		}
-		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
 #ifndef ARCH_SEC_HW_STORAGE
+		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
 		fop_seek(filep, seek_off, SEEK_SET);
 #endif
 		uint8_t data_buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
@@ -887,10 +917,8 @@ void process_request(uint8_t *buf)
 			size += (uint32_t) fop_read(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 #else
 			size += partition_read(partition_id, 
-									seek_off + i * STORAGE_BLOCK_SIZE, 
-									STORAGE_BLOCK_SIZE, 
+									start_block + i,
 									data_buf);
-//			sleep(5);
 #endif
 			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 		}
