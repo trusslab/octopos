@@ -220,7 +220,7 @@ struct partition {
 /* FIXME: determine partitions and their sizes dynamically. */
 struct partition partitions[NUM_PARTITIONS];
 uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
-	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100};
+	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 128, 128, 128};
 
 bool is_queue_set_bound = false;
 int bound_partition = -1;
@@ -239,10 +239,10 @@ u32 partition_head[NUM_PARTITIONS] = {1};
  * physical page number.
  */
 /* FIXME: currently support up to 1000 virtual pages. */
+// FIXME: page map and partition head must be stored in persistent memory.
 u32 page_map[NUM_PARTITIONS][1000] = {0};
 
 // FIXME: Move to a header file
-
 typedef struct{
 	u32 SectSize;		/* Individual sector size or combined sector
 				 * size in case of parallel config
@@ -305,7 +305,8 @@ static u32 get_partition_base_address(int partition_id)
 	u32 address = data_offset;
 
 	for (i = 0; i <= partition_id; i++) {
-		address += partition_sizes[i];
+		address += partition_sizes[i] *
+				(Flash_Config_Table[FCTIndex].PageSize / STORAGE_BLOCK_SIZE);
 	}
 
 	return address;
@@ -316,14 +317,6 @@ static u32 get_partition_phy_page_address(int partition_id, int page_id)
 	u32 address;
 	u32 base_address = get_partition_base_address(partition_id);
 	u32 phy_page = page_map[partition_id][page_id];
-
-	/* Check if translated phy page goes beyond allocated partition size */
-	// FIXME: rm this check. this should never happen unless my code has a glitch.
-	if (phy_page >= partition_sizes[partition_id] /
-			Flash_Config_Table[FCTIndex].PageSize) {
-		SEC_HW_DEBUG_HANG();
-		return 0;
-	}
 
 	address = base_address +
 			phy_page * Flash_Config_Table[FCTIndex].PageSize;
@@ -431,8 +424,7 @@ static int partition_read(int partition_id, int page_id, void *ptr)
 		return ERR_INVALID;
 
 	/* Check if requested page id goes beyond allocated partition size */
-	if (page_id >= partition_sizes[partition_id] /
-			Flash_Config_Table[FCTIndex].PageSize) {
+	if (page_id >= partition_sizes[partition_id] / STORAGE_BLOCK_SIZE) {
 		return ERR_PERMISSION;
 	}
 
@@ -515,8 +507,8 @@ static int partition_write(int partition_id, int page_id, void *ptr)
 		return ERR_INVALID;
 
 	/* Check if requested page id goes beyond allocated partition size */
-	if (page_id >= partition_sizes[partition_id] /
-			Flash_Config_Table[FCTIndex].PageSize) {
+	if (page_id >= partition_sizes[partition_id] / STORAGE_BLOCK_SIZE) {
+		SEC_HW_DEBUG_HANG();
 		return ERR_PERMISSION;
 	}
 
@@ -642,9 +634,9 @@ void initialize_storage_space(void)
 		if (size == 4 && tag[0] == 1) {
 			partition->is_created = true;
 		} else {
-			// reading all ff because i erased wrong address, that's
-			// the only explaination!!!!
-			partition_erase(i, ERASE_ALL);
+			// FIXME discuss with Ardalan if erase is needed.
+			// all unmapped pages won't be accessible.
+//			partition_erase(i, ERASE_ALL);
 			partition->is_locked = false;
 			continue;
 		}
@@ -681,7 +673,8 @@ static int set_partition_key(uint8_t *data, int partition_id)
 										STORAGE_KEY_SIZE,
 										data);
 	if (size < STORAGE_KEY_SIZE) {
-		partition_reset_key(partition_id);
+		// FIXME: implement
+//		partition_reset_key(partition_id);
 		return ERR_FAULT;
 	}
 
@@ -710,7 +703,8 @@ static int remove_partition_key(int partition_id)
 	fop_close(filep);
 #else
 	if (partitions[partition_id].is_created) {
-		partition_reset_key(partition_id);
+		// FIXME: implement
+//		partition_reset_key(partition_id);
 	} else {
 		return ERR_FAULT;
 	}
@@ -774,7 +768,8 @@ static int wipe_partition(int partition_id)
 	}
 	fop_close(filep);
 #else
-	partition_erase(partition_id, ERASE_DATA);
+	// FIXME: implement
+//	partition_erase(partition_id, ERASE_DATA);
 #endif
 	return 0;
 }
@@ -849,10 +844,7 @@ void process_request(uint8_t *buf)
 									data_buf);
 
 //			uint8_t data_buf_rd_dbg[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
-//			partition_read(partition_id,
-//									seek_off + i * STORAGE_BLOCK_SIZE,
-//									STORAGE_BLOCK_SIZE,
-//									data_buf_rd_dbg);
+//			partition_read(partition_id, start_block + i, data_buf_rd_dbg);
 //			sleep(5);
 #endif
 		}
@@ -1114,7 +1106,8 @@ void process_request(uint8_t *buf)
 				FILE *filep2 = fop_open(partitions[partition_id].create_name, "w");
 				fop_close(filep2);
 #else
-				partition_erase(partition_id, ERASE_HEADER);
+				// FIXME: implement
+//				partition_erase(partition_id, ERASE_HEADER);
 #endif
 			}
 			return;
@@ -1165,7 +1158,8 @@ void process_request(uint8_t *buf)
 		fop_close(filep2);
 		/* FIXME: do we need to wipe the partition content? */
 #else
-		partition_erase(partition_id, ERASE_ALL);
+		// FIXME: implement
+//		partition_erase(partition_id, ERASE_ALL);
 #endif
 
 		STORAGE_SET_ONE_RET(0)
