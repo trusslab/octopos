@@ -284,10 +284,10 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 
 /* Partition creation info and locks are saved in headers.
  * Each header has 128B.
- * The first 1MB is reserved for headers */
+ * The first 1024B is reserved for headers */
 #define header_size 128
-#define data_offset 1048600
-#define header_offset 1024
+#define data_offset 1024
+#define header_offset 0
 
 #define create_header_offset 0
 #define lock_header_offset 15
@@ -304,7 +304,7 @@ static u32 get_partition_base_address(int partition_id)
 	int i;
 	u32 address = data_offset;
 
-	for (i = 0; i <= partition_id; i++) {
+	for (i = 0; i < partition_id; i++) {
 		address += partition_sizes[i] *
 				(Flash_Config_Table[FCTIndex].PageSize / STORAGE_BLOCK_SIZE);
 	}
@@ -526,6 +526,10 @@ static int partition_write(int partition_id, int page_id, void *ptr)
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
+
+	// FIXME: a small delay is needed for the write to finish.
+	for (int i=0; i < 1000; i++)
+		asm("nop");
 
 	return STORAGE_BLOCK_SIZE;
 }
