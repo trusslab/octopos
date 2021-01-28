@@ -25,7 +25,7 @@ int fd_mailbox_log, fd_tpm_log, fd_os_log, fd_keyboard_log,
 
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
-pid_t mailbox_pid, tpm_pid, tpm_server_pid, tpm2_abrmd_pid, os_pid,
+pid_t mailbox_pid, tpm_server_pid, tpm2_abrmd_pid, os_pid,
       keyboard_pid, serial_out_pid, runtime1_pid, runtime2_pid, storage_pid,
       network_pid, bluetooth_pid, untrusted_pid, socket_server_pid,
       attest_server_pid, bank_server_pid, health_server_pid;
@@ -35,7 +35,7 @@ struct termios orig;
 int do_restart = 1;
 int do_reset_queues = 1;
 int num_running_procs = 0;
-sem_t reset_done[NUM_PROCESSORS + 1];
+sem_t reset_done[NUM_PROCESSORS + 2];
 
 int mailbox_ready = 0;
 
@@ -196,17 +196,6 @@ static int start_tpm2_abrmd_proc(void)
 	return ret;
 }
 
-static int start_tpm_proc(void)
-{
-	int ret;
-
-	char *const args[] = {(char *) "tpm", NULL};
-	char path[] = "./tpm/tpm";
-	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
-
-	return ret;
-}
-
 static int start_os_proc(void)
 {
 	char *const args[] = {(char *) "bootloader_os", (char *) "os", NULL};
@@ -316,7 +305,6 @@ static void start_all_procs(void)
 	mailbox_pid = start_mailbox_proc();
 	tpm_server_pid = start_tpm_server_proc();
 	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
-	tpm_pid = start_tpm_proc();
 	os_pid = start_os_proc();
 	keyboard_pid = start_keyboard_proc();
 	serial_out_pid = start_serial_out_proc();
@@ -418,7 +406,6 @@ static void halt_all_procs(void)
 	
 	halt_proc(P_OS);
 	
-	kill(tpm_pid, SIGKILL);
 	kill(tpm2_abrmd_pid, SIGKILL);
 	kill(tpm_server_pid, SIGKILL);
 
@@ -440,18 +427,14 @@ static void *proc_reboot_handler(void *data)
 			sprintf(proc_name, "Mailbox");
 			reboot_exception = 1;
 			sem_post(&reset_done[0]);
-		} else if (pid == tpm_pid) {
-			sprintf(proc_name, "TPM");
-			reboot_exception = 1;
-			sem_post(&reset_done[P_TPM]);
 		} else if (pid == tpm_server_pid) {
 			sprintf(proc_name, "TPM_server");
 			reboot_exception = 1;
-			sem_post(&reset_done[P_TPM]);
+			sem_post(&reset_done[NUM_PROCESSORS + 1]);
 		} else if (pid == tpm2_abrmd_pid) {
 			sprintf(proc_name, "TPM_abrmd");
 			reboot_exception = 1;
-			sem_post(&reset_done[P_TPM]);
+			sem_post(&reset_done[NUM_PROCESSORS + 1]);
 		} else if (pid == os_pid) {
 			sprintf(proc_name, "OS processor");
 			if (do_reset_queues) {
@@ -894,9 +877,8 @@ int main(int argc, char **argv)
 						halt_all_procs();
 						/* We've used the first sem in the array for the mailbox. */
 						sem_wait(&reset_done[0]);
-						sem_wait(&reset_done[P_TPM]);
-						sem_wait(&reset_done[P_TPM]);
-						sem_wait(&reset_done[P_TPM]);
+						sem_wait(&reset_done[NUM_PROCESSORS + 1]);
+						sem_wait(&reset_done[NUM_PROCESSORS + 1]);
 						sem_wait(&reset_done[P_OS]);
 						sem_wait(&reset_done[P_KEYBOARD]);
 						sem_wait(&reset_done[P_SERIAL_OUT]);

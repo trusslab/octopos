@@ -1,5 +1,5 @@
-DIRS := applications arch keyboard os runtime serial_out storage network bluetooth tpm bootloader installer
-DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network tpm bootloader util/tpm installer
+DIRS := applications arch keyboard os runtime serial_out storage network bluetooth bootloader installer util/tpm/tpm_shutdown
+DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network bootloader installer util/tpm/tpm_shutdown
 
 EXTERNAL_DIR := ./external
 

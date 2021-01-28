@@ -78,11 +78,9 @@ struct runtime_api {
 	int (*recv_msg_on_secure_ipc)(char *msg, int *size);
 
 	/* tpm attestation */
-	int (*request_tpm_attestation_report)(uint8_t *pcr_slots,
-					      uint8_t num_pcr_slots, char* nonce,
-					      uint8_t **signature,
-					      uint32_t *sig_size, uint8_t **quote,
-					      uint32_t *quote_size);
+	int (*request_tpm_attestation_report)(uint32_t *pcr_list, size_t pcr_list_size, 
+					  char* nonce, uint8_t **signature, size_t *sig_size,
+					  uint8_t **quote, size_t *quote_size);
 
 	/* Local API */
 	uint8_t (*get_runtime_proc_id)(void);

@@ -12,11 +12,8 @@ network/network
 bluetooth/bluetooth
 applications/socket_client/socket_server
 applications/attest_client/attest_server
-<<<<<<< HEAD
-=======
 applications/bank_client/bank_server
 applications/health_client/health_server
->>>>>>> bacfa6c... (1) Secure bank app (with remote attestation and resource accounting) and (2) secure health app (basic functionality and with a simple bluetooth service).
 arch/umode/mailbox/mailbox
 arch/umode/pmu/pmu
 arch/umode/emulator/log_view
@@ -34,10 +31,6 @@ bootloader/runtime2
 bootloader/linux
 installer/installer
 installer/copy*
-<<<<<<< HEAD
-=======
 installer/aligned*
->>>>>>> bacfa6c... (1) Secure bank app (with remote attestation and resource accounting) and (2) secure health app (basic functionality and with a simple bluetooth service).
-tpm/tpm
-external/ibmtpm1637/tpm_server
-tpm/tpm_shutdown/tpm_shutdown
+external/ibmtpm/tpm_server
+util/tpm/tpm_shutdown/tpm_shutdown

@@ -20,7 +20,6 @@
 #include <json-c/json.h>
 /* octopos header files */
 #define APPLICATION
-#include <octopos/tpm.h>
 #include <tpm/hash.h>
 
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)

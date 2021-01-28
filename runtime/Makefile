@@ -11,7 +11,7 @@ CONFIG_TOPLOGY = 2
 LD = ld
 CC = gcc
 CFLAGS = -Wall -Werror -I ../include/ -I ../include/network/ -I ../../include/network/ -I ../../../include/ -I ../../../include/network/ -I ../arch/umode/include/
-LFLAGS = -ldl -lpthread -lrt -lcrypto
+LFLAGS = -ldl -lpthread -lrt -ltss2-esys -ltss2-rc -ltss2-fapi -lcrypto
 export LD CC CFLAGS
 
 ifeq ($(CONFIG_DEBUG), y)
@@ -52,7 +52,8 @@ RUNTIME_OBJS =  runtime.o 						\
 		network/udp/udp_obj.o					\
 		network/tcp/tcp_obj.o					\
 		../util/network/lib_obj.o				\
-		../util/tpm/hash.o
+		../util/tpm/hash.o				\
+		../util/tpm/tpm.o
 
 umode:runtime
 
@@ -73,4 +74,3 @@ clean:
 	rm -f runtime
 	rm -f ../arch/umode/mailbox_interface/mailbox_runtime.o
 	rm -f ../util/network/lib_obj.o
-	rm -f ../util/tpm/hash.o

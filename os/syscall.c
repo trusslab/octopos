@@ -491,44 +491,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		*no_response = true;
 		break;
 	}
-	case SYSCALL_REQUEST_TPM_ACCESS: {
-		SYSCALL_GET_TWO_ARGS
-		uint32_t limit = arg0;
-		uint32_t timeout = arg1;
-
-		/* FIXME: if no other timeout values are used,
-		 * then it shouldn't be an input parameter.
-		 *
-		 * Also, why 100?
-		 */
-		if (limit > 100 || timeout != MAILBOX_DEFAULT_TIMEOUT_VAL)
-		{
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		int ret = is_queue_available(Q_TPM_IN);
-		if (!ret)	
-			wait_for_queue_availability(Q_TPM_IN);
-
-		ret = is_queue_available(Q_TPM_OUT);
-		if (!ret)	
-			wait_for_queue_availability(Q_TPM_OUT);
-
-		mark_queue_unavailable(Q_TPM_IN);
-		mark_queue_unavailable(Q_TPM_OUT);
-
-		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id,
-					      (limit_t) limit,
-					      (timeout_t) timeout);
-
-		mailbox_delegate_queue_access(Q_TPM_OUT, runtime_proc_id,
-					      (limit_t) limit,
-					      (timeout_t) timeout);
-
-		SYSCALL_SET_ONE_RET(0)
-		break;
-	}
 
 	default:
 		printf("Error: invalid syscall\n");
