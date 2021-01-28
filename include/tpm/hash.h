@@ -1,13 +1,8 @@
-#include <octopos/mailbox.h>
 #include <openssl/sha.h>
 
-#if (MAILBOX_QUEUE_MSG_SIZE >= (SHA256_DIGEST_LENGTH + 1))
-/* In this case, one message will be needed, which is what is assumed in the
- * code that sends/receives the hash over the mailbox.
- */
+#define TPM_AT_ID_LENGTH			16
+#define TPM_AT_NONCE_LENGTH			16
 #define TPM_EXTEND_HASH_SIZE			SHA256_DIGEST_LENGTH
-#define TPM_EXTEND_HASH_NUM_MAILBOX_MSGS	1
-#endif
 
 int hash_file(char *path, uint8_t *hash_buf);
 void convert_hash_to_str(uint8_t *hash_buf, char *hash_str);
