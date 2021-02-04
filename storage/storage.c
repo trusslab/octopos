@@ -21,112 +21,7 @@
 #include "arch/syscall.h"
 
 #ifdef ARCH_SEC_HW_STORAGE
-//#include "ff.h"
 #include "arch/sec_hw.h"
-//#define FILE FIL
-//#define	SEEK_SET	0
-//
-//FIL* fop_open(const char *filename, const char *mode)
-//{
-//	FIL* filep = (FIL*) malloc(sizeof(FIL));
-//	BYTE _mode;
-//	FRESULT result;
-//
-//	if (strcmp(mode, "r") == 0) {
-//		_mode = FA_READ;
-//	} else if (strcmp(mode, "r+") == 0) {
-//		_mode = FA_READ | FA_WRITE;
-//	} else if (strcmp(mode, "w") == 0) {
-//		_mode = FA_CREATE_ALWAYS | FA_WRITE;
-//	} else if (strcmp(mode, "w+") == 0) {
-//		_mode = FA_CREATE_ALWAYS | FA_WRITE | FA_READ;
-//	} else if (strcmp(mode, "a") == 0) {
-//		_mode = FA_OPEN_APPEND | FA_WRITE;
-//	} else if (strcmp(mode, "a+") == 0) {
-//		_mode = FA_OPEN_APPEND | FA_WRITE | FA_READ;
-//	} else if (strcmp(mode, "wx") == 0) {
-//		_mode = FA_CREATE_NEW | FA_WRITE;
-//	} else if (strcmp(mode, "w+x") == 0) {
-//		_mode = FA_CREATE_NEW | FA_WRITE | FA_READ;
-//	} else {
-//		return NULL;
-//	}
-//
-//	result = f_open(filep, filename, _mode);
-//	if (result == FR_OK) {
-//		return filep;
-//	} else {
-//		return NULL;
-//	}
-//
-//}
-//
-//int fop_close(FIL *filep)
-//{
-//	FRESULT result;
-//
-//	if (!filep) {
-//		SEC_HW_DEBUG_HANG();
-//		return ERR_INVALID;
-//	}
-//
-//	result = f_close(filep);
-//	free(filep);
-//	if (result == FR_OK) {
-//		return 0;
-//	} else {
-//		SEC_HW_DEBUG_HANG();
-//		return ERR_FAULT;
-//	}
-//}
-//
-//int fop_seek(FIL *filep, long int offset, int origin)
-//{
-//	FRESULT result;
-//
-//	if (origin != SEEK_SET) {
-//		SEC_HW_DEBUG_HANG();
-//		return ERR_INVALID;
-//	}
-//
-//	result = f_lseek(filep, offset);
-//	if (result == FR_OK) {
-//		return 0;
-//	} else {
-//		SEC_HW_DEBUG_HANG();
-//		return ERR_FAULT;
-//	}
-//}
-//
-//size_t fop_read(void *ptr, size_t size, size_t count, FIL *filep)
-//{
-//	FRESULT result;
-//	UINT NumBytesRead = 0;
-//	UINT _size = size * count;
-//
-//	result = f_read(filep, ptr, _size, &NumBytesRead);
-//	if (result == FR_OK) {
-//		return (size_t) NumBytesRead;
-//	} else {
-//		SEC_HW_DEBUG_HANG();
-//		return 0;
-//	}
-//}
-//
-//size_t fop_write(void *ptr, size_t size, size_t count, FIL *filep)
-//{
-//	FRESULT result;
-//	UINT NumBytesWrite = 0;
-//	UINT _size = size * count;
-//
-//	result = f_write(filep, ptr, _size, &NumBytesWrite);
-//	if (result == FR_OK) {
-//		return (size_t) NumBytesWrite;
-//	} else {
-//		SEC_HW_DEBUG_HANG();
-//		return 0;
-//	}
-//}
 #else /* ARCH_SEC_HW_STORAGE */
 
 #define fop_open fopen
@@ -239,8 +134,18 @@ u32 partition_head[NUM_PARTITIONS] = {1};
  * physical page number.
  */
 /* FIXME: currently support up to 1000 virtual pages. */
-// FIXME: page map and partition head must be stored in persistent memory.
 u32 page_map[NUM_PARTITIONS][1000] = {0};
+
+#define FLASH_PAGE_MAP_SECTOR_OFFSET 0
+#define FLASH_PAGE_MAP_SECTOR_LENGTH 1
+#define PARTITION_HEADER_SECTOR_OFFSET FLASH_PAGE_MAP_SECTOR_OFFSET + FLASH_PAGE_MAP_SECTOR_LENGTH
+#define PARTITION_HEADER_SECTOR_LENGTH NUM_PARTITIONS
+#define PARTITION_DATA_SECTOR_OFFSET PARTITION_HEADER_SECTOR_OFFSET + PARTITION_HEADER_SECTOR_LENGTH
+
+#define MIN_PARTITION_SECTOR_SIZE 3
+
+#define create_header_offset 0
+#define lock_header_offset 15
 
 // FIXME: Move to a header file
 typedef struct{
@@ -282,16 +187,6 @@ int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 				u8 *WriteBfrPtr, u8 *ReadBfrPtr);
 
-/* Partition creation info and locks are saved in headers.
- * Each header has 128B.
- * The first 1024B is reserved for headers */
-#define header_size 128
-#define data_offset 1024
-#define header_offset 0
-
-#define create_header_offset 0
-#define lock_header_offset 15
-
 #define is_aligned_64(PTR) \
 	(((uintptr_t)(const void *)(PTR)) % 64 == 0)
 
@@ -299,15 +194,50 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 #define ERASE_DATA		0x01
 #define ERASE_ALL		0x11
 
+static u32 get_physical_partition_size(int partition_id)
+{
+	/* The partition size persent to user. */
+	u32 norminal_size = partition_sizes[partition_id];
+
+	/* Base size may be zero if less than sector size */
+	u32 base_size = (int) norminal_size / Flash_Config_Table[FCTIndex].SectSize;
+
+	if (base_size >=
+			Flash_Config_Table[FCTIndex].NumSect -
+			PARTITION_HEADER_SECTOR_LENGTH -
+			FLASH_PAGE_MAP_SECTOR_LENGTH)
+		SEC_HW_DEBUG_HANG();
+
+	/* The minimal size required to implement erase, plus 2 times the base size*/
+	return (MIN_PARTITION_SECTOR_SIZE + base_size * 2) *
+			Flash_Config_Table[FCTIndex].SectSize;
+}
+
+static u32 get_translation_table_address(int partition_id)
+{
+	u32 address =
+			FLASH_PAGE_MAP_SECTOR_OFFSET * Flash_Config_Table[FCTIndex].SectSize;
+
+	return address;
+}
+
+static u32 get_partition_header_address(int partition_id)
+{
+	u32 address =
+			PARTITION_HEADER_SECTOR_OFFSET * Flash_Config_Table[FCTIndex].SectSize +
+			partition_id * Flash_Config_Table[FCTIndex].SectSize;
+
+	return address;
+}
+
 static u32 get_partition_base_address(int partition_id)
 {
 	int i;
-	u32 address = data_offset;
+	u32 address =
+			PARTITION_DATA_SECTOR_OFFSET * Flash_Config_Table[FCTIndex].SectSize;
 
-	for (i = 0; i < partition_id; i++) {
-		address += partition_sizes[i] *
-				(Flash_Config_Table[FCTIndex].PageSize / STORAGE_BLOCK_SIZE);
-	}
+	for (i = 0; i < partition_id; i++)
+		address += get_physical_partition_size(i);
 
 	return address;
 }
@@ -336,16 +266,12 @@ static int partition_erase(int partition_id, int part)
 		return ERR_INVALID;
 
 	partition = &partitions[partition_id];
-	header_address = header_offset + partition_id * header_size;
+	header_address = get_partition_header_address(partition_id);
 	data_address = get_partition_base_address(partition_id);
 
 	if (part & ERASE_HEADER) {
-		status = FlashErase(header_address, header_size, CmdBfr);
-		/* erase partition header */
-//		status = FlashWrite(header_address,
-//						header_size,
-//						WriteCmd,
-//						zero_block);
+		// FIXME: implement
+//		status = FlashErase(header_address, header_size, CmdBfr);
 		if (status != XST_SUCCESS) {
 			SEC_HW_DEBUG_HANG();
 			return ERR_FAULT;
@@ -354,8 +280,9 @@ static int partition_erase(int partition_id, int part)
 
 
 	if (part & ERASE_DATA) {
+		// FIXME: implement
 		/* erase partition data */
-		status = FlashErase(data_address, partition->size, CmdBfr);
+//		status = FlashErase(data_address, partition->size, CmdBfr);
 	}
 
 	return 0;
@@ -369,12 +296,13 @@ static int partition_reset_key(int partition_id)
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
-	header_address = header_offset + partition_id * header_size;
+	header_address = get_partition_header_address(partition_id);
 
 	/* erase partition header */
-	status = FlashErase(header_address + lock_header_offset,
-						header_size - lock_header_offset,
-						CmdBfr);
+	// FIXME: impl
+//	status = FlashErase(header_address + lock_header_offset,
+//						header_size - lock_header_offset,
+//						CmdBfr);
 
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
@@ -391,7 +319,7 @@ static int partition_read_header(int partition_id, u32 offset, u32 length, void 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
-	if (offset + length > header_size) {
+	if (offset + length > Flash_Config_Table[FCTIndex].SectSize) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_INVALID;
 	}
@@ -401,7 +329,7 @@ static int partition_read_header(int partition_id, u32 offset, u32 length, void 
 		return ERR_FAULT;
 	}
 
-	header_address = header_offset + partition_id * header_size;
+	header_address = get_partition_header_address(partition_id);
 
 	/* read partition header */
 	status = FlashRead(header_address + offset, 
@@ -467,10 +395,10 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 	uint8_t dup_buf[length + 5];
 	memcpy(dup_buf, ptr, length);
 
-	if (offset + length > header_size)
+	if (offset + length > Flash_Config_Table[FCTIndex].SectSize)
 		return ERR_INVALID;
 
-	header_address = header_offset + partition_id * header_size;
+	header_address = get_partition_header_address(partition_id);
 
 	/* write partition header */
 //	status = FlashErase(header_address + offset, length, CmdBfr);
