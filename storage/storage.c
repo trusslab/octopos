@@ -124,11 +124,20 @@ uint8_t config_key[STORAGE_KEY_SIZE];
 bool is_config_locked = false;
 
 #ifdef ARCH_SEC_HW_STORAGE
+
+typedef struct __attribute__((__packed__)) {
+	u8 partition_id;
+	u32 virt_page_id;
+	u32 phy_page_id;
+} translation_log_t;
+
 /* The next writable page number in each partition.
  * Page 0 is reserved as an empty page, so that
  * unmapped virtual pages will read FF.
  */
 u32 partition_head[NUM_PARTITIONS] = {1};
+
+u32 translation_log_head_offset = 0;
 
 /* page_map translates a virtual page number to a
  * physical page number.
@@ -213,7 +222,7 @@ static u32 get_physical_partition_size(int partition_id)
 			Flash_Config_Table[FCTIndex].SectSize;
 }
 
-static u32 get_translation_table_address(int partition_id)
+static inline u32 get_translation_table_address()
 {
 	u32 address =
 			FLASH_PAGE_MAP_SECTOR_OFFSET * Flash_Config_Table[FCTIndex].SectSize;
@@ -310,6 +319,58 @@ static int partition_reset_key(int partition_id)
 	}	
 
 	return 0;
+}
+
+static void read_translation_log_and_initialize_mappings()
+{
+	translation_log_t *entry = aligned_alloc(64, sizeof(translation_log_t) + 48);
+	u32 translation_log_head_address = get_translation_table_address();
+	u32 translation_log_count = 0;
+	u32 status;
+
+	for (;;) {
+		status = FlashRead(translation_log_head_address +
+							translation_log_count * sizeof(translation_log_t),
+						sizeof(translation_log_t),
+						ReadCmd, CmdBfr, (u8 *) entry);
+
+		if (status != XST_SUCCESS)
+			SEC_HW_DEBUG_HANG();
+
+		/* Stop at 0xff because erased flash reads 0xff.
+		 * It can be the end of log, or there is no log at all.
+		 */
+		if (*(u8 *) entry != 0xff)
+			break;
+
+		page_map[entry->partition_id][entry->virt_page_id] = entry->phy_page_id;
+
+		partition_head[entry->partition_id] = entry->phy_page_id + 1;
+	}
+}
+
+static void write_translation_log(u8 partition_id, u32 virt_page_id, u32 phy_page_id)
+{
+	translation_log_t *entry = malloc(sizeof(translation_log_t) + 5);
+	u32 translation_log_head_address = get_translation_table_address();
+	u32 status;
+
+	entry->partition_id = partition_id;
+	entry->virt_page_id = virt_page_id;
+	entry->phy_page_id = phy_page_id;
+
+	/* FIXME: handle large translation log */
+	if (translation_log_head_offset + sizeof(translation_log_t) >
+		Flash_Config_Table[FCTIndex].SectSize)
+		SEC_HW_DEBUG_HANG();
+
+	status = FlashWrite(translation_log_head_address + translation_log_head_offset,
+			sizeof(translation_log_t), WriteCmd, (u8 *) entry);
+
+	if (status != XST_SUCCESS)
+		SEC_HW_DEBUG_HANG();
+
+	translation_log_head_offset += sizeof(translation_log_t);
 }
 
 static int partition_read_header(int partition_id, u32 offset, u32 length, void *ptr)
@@ -440,11 +501,17 @@ static int partition_write(int partition_id, int page_id, void *ptr)
 		return ERR_PERMISSION;
 	}
 
+	/* Update in-memory mapping */
 	page_map[partition_id][page_id] = partition_head[partition_id];
+
+	/* Append a translation log entry to flash */
+	write_translation_log(partition_id, page_id, partition_head[partition_id]);
+
+	/* Update next writable physical address */
 	partition_head[partition_id] += 1;
 
+	/* Get physical address and write flash */
 	data_address = get_partition_phy_page_address(partition_id, page_id);
-
 	status = FlashWrite(data_address, STORAGE_BLOCK_SIZE, WriteCmd, (u8 *) ptr);
 
 	if (status != XST_SUCCESS) {
@@ -1158,6 +1225,9 @@ int main(int argc, char **argv)
 	}
 
 	init_storage();
+#ifdef ARCH_SEC_HW_STORAGE
+	read_translation_log_and_initialize_mappings();
+#endif
 	storage_event_loop();
 	close_storage();
 }
