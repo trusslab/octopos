@@ -131,6 +131,27 @@ typedef struct __attribute__((__packed__)) {
 	u32 phy_page_id;
 } translation_log_t;
 
+/* Source:
+ * https://stackoverflow.com/questions/38088732/explanation-to-aligned-malloc-implementation */
+void* aligned_malloc(size_t required_bytes, size_t alignment)
+{
+    void* p1; // original block
+    void** p2; // aligned block
+    int offset = alignment - 1 + sizeof(void*);
+    if ((p1 = (void*)malloc(required_bytes + offset)) == NULL)
+    {
+       return NULL;
+    }
+    p2 = (void**)(((size_t)(p1) + offset) & ~(alignment - 1));
+    p2[-1] = p1;
+    return p2;
+}
+
+void aligned_free(void *p)
+{
+    free(((void**)p)[-1]);
+}
+
 /* The next writable page number in each partition.
  * Page 0 is reserved as an empty page, so that
  * unmapped virtual pages will read FF.
@@ -323,7 +344,7 @@ static int partition_reset_key(int partition_id)
 
 static void read_translation_log_and_initialize_mappings()
 {
-	translation_log_t *entry = aligned_alloc(64, sizeof(translation_log_t) + 48);
+	translation_log_t *entry = aligned_malloc(sizeof(translation_log_t) + 48, 64);
 	u32 translation_log_head_address = get_translation_table_address();
 	u32 translation_log_count = 0;
 	u32 status;
@@ -347,6 +368,8 @@ static void read_translation_log_and_initialize_mappings()
 
 		partition_head[entry->partition_id] = entry->phy_page_id + 1;
 	}
+
+	aligned_free(entry);
 }
 
 static void write_translation_log(u8 partition_id, u32 virt_page_id, u32 phy_page_id)
@@ -371,6 +394,7 @@ static void write_translation_log(u8 partition_id, u32 virt_page_id, u32 phy_pag
 		SEC_HW_DEBUG_HANG();
 
 	translation_log_head_offset += sizeof(translation_log_t);
+	free(entry);
 }
 
 static int partition_read_header(int partition_id, u32 offset, u32 length, void *ptr)
