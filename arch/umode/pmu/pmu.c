@@ -676,6 +676,7 @@ int main(int argc, char **argv)
 	int ret, len, i;
 	int untrusted_init = 0;
 	pthread_t reboot_thread;
+	sem_t *sem;
 
 	/*
 	 * put tty in raw mode.
@@ -692,6 +693,13 @@ int main(int argc, char **argv)
         now.c_cc[VTIME]=2;
         tcsetattr(0, TCSANOW, &now);
 	
+	sem_unlink("/tpm_sem");
+	sem = sem_open("/tpm_sem", O_CREAT | O_EXCL, 0644, 1);
+	if (sem == SEM_FAILED) {
+		printf("Error: couldn't create tpm semaphore.\n");
+		exit(-1);
+	}
+
 	mkfifo(FIFO_PMU_TO_OS, 0666);
 	mkfifo(FIFO_PMU_FROM_OS, 0666);
 	mkfifo(FIFO_PMU_TO_MAILBOX, 0666);
