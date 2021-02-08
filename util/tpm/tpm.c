@@ -52,10 +52,23 @@ int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value)
 	return 0;
 }
 
-int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor)
+int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor)
 {
 	TSS2_RC rc = TSS2_RC_SUCCESS;
 	TSS2_TCTI_CONTEXT *tcti_ctx = NULL;
+
+	rc = Fapi_GetTcti(context, &tcti_ctx);
+	return_if_error(rc, "Get TCTI Error.");
+
+    rc = Tss2_Tcti_SetLocality(tcti_ctx, PROC_LOCALITY(processor));
+	return_if_error(rc, "Change Locality Error.");
+
+	return 0;
+}
+
+int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor)
+{
+	TSS2_RC rc = TSS2_RC_SUCCESS;
     
     /* Hide all error and warning logs produced by TSS lib.
 	 * All errors and warnings should be handled manually.
@@ -76,11 +89,8 @@ int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor)
 	return_if_error_exception(rc, "Fapi Create Initial Key Error.", 
 							  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
 
-	rc = Fapi_GetTcti(*context, &tcti_ctx);
-	return_if_error(rc, "Get TCTI Error.");
-
-    rc = Tss2_Tcti_SetLocality(tcti_ctx, PROC_LOCALITY(processor));
-	return_if_error(rc, "Change Locality Error.");
+	rc = tpm_set_locality(*context, processor);
+	return_if_error_no_msg(rc);
 
 	return 0;
 }
@@ -91,12 +101,13 @@ int tpm_finalize(FAPI_CONTEXT **context)
 	return 0;
 }
 
-int tpm_read(FAPI_CONTEXT *context, uint8_t pcr_index, uint8_t *buf, 
+int tpm_read(FAPI_CONTEXT *context, uint8_t processor, uint8_t *buf, 
 			 char **log, BOOL print)
 {
 	TSS2_RC rc = TSS2_RC_SUCCESS;
 	uint8_t *digest = NULL;
 	size_t digest_size = 0;
+	uint32_t pcr_index = PROC_TO_PCR(processor);
 
 	rc = Fapi_PcrRead(context, pcr_index, &digest, &digest_size, log);
 	return_if_error(rc, "PCR Read Error.");
@@ -118,7 +129,7 @@ int tpm_read(FAPI_CONTEXT *context, uint8_t pcr_index, uint8_t *buf,
 /* FAPI_PcrExtend uses TPM_EVENT extending all hashes slots.
  * So here just uses ESYS_CONTEXT.
 */
-int tpm_extend(FAPI_CONTEXT *context, int pcr_index, uint8_t *hash_buf)
+int tpm_extend(FAPI_CONTEXT *context, uint8_t processor, uint8_t *hash_buf)
 {
 	TSS2_RC rc;
 	ESYS_CONTEXT *esys_context = NULL;
@@ -134,6 +145,7 @@ int tpm_extend(FAPI_CONTEXT *context, int pcr_index, uint8_t *hash_buf)
 			},
 		}
 	};
+	uint32_t pcr_index = PROC_TO_PCR(processor);
 
 	convert_hash_to_str(hash_buf, hash_str);
 	int ret = prepare_extend(hash_str, &digests);
@@ -179,10 +191,10 @@ int tpm_measure_service(char* path, uint8_t processor)
 	rc = tpm_initialize(&context, processor);
 	return_if_error_no_msg(rc);
 	
-	rc = tpm_extend(context, PROC_TO_PCR(processor), hash_value);
+	rc = tpm_extend(context, processor, hash_value);
 	return_if_error_no_msg(rc);
 	
-	rc = tpm_read(context, PROC_TO_PCR(processor), NULL, NULL, 1);
+	rc = tpm_read(context, processor, NULL, NULL, 1);
 	return_if_error_no_msg(rc);
 	
 	rc = tpm_finalize(&context);
@@ -197,7 +209,7 @@ int tpm_processor_read_pcr(uint8_t processor, uint8_t *pcr_value)
 	rc = tpm_initialize(&context, processor);
 	return_if_error_no_msg(rc);
 	
-	rc = tpm_read(context, PROC_TO_PCR(processor), pcr_value, NULL, 1);
+	rc = tpm_read(context, processor, pcr_value, NULL, 1);
 	return_if_error_no_msg(rc);
 	
 	rc = tpm_finalize(&context);

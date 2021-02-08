@@ -13,6 +13,7 @@
 #define TSS_LOG_LVL_NONE    "ALL+none"
 #define TSS_LOG_LVL_ERROR   "ALL+error"
 #define TSS_LOG_LVL_DEBUG   "ALL+debug"
+#define TSS_LOG_LVL_TRACE   "ALL+trace"
 
 /**
 * PCR No.    Allocation
@@ -55,15 +56,20 @@
 #define TPM2_ERROR_FORMAT "%s%s (0x%08x)"
 #define TPM2_ERROR_TEXT(r) "Error", "Code", r
 
+#define return_if_error(r,msg) \
+    if (r != TSS2_RC_SUCCESS) { \
+        fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
+        return r;  \
+    }
+
 #define return_if_error_no_msg(r) \
     if (r != 0) { \
         return r;  \
     }
 
-#define return_if_error(r,msg) \
-    if (r != TSS2_RC_SUCCESS) { \
-        fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        return r;  \
+#define return_if_error_label(r, label) \
+    if (r != 0) { \
+        goto label;  \
     }
 
 #define return_if_error_exception(r,msg,except) \
@@ -81,11 +87,12 @@ int tpm_attest(uint8_t processor, uint8_t *nonce,
 			   char** quote_info);
 
 /* Wrapper of FAPI and ESAPI */
+int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor);
 int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor);
 int tpm_finalize(FAPI_CONTEXT **context);
-int tpm_read(FAPI_CONTEXT* context, uint8_t index, uint8_t* buf, 
+int tpm_read(FAPI_CONTEXT* context, uint8_t processor, uint8_t* buf, 
 			 char** log, BOOL print);
-int tpm_extend(FAPI_CONTEXT* context, int selected, uint8_t *hash_buf);
+int tpm_extend(FAPI_CONTEXT* context, uint8_t processor, uint8_t *hash_buf);
 int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 			  uint32_t *pcr_list, size_t pcr_list_size,
 			  uint8_t **signature, size_t *signature_size, 
