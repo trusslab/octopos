@@ -164,7 +164,8 @@ u32 translation_log_head_offset = 0;
  * physical page number.
  */
 /* FIXME: currently support up to 1000 virtual pages. */
-u32 page_map[NUM_PARTITIONS][1000] = {0};
+#define PAGE_MAP_MAX_VIRT_PAGE 1000
+u32 page_map[NUM_PARTITIONS][PAGE_MAP_MAX_VIRT_PAGE] = {0};
 
 #define FLASH_PAGE_MAP_SECTOR_OFFSET 0
 #define FLASH_PAGE_MAP_SECTOR_LENGTH 1
@@ -361,8 +362,12 @@ static void read_translation_log_and_initialize_mappings()
 		/* Stop at 0xff because erased flash reads 0xff.
 		 * It can be the end of log, or there is no log at all.
 		 */
-		if (*(u8 *) entry != 0xff)
+		if (*(u8 *) entry == 0xff)
 			break;
+
+		if (entry->partition_id >= NUM_PARTITIONS ||
+				entry->virt_page_id >= PAGE_MAP_MAX_VIRT_PAGE)
+			SEC_HW_DEBUG_HANG();
 
 		page_map[entry->partition_id][entry->virt_page_id] = entry->phy_page_id;
 
