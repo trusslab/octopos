@@ -40,7 +40,8 @@ u32				DEBUG_STATUS_REGISTERS[30] = {0};
 
 void process_request(uint8_t *buf);
 void initialize_storage_space(void);
-int initialize_qspi_flash();
+int initialize_qspi_flash(void);
+void read_translation_log_and_initialize_mappings(void);
 
 //static void initialize_ramfs(void)
 //{
@@ -349,6 +350,8 @@ int init_storage(void)
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
 //	initialize_ramfs();
+
+	read_translation_log_and_initialize_mappings();
 
 	initialize_storage_space();
 

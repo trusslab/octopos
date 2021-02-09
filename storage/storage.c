@@ -126,7 +126,7 @@ bool is_config_locked = false;
 #ifdef ARCH_SEC_HW_STORAGE
 
 typedef struct __attribute__((__packed__)) {
-	u8 partition_id;
+	u32 partition_id;
 	u32 virt_page_id;
 	u32 phy_page_id;
 } translation_log_t;
@@ -343,7 +343,7 @@ static int partition_reset_key(int partition_id)
 	return 0;
 }
 
-static void read_translation_log_and_initialize_mappings()
+void read_translation_log_and_initialize_mappings()
 {
 	translation_log_t *entry = aligned_malloc(sizeof(translation_log_t) + 48, 64);
 	u32 translation_log_head_address = get_translation_table_address();
@@ -362,7 +362,10 @@ static void read_translation_log_and_initialize_mappings()
 		/* Stop at 0xff because erased flash reads 0xff.
 		 * It can be the end of log, or there is no log at all.
 		 */
-		if (*(u8 *) entry == 0xff)
+		/* After an unaligned write (if it's the last write), there will be
+		 * a few 0x00 follow. That's why we check for the next value.
+		 */
+		if (*(u8 *) entry == 0xff || entry->virt_page_id == 0xffffffff)
 			break;
 
 		if (entry->partition_id >= NUM_PARTITIONS ||
@@ -372,6 +375,7 @@ static void read_translation_log_and_initialize_mappings()
 		page_map[entry->partition_id][entry->virt_page_id] = entry->phy_page_id;
 
 		partition_head[entry->partition_id] = entry->phy_page_id + 1;
+		translation_log_count++;
 	}
 
 	aligned_free(entry);
@@ -470,6 +474,7 @@ static int partition_read(int partition_id, int page_id, void *ptr)
 
 static int partition_write_header(int partition_id, u32 offset, u32 length, void *ptr)
 {
+	sleep(40);
 	u32 header_address, status;
 
 	if (partition_id >= NUM_PARTITIONS)
@@ -482,6 +487,7 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 //		SEC_HW_DEBUG_HANG();
 //		return ERR_FAULT;
 //	}
+	// FIXME: dup buf is no longer needed
 	uint8_t dup_buf[length + 5];
 	memcpy(dup_buf, ptr, length);
 
@@ -867,9 +873,9 @@ void process_request(uint8_t *buf)
 			size += (uint32_t) fop_write(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 #else
 
-			size += partition_write(partition_id, 
-									start_block + i,
-									data_buf);
+//			size += partition_write(partition_id,
+//									start_block + i,
+//									data_buf);
 
 //			uint8_t data_buf_rd_dbg[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
 //			partition_read(partition_id, start_block + i, data_buf_rd_dbg);
@@ -1254,9 +1260,6 @@ int main(int argc, char **argv)
 	}
 
 	init_storage();
-#ifdef ARCH_SEC_HW_STORAGE
-	read_translation_log_and_initialize_mappings();
-#endif
 	storage_event_loop();
 	close_storage();
 }
