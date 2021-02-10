@@ -126,8 +126,8 @@ bool is_config_locked = false;
 #ifdef ARCH_SEC_HW_STORAGE
 
 typedef struct __attribute__((__packed__)) {
-	u32 partition_id;
-	u32 virt_page_id;
+	u16 partition_id;
+	u16 virt_page_id;
 	u32 phy_page_id;
 } translation_log_t;
 
@@ -153,10 +153,10 @@ void aligned_free(void *p)
 }
 
 /* The next writable page number in each partition.
- * Page 0 is reserved as an empty page, so that
- * unmapped virtual pages will read FF.
+ * Note that page 0 is reserved as an empty page, so that
+ * unmapped virtual pages will always read 0xFF.
  */
-u32 partition_head[NUM_PARTITIONS] = {1};
+u32 partition_head[NUM_PARTITIONS];
 
 u32 translation_log_head_offset = 0;
 
@@ -343,44 +343,6 @@ static int partition_reset_key(int partition_id)
 	return 0;
 }
 
-void read_translation_log_and_initialize_mappings()
-{
-	translation_log_t *entry = aligned_malloc(sizeof(translation_log_t) + 48, 64);
-	u32 translation_log_head_address = get_translation_table_address();
-	u32 translation_log_count = 0;
-	u32 status;
-
-	for (;;) {
-		status = FlashRead(translation_log_head_address +
-							translation_log_count * sizeof(translation_log_t),
-						sizeof(translation_log_t),
-						ReadCmd, CmdBfr, (u8 *) entry);
-
-		if (status != XST_SUCCESS)
-			SEC_HW_DEBUG_HANG();
-
-		/* Stop at 0xff because erased flash reads 0xff.
-		 * It can be the end of log, or there is no log at all.
-		 */
-		/* After an unaligned write (if it's the last write), there will be
-		 * a few 0x00 follow. That's why we check for the next value.
-		 */
-		if (*(u8 *) entry == 0xff || entry->virt_page_id == 0xffffffff)
-			break;
-
-		if (entry->partition_id >= NUM_PARTITIONS ||
-				entry->virt_page_id >= PAGE_MAP_MAX_VIRT_PAGE)
-			SEC_HW_DEBUG_HANG();
-
-		page_map[entry->partition_id][entry->virt_page_id] = entry->phy_page_id;
-
-		partition_head[entry->partition_id] = entry->phy_page_id + 1;
-		translation_log_count++;
-	}
-
-	aligned_free(entry);
-}
-
 static void write_translation_log(u8 partition_id, u32 virt_page_id, u32 phy_page_id)
 {
 	translation_log_t *entry = malloc(sizeof(translation_log_t) + 5);
@@ -404,6 +366,63 @@ static void write_translation_log(u8 partition_id, u32 virt_page_id, u32 phy_pag
 
 	translation_log_head_offset += sizeof(translation_log_t);
 	free(entry);
+}
+
+void read_translation_log_and_initialize_mappings()
+{
+	translation_log_t *entry = aligned_malloc(sizeof(translation_log_t) + 48, 64);
+	u32 translation_log_head_address = get_translation_table_address();
+	u32 translation_log_count = 0;
+	u32 status;
+	u32 partition_tail[NUM_PARTITIONS] = {0};
+
+	/* Set all partition head to 1. Page 0 is reserved for invalid pages (0xff) */
+	for (int i = 0; i < NUM_PARTITIONS; i++)
+		partition_head[i] = 1;
+
+	for (;;) {
+		status = FlashRead(translation_log_head_address +
+							translation_log_count * sizeof(translation_log_t),
+						sizeof(translation_log_t),
+						ReadCmd, CmdBfr, (u8 *) entry);
+
+		if (status != XST_SUCCESS)
+			SEC_HW_DEBUG_HANG();
+
+		/* Stop at 0xff because erased flash reads 0xff.
+		 * It can be the end of log, or there is no log at all.
+		 */
+		/* After an unaligned write (if it's the last write), there will be
+		 * a few 0x00 follow. That's why we check for the next value.
+		 */
+		if (*(u8 *) entry == 0xff) {
+			break;
+		}
+
+		if (entry->partition_id >= NUM_PARTITIONS ||
+				entry->virt_page_id >= PAGE_MAP_MAX_VIRT_PAGE)
+			SEC_HW_DEBUG_HANG();
+
+		page_map[entry->partition_id][entry->virt_page_id] = entry->phy_page_id;
+
+		if (entry->virt_page_id > partition_tail[entry->partition_id])
+			partition_tail[entry->partition_id] = entry->virt_page_id;
+
+		if (partition_head[entry->partition_id] < entry->phy_page_id + 1)
+			partition_head[entry->partition_id] = entry->phy_page_id + 1;
+
+		translation_log_count++;
+	}
+
+	aligned_free(entry);
+
+	/* Writing the compressed translation table back to flash */
+	FlashErase(translation_log_head_address, 1024, CmdBfr);
+
+	for (int i = 0; i < NUM_PARTITIONS; i++) {
+		for (int j = 0; j <= partition_tail[i]; j++)
+			write_translation_log(i, j, page_map[i][j]);
+	}
 }
 
 static int partition_read_header(int partition_id, u32 offset, u32 length, void *ptr)
@@ -474,7 +493,7 @@ static int partition_read(int partition_id, int page_id, void *ptr)
 
 static int partition_write_header(int partition_id, u32 offset, u32 length, void *ptr)
 {
-	sleep(40);
+	SEC_HW_DEBUG_HANG();
 	u32 header_address, status;
 
 	if (partition_id >= NUM_PARTITIONS)
