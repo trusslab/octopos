@@ -4,4 +4,4 @@ umode:
 	g++ -Wall -I ../include/ -I ../arch/umode/include/ bootloader.c bootloader_other.c ../util/tpm/hash.c ../util/tpm/tpm.c -o bootloader_other -ldl -lpthread -ltss2-esys -ltss2-rc -ltss2-fapi -lcrypto
 
 clean:
-	rm bootloader_storage bootloader_os bootloader_other keyboard serial_out os storage network bluetooth runtime*
+	rm -f bootloader_storage bootloader_os bootloader_other keyboard serial_out os storage network bluetooth runtime* linux

@@ -74,3 +74,5 @@ clean:
 	rm -f runtime
 	rm -f ../arch/umode/mailbox_interface/mailbox_runtime.o
 	rm -f ../util/network/lib_obj.o
+	rm -f ../util/tpm/hash.o
+	rm -f ../util/tpm/tpm.o

@@ -951,7 +951,7 @@ static mailbox_state_reg_t attest_queue_access(uint8_t queue_id,
 
 	if (requester != queues[queue_id].OWNER &&
 	    requester != queues[queue_id].fixed_proc) { 
-		printf("Error: %s: Only fixed_proc, owner, and TPM proc can "
+		printf("Error: %s: Only fixed_proc and owner can "
 		       "check the mailbox state (%d, %d, %d).\n", __func__,
 		       queue_id, requester, queues[queue_id].OWNER);
 		return MAILBOX_STATE_REG_INVALID;
