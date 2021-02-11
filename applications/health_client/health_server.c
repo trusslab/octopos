@@ -23,11 +23,12 @@
 
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 
-char device1_password[32] = "Dev1Password";
-char device2_password[32] = "Dev2Password";
+char glucose_monitor_password[32] = "glucose_monitor_password";
+char insulin_pump_password[32] = "insulin_pump_password";
 
 uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t storage_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t expected_pcr_digest[TPM_EXTEND_HASH_SIZE];
 char expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
 
@@ -195,6 +196,15 @@ static void generate_PCR_digests(void)
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, network_pcr);
 
+	/* Storage PCR */
+	/* We don't use the aligned file for storage since the storage service
+	 * measures the actual executable.
+	 */
+	hash_file((char *) "./storage/storage", file_hash);
+	buffers[0] = zero_pcr;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, storage_pcr);
+
 	/* App PCR: two hashes are extended to PCR in this case. */
 	hash_file((char *) "./installer/aligned_runtime", file_hash);
 	buffers[0] = zero_pcr;
@@ -311,6 +321,14 @@ int main(int argc, char *argv[])
 		error("ERROR quote verification failed");
 	}
 
+	/* Verification of the quote tells us that our app is running in one
+	 * of the runtimes. We can be sure that we're talking to that runtime
+	 * since other runtimes won't have the ability to read the PCR for this
+	 * runtime.
+	 *
+	 * FIXME: add locality check for attestation reports to TPM.
+	 */
+
 	buffer[0] = 1;
 	n = write(newsockfd, buffer, 1);
 	if (n < 0)
@@ -321,18 +339,40 @@ int main(int argc, char *argv[])
 	if (n < 0)
 		error("ERROR writing to socket -- bluetooth_pcr");
 
+	n = write(newsockfd, storage_pcr, TPM_EXTEND_HASH_SIZE);
+	if (n < 0)
+		error("ERROR writing to socket -- storage_pcr");
+
 	n = write(newsockfd, network_pcr, TPM_EXTEND_HASH_SIZE);
 	if (n < 0)
 		error("ERROR writing to socket -- network_pcr");
 
-	/* Send bluetooth device passwords */
-	n = write(newsockfd, device1_password, 32);
+	/* This is needed for attestation of the network service.
+	 * Right after we receive the PCR, we compare it with what we have
+	 * from TPM measurements. If they match, we tell the server so that
+	 * it can send us secrets or receive confidential information.
+	 * Note that the client and server communication is secured end-to-end,
+	 * therefore we can trust our message to be delivered correctly and not
+	 * delivered at all. Yet, we don't assume that the communications
+	 * between the client are secure against side-channels on the client
+	 * device. The attestation of the network service tries to defeat that.
+	 */
+	bzero(buffer, 1);
+	n = read(newsockfd, buffer, 1);
 	if (n < 0)
-		error("ERROR writing to socket -- device1_password");
+		error("ERROR reading from socket -- 3");
 
-	n = write(newsockfd, device2_password, 32);
+	if (buffer[0] != 1)
+		error("ERROR network service attestation failed on the device");
+
+	/* Send bluetooth device passwords */
+	n = write(newsockfd, glucose_monitor_password, 32);
 	if (n < 0)
-		error("ERROR writing to socket -- device2_password");
+		error("ERROR writing to socket -- glucose_monitor_password");
+
+	n = write(newsockfd, insulin_pump_password, 32);
+	if (n < 0)
+		error("ERROR writing to socket -- insulin_pump_password");
 
 	printf("Terminating\n");
 	close(newsockfd);

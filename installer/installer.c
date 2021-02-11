@@ -238,8 +238,6 @@ int main(int argc, char **argv)
 				 (char *) "./installer/aligned_keyboard", 1);
 	copy_file_from_partition((char *) "serial_out",
 				 (char *) "./installer/aligned_serial_out", 1);
-	copy_file_from_partition((char *) "storage",
-				 (char *) "./installer/aligned_storage", 1);
 	copy_file_from_partition((char *) "runtime",
 				 (char *) "./installer/aligned_runtime", 1);
 	copy_file_from_partition((char *) "network",

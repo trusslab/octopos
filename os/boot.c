@@ -98,6 +98,12 @@ int reset_proc(uint8_t proc_id)
 		help_boot_network_proc();
 	} else if (proc_id == P_BLUETOOTH) {
 		help_boot_bluetooth_proc();
+		/* Making sure bluetooth boots completely before we return
+		 * to the syscall handler, which will send a bind command to it.
+		 * If this command is received by its bootloader, it will
+		 * confuse it.
+		 */
+		while (!is_queue_available(Q_STORAGE_DATA_OUT));
 	} else if (proc_id == P_STORAGE) {
 		uint32_t partition_size = initialize_storage();
 		initialize_file_system(partition_size);

@@ -52,7 +52,8 @@ struct runtime_api {
 	int (*request_secure_storage_access)(uint32_t partition_size,
 					     limit_t limit, timeout_t timeout,
 					     queue_update_callback_t callback,
-					     uint8_t *expected_pcr);
+					     uint8_t *expected_pcr,
+					     uint8_t *return_pcr);
 	int (*yield_secure_storage_access)(void);
 	int (*delete_and_yield_secure_storage)(void);
 	int (*write_secure_storage_blocks)(uint8_t *data, uint32_t start_block,
@@ -65,9 +66,11 @@ struct runtime_api {
 	int (*write_to_secure_storage_block)(uint8_t *data, uint32_t block_num,
 					     uint32_t block_offset,
 					     uint32_t write_size);
-
-	/* storing context in secure storage */
-	int (*set_up_context)(void *addr, uint32_t size);
+	int (*set_up_context)(void *addr, uint32_t size, int do_yield,
+			      uint32_t partition_size, limit_t limit,
+			      timeout_t timeout, queue_update_callback_t callback,
+			      uint8_t *expected_pcr, uint8_t *return_pcr);
+	int (*write_context_to_storage)(int do_yield);
 
 	/* secure IPC */
 	int (*request_secure_ipc)(uint8_t target_runtime_queue_id,
@@ -78,8 +81,9 @@ struct runtime_api {
 	int (*recv_msg_on_secure_ipc)(char *msg, int *size);
 
 	/* tpm attestation */
-	int (*request_tpm_attestation_report)(uint32_t *pcr_list, size_t pcr_list_size, 
-					      char* nonce, uint8_t **signature, size_t *sig_size,
+	int (*request_tpm_attestation_report)(uint32_t *pcr_list,
+					      size_t pcr_list_size, char* nonce,
+					      uint8_t **signature, size_t *sig_size,
 					      uint8_t **quote, size_t *quote_size);
 
 	/* Local API */
@@ -88,6 +92,7 @@ struct runtime_api {
 	void (*terminate_app)(void);
 	int (*schedule_func_execution)(void *(*func)(void *), void *data);
 	uint32_t (*get_random_uint)(void);
+	uint64_t (*get_time)(void);
 
 #ifndef ARCH_SEC_HW
 	/* socket and network */
@@ -107,13 +112,16 @@ struct runtime_api {
 	int (*yield_network_access)(void);
 
 	/* bluetooth */
-	int (*request_secure_bluetooth_access)(uint8_t *device_name,
+	int (*request_secure_bluetooth_access)(uint8_t *device_names,
+					       uint32_t num_devices,
 					       limit_t limit, timeout_t timeout,
+					       uint8_t *am_addrs,
 					       queue_update_callback_t callback,
-					       uint8_t *expected_pcr);
+					       uint8_t *expected_pcr,
+					       uint8_t *return_pcr);
 	int (*yield_secure_bluetooth_access)(void);
-	int (*bluetooth_send_data)(uint8_t *data, uint32_t len);
-	int (*bluetooth_recv_data)(uint8_t *data, uint32_t len);
+	int (*bluetooth_send_data)(uint8_t am_addr, uint8_t *data, uint32_t len);
+	int (*bluetooth_recv_data)(uint8_t am_addr, uint8_t *data, uint32_t len);
 #endif
 };
 #endif /* UNTRUSTED_DOMAIN */

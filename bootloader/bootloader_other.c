@@ -30,6 +30,8 @@ int keyboard = 0, serial_out = 0, network = 0, bluetooth = 0, runtime1 = 0,
     runtime2 = 0, untrusted = 0;
 uint8_t processor = 0;
 
+int need_repeat = 0, total_count = 0;
+
 static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
 	uint8_t opcode[2];
@@ -55,12 +57,11 @@ void read_from_storage_data_queue(uint8_t *buf)
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
-
 /* FIXME: adapted from the same function in mailbox_storage.c */
 static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
-	int spurious = 0;
+	int spurious = 0, num_storage_data_out_interrupts = 0;
 
 	while (1) {
 		read(fd_intr, &interrupt, 1);
@@ -69,23 +70,38 @@ static void *handle_mailbox_interrupts(void *data)
 			/* ignore the timer interrupt */
 		} else if (interrupt == Q_STORAGE_DATA_OUT) {
 			sem_post(&interrupts[Q_STORAGE_DATA_OUT]);
+
+			/* Block interrupts until the program is loaded.
+			 * Otherwise, we might receive some interrupts not
+			 * intended for the bootloader.
+			 */
+			num_storage_data_out_interrupts++;
+			if (!need_repeat && (num_storage_data_out_interrupts ==
+					     total_count)) {
+				return NULL;
+			}
+
 		} else if ((interrupt - NUM_QUEUES) == Q_STORAGE_DATA_OUT) {
 			sem_post(&availables[Q_STORAGE_DATA_OUT]);
 
-		/* When the OS resets a runtime (after it's done), it is possible
-		 * for the bootloader (when trying to reload the runtime) to receive
-		 * an interrupt acknowledging that the OS read the last syscall
-		 * from the mailbox (for termination information),
-		 * or the interrupt for the response to that last syscall.
+		/* When the OS resets a runtime (after it's done), it is
+		 * possible for the bootloader (when trying to reload the
+		 * runtime) to receive an interrupt acknowledging that the OS
+		 * read the last syscall from the mailbox (for termination
+		 * information), or the interrupt for the response to that last
+		 * syscall.
 		 */
-		} else if (runtime1 && (interrupt == Q_OS1 || interrupt == Q_RUNTIME1)
+		} else if (runtime1 && (interrupt == Q_OS1 ||
+					interrupt == Q_RUNTIME1)
 			   && spurious <= 1) {
 			spurious++;
-		} else if (runtime2 && (interrupt == Q_OS2 || interrupt == Q_RUNTIME2)
+		} else if (runtime2 && (interrupt == Q_OS2 ||
+					interrupt == Q_RUNTIME2)
 			   && spurious <= 1) {
 			spurious++;
 		} else {
-			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
+			printf("Error: interrupt from an invalid queue (%d)\n",
+			       interrupt);
 			exit(-1);
 		}
 	}
@@ -158,7 +174,8 @@ int init_mailbox(void)
 		exit(-1);
 	}
 
-	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	int ret = pthread_create(&mailbox_thread, NULL,
+				 handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
@@ -229,22 +246,23 @@ int copy_file_from_boot_partition(char *filename, char *path)
 {
 	FILE *copy_filep;
 	uint8_t buf[STORAGE_BLOCK_SIZE];
-	int offset, need_repeat = 0;
+	int offset;
 
 	init_mailbox();
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
-		printf("Error: %s: storage data queue msg size must be equal to storage block size\n", __func__);
+		printf("Error: %s: storage data queue msg size must be equal "
+		       "to storage block size\n", __func__);
 		exit(-1);
 	}
 	
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
-		printf("Error: %s: Couldn't open the target file (%s).\n", __func__, path);
+		printf("Error: %s: Couldn't open the target file (%s).\n",
+		       __func__, path);
 		return -1;
 	}
 
-	int total = 0;
 	offset = 0;
 repeat:
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
@@ -260,7 +278,7 @@ repeat:
 	else
 		need_repeat = 0;
 
-	total += count;
+	total_count += count;
 
 	for (int i = 0; i < (int) count; i++) {
 		read_from_storage_data_queue(buf);

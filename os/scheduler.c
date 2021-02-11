@@ -38,9 +38,15 @@ uint64_t timer_ticks = 0;
 struct runtime_proc untrusted_runtime_proc;
 struct app untrusted_app;
 
+/* FIXME: move somewhere else. */
+void check_and_run_repeat_cmd(void);
+
 void update_timer_ticks(void)
 {
 	timer_ticks++;
+
+	/* FIXME: is this the best place to call this? */
+	check_and_run_repeat_cmd();
 }
 
 static uint64_t get_timer_ticks(void)
