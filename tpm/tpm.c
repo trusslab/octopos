@@ -79,6 +79,15 @@ static int is_pcr_slot_attest_allowed(uint8_t pcr_slot, uint8_t requester)
 		return (is_proc_queue_owner(requester, Q_NETWORK_DATA_IN) &&
 			is_proc_queue_owner(requester, Q_NETWORK_DATA_OUT));
 
+	case P_BLUETOOTH:
+		/* Even access to one of the queues should be enough, but
+		 * there's no harm in being stricter here.
+		 */
+		return (is_proc_queue_owner(requester, Q_BLUETOOTH_CMD_IN) &&
+			is_proc_queue_owner(requester, Q_BLUETOOTH_CMD_OUT) &&
+			is_proc_queue_owner(requester, Q_BLUETOOTH_DATA_IN) &&
+			is_proc_queue_owner(requester, Q_BLUETOOTH_DATA_OUT));
+
 	case P_RUNTIME1:
 		return is_proc_queue_owner(requester, Q_RUNTIME1);
 

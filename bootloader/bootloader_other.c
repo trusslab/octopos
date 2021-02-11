@@ -84,16 +84,19 @@ static void *handle_mailbox_interrupts(void *data)
 		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
 			sem_post(&availables[Q_TPM_IN]);
 
-		/* When the OS resets a runtime (after it's done), it is possible
-		 * for the bootloader (when trying to reload the runtime) to receive
-		 * an interrupt acknowledging that the OS read the last syscall
-		 * from the mailbox (for termination information),
-		 * or the interrupt for the response to that last syscall.
+		/* When the OS resets a runtime (after it's done), it is
+		 * possible for the bootloader (when trying to reload the
+		 * runtime) to receive an interrupt acknowledging that the OS
+		 * read the last syscall from the mailbox (for termination
+		 * information), or the interrupt for the response to that last
+		 * syscall.
 		 */
-		} else if (runtime1 && (interrupt == Q_OS1 || interrupt == Q_RUNTIME1)
+		} else if (runtime1 && (interrupt == Q_OS1 ||
+					interrupt == Q_RUNTIME1)
 			   && spurious <= 1) {
 			spurious++;
-		} else if (runtime2 && (interrupt == Q_OS2 || interrupt == Q_RUNTIME2)
+		} else if (runtime2 && (interrupt == Q_OS2 ||
+					interrupt == Q_RUNTIME2)
 			   && spurious <= 1) {
 			spurious++;
 		} else {

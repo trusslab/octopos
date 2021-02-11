@@ -25,6 +25,11 @@ void delegate_tpm_data_in_queue(uint8_t proc_id)
 	mailbox_delegate_queue_access(Q_TPM_IN, proc_id,
 				      TPM_EXTEND_HASH_NUM_MAILBOX_MSGS,
 				      MAILBOX_DEFAULT_TIMEOUT_VAL);
+	/* Wait until the bootloader is done before we continue.
+	 * Otherwise, we might end up sending messages to the proc that are
+	 * not expected by the bootloader.
+	 */
+	wait_for_queue_availability(Q_TPM_IN);
 }
 
 static void help_boot_proc(uint8_t proc_id, char *filename)
