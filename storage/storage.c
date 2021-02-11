@@ -375,6 +375,7 @@ void read_translation_log_and_initialize_mappings()
 	u32 translation_log_count = 0;
 	u32 status;
 	u32 partition_tail[NUM_PARTITIONS] = {0};
+	_Bool need_write_back = FALSE;
 
 	/* Set all partition head to 1. Page 0 is reserved for invalid pages (0xff) */
 	for (int i = 0; i < NUM_PARTITIONS; i++)
@@ -417,9 +418,21 @@ void read_translation_log_and_initialize_mappings()
 	aligned_free(entry);
 
 	/* Writing the compressed translation table back to flash */
+	for (int i = 0; i < NUM_PARTITIONS; i++) {
+		if (partition_tail[i] != 0)
+			need_write_back = TRUE;
+	}
+
+	if (!need_write_back)
+		return;
+
 	FlashErase(translation_log_head_address, 1024, CmdBfr);
 
 	for (int i = 0; i < NUM_PARTITIONS; i++) {
+		/* virtual page 0 is reserved, so we skip */
+		if (partition_tail[i] == 0)
+			continue;
+
 		for (int j = 0; j <= partition_tail[i]; j++)
 			write_translation_log(i, j, page_map[i][j]);
 	}
@@ -493,7 +506,7 @@ static int partition_read(int partition_id, int page_id, void *ptr)
 
 static int partition_write_header(int partition_id, u32 offset, u32 length, void *ptr)
 {
-	SEC_HW_DEBUG_HANG();
+//	SEC_HW_DEBUG_HANG();
 	u32 header_address, status;
 
 	if (partition_id >= NUM_PARTITIONS)
@@ -892,9 +905,10 @@ void process_request(uint8_t *buf)
 			size += (uint32_t) fop_write(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
 #else
 
-//			size += partition_write(partition_id,
-//									start_block + i,
-//									data_buf);
+			size += partition_write(partition_id,
+									start_block + i,
+									data_buf);
+//			sleep(5);
 
 //			uint8_t data_buf_rd_dbg[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
 //			partition_read(partition_id, start_block + i, data_buf_rd_dbg);
@@ -964,6 +978,7 @@ void process_request(uint8_t *buf)
 			size += partition_read(partition_id, 
 									start_block + i,
 									data_buf);
+//			sleep(5);
 #endif
 			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 		}

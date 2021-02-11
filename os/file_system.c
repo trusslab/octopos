@@ -245,17 +245,18 @@ static int update_file_in_directory(struct file *file)
 	if ((dir_data_off + filename_size + 15) > DIR_DATA_SIZE)
 		return ERR_MEMORY;
 
-	*((uint16_t *) &dir_data[dir_data_off]) = filename_size;
+	memcpy(&dir_data[dir_data_off], &filename_size, 2);
 	dir_data_off += 2;
 
 	strcpy((char *) &dir_data[dir_data_off], file->filename);
 	dir_data_off += (filename_size + 1);
 
-	*((uint32_t *) &dir_data[dir_data_off]) = file->start_block;
+	memcpy(&dir_data[dir_data_off], &(file->start_block), 4);
+
 	dir_data_off += 4;
-	*((uint32_t *) &dir_data[dir_data_off]) = file->num_blocks;
+	memcpy(&dir_data[dir_data_off], &(file->num_blocks), 4);
 	dir_data_off += 4;
-	*((uint32_t *) &dir_data[dir_data_off]) = file->size;
+	memcpy(&dir_data[dir_data_off], &(file->size), 4);
 
 	return 0;
 }
@@ -902,14 +903,16 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
 		/* retrieve file info */
-		uint16_t num_files = *((uint16_t *) &dir_data[4]);
+		uint16_t num_files;
+		memcpy(&num_files, &dir_data[4], 2);
 		dir_data_ptr = 6;
 
 		for (int i = 0; i < num_files; i++) {
 			int dir_data_off = dir_data_ptr;
 			if ((dir_data_ptr + 2) > DIR_DATA_SIZE)
 				break;
-			int filename_size = *((uint16_t *) &dir_data[dir_data_ptr]);
+			uint16_t filename_size;
+			memcpy(&filename_size, &dir_data[dir_data_ptr], 2);
 			if ((dir_data_ptr + filename_size + 15) > DIR_DATA_SIZE)
 				break;
 			dir_data_ptr += 2;
@@ -925,11 +928,11 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			dir_data_ptr = dir_data_ptr + filename_size + 1;
 
 			file->dir_data_off = dir_data_off;
-			file->start_block = *((uint32_t *) &dir_data[dir_data_ptr]);
+			memcpy(&(file->start_block), &dir_data[dir_data_ptr], 4);
 			dir_data_ptr += 4;
-			file->num_blocks = *((uint32_t *) &dir_data[dir_data_ptr]);
+			memcpy(&(file->num_blocks), &dir_data[dir_data_ptr], 4);
 			dir_data_ptr += 4;
-			file->size = *((uint32_t *) &dir_data[dir_data_ptr]);
+			memcpy(&(file->size), &dir_data[dir_data_ptr], 4);
 			dir_data_ptr += 4;
 
 			add_file_to_list(file);

@@ -53,11 +53,11 @@ void fs_test(struct runtime_api *api)
 	}
 
 	data = 13;
-	api->write_to_file(fd1, (uint8_t *) &data, 4, 0);
-	api->write_to_file(fd1, (uint8_t *) &data, 4, 4);
+	// api->write_to_file(fd1, (uint8_t *) &data, 4, 0);
+	// api->write_to_file(fd1, (uint8_t *) &data, 4, 4);
 	data = 15;
-	api->write_to_file(fd2, (uint8_t *) &data, 4, 0);
-	api->write_to_file(fd2, (uint8_t *) &data, 4, 4);
+	// api->write_to_file(fd2, (uint8_t *) &data, 4, 0);
+	// api->write_to_file(fd2, (uint8_t *) &data, 4, 4);
 
 	api->read_from_file(fd1, (uint8_t *) &data, 4, 4);
 	insecure_printf("data (first file) = %d\n", data);
@@ -78,7 +78,7 @@ void fs_test(struct runtime_api *api)
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 
 	block[10] = 14;
-	api->write_file_blocks(fd2, block, 0, 1);
+	// api->write_file_blocks(fd2, block, 0, 1);
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 	api->read_file_blocks(fd2, block, 0, 1);
 	insecure_printf("block[10] = %d\n", (int) block[10]);
@@ -93,7 +93,7 @@ void fs_test(struct runtime_api *api)
 
 	index = (99 * STORAGE_BLOCK_SIZE) + 10;
 	block[index] = 12;
-	api->write_file_blocks(fd2, block, 1, 100);
+	// api->write_file_blocks(fd2, block, 1, 100);
 	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
 	api->read_file_blocks(fd2, block, 1, 100);
 	insecure_printf("block[index] = %d\n", (int) block[index]);
@@ -105,7 +105,7 @@ void fs_test(struct runtime_api *api)
 
 out:
 	api->close_file(fd1);
-	api->remove_file((char *) "test_file_1.txt");
+	// api->remove_file((char *) "test_file_1.txt");
 	api->close_file(fd2);
-	api->remove_file((char *) "test_file_2.txt");
+	// api->remove_file((char *) "test_file_2.txt");
 }
