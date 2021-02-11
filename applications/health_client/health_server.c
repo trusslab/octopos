@@ -24,8 +24,8 @@
 
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 
-char device1_password[32] = "Dev1Password";
-char device2_password[32] = "Dev2Password";
+char glucose_monitor_password[32] = "glucose_monitor_password";
+char insulin_pump_password[32] = "insulin_pump_password";
 
 uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
@@ -327,13 +327,13 @@ int main(int argc, char *argv[])
 		error("ERROR writing to socket -- network_pcr");
 
 	/* Send bluetooth device passwords */
-	n = write(newsockfd, device1_password, 32);
+	n = write(newsockfd, glucose_monitor_password, 32);
 	if (n < 0)
-		error("ERROR writing to socket -- device1_password");
+		error("ERROR writing to socket -- glucose_monitor_password");
 
-	n = write(newsockfd, device2_password, 32);
+	n = write(newsockfd, insulin_pump_password, 32);
 	if (n < 0)
-		error("ERROR writing to socket -- device2_password");
+		error("ERROR writing to socket -- insulin_pump_password");
 
 	printf("Terminating\n");
 	close(newsockfd);

@@ -36,8 +36,11 @@ uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t measured_network_pcr[TPM_EXTEND_HASH_SIZE];
 
-uint8_t device1_password[32];
-uint8_t device2_password[32];
+uint8_t glucose_monitor[BD_ADDR_LEN] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc};
+uint8_t insulin_pump[BD_ADDR_LEN] = {0xcb, 0xa9, 0x87, 0x65, 0x43, 0x21};
+
+uint8_t glucose_monitor_password[32];
+uint8_t insulin_pump_password[32];
 
 #define loop_printf(print_cmd, fmt, args...) {				\
 	memset(output_buf_full, 0x0, MAX_PRINT_SIZE);			\
@@ -119,6 +122,12 @@ static void terminate_bluetooth_session(void)
 
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
 	gapi->bluetooth_send_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+
+	if (msg[0] != 1) {
+		insecure_printf("Error: couldn't deauthenticate bluetooth "
+				"device.\n");
+	}
 }
 
 static void *yield_resources(void *data)
@@ -204,12 +213,12 @@ static int connect_to_server(void)
 
 static int receive_bluetooth_devices_passwords(void)
 {
-	if (gapi->read_from_socket(sock, device1_password, 32) < 0) {
+	if (gapi->read_from_socket(sock, glucose_monitor_password, 32) < 0) {
 		insecure_printf("Error: couldn't read from socket (passwords:1)\n");
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, device2_password, 32) < 0) {
+	if (gapi->read_from_socket(sock, insulin_pump_password, 32) < 0) {
 		insecure_printf("Error: couldn't read from socket (passwords:2)\n");
 		return -1;
 	}
@@ -351,14 +360,16 @@ void app_main(struct runtime_api *api)
 	 *	   Upon successful attestation, establish a secure channel.
 	 * Step 2: Receive passwords for both bluetooth devices.
 	 * Step 3: Authenticate with bluetooth devices.
-	 *	   Upon success, read from device1 (sensor) and write to
-	 *	   device2 (pump, actuator).
+	 *	   Upon success, read from glucose_monitor (sensor) and write
+	 *	   to insulin_pump (actuator).
 	 * Step 4: Keep track of the usage of the queues (limit and timeout).
 	 *	   Secure yield access when about to expire. For bluetooth,
 	 *	   terminate the sessions with devices. For network, terminate
 	 *	   the session with the server.
 	 */
 	int ret;
+	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
+	uint16_t glucose_measurement;
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
 		printf("Error: %s: BTPACKET_FIXED_DATA_SIZE must be 32 (%d)\n",
@@ -400,31 +411,49 @@ void app_main(struct runtime_api *api)
 	}
 
 	/* Step 3: authenticate & send/receive messages */
-	/* FIXME: for now, we just communciate with one bluetooth device */
-	uint8_t device1[BD_ADDR_LEN] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc};
 
-	ret = gapi->request_secure_bluetooth_access(device1, 100, 100,
-						    queue_update_callback, NULL);
+	/* Step 3.1: get a measurement from the glucose monitor */
+	insecure_printf("Connecting to the glucose monitor now.\n");
+
+	ret = gapi->request_secure_bluetooth_access(glucose_monitor, 100, 100,
+						    queue_update_callback,
+						    bluetooth_pcr);
 	if (ret) {
 		insecure_printf("Error: couldn't get access to bluetooth.\n");
 		return;
 	}
 
 	has_bluetooth = 1;
-	insecure_printf("Got access to bluetooth.\n");
+	insecure_printf("Connected to the glucose monitor.\n");
 
 	/* Authenticate */
-	gapi->bluetooth_send_data(device1_password, BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_send_data(glucose_monitor_password,
+				  BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	if (msg[0] != 1) {
+		insecure_printf("Error: couldn't authenticate with the glucose "
+				"monitor\n");
+		goto terminate;
+	}
+
+	insecure_printf("Authenticated with the glucose monitor.\n");
 
 	/* send/receive msgs */
-	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
-
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
 	msg[0] = 1;
 	gapi->bluetooth_send_data(msg, BTPACKET_FIXED_DATA_SIZE);
 	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	if (msg[0] != 1) {
+		insecure_printf("Error: couldn't get measurement from the "
+				"glucose monitor.\n");
+		goto terminate;
+	}
+
+	insecure_printf("glucose measurement = %d (mg/dL).\n",
+			*((uint16_t *) msg[1]));
 
 	/* Step 4 */
+terminate:
 	terminate_bluetooth_session();
 	terminate_network_session();
 

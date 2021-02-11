@@ -24,45 +24,61 @@ int bound_device_index = 0;
 void (*bound_device_func)(struct btpacket *btp) = NULL;
 
 /* FIXME: move somewhere else */
-char device1_password[32] = "Dev1Password";
-int device1_authenticated = 0;
+char glucose_monitor_password[32] = "glucose_monitor_password";
+int glucose_monitor_authenticated = 0;
 
-static void device1_func(struct btpacket *btp)
+static void glucose_monitor_func(struct btpacket *btp)
 {
-	if (!device1_authenticated) {
-		if (!strcmp((char *) btp->data, device1_password)) {
-			device1_authenticated = 1;
-			printf("Device1 successfully authenticated.\n");
+	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	struct btpacket *btp2 = (struct btpacket *) buf_large;
+	
+	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+	if (!glucose_monitor_authenticated) {
+		if (!strcmp((char *) btp->data, glucose_monitor_password)) {
+			glucose_monitor_authenticated = 1;
+			printf("glucose_monitor successfully authenticated.\n");
+			btp2->data[0] = 1; /* success */
+			write_to_bluetooth_data_queue(buf_large);
 		} else {
-			printf("Device1 authentication failed.\n");
+			printf("glucose_monitor authentication failed.\n");
+			btp2->data[0] = 0; /* failure */
+			write_to_bluetooth_data_queue(buf_large);
 		}
 
 		return;
 	}
 
 	if (btp->data[0] == 1) {
-		uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
-		struct btpacket *btp2 = (struct btpacket *) buf_large;
-		printf("Device1: sending a response.\n");
+		/* Request a measurement */
+		uint16_t measurement = (rand() % 300) + 100; /* in mg/dL */
+		printf("glucose_monitor: measurement = %d.\n", measurement);
+		printf("glucose_monitor: sending a response.\n");
 
-		strcpy((char *) btp2->data, "Success!");
+		btp2->data[0] = 1; /* success */
+		*((uint16_t *) btp2->data[1]) = measurement;
 		write_to_bluetooth_data_queue(buf_large);
 
 		return;
 	} else if (btp->data[0] == 0) {
-		device1_authenticated = 1;
-		printf("Device1 deauthenticated.\n");
+		/* Terminate session */
+		glucose_monitor_authenticated = 1;
+		printf("glucose_monitor deauthenticated.\n");
+		btp2->data[0] = 1; /* success */
+		write_to_bluetooth_data_queue(buf_large);
 		return;
+	} else {
+		printf("glucose_monitor received an invalid message.\n");
+		btp2->data[0] = 0; /* failure */
+		write_to_bluetooth_data_queue(buf_large);
 	}
-
-	printf("Device1 received an invalid message.\n");
 }
 
 /* FIXME: move somewhere else */
-char device2_password[32] = "Dev2Password";
-int device2_authenticated = 0;
+char insulin_pump_password[32] = "insulin_pump_password";
+int insulin_pump_authenticated = 0;
 
-static void device2_func(struct btpacket *btp)
+static void insulin_pump_func(struct btpacket *btp)
 {
 	printf("%s: received packet: %d\n", __func__, (uint8_t) btp->data[0]);
 }
@@ -101,9 +117,9 @@ static void process_cmd(uint8_t *buf)
 				bound = 1;
 				/* FIXME: not scalable */
 				if (i == 1)
-					bound_device_func = device1_func;
+					bound_device_func = glucose_monitor_func;
 				else if (i == 2)
-					bound_device_func = device2_func;
+					bound_device_func = insulin_pump_func;
 				break;
 			}
 		}
