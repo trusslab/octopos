@@ -14,6 +14,7 @@
 #include <sys/wait.h>
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
+#include <tpm/tpm.h>
 #include <arch/pmu.h>
 
 int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
@@ -28,7 +29,7 @@ int fd_keyboard, fd_serial_out, fd_untrusted_in;
 pid_t mailbox_pid, tpm_server_pid, tpm2_abrmd_pid, os_pid,
       keyboard_pid, serial_out_pid, runtime1_pid, runtime2_pid, storage_pid,
       network_pid, bluetooth_pid, untrusted_pid, socket_server_pid,
-      attest_server_pid, bank_server_pid, health_server_pid;
+      attest_server_pid, bank_server_pid, health_server_pid, display_server_pid;
 
 struct termios orig;
 
@@ -260,6 +261,12 @@ static int start_bluetooth_proc(void)
 	char *const args[] = {(char *) "bootloader_other", (char *) "bluetooth",
 			      NULL};
 	char path[] = "./bootloader/bootloader_other";
+	/* FIXME: Mingyi: this returns an error.
+	 * Note that since we are in the PMU, we can only set the locality to
+	 * PMU's locality. (And this needs to be enforced.)
+	 */
+	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_BLUETOOTH)};
+	tpm_reset_pcrs(P_PMU, pcr_list, 1);
 	return start_proc(path, args, fd_bluetooth_log, 0, 0, 0);
 }
 
@@ -300,6 +307,13 @@ static int start_health_server_proc(void)
 	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
 }
 
+static int start_display_proc(void)
+{
+	char *const args[] = {(char*) "display server", NULL};
+	char path[] = "./display/displayTest";
+	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
+}
+
 static void start_all_procs(void)
 {
 	mailbox_pid = start_mailbox_proc();
@@ -314,6 +328,7 @@ static void start_all_procs(void)
 	network_pid = start_network_proc();
 	bluetooth_pid = start_bluetooth_proc();
 	untrusted_pid = start_untrusted_proc();
+	display_server_pid = start_display_proc();
 	/* These servers are not part of OctopOS.
 	 * We start them here since they're useful for testing.
 	 */
@@ -389,6 +404,7 @@ static void halt_all_procs(void)
 	kill(bank_server_pid, SIGKILL);
 	kill(attest_server_pid, SIGKILL);
 	kill(socket_server_pid, SIGKILL);
+	kill(display_server_pid, SIGKILL);
 
 	halt_proc(P_BLUETOOTH);
 

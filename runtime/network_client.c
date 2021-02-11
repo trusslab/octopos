@@ -153,7 +153,7 @@ int yield_network_access(void)
  * It can get the measured value here and compare it with the expected value
  * later.
  *
- * FIXME: @callback, @expected_pcr, and @return_pcr can be set by the UNTRUSTED_DOMAIN
+ * FIXME: @callback, @expected_pcr, and @return_pcr can be set by the untrusted
  * domain, but they're no ops.
  */
 int request_network_access(limit_t limit, timeout_t timeout,

@@ -799,51 +799,6 @@ static int remove_file(char *filename)
 	return (int) ret0;
 }
 
-bool context_set = false;
-void *context_addr = NULL;
-uint32_t context_size = 0;
-uint32_t context_tag = 0xDEADBEEF;
-#define CONTEXT_TAG_SIZE	4
-
-static int set_up_context(void *addr, uint32_t size)
-{
-	uint8_t context_block[STORAGE_BLOCK_SIZE];
-	if (size > (STORAGE_BLOCK_SIZE - CONTEXT_TAG_SIZE)) {
-		printf("Error (%s): context size is too big.\n", __func__);
-		return ERR_INVALID;
-	}
-
-	context_addr = addr;
-	context_size = size;
-	context_set = true;
-	/* Now, let's retrieve the context. */
-	int ret = request_secure_storage_access(100, 200,
-				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
-	if (ret) {
-		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
-		return ret;
-	}
-
-	uint32_t rret = read_from_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
-	if (rret != (context_size + CONTEXT_TAG_SIZE)) {
-		printf("%s: Couldn't read from secure storage.\n", __func__);
-		yield_secure_storage_access();
-		return ERR_FAULT;
-	}
-
-	if ((*(uint32_t *) context_block) != context_tag) {
-		printf("%s: No context to use.\n", __func__);
-		yield_secure_storage_access();
-		return ERR_INVALID;
-	}
-
-	memcpy(context_addr, &context_block[CONTEXT_TAG_SIZE], context_size);
-
-	yield_secure_storage_access();
-
-	return 0;
-}
-
 static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 			      timeout_t timeout, queue_update_callback_t callback)
 {
@@ -989,6 +944,12 @@ static uint32_t get_random_uint(void)
 	return (uint32_t) rand();	
 }
 
+/* Return time in seconds since some fixed time in the past */
+static uint64_t get_time(void)
+{
+	return (uint64_t) time(NULL);
+}
+
 extern bool has_network_access;
 extern int network_access_count;
 
@@ -1047,7 +1008,8 @@ static int connect_socket(struct socket *sock, struct sock_addr *skaddr)
 {
 	/* FIXME: 20 packets for connect is an over-approximation. */
 	if (!has_network_access || (network_access_count < 10)) {
-		printf("%s: Error: has no or insufficient network access.\n", __func__);
+		printf("%s: Error: has no or insufficient network access.\n",
+		       __func__);
 		return ERR_INVALID;
 	}
 
@@ -1059,8 +1021,10 @@ static int connect_socket(struct socket *sock, struct sock_addr *skaddr)
 static int read_from_socket(struct socket *sock, void *buf, int len)
 {
 	/* FIXME: calculate more precisely how many packets will be needed. */
-	if (!has_network_access || (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
-		printf("%s: Error: has no or insufficient network access.\n", __func__);
+	if (!has_network_access ||
+	    (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
+		printf("%s: Error: has no or insufficient network access.\n",
+		       __func__);
 		return 0;
 	}
 
@@ -1073,8 +1037,10 @@ static int read_from_socket(struct socket *sock, void *buf, int len)
 static int write_to_socket(struct socket *sock, void *buf, int len)
 {
 	/* FIXME: calculate more precisely how many packets will be needed. */
-	if (!has_network_access || (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
-		printf("%s: Error: has no or insufficient network access.\n", __func__);
+	if (!has_network_access ||
+	    (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
+		printf("%s: Error: has no or insufficient network access.\n",
+		       __func__);
 		return 0;
 	}
 
@@ -1084,8 +1050,12 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 	return _write(sock, buf, len);
 }
 
-static int verify_bluetooth_service_state(uint8_t *device_name)
+static int verify_bluetooth_service_state(uint8_t *device_names,
+					  uint32_t num_devices,
+					  uint8_t *am_addrs)
 {
+	uint32_t found = 0;
+
 	BLUETOOTH_SET_ZERO_ARGS(IO_OP_QUERY_STATE)
 
 	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
@@ -1100,24 +1070,46 @@ static int verify_bluetooth_service_state(uint8_t *device_name)
 
 	/* data[0] is bound. Must be 1.
 	 * data[1] is used. Must be 0.
-	 * &data[2] is the starting addr for the bound device name.
+	 * data[2] is num_devicesl Must be equal to what we expect.
+	 * &data[3] is the starting addr for the bound device name/am_addr pairs.
 	 */
-	if ((_size != (3 + BD_ADDR_LEN)) || (data[0] != 1) ||
-	    (data[1] != 0) || !memcmp(&data[2], device_name, BD_ADDR_LEN)) {
-		printf("Error: %s: bluetooth service state not verified.\n",
-		       __func__);
+	if ((_size != (3 + (num_devices * (BD_ADDR_LEN + 1)))) ||
+	    (data[0] != 1) || (data[1] != 0) ||
+	    (((uint32_t) data[2]) != num_devices)) {
+		printf("Error: %s: bluetooth service state not verified "
+		       "(first check).\n", __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	for (int i = 0; i < num_devices; i++) {
+		for (int j = 0; j < num_devices; j++) { 
+			if (!memcmp(&data[3 + (i * (BD_ADDR_LEN + 1))],
+				    &device_names[j * BD_ADDR_LEN],
+				    BD_ADDR_LEN) &&
+			    data[3 + (i * (BD_ADDR_LEN + 1)) + BD_ADDR_LEN] ==
+								am_addrs[i])
+				found++;
+		}
+	}
+
+	if (found != num_devices) {
+		printf("Error: %s: bluetooth service state not verified "
+		       "(second check).\n", __func__);
 		return ERR_UNEXPECTED;
 	}
 
 	return 0;
 }
 
-static int request_secure_bluetooth_access(uint8_t *device_name,
-					   limit_t limit, timeout_t timeout,
+static int request_secure_bluetooth_access(uint8_t *device_names,
+					   uint32_t num_devices, limit_t limit,
+					   timeout_t timeout, uint8_t *am_addrs,
 					   queue_update_callback_t callback,
-					   uint8_t *expected_pcr)
+					   uint8_t *expected_pcr,
+					   uint8_t *return_pcr)
 {
 	int ret;
+	uint8_t ret_data[MAILBOX_QUEUE_MSG_SIZE];
 
 	/* request access to the queues */
 	reset_queue_sync(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -1125,13 +1117,21 @@ static int request_secure_bluetooth_access(uint8_t *device_name,
 	reset_queue_sync(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	reset_queue_sync(Q_BLUETOOTH_DATA_OUT, 0);
 
-	SYSCALL_SET_TWO_ARGS_DATA(SYSCALL_REQUEST_BLUETOOTH_ACCESS,
+	SYSCALL_SET_THREE_ARGS_DATA(SYSCALL_REQUEST_BLUETOOTH_ACCESS,
 				  (uint32_t) limit, (uint32_t) timeout,
-				  device_name, BD_ADDR_LEN)
+				  num_devices, device_names,
+				  num_devices * BD_ADDR_LEN)
 	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET
+	SYSCALL_GET_ONE_RET_DATA(ret_data)
 	if (ret0)
 		return (int) ret0;
+
+	if (((uint32_t) _size) != num_devices) {
+		printf("%s: Error: invalid response from the OS\n", __func__);
+		return ERR_INVALID;
+	}
+
+	memcpy(am_addrs, ret_data, _size);
 
 	/* Verify mailbox state */
 	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_IN, limit, timeout);
@@ -1193,7 +1193,9 @@ static int request_secure_bluetooth_access(uint8_t *device_name,
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_BLUETOOTH, expected_pcr);
 		if (ret) {
-			/* FIXME: the next two error blocks are identical. */
+			/* FIXME: the next three error blocks are almost
+			 * identical.
+			 */
 			/* FIXME: also, has a lot in common with the yield func.
 			 * (the same for other I/Os)
 			 */
@@ -1216,10 +1218,32 @@ static int request_secure_bluetooth_access(uint8_t *device_name,
 			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
 			return ERR_UNEXPECTED;
 		}
+	} else if (return_pcr) {
+		ret = read_tpm_pcr_for_proc(P_BLUETOOTH, return_pcr);
+		if (ret) {
+			printf("%s: Error: couldn't read PCR\n", __func__);
+			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+			wait_until_empty(Q_BLUETOOTH_DATA_IN,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+			return ERR_FAULT;
+		}
 	}
 
 	/* Verify bluetooth service state */
-	ret = verify_bluetooth_service_state(device_name);
+	ret = verify_bluetooth_service_state(device_names, num_devices, am_addrs);
 	if (ret) {
 		printf("Error: %s: invalid state sent from the bluetooth "
 		       "service.\n", __func__);
@@ -1272,10 +1296,45 @@ static int yield_secure_bluetooth_access(void)
 	return 0;
 }
 
-int bluetooth_send_data(uint8_t *data, uint32_t len)
+/* FIXME: ugly. */
+/* FIXME: duplicate in bluetooth/bluetooth.c */
+static int set_btp_am_addr(struct btpacket *btp, uint8_t am_addr)
+{
+	switch(am_addr) {
+	case 0:
+		btp->header1.am_addr = 0;
+		return 0;
+	case 1:
+		btp->header1.am_addr = 1;
+		return 0;
+	case 2:
+		btp->header1.am_addr = 2;
+		return 0;
+	case 3:
+		btp->header1.am_addr = 3;
+		return 0;
+	case 4:
+		btp->header1.am_addr = 4;
+		return 0;
+	case 5:
+		btp->header1.am_addr = 5;
+		return 0;
+	case 6:
+		btp->header1.am_addr = 6;
+		return 0;
+	case 7:
+		btp->header1.am_addr = 7;
+		return 0;
+	default:
+		return ERR_INVALID;
+	}
+}
+
+int bluetooth_send_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 {
 	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	struct btpacket *btp = (struct btpacket *) buf_large;
+	int ret;
 
 	if (len > BTPACKET_FIXED_DATA_SIZE) {
 		printf("Error: %s: can't send more than %d bytes\n", __func__,
@@ -1285,6 +1344,12 @@ int bluetooth_send_data(uint8_t *data, uint32_t len)
 
 	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 	memcpy(btp->data, data, len);
+
+	ret = set_btp_am_addr(btp, am_addr);
+	if (ret) {
+		printf("Error: %s: invalid am_addr (%d)\n", __func__, am_addr);
+		return ret;
+	}
 
 	/* the arg is the number of packets */
 	BLUETOOTH_SET_ONE_ARG(IO_OP_SEND_DATA, 1)
@@ -1303,7 +1368,7 @@ int bluetooth_send_data(uint8_t *data, uint32_t len)
 	return 0;
 }
 
-int bluetooth_recv_data(uint8_t *data, uint32_t len)
+int bluetooth_recv_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 {
 	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	struct btpacket *btp = (struct btpacket *) buf_large;
@@ -1316,6 +1381,12 @@ int bluetooth_recv_data(uint8_t *data, uint32_t len)
 
 	runtime_recv_msg_from_queue_large(buf_large, Q_BLUETOOTH_DATA_OUT);
 
+	if (((uint8_t) btp->header1.am_addr) != am_addr) {
+		printf("Error: %s: message from unexpected bluetooth device.\n",
+		       __func__);
+		return ERR_UNEXPECTED;
+	}
+
 	memcpy(data, btp->data, len);
 
 	return 0;
@@ -1324,8 +1395,9 @@ int bluetooth_recv_data(uint8_t *data, uint32_t len)
 #endif
 
 static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_size, 
-					  char* nonce, uint8_t **signature, size_t *sig_size,
-					  uint8_t **quote, size_t *quote_size)
+					  char* nonce, uint8_t **signature,
+					  size_t *sig_size, uint8_t **quote,
+					  size_t *quote_size)
 {
 	int rc = 0;
 	rc = tpm_attest(p_runtime, (uint8_t *) nonce, pcr_list, pcr_list_size,
@@ -1381,6 +1453,7 @@ static void load_application(char *msg)
 		.write_to_secure_storage_block = write_to_secure_storage_block,
 		.read_from_secure_storage_block = read_from_secure_storage_block,
 		.set_up_context = set_up_context,
+		.write_context_to_storage = write_context_to_storage,
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
@@ -1391,6 +1464,7 @@ static void load_application(char *msg)
 		.terminate_app = terminate_app,
 		.schedule_func_execution = schedule_func_execution,
 		.get_random_uint = get_random_uint,
+		.get_time = get_time,
 #ifdef ARCH_UMODE
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
@@ -1513,31 +1587,12 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 
 void *store_context(void *data)
 {
-	uint8_t context_block[STORAGE_BLOCK_SIZE];
+	int ret;
 
-	if (!is_secure_storage_key_set() || !context_set) {
-		printf("%s: Error: either the secure storage key or context not set\n", __func__);
+	ret = write_context_to_storage(1);
+	if (ret)
 		return NULL;
-	}
 
-#ifdef ARCH_SEC_HW
-	async_syscall_mode = true;
-#endif
-	int ret = request_secure_storage_access(100, 200,
-				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
-	if (ret) {
-		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
-		return NULL;
-	}
-
-	memcpy(context_block, &context_tag, CONTEXT_TAG_SIZE);
-	memcpy(&context_block[CONTEXT_TAG_SIZE], context_addr, context_size);
-
-	uint32_t wret = write_to_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
-	if (wret != (context_size + CONTEXT_TAG_SIZE))
-		printf("Error: couldn't write the context to secure storage.\n");
-
-	yield_secure_storage_access();
 #ifdef ARCH_SEC_HW
 	async_syscall_mode = false;
 #endif

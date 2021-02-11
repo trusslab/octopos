@@ -1,7 +1,9 @@
 /* OctopOS bluetooth code */
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include <arch/mailbox_bluetooth.h>
 #include <octopos/mailbox.h>
 #include <octopos/io.h>
@@ -13,58 +15,157 @@ uint8_t used = 0;
 
 /* BD_ADDR for a few devices (resources). */
 #define NUM_RESOURCES	2
-/* index 0 is dummy */
-uint8_t devices[NUM_RESOURCES + 1][BD_ADDR_LEN] = {
-					{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+uint8_t devices[NUM_RESOURCES][BD_ADDR_LEN] = {
 					{0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc},
 					{0xcb, 0xa9, 0x87, 0x65, 0x43, 0x21}};
-int bound_device_index = 0;
 
-void (*bound_device_func)(struct btpacket *btp) = NULL;
+int bound_devices[NUM_RESOURCES] = {0, 0};
+
+/* We use the array index as the logical address. */
+#define GLUCOSE_MONITOR_AM_ADDR		0
+#define INSULIN_PUMP_AM_ADDR		1
 
 /* FIXME: move somewhere else */
-char device1_password[32] = "Dev1Password";
-int device1_authenticated = 0;
+char glucose_monitor_password[32] = "glucose_monitor_password";
+int glucose_monitor_authenticated = 0;
 
-static void device1_func(struct btpacket *btp)
+/* FIXME: ugly. */
+/* FIXME: duplicate in runtime/runtime.c */
+static int set_btp_am_addr(struct btpacket *btp, uint8_t am_addr)
 {
-	if (!device1_authenticated) {
-		if (!strcmp((char *) btp->data, device1_password)) {
-			device1_authenticated = 1;
-			printf("Device1 successfully authenticated.\n");
+	switch(am_addr) {
+	case 0:
+		btp->header1.am_addr = 0;
+		return 0;
+	case 1:
+		btp->header1.am_addr = 1;
+		return 0;
+	case 2:
+		btp->header1.am_addr = 2;
+		return 0;
+	case 3:
+		btp->header1.am_addr = 3;
+		return 0;
+	case 4:
+		btp->header1.am_addr = 4;
+		return 0;
+	case 5:
+		btp->header1.am_addr = 5;
+		return 0;
+	case 6:
+		btp->header1.am_addr = 6;
+		return 0;
+	case 7:
+		btp->header1.am_addr = 7;
+		return 0;
+	default:
+		return ERR_INVALID;
+	}
+}
+
+static void glucose_monitor_func(struct btpacket *btp)
+{
+	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	struct btpacket *btp2 = (struct btpacket *) buf_large;
+	
+	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	set_btp_am_addr(btp2, GLUCOSE_MONITOR_AM_ADDR);
+
+	if (!glucose_monitor_authenticated) {
+		if (!strcmp((char *) btp->data, glucose_monitor_password)) {
+			glucose_monitor_authenticated = 1;
+			printf("glucose_monitor successfully authenticated.\n");
+			btp2->data[0] = 1; /* success */
+			write_to_bluetooth_data_queue(buf_large);
 		} else {
-			printf("Device1 authentication failed.\n");
+			printf("glucose_monitor authentication failed.\n");
+			btp2->data[0] = 0; /* failure */
+			write_to_bluetooth_data_queue(buf_large);
 		}
 
 		return;
 	}
 
 	if (btp->data[0] == 1) {
-		uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
-		struct btpacket *btp2 = (struct btpacket *) buf_large;
-		printf("Device1: sending a response.\n");
+		/* Request a measurement */
+		srand(time(NULL));
+		uint16_t measurement = (rand() % 300) + 100; /* in mg/dL */
+		printf("glucose_monitor: measurement = %d.\n", measurement);
+		printf("glucose_monitor: sending a response.\n");
 
-		strcpy((char *) btp2->data, "Success!");
+		btp2->data[0] = 1; /* success */
+		*((uint16_t *) &btp2->data[1]) = measurement;
 		write_to_bluetooth_data_queue(buf_large);
 
 		return;
 	} else if (btp->data[0] == 0) {
-		device1_authenticated = 1;
-		printf("Device1 deauthenticated.\n");
+		/* Terminate session */
+		glucose_monitor_authenticated = 0;
+		printf("glucose_monitor deauthenticated.\n");
+		btp2->data[0] = 1; /* success */
+		write_to_bluetooth_data_queue(buf_large);
 		return;
+	} else {
+		printf("glucose_monitor received an invalid message.\n");
+		btp2->data[0] = 0; /* failure */
+		write_to_bluetooth_data_queue(buf_large);
 	}
-
-	printf("Device1 received an invalid message.\n");
 }
 
 /* FIXME: move somewhere else */
-char device2_password[32] = "Dev2Password";
-int device2_authenticated = 0;
+char insulin_pump_password[32] = "insulin_pump_password";
+int insulin_pump_authenticated = 0;
 
-static void device2_func(struct btpacket *btp)
+static void insulin_pump_func(struct btpacket *btp)
 {
-	printf("%s: received packet: %d\n", __func__, (uint8_t) btp->data[0]);
+	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	struct btpacket *btp2 = (struct btpacket *) buf_large;
+	
+	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	set_btp_am_addr(btp2, INSULIN_PUMP_AM_ADDR);
+
+	if (!insulin_pump_authenticated) {
+		if (!strcmp((char *) btp->data, insulin_pump_password)) {
+			insulin_pump_authenticated = 1;
+			printf("insulin_pump successfully authenticated.\n");
+			btp2->data[0] = 1; /* success */
+			write_to_bluetooth_data_queue(buf_large);
+		} else {
+			printf("insulin_pump authentication failed.\n");
+			btp2->data[0] = 0; /* failure */
+			write_to_bluetooth_data_queue(buf_large);
+		}
+
+		return;
+	}
+
+	if (btp->data[0] == 1) {
+		/* Request an injection */
+		uint8_t dose = btp->data[1];
+		printf("insulin_pump: adminstering %d doses of insulin.\n",
+		       dose);
+		printf("insulin_pump: sending a response.\n");
+
+		btp2->data[0] = 1; /* success */
+		write_to_bluetooth_data_queue(buf_large);
+
+		return;
+	} else if (btp->data[0] == 0) {
+		/* Terminate session */
+		insulin_pump_authenticated = 0;
+		printf("insulin_pump deauthenticated.\n");
+		btp2->data[0] = 1; /* success */
+		write_to_bluetooth_data_queue(buf_large);
+		return;
+	} else {
+		printf("insulin_pump received an invalid message.\n");
+		btp2->data[0] = 0; /* failure */
+		write_to_bluetooth_data_queue(buf_large);
+	}
 }
+
+void (*device_funcs[NUM_RESOURCES])(struct btpacket *btp) =
+				{glucose_monitor_func, insulin_pump_func};
 
 static void process_cmd(uint8_t *buf)
 {
@@ -79,42 +180,68 @@ static void process_cmd(uint8_t *buf)
 
 		/* We don't use authentication for Bluetooth */
 
+		uint8_t am_addrs[NUM_RESOURCES];
+		uint32_t num_matched = 0;
+
+		/* am_addr value of 0xFF is invalid */
+		memset(am_addrs, 0xFF, NUM_RESOURCES);
+
 		if (bound || used) {
 			printf("Error: %s: the bind op is invalid if bound (%d) "
 			       "or used (%d) is set.\n", __func__, bound, used);
-			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+			char dummy;
+			BLUETOOTH_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
 			break;
 		}
 
-		BLUETOOTH_GET_ZERO_ARGS_DATA
-		if (_size != BD_ADDR_LEN) {
-			printf("Error: %s: invalid device_name size (%d)\n",
+		BLUETOOTH_GET_ONE_ARG_DATA
+
+		/* arg0 is the number of resources that need to be bound */
+		if (arg0 < 1 || arg0 > NUM_RESOURCES) {
+			printf("Error: %s: invalid number of resources to be "
+			       "bound (%d)\n", __func__, arg0);
+			char dummy;
+			BLUETOOTH_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
+			break;
+		}
+
+		if (_size != (arg0 * BD_ADDR_LEN)) {
+			printf("Error: %s: invalid device_name(s) size (%d)\n",
 			       __func__, (int) _size);
-			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+			char dummy;
+			BLUETOOTH_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
 			break;
 		}
 
-		for (int i = 1; i <= NUM_RESOURCES; i++) {
-			if (!memcmp(data, devices[i], BD_ADDR_LEN)) {
-				bound_device_index = i;
-				bound = 1;
-				/* FIXME: not scalable */
-				if (i == 1)
-					bound_device_func = device1_func;
-				else if (i == 2)
-					bound_device_func = device2_func;
-				break;
+		for (int i = 0; i < (int) arg0; i++) {
+			am_addrs[i] = 0; /* not found */
+			for (int j = 0; j < NUM_RESOURCES; j++) {
+				if (!memcmp(data + (i * BD_ADDR_LEN),
+					    devices[j], BD_ADDR_LEN)) {
+					num_matched++;
+					bound_devices[j] = 1; 
+					am_addrs[i] = j;
+				}
 			}
 		}
 
-		if (!bound) {
-			printf("Error: %s: resource ID for the bind op not "
-			       "found.\n", __func__);
-			BLUETOOTH_SET_ONE_RET(ERR_FOUND)
+		if (num_matched != arg0) {
+			printf("Error: %s: could %s find %d of the %d "
+			       "requested devices.\n", __func__,
+			       num_matched ? "only" : "", num_matched, arg0);
+			for (int i = 0; i < NUM_RESOURCES; i++) {
+				bound_devices[i] = 0;
+				am_addrs[i] = 0xFF;
+			}
+
+			char dummy;
+			BLUETOOTH_SET_ONE_RET_DATA(ERR_FOUND, &dummy, 0)
 			break;
 		}
 
-		BLUETOOTH_SET_ONE_RET(0)
+		bound = 1;
+
+		BLUETOOTH_SET_ONE_RET_DATA(0, am_addrs, arg0)
 		break;
 	}
 
@@ -125,7 +252,6 @@ static void process_cmd(uint8_t *buf)
 		 * Persistent ones need a time-out.
 		 * Can provide TPM measurements if resource needs authentication
 		 */
-
 		/* No op for Bluetooth */
 		printf("Error: %s: create_resource op not supported by the "
 		       "Bluetooth service\n", __func__);
@@ -153,17 +279,28 @@ static void process_cmd(uint8_t *buf)
 		 * Other device specific info:
 		 *	network packet header
 		 */
-
-		uint8_t state[3 + BD_ADDR_LEN];
+		uint8_t state[3 + (BD_ADDR_LEN * NUM_RESOURCES)];
 		uint32_t state_size = 2;
 
 		state[0] = bound;
 		state[1] = used;
 		if (bound) {
-			state[2] = BD_ADDR_LEN;
-			memcpy(&state[3], devices[bound_device_index],
-			       BD_ADDR_LEN);
-			state_size += (BD_ADDR_LEN + 1);
+			int num_bound_devices = 0;
+			for (int i = 0; i < NUM_RESOURCES; i++) {
+				if (!bound_devices[i])
+					continue;
+
+				memcpy(&state[3 + (num_bound_devices *
+						   (BD_ADDR_LEN + 1))],
+				       devices[i], BD_ADDR_LEN);
+				/* am_addr */
+				state[3 + (num_bound_devices * 
+					   (BD_ADDR_LEN + 1)) + BD_ADDR_LEN ] = i;
+				num_bound_devices++;
+				state_size += (BD_ADDR_LEN + 1);
+			}
+			state[2] = num_bound_devices;
+			state_size++;
 		}
 
 		BLUETOOTH_SET_ONE_RET_DATA(0, state, state_size)
@@ -193,6 +330,7 @@ static void process_cmd(uint8_t *buf)
 		 */
 		uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 		struct btpacket *btp = (struct btpacket *) buf_large;
+		uint8_t am_addr;
 
 		if (!bound) {
 			printf("Error: %s: no device is bound.\n", __func__);
@@ -213,8 +351,22 @@ static void process_cmd(uint8_t *buf)
 
 		read_from_bluetooth_data_queue(buf_large);
 
-		if (bound_device_func)
-			(*bound_device_func)(btp);
+		am_addr = (uint8_t) btp->header1.am_addr;	
+		if (am_addr >= NUM_RESOURCES) {
+			printf("Error: %s: invalid am_addr (%d).\n", __func__,
+			       am_addr);
+			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+			break;
+		}
+
+		if (!bound_devices[am_addr]) {
+			printf("Error: %s: device %d not bound\n", __func__,
+			       am_addr);
+			BLUETOOTH_SET_ONE_RET(ERR_PERMISSION)
+			break;
+		}
+
+		(*device_funcs[am_addr])(btp);
 
 		BLUETOOTH_SET_ONE_RET(0)
 		break;

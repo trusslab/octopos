@@ -26,6 +26,8 @@
 #define P_UNTRUSTED		9
 #define NUM_PROCESSORS		9
 #define ALL_PROCESSORS		10
+/* FIXME: just used for using the TPM API in PMU. */
+#define P_PMU			10
 #define INVALID_PROCESSOR	11
 
 #define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */
