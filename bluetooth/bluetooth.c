@@ -1,5 +1,6 @@
 /* OctopOS bluetooth code */
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <arch/mailbox_bluetooth.h>
@@ -56,13 +57,13 @@ static void glucose_monitor_func(struct btpacket *btp)
 		printf("glucose_monitor: sending a response.\n");
 
 		btp2->data[0] = 1; /* success */
-		*((uint16_t *) btp2->data[1]) = measurement;
+		*((uint16_t *) &btp2->data[1]) = measurement;
 		write_to_bluetooth_data_queue(buf_large);
 
 		return;
 	} else if (btp->data[0] == 0) {
 		/* Terminate session */
-		glucose_monitor_authenticated = 1;
+		glucose_monitor_authenticated = 0;
 		printf("glucose_monitor deauthenticated.\n");
 		btp2->data[0] = 1; /* success */
 		write_to_bluetooth_data_queue(buf_large);
@@ -80,7 +81,49 @@ int insulin_pump_authenticated = 0;
 
 static void insulin_pump_func(struct btpacket *btp)
 {
-	printf("%s: received packet: %d\n", __func__, (uint8_t) btp->data[0]);
+	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+	struct btpacket *btp2 = (struct btpacket *) buf_large;
+	
+	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+
+	if (!insulin_pump_authenticated) {
+		if (!strcmp((char *) btp->data, insulin_pump_password)) {
+			insulin_pump_authenticated = 1;
+			printf("insulin_pump successfully authenticated.\n");
+			btp2->data[0] = 1; /* success */
+			write_to_bluetooth_data_queue(buf_large);
+		} else {
+			printf("insulin_pump authentication failed.\n");
+			btp2->data[0] = 0; /* failure */
+			write_to_bluetooth_data_queue(buf_large);
+		}
+
+		return;
+	}
+
+	if (btp->data[0] == 1) {
+		/* Request an injection */
+		uint8_t dose = btp->data[1];
+		printf("insulin_pump: adminstering %d doses of insulin.\n",
+		       dose);
+		printf("insulin_pump: sending a response.\n");
+
+		btp2->data[0] = 1; /* success */
+		write_to_bluetooth_data_queue(buf_large);
+
+		return;
+	} else if (btp->data[0] == 0) {
+		/* Terminate session */
+		insulin_pump_authenticated = 0;
+		printf("insulin_pump deauthenticated.\n");
+		btp2->data[0] = 1; /* success */
+		write_to_bluetooth_data_queue(buf_large);
+		return;
+	} else {
+		printf("insulin_pump received an invalid message.\n");
+		btp2->data[0] = 0; /* failure */
+		write_to_bluetooth_data_queue(buf_large);
+	}
 }
 
 static void process_cmd(uint8_t *buf)

@@ -81,6 +81,9 @@
 	}							\
 	data = &buf[11];					\
 
+/* FIXME: add reset logic for other I/O servers as well. */
+bool bluetooth_proc_need_reset = false;
+
 /* response for async syscalls */
 void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size)
 {
@@ -441,6 +444,12 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
+
+		/* Reset bluetooth proc if needed */
+		if (bluetooth_proc_need_reset)
+			reset_proc(P_BLUETOOTH);
+
+		bluetooth_proc_need_reset = true;
 
 		/* Send msg to the bluetooth service to bind the resource */
 		uint32_t ret = send_bind_cmd_to_bluetooth(device_name);

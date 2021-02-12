@@ -370,6 +370,7 @@ void app_main(struct runtime_api *api)
 	int ret;
 	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
 	uint16_t glucose_measurement;
+	uint8_t dose;
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
 		printf("Error: %s: BTPACKET_FIXED_DATA_SIZE must be 32 (%d)\n",
@@ -449,8 +450,65 @@ void app_main(struct runtime_api *api)
 		goto terminate;
 	}
 
+	glucose_measurement = *((uint16_t *) &msg[1]);
 	insecure_printf("glucose measurement = %d (mg/dL).\n",
-			*((uint16_t *) msg[1]));
+			glucose_measurement);
+
+	/* Step 3.2: if needed, send an injection request to the insulin pump */
+	if (glucose_measurement < 100) {
+		insecure_printf("No insulin injection is needed. Terminating.\n");
+		goto terminate;
+	}
+
+	terminate_bluetooth_session();
+	has_bluetooth = 0;
+	gapi->yield_secure_bluetooth_access();
+
+	dose = (glucose_measurement > 200) ? 2 : 1;
+
+	insecure_printf("Need to inject %d doses of insulin. Connecting to "
+			"the insulin pump now.\n", dose);
+
+	/* FIXME: can't check the PCR until new TPM architecture is ready since
+	 * after a reboot of the bluetooth proc, its PCR won't match the
+	 * expected value.
+	 */
+	ret = gapi->request_secure_bluetooth_access(insulin_pump, 100, 100,
+						    queue_update_callback,
+						    //bluetooth_pcr);
+						    NULL);
+	if (ret) {
+		insecure_printf("Error: couldn't get access to bluetooth.\n");
+		return;
+	}
+
+	has_bluetooth = 1;
+	insecure_printf("Connected to the insulin pump.\n");
+
+	/* Authenticate */
+	gapi->bluetooth_send_data(insulin_pump_password,
+				  BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	if (msg[0] != 1) {
+		insecure_printf("Error: couldn't authenticate with the insulin "
+				"pump\n");
+		goto terminate;
+	}
+
+	insecure_printf("Authenticated with the insulin pump.\n");
+
+	/* send/receive msgs */
+	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
+	msg[0] = 1;
+	msg[1] = dose;
+	gapi->bluetooth_send_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	if (msg[0] != 1) {
+		insecure_printf("Error: insulin injection failed.\n");
+		goto terminate;
+	}
+
+	insecure_printf("Insulin successfully adminstered.\n");
 
 	/* Step 4 */
 terminate:
