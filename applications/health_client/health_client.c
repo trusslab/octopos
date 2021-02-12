@@ -371,6 +371,7 @@ void app_main(struct runtime_api *api)
 	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
 	uint16_t glucose_measurement;
 	uint8_t dose;
+	printf("%s [1]\n", __func__);
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
 		printf("Error: %s: BTPACKET_FIXED_DATA_SIZE must be 32 (%d)\n",
@@ -386,12 +387,14 @@ void app_main(struct runtime_api *api)
 		insecure_printf("Error: couldn't connect to the server.\n");
 		return;
 	}
+	printf("%s [2]\n", __func__);
 
 	ret = perform_remote_attestation();
 	if (ret) {
 		insecure_printf("Error: remote attestation failed.\n");
 		return;
 	}
+	printf("%s [3]\n", __func__);
 
 	/* From here on, we need to check the PCR for I/O services we get access
 	 * to.
@@ -402,6 +405,7 @@ void app_main(struct runtime_api *api)
 		insecure_printf("Error: couldn't establish a secure channel.\n");
 		return;
 	}
+	printf("%s [4]\n", __func__);
 
 	/* Step 2 */
 	ret = receive_bluetooth_devices_passwords();

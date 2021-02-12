@@ -57,6 +57,15 @@ bool untrusted_in_foreground = false;
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 #define output_printf(fmt, args...) {memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE); sprintf(output_buf, fmt, ##args); send_output((uint8_t *) output_buf);}
 
+#define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE
+static char line[MAX_LINE_SIZE];
+static int num_chars = 0;
+
+static char repeat_cmd[MAX_LINE_SIZE];
+static int repeat_num = 0;
+static bool repeat_cmd_exists = false;
+static int repeat_cmd_counter = 0;
+
 /*
  * Handle commands separatly
  * input: return value from previous command (useful for pipe file descriptor)
@@ -75,6 +84,7 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 {
 	/* FIXME: add support for passing args to apps */
 
+	printf("%s [1]\n", __func__);
 	if (first == 1 && last == 0 && input == 0) {
 		// First command
 		return sched_create_app(args[0]);
@@ -86,6 +96,7 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 		return app_id;
 	} else {
 		// Last command
+		printf("%s [2]: args[0] = %s\n", __func__, args[0]);
 		int app_id = sched_create_app(args[0]);
 		if (input) {
 			sched_connect_apps(app_id, input, double_pipe);
@@ -183,11 +194,50 @@ static void process_input_line(char *line)
 		bg = 1;
 		/* 'next' points to '&' */
 		*next = '\0';
+		goto run;
 	}
 
+	/* see if it's a repeat command (cmd # n) */
+	next = strchr(cmd, '#');
+	if (next != NULL) {
+		/* 'next' points to '#' */
+		*next = '\0';
+		if (repeat_cmd_exists) {
+			printf("Error: cannot support more than one repeat "
+			       "cmd.\n");
+		} else { 
+			memcpy(repeat_cmd, cmd, MAX_LINE_SIZE);
+			repeat_num = atoi(next + 1);
+			printf("%s [1]: repeat_num = %d\n", __func__, repeat_num);
+			printf("%s [2]: repeat_cmd = %s\n", __func__, repeat_cmd);
+			repeat_cmd_exists = true;
+			repeat_cmd_counter = 0;
+		}
+	}
+
+run:
 	input = run(cmd, input, first, 1, 0, bg);
 	cleanup(n);
 	n = 0;
+}
+
+void check_and_run_repeat_cmd(void)
+{
+	char cmd_backup[MAX_LINE_SIZE];
+	if (!repeat_cmd_exists)
+		return;
+
+	repeat_cmd_counter++;
+	printf("%s [1]: repeat_cmd_counter = %d\n", __func__, repeat_cmd_counter);
+
+	if (repeat_cmd_counter != repeat_num)
+		return;
+
+	repeat_cmd_counter = 0;
+	printf("Repeat run of %s\n", repeat_cmd);
+	memcpy(cmd_backup, repeat_cmd, MAX_LINE_SIZE);
+	run(repeat_cmd, 0, 0, 1, 0, 0);
+	memcpy(repeat_cmd, cmd_backup, MAX_LINE_SIZE);
 }
 
 static void process_app_input(struct app *app, uint8_t *line, int num_chars)
@@ -200,10 +250,6 @@ static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 
 	shell_status = SHELL_STATE_RUNNING_APP;
 }
-
-#define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE
-static char line[MAX_LINE_SIZE];
-static int num_chars = 0;
 
 void shell_process_input(char buf)
 {
@@ -371,6 +417,7 @@ static void split(char* cmd);
 static int run(char* cmd, int input, int first, int last, int double_pipe, int bg)
 {
 	split(cmd);
+	printf("%s [1]\n", __func__);
 	if (args[0] != NULL) {
 		if (strcmp(args[0], "halt") == 0) {
 			int ret;
@@ -410,6 +457,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			return 0;
 		}
 		n += 1;
+		printf("%s [2]: args[0] = %s\n", __func__, args[0]);
 		return command(input, first, last, double_pipe, bg);
 	}
 	return 0;
