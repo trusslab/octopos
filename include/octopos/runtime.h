@@ -65,9 +65,8 @@ struct runtime_api {
 	int (*write_to_secure_storage_block)(uint8_t *data, uint32_t block_num,
 					     uint32_t block_offset,
 					     uint32_t write_size);
-
-	/* storing context in secure storage */
-	int (*set_up_context)(void *addr, uint32_t size);
+	int (*set_up_context)(void *addr, uint32_t size, int do_yield);
+	int (*write_context_to_storage)(int do_yield);
 
 	/* secure IPC */
 	int (*request_secure_ipc)(uint8_t target_runtime_queue_id,
@@ -90,6 +89,7 @@ struct runtime_api {
 	void (*terminate_app)(void);
 	int (*schedule_func_execution)(void *(*func)(void *), void *data);
 	uint32_t (*get_random_uint)(void);
+	uint64_t (*get_time)(void);
 
 #ifndef ARCH_SEC_HW
 	/* socket and network */

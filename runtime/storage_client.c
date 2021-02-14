@@ -128,6 +128,17 @@ void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
 #endif
 
+uint8_t secure_storage_key[STORAGE_KEY_SIZE];
+bool secure_storage_key_set = false;
+bool secure_storage_available = false;
+bool has_access_to_secure_storage = false;
+
+bool context_set = false;
+void *context_addr = NULL;
+uint32_t context_size = 0;
+uint32_t context_tag = 0xDEADBEEF;
+#define CONTEXT_TAG_SIZE	4
+
 int send_msg_to_storage(uint8_t *buf)
 {
 	runtime_send_msg_on_queue(buf, Q_STORAGE_CMD_IN);
@@ -225,16 +236,6 @@ static int wipe_secure_storage(void)
 	send_msg_to_storage(buf);
 	STORAGE_GET_ONE_RET
 	return (int) ret0;
-}
-
-uint8_t secure_storage_key[STORAGE_KEY_SIZE];
-bool secure_storage_key_set = false;
-bool secure_storage_available = false;
-bool has_access_to_secure_storage = false;
-
-bool is_secure_storage_key_set(void)
-{
-	return secure_storage_key_set;
 }
 
 /* FIXME: do we need an int return? */
@@ -523,7 +524,8 @@ int request_secure_storage_access(uint32_t partition_size,
 int delete_and_yield_secure_storage(void)
 {
 	if (!secure_storage_available || !has_access_to_secure_storage) {
-		printf("%s: Error: secure storage has not been set up or there is no access\n", __func__);
+		printf("%s: Error: secure storage has not been set up or "
+		       "there is no access\n", __func__);
 		return ERR_INVALID;
 	}
 
@@ -650,3 +652,87 @@ int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
 
 	return (int) write_size;
 }
+
+int set_up_context(void *addr, uint32_t size, int do_yield)
+{
+	uint8_t context_block[STORAGE_BLOCK_SIZE];
+	if (size > (STORAGE_BLOCK_SIZE - CONTEXT_TAG_SIZE)) {
+		printf("Error (%s): context size is too big.\n", __func__);
+		return ERR_INVALID;
+	}
+
+	context_addr = addr;
+	context_size = size;
+	context_set = true;
+	/* Now, let's retrieve the context. */
+	int ret = request_secure_storage_access(100, 200,
+				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
+	if (ret) {
+		printf("Error (%s): Failed to get secure access to storage.\n",
+		       __func__);
+		return ret;
+	}
+
+	uint32_t rret = read_from_secure_storage_block(context_block, 0, 0,
+						context_size + CONTEXT_TAG_SIZE);
+	if (rret != (context_size + CONTEXT_TAG_SIZE)) {
+		printf("%s: Couldn't read from secure storage.\n", __func__);
+		yield_secure_storage_access();
+		return ERR_FAULT;
+	}
+
+	if ((*(uint32_t *) context_block) != context_tag) {
+		printf("%s: No context to use.\n", __func__);
+		yield_secure_storage_access();
+		return ERR_INVALID;
+	}
+
+	memcpy(context_addr, &context_block[CONTEXT_TAG_SIZE], context_size);
+
+	if (do_yield)
+		yield_secure_storage_access();
+
+	return 0;
+}
+
+int write_context_to_storage(int do_yield)
+{
+	uint8_t context_block[STORAGE_BLOCK_SIZE];
+
+	if (!secure_storage_key_set || !secure_storage_available ||
+	    !context_set) {
+		printf("%s: Error: either the secure storage key or context "
+		       "not set or secure storage not previously set up\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
+#ifdef ARCH_SEC_HW
+	async_syscall_mode = true;
+#endif
+
+	if (!has_access_to_secure_storage) {
+
+		int ret = request_secure_storage_access(100, 200,
+					MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
+		if (ret) {
+			printf("Error (%s): Failed to get secure access to "
+			       "storage.\n", __func__);
+			return ret;
+		}
+	}
+
+	memcpy(context_block, &context_tag, CONTEXT_TAG_SIZE);
+	memcpy(&context_block[CONTEXT_TAG_SIZE], context_addr, context_size);
+
+	uint32_t wret = write_to_secure_storage_block(context_block, 0, 0,
+						context_size + CONTEXT_TAG_SIZE);
+	if (wret != (context_size + CONTEXT_TAG_SIZE))
+		printf("Error: couldn't write the context to secure storage.\n");
+
+	yield_secure_storage_access();
+
+	return 0;
+}
+
+

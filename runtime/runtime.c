@@ -799,51 +799,6 @@ static int remove_file(char *filename)
 	return (int) ret0;
 }
 
-bool context_set = false;
-void *context_addr = NULL;
-uint32_t context_size = 0;
-uint32_t context_tag = 0xDEADBEEF;
-#define CONTEXT_TAG_SIZE	4
-
-static int set_up_context(void *addr, uint32_t size)
-{
-	uint8_t context_block[STORAGE_BLOCK_SIZE];
-	if (size > (STORAGE_BLOCK_SIZE - CONTEXT_TAG_SIZE)) {
-		printf("Error (%s): context size is too big.\n", __func__);
-		return ERR_INVALID;
-	}
-
-	context_addr = addr;
-	context_size = size;
-	context_set = true;
-	/* Now, let's retrieve the context. */
-	int ret = request_secure_storage_access(100, 200,
-				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
-	if (ret) {
-		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
-		return ret;
-	}
-
-	uint32_t rret = read_from_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
-	if (rret != (context_size + CONTEXT_TAG_SIZE)) {
-		printf("%s: Couldn't read from secure storage.\n", __func__);
-		yield_secure_storage_access();
-		return ERR_FAULT;
-	}
-
-	if ((*(uint32_t *) context_block) != context_tag) {
-		printf("%s: No context to use.\n", __func__);
-		yield_secure_storage_access();
-		return ERR_INVALID;
-	}
-
-	memcpy(context_addr, &context_block[CONTEXT_TAG_SIZE], context_size);
-
-	yield_secure_storage_access();
-
-	return 0;
-}
-
 static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 			      timeout_t timeout, queue_update_callback_t callback)
 {
@@ -987,6 +942,12 @@ static uint32_t get_random_uint(void)
 	srand(time(NULL));
 
 	return (uint32_t) rand();	
+}
+
+/* Return time in seconds since some fixed time in the past */
+static uint64_t get_time(void)
+{
+	return (uint64_t) time(NULL);
 }
 
 extern bool has_network_access;
@@ -1552,6 +1513,7 @@ static void load_application(char *msg)
 		.write_to_secure_storage_block = write_to_secure_storage_block,
 		.read_from_secure_storage_block = read_from_secure_storage_block,
 		.set_up_context = set_up_context,
+		.write_context_to_storage = write_context_to_storage,
 		.request_secure_ipc = request_secure_ipc,
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
@@ -1562,6 +1524,7 @@ static void load_application(char *msg)
 		.terminate_app = terminate_app,
 		.schedule_func_execution = schedule_func_execution,
 		.get_random_uint = get_random_uint,
+		.get_time = get_time,
 #ifdef ARCH_UMODE
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
@@ -1684,31 +1647,12 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 
 void *store_context(void *data)
 {
-	uint8_t context_block[STORAGE_BLOCK_SIZE];
+	int ret;
 
-	if (!is_secure_storage_key_set() || !context_set) {
-		printf("%s: Error: either the secure storage key or context not set\n", __func__);
+	ret = write_context_to_storage(1);
+	if (ret)
 		return NULL;
-	}
 
-#ifdef ARCH_SEC_HW
-	async_syscall_mode = true;
-#endif
-	int ret = request_secure_storage_access(100, 200,
-				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
-	if (ret) {
-		printf("Error (%s): Failed to get secure access to storage.\n", __func__);
-		return NULL;
-	}
-
-	memcpy(context_block, &context_tag, CONTEXT_TAG_SIZE);
-	memcpy(&context_block[CONTEXT_TAG_SIZE], context_addr, context_size);
-
-	uint32_t wret = write_to_secure_storage_block(context_block, 0, 0, context_size + CONTEXT_TAG_SIZE);
-	if (wret != (context_size + CONTEXT_TAG_SIZE))
-		printf("Error: couldn't write the context to secure storage.\n");
-
-	yield_secure_storage_access();
 #ifdef ARCH_SEC_HW
 	async_syscall_mode = false;
 #endif

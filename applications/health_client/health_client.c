@@ -32,15 +32,27 @@ char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 int num_chars = 0;
 int msg_num = 0;
 
-uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
-uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
-uint8_t measured_network_pcr[TPM_EXTEND_HASH_SIZE];
-
 uint8_t glucose_monitor[BD_ADDR_LEN] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc};
 uint8_t insulin_pump[BD_ADDR_LEN] = {0xcb, 0xa9, 0x87, 0x65, 0x43, 0x21};
 
-uint8_t glucose_monitor_password[32];
-uint8_t insulin_pump_password[32];
+uint8_t measured_network_pcr[TPM_EXTEND_HASH_SIZE];
+
+#define CONTEXT_SIGNATURE_SIZE	4
+/* Used to check if context returned from storage is valid or junk */
+uint8_t expected_context_signature[CONTEXT_SIGNATURE_SIZE] =
+						{0x32, 0x9f, 0x33, 0x71};
+
+struct app_context {
+	uint8_t signature[CONTEXT_SIGNATURE_SIZE];
+	uint8_t glucose_monitor_password[32];
+	uint8_t insulin_pump_password[32];
+	uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
+	uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
+	uint16_t glucose_measurement_avg;
+	uint64_t last_measurement_time; /* in seconds compared to a ref. time */
+};
+
+struct app_context context;
 
 #define loop_printf(print_cmd, fmt, args...) {				\
 	memset(output_buf_full, 0x0, MAX_PRINT_SIZE);			\
@@ -213,12 +225,12 @@ static int connect_to_server(void)
 
 static int receive_bluetooth_devices_passwords(void)
 {
-	if (gapi->read_from_socket(sock, glucose_monitor_password, 32) < 0) {
+	if (gapi->read_from_socket(sock, context.glucose_monitor_password, 32) < 0) {
 		insecure_printf("Error: couldn't read from socket (passwords:1)\n");
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, insulin_pump_password, 32) < 0) {
+	if (gapi->read_from_socket(sock, context.insulin_pump_password, 32) < 0) {
 		insecure_printf("Error: couldn't read from socket (passwords:2)\n");
 		return -1;
 	}
@@ -323,20 +335,23 @@ static int perform_remote_attestation(void)
 	}
 
 	/* Receieve I/O service PCRs */
-	if (gapi->read_from_socket(sock, bluetooth_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
+	if (gapi->read_from_socket(sock, context.bluetooth_pcr,
+				   TPM_EXTEND_HASH_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:4)\n");
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, network_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
+	if (gapi->read_from_socket(sock, context.network_pcr,
+				   TPM_EXTEND_HASH_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:5)\n");
 		return -1;
 	}
 
 	/* check the network PCR val */
-	ret = memcmp(measured_network_pcr, network_pcr, TPM_EXTEND_HASH_SIZE);
+	ret = memcmp(measured_network_pcr, context.network_pcr,
+		     TPM_EXTEND_HASH_SIZE);
 	if (ret) {
 		printf("Error: %s: network PCR not verified.\n", __func__);
 		return -1;
@@ -351,26 +366,70 @@ static int establish_secure_channel(void)
 	return 0;
 }
 
+static void calculate_dose_update_context(uint16_t glucose_measurement,
+					  uint8_t *dose, int context_found)
+{
+	uint64_t current_time;
+	uint16_t glucose_measurement_avg;
+
+	if (context_found) {
+		current_time = gapi->get_time();
+		if (current_time <= context.last_measurement_time) {
+			/* Should not happen, but let's check anyway. */
+			insecure_printf("Error: stored data seem incorrect. "
+					"Discarding.\n");
+			goto context_not_found;
+		}
+
+		/* simple, dummy calculations */
+		if ((current_time - context.last_measurement_time) > 86400) {
+			/* more than one day */
+			insecure_printf("Stored data are old. Discarding.\n");
+			goto context_not_found;
+		}
+
+		glucose_measurement_avg = (glucose_measurement +
+					   context.glucose_measurement_avg) / 2;
+		printf("%s [1]: glucose_measurement_avg = %d\n", __func__,
+		       glucose_measurement_avg);
+
+		*dose = (glucose_measurement_avg > 200) ? 2 : 1;
+		context.glucose_measurement_avg = glucose_measurement_avg;
+		context.last_measurement_time = current_time;
+
+		return;
+	}
+
+context_not_found:
+	*dose = (glucose_measurement > 200) ? 2 : 1;
+	context.glucose_measurement_avg = glucose_measurement;
+	context.last_measurement_time = gapi->get_time();
+}
+
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
 	/*
-	 * Step 1: Connect to the server and perform remote attestation of
+	 * Step 1: Check secure storage for previously-stored passwords and
+	 *	   measurements. If found, skip to Step 4.
+	 * Step 2: Connect to the server and perform remote attestation of
 	 *	   the app itself, bluetooth, and network.
 	 *	   Upon successful attestation, establish a secure channel.
-	 * Step 2: Receive passwords for both bluetooth devices.
-	 * Step 3: Authenticate with bluetooth devices.
+	 * Step 3: Receive passwords for both bluetooth devices.
+	 * Step 4: Authenticate with bluetooth devices.
 	 *	   Upon success, read from glucose_monitor (sensor) and write
 	 *	   to insulin_pump (actuator).
-	 * Step 4: Keep track of the usage of the queues (limit and timeout).
+	 * Step 5: Keep track of the usage of the queues (limit and timeout).
 	 *	   Secure yield access when about to expire. For bluetooth,
 	 *	   terminate the sessions with devices. For network, terminate
-	 *	   the session with the server.
+	 *	   the session with the server. For storage, write the latest
+	 *	   version of the context data to storage.
 	 */
 	int ret;
 	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
 	uint16_t glucose_measurement;
 	uint8_t dose;
+	int context_found = 0;
 	printf("%s [1]\n", __func__);
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
@@ -382,6 +441,26 @@ void app_main(struct runtime_api *api)
 	gapi = api;
 
 	/* Step 1 */
+	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
+	/* generate a key */
+	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
+		secure_storage_key[i] = i + 5;
+
+	api->set_up_secure_storage_key(secure_storage_key);
+	ret = api->set_up_context((void *) &context, sizeof(struct app_context),
+				  0);
+	printf("%s [1.1]: ret = %d\n", __func__, ret);
+	if (!ret && !memcmp(context.signature, expected_context_signature,
+			    CONTEXT_SIGNATURE_SIZE)) {
+		insecure_printf("Found measurements from previous run(s).\n");
+		context_found = 1;
+		goto new_measurement;
+	}
+		
+	memcpy(context.signature, expected_context_signature,
+	       CONTEXT_SIGNATURE_SIZE);
+	
+	/* Step 2 */
 	ret = connect_to_server();
 	if (ret) {
 		insecure_printf("Error: couldn't connect to the server.\n");
@@ -407,7 +486,7 @@ void app_main(struct runtime_api *api)
 	}
 	printf("%s [4]\n", __func__);
 
-	/* Step 2 */
+	/* Step 3 */
 	ret = receive_bluetooth_devices_passwords();
 	if (ret) {
 		insecure_printf("Error: couldn't receive the passwords for"
@@ -415,14 +494,19 @@ void app_main(struct runtime_api *api)
 		return;
 	}
 
-	/* Step 3: authenticate & send/receive messages */
-
-	/* Step 3.1: get a measurement from the glucose monitor */
+new_measurement:
+	/* Step 4: authenticate & send/receive messages */
+	/* Step 4.1: get a measurement from the glucose monitor */
 	insecure_printf("Connecting to the glucose monitor now.\n");
 
+	/* FIXME: can't check the PCR until new TPM architecture is ready since
+	 * after a reboot of the bluetooth proc, its PCR won't match the
+	 * expected value.
+	 */
 	ret = gapi->request_secure_bluetooth_access(glucose_monitor, 100, 100,
 						    queue_update_callback,
-						    bluetooth_pcr);
+						    //context.bluetooth_pcr);
+						    NULL);
 	if (ret) {
 		insecure_printf("Error: couldn't get access to bluetooth.\n");
 		return;
@@ -432,7 +516,7 @@ void app_main(struct runtime_api *api)
 	insecure_printf("Connected to the glucose monitor.\n");
 
 	/* Authenticate */
-	gapi->bluetooth_send_data(glucose_monitor_password,
+	gapi->bluetooth_send_data(context.glucose_monitor_password,
 				  BTPACKET_FIXED_DATA_SIZE);
 	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
 	if (msg[0] != 1) {
@@ -458,7 +542,7 @@ void app_main(struct runtime_api *api)
 	insecure_printf("glucose measurement = %d (mg/dL).\n",
 			glucose_measurement);
 
-	/* Step 3.2: if needed, send an injection request to the insulin pump */
+	/* Step 4.2: if needed, send an injection request to the insulin pump */
 	if (glucose_measurement < 100) {
 		insecure_printf("No insulin injection is needed. Terminating.\n");
 		goto terminate;
@@ -468,7 +552,7 @@ void app_main(struct runtime_api *api)
 	has_bluetooth = 0;
 	gapi->yield_secure_bluetooth_access();
 
-	dose = (glucose_measurement > 200) ? 2 : 1;
+	calculate_dose_update_context(glucose_measurement, &dose, context_found);
 
 	insecure_printf("Need to inject %d doses of insulin. Connecting to "
 			"the insulin pump now.\n", dose);
@@ -479,7 +563,7 @@ void app_main(struct runtime_api *api)
 	 */
 	ret = gapi->request_secure_bluetooth_access(insulin_pump, 100, 100,
 						    queue_update_callback,
-						    //bluetooth_pcr);
+						    //context.bluetooth_pcr);
 						    NULL);
 	if (ret) {
 		insecure_printf("Error: couldn't get access to bluetooth.\n");
@@ -490,7 +574,7 @@ void app_main(struct runtime_api *api)
 	insecure_printf("Connected to the insulin pump.\n");
 
 	/* Authenticate */
-	gapi->bluetooth_send_data(insulin_pump_password,
+	gapi->bluetooth_send_data(context.insulin_pump_password,
 				  BTPACKET_FIXED_DATA_SIZE);
 	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
 	if (msg[0] != 1) {
@@ -514,8 +598,15 @@ void app_main(struct runtime_api *api)
 
 	insecure_printf("Insulin successfully adminstered.\n");
 
-	/* Step 4 */
+	/* Step 5 */
 terminate:
+	/* write_context_to_storage won't yield if there's an error. Therefore,
+	 * we explicitly yield instead of doing it through
+	 * write_context_to_storage.
+	 */
+	gapi->write_context_to_storage(0);
+	gapi->yield_secure_storage_access();
+
 	terminate_bluetooth_session();
 	terminate_network_session();
 
