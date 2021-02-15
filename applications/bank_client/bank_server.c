@@ -339,11 +339,29 @@ int main(int argc, char *argv[])
 	if (n < 0)
 		error("ERROR writing to socket -- network_pcr");
 
+	/* This is needed for attestation of the network service.
+	 * Right after we receive the PCR, we compare it with what we have
+	 * from TPM measurements. If they match, we tell the server so that
+	 * it can send us secrets or receive confidential information.
+	 * Note that the client and server communication is secured end-to-end,
+	 * therefore we can trust our message to be delivered correctly and not
+	 * delivered at all. Yet, we don't assume that the communications
+	 * between the client are secure against side-channels on the client
+	 * device. The attestation of the network service tries to defeat that.
+	 */
+	bzero(buffer, 1);
+	n = read(newsockfd, buffer, 1);
+	if (n < 0)
+		error("ERROR reading from socket -- 3");
+
+	if (buffer[0] != 1)
+		error("ERROR network service attestation failed on the device");
+
 	/* Receive username and compare */
 	bzero(buffer, 32);
 	n = read(newsockfd, buffer, 32);
 	if (n < 0)
-		error("ERROR reading from socket -- 3");
+		error("ERROR reading from socket -- 4");
 
 	printf("Received username (n = %d): %s\n", n, buffer);
 
@@ -367,7 +385,7 @@ int main(int argc, char *argv[])
 	bzero(buffer, 32);
 	n = read(newsockfd, buffer, 32);
 	if (n < 0)
-		error("ERROR reading from socket -- 4");
+		error("ERROR reading from socket -- 5");
 
 	printf("Received password (n = %d): %s\n", n, buffer);
 
@@ -386,7 +404,7 @@ int main(int argc, char *argv[])
 	bzero(buffer, 32);
 	n = read(newsockfd, buffer, 1);
 	if (n < 0)
-		error("ERROR reading from socket -- 5");
+		error("ERROR reading from socket -- 6");
 	
 	if (buffer[0] != 1) {
 		buffer[0] = 0;

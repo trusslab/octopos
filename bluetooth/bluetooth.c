@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include <arch/mailbox_bluetooth.h>
 #include <octopos/mailbox.h>
 #include <octopos/io.h>
@@ -52,6 +53,7 @@ static void glucose_monitor_func(struct btpacket *btp)
 
 	if (btp->data[0] == 1) {
 		/* Request a measurement */
+		srand(time(NULL));
 		uint16_t measurement = (rand() % 300) + 100; /* in mg/dL */
 		printf("glucose_monitor: measurement = %d.\n", measurement);
 		printf("glucose_monitor: sending a response.\n");

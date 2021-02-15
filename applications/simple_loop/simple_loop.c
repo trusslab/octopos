@@ -50,7 +50,7 @@ void simple_loop(struct runtime_api *api)
 	}
 
 	api->set_up_secure_storage_key(secure_storage_key);
-	api->set_up_context((void *) &gcounter, 4, 1);	
+	api->set_up_context((void *) &gcounter, 4, 1, NULL, NULL, NULL);	
 
 	while (1) {
 		insecure_printf("gcounter = %d\n", gcounter);
