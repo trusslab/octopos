@@ -433,7 +433,13 @@ static void calculate_dose_update_context(uint16_t glucose_measurement,
 		printf("%s [1]: glucose_measurement_avg = %d\n", __func__,
 		       glucose_measurement_avg);
 
-		*dose = (glucose_measurement_avg > 200) ? 2 : 1;
+		if (glucose_measurement_avg > 200)
+			*dose = 2;
+		else if (glucose_measurement_avg > 100)
+			*dose = 1;
+		else
+			*dose = 0;
+
 		context.glucose_measurement_avg = glucose_measurement_avg;
 		context.last_measurement_time = current_time;
 
@@ -515,7 +521,7 @@ void app_main(struct runtime_api *api)
 	ret = perform_remote_attestation();
 	if (ret) {
 		insecure_printf("Error: remote attestation failed.\n");
-		return;
+		goto terminate_network;
 	}
 	printf("%s [3]\n", __func__);
 
@@ -526,7 +532,7 @@ void app_main(struct runtime_api *api)
 	ret = establish_secure_channel();
 	if (ret) {
 		insecure_printf("Error: couldn't establish a secure channel.\n");
-		return;
+		goto terminate_network;
 	}
 	printf("%s [4]\n", __func__);
 
@@ -535,7 +541,7 @@ void app_main(struct runtime_api *api)
 	if (ret) {
 		insecure_printf("Error: couldn't receive the passwords for"
 				"bluetooth devices.\n");
-		return;
+		goto terminate_network;
 	}
 
 new_measurement:
@@ -553,7 +559,7 @@ new_measurement:
 						    NULL);
 	if (ret) {
 		insecure_printf("Error: couldn't get access to bluetooth.\n");
-		return;
+		goto terminate_network;
 	}
 
 	has_bluetooth = 1;
@@ -566,7 +572,7 @@ new_measurement:
 	if (msg[0] != 1) {
 		insecure_printf("Error: couldn't authenticate with the glucose "
 				"monitor\n");
-		goto terminate;
+		goto terminate_bluetooth;
 	}
 
 	insecure_printf("Authenticated with the glucose monitor.\n");
@@ -579,7 +585,7 @@ new_measurement:
 	if (msg[0] != 1) {
 		insecure_printf("Error: couldn't get measurement from the "
 				"glucose monitor.\n");
-		goto terminate;
+		goto terminate_bluetooth;
 	}
 
 	glucose_measurement = *((uint16_t *) &msg[1]);
@@ -587,7 +593,8 @@ new_measurement:
 			glucose_measurement);
 
 	/* Step 4.2: if needed, send an injection request to the insulin pump */
-	if (glucose_measurement < 100) {
+	calculate_dose_update_context(glucose_measurement, &dose, context_found);
+	if (!dose) {
 		insecure_printf("No insulin injection is needed. Terminating.\n");
 		goto terminate;
 	}
@@ -595,8 +602,6 @@ new_measurement:
 	terminate_bluetooth_session();
 	has_bluetooth = 0;
 	gapi->yield_secure_bluetooth_access();
-
-	calculate_dose_update_context(glucose_measurement, &dose, context_found);
 
 	insecure_printf("Need to inject %d doses of insulin. Connecting to "
 			"the insulin pump now.\n", dose);
@@ -611,7 +616,7 @@ new_measurement:
 						    NULL);
 	if (ret) {
 		insecure_printf("Error: couldn't get access to bluetooth.\n");
-		return;
+		goto terminate;
 	}
 
 	has_bluetooth = 1;
@@ -663,14 +668,15 @@ terminate:
 		gapi->yield_secure_storage_access();
 	}
 
-	terminate_bluetooth_session();
-	terminate_network_session();
-
-	has_network = 0;
-	gapi->yield_network_access();
-
+terminate_bluetooth:
 	has_bluetooth = 0;
+	terminate_bluetooth_session();
 	gapi->yield_secure_bluetooth_access();
+
+terminate_network:
+	has_network = 0;
+	terminate_network_session();
+	gapi->yield_network_access();
 }
 
 #endif
