@@ -118,9 +118,10 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 		ret = request_secure_storage_access(
 				STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE,
 				MAILBOX_MAX_LIMIT_VAL,
-				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
+				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL, NULL);
 		if (ret) {
-			printk("Error (%s): Failed to get secure access to storage.\n", __func__);
+			printk("Error (%s): Failed to get secure access to "
+			       "storage.\n", __func__);
 			mutex_unlock(&obd_lock);
 			return ret;
 		}

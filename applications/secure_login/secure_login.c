@@ -105,7 +105,7 @@ void secure_login(struct runtime_api *api)
 	api->set_up_secure_storage_key(secure_storage_key);
 	ret = api->request_secure_storage_access(100, 200,
 						 MAILBOX_DEFAULT_TIMEOUT_VAL,
-						 NULL, NULL);
+						 NULL, NULL, NULL);
 	if (ret) {
 		printf("Error: could not get secure access to storage.\n");
 		insecure_printf("Error: could not get secure access to storage.\n");

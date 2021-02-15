@@ -335,13 +335,22 @@ int yield_secure_storage_access(void)
 	return 0;
 }
 
-/* FIXME: @callback and @expected_pcr can be set by the untrusted domain,
- * but they're no ops.
+/* @expected_pcr: if not NULL, we request the PCR val for the storage service
+ * and compare it with expected_pcr.
+ * @return_pcr: if expected_pcr is NULL but return_pcr is not, we'll request
+ * and return the PCR val for the storage service. This is useful because the
+ * app might not have the expected value when it first asks for storage access.
+ * It can get the measured value here and compare it with the expected value
+ * later.
+ *
+ * FIXME: @callback, @expected_pcr, and @return_ocr can be set by the untrusted
+ * domain, but they're no ops.
  */
 static int request_secure_storage_queues_access(limit_t limit,
 						timeout_t timeout,
 						queue_update_callback_t callback,
-						uint8_t *expected_pcr)
+						uint8_t *expected_pcr,
+						uint8_t *return_pcr)
 {
 	int ret;
 
@@ -439,6 +448,28 @@ static int request_secure_storage_queues_access(limit_t limit,
 			queue_timeouts[Q_STORAGE_DATA_OUT] = 0;
 			return ERR_UNEXPECTED;
 		}
+	} else if (return_pcr) {
+		ret = read_tpm_pcr_for_proc(P_STORAGE, return_pcr);
+		if (ret) {
+			printf("%s: Error: couldn't read PCR\n", __func__);
+			wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+			wait_until_empty(Q_STORAGE_DATA_IN,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
+			mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+
+			queue_limits[Q_STORAGE_CMD_IN] = 0;
+			queue_timeouts[Q_STORAGE_CMD_IN] = 0;
+			queue_limits[Q_STORAGE_CMD_OUT] = 0;
+			queue_timeouts[Q_STORAGE_CMD_OUT] = 0;
+			queue_limits[Q_STORAGE_DATA_IN] = 0;
+			queue_timeouts[Q_STORAGE_DATA_IN] = 0;
+			queue_limits[Q_STORAGE_DATA_OUT] = 0;
+			queue_timeouts[Q_STORAGE_DATA_OUT] = 0;
+			return ERR_FAULT;
+		}
 	}
 	
 	queue_update_callbacks[Q_STORAGE_CMD_IN] = callback;
@@ -459,7 +490,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 int request_secure_storage_access(uint32_t partition_size,
 				  limit_t limit, timeout_t timeout,
 				  queue_update_callback_t callback,
-				  uint8_t *expected_pcr)
+				  uint8_t *expected_pcr, uint8_t *return_pcr)
 {
 	int ret, unlock_ret, set_key_ret;
 
@@ -469,7 +500,7 @@ int request_secure_storage_access(uint32_t partition_size,
 	}
 
 	ret = request_secure_storage_queues_access(limit, timeout, callback,
-						   expected_pcr);	
+						   expected_pcr, return_pcr);	
 	if (ret) {
 		printf("%s: Error: couldn't get access to storage queues.\n",
 		       __func__);
@@ -493,7 +524,7 @@ int request_secure_storage_access(uint32_t partition_size,
 			return create_ret;
 		}
 		ret = request_secure_storage_queues_access(limit, timeout,
-							callback, expected_pcr);	
+					callback, expected_pcr, return_pcr);	
 		if (ret) {
 			printf("%s: Error: couldn't regain access to storage "
 			       "queues.\n", __func__);
@@ -653,7 +684,9 @@ int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
 	return (int) write_size;
 }
 
-int set_up_context(void *addr, uint32_t size, int do_yield)
+int set_up_context(void *addr, uint32_t size, int do_yield,
+		   queue_update_callback_t callback, uint8_t *expected_pcr,
+		   uint8_t *return_pcr)
 {
 	uint8_t context_block[STORAGE_BLOCK_SIZE];
 	if (size > (STORAGE_BLOCK_SIZE - CONTEXT_TAG_SIZE)) {
@@ -666,7 +699,8 @@ int set_up_context(void *addr, uint32_t size, int do_yield)
 	context_set = true;
 	/* Now, let's retrieve the context. */
 	int ret = request_secure_storage_access(100, 200,
-				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
+				MAILBOX_DEFAULT_TIMEOUT_VAL, callback,
+				expected_pcr, return_pcr);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n",
 		       __func__);
@@ -714,7 +748,8 @@ int write_context_to_storage(int do_yield)
 	if (!has_access_to_secure_storage) {
 
 		int ret = request_secure_storage_access(100, 200,
-					MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL);
+					MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL,
+					NULL);
 		if (ret) {
 			printf("Error (%s): Failed to get secure access to "
 			       "storage.\n", __func__);

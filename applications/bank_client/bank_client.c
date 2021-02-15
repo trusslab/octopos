@@ -387,8 +387,29 @@ static int perform_remote_attestation(void)
 	ret = memcmp(measured_network_pcr, network_pcr, TPM_EXTEND_HASH_SIZE);
 	if (ret) {
 		printf("Error: %s: network PCR not verified.\n", __func__);
+		success = 0;
+	} else {
+		success = 1;
+	}
+
+	/* This is needed for attestation of the network service.
+	 * Right after we receive the PCR, we compare it with what we have
+	 * from TPM measurements. If they match, we tell the server so that
+	 * it can send us secrets or receive confidential information.
+	 * Note that the client and server communication is secured end-to-end,
+	 * therefore we can trust our message to be delivered correctly and not
+	 * delivered at all. Yet, we don't assume that the communications
+	 * between the client are secure against side-channels on the client
+	 * device. The attestation of the network service tries to defeat that.
+	 */
+	if (gapi->write_to_socket(sock, &success, 1) < 0) {
+		insecure_printf("Error: couldn't write to socket (remote "
+				"attestation:2)\n");
 		return -1;
 	}
+
+	if (!success)
+		return -1;
 
 	return 0;
 }

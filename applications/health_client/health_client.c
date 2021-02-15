@@ -35,7 +35,11 @@ int msg_num = 0;
 uint8_t glucose_monitor[BD_ADDR_LEN] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc};
 uint8_t insulin_pump[BD_ADDR_LEN] = {0xcb, 0xa9, 0x87, 0x65, 0x43, 0x21};
 
+uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t measured_network_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t storage_pcr[TPM_EXTEND_HASH_SIZE];
+uint8_t measured_storage_pcr[TPM_EXTEND_HASH_SIZE];
+int trustworthy_storage_service = 0;
 
 #define CONTEXT_SIGNATURE_SIZE	4
 /* Used to check if context returned from storage is valid or junk */
@@ -47,7 +51,6 @@ struct app_context {
 	uint8_t glucose_monitor_password[32];
 	uint8_t insulin_pump_password[32];
 	uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
-	uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 	uint16_t glucose_measurement_avg;
 	uint64_t last_measurement_time; /* in seconds compared to a ref. time */
 };
@@ -342,20 +345,57 @@ static int perform_remote_attestation(void)
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, context.network_pcr,
+	if (gapi->read_from_socket(sock, storage_pcr,
 				   TPM_EXTEND_HASH_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:5)\n");
 		return -1;
 	}
 
-	/* check the network PCR val */
-	ret = memcmp(measured_network_pcr, context.network_pcr,
+	/* check the storage PCR val */
+	ret = memcmp(measured_storage_pcr, storage_pcr,
 		     TPM_EXTEND_HASH_SIZE);
-	if (ret) {
-		printf("Error: %s: network PCR not verified.\n", __func__);
+	printf("%s [1]: ret = %d\n", __func__, ret);
+	if (ret)
+		trustworthy_storage_service = 0;
+	else
+		trustworthy_storage_service = 1;
+	
+
+	if (gapi->read_from_socket(sock, network_pcr,
+				   TPM_EXTEND_HASH_SIZE) < 0) {
+		insecure_printf("Error: couldn't read from socket (remote "
+				"attestation:6)\n");
 		return -1;
 	}
+
+	/* check the network PCR val */
+	ret = memcmp(measured_network_pcr, network_pcr, TPM_EXTEND_HASH_SIZE);
+	if (ret) {
+		printf("Error: %s: network PCR not verified.\n", __func__);
+		success = 0;
+	} else {
+		success = 1;
+	}
+
+	/* This is needed for attestation of the network service.
+	 * Right after we receive the PCR, we compare it with what we have
+	 * from TPM measurements. If they match, we tell the server so that
+	 * it can send us secrets or receive confidential information.
+	 * Note that the client and server communication is secured end-to-end,
+	 * therefore we can trust our message to be delivered correctly and not
+	 * delivered at all. Yet, we don't assume that the communications
+	 * between the client are secure against side-channels on the client
+	 * device. The attestation of the network service tries to defeat that.
+	 */
+	if (gapi->write_to_socket(sock, &success, 1) < 0) {
+		insecure_printf("Error: couldn't write to socket (remote "
+				"attestation:2)\n");
+		return -1;
+	}
+
+	if (!success)
+		return -1;
 
 	return 0;
 }
@@ -446,9 +486,13 @@ void app_main(struct runtime_api *api)
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
 		secure_storage_key[i] = i + 5;
 
+	/* FIXME: how to do local attestation for storage, i.e., check its PCR
+	 * val?
+	 */
+
 	api->set_up_secure_storage_key(secure_storage_key);
 	ret = api->set_up_context((void *) &context, sizeof(struct app_context),
-				  0);
+				  0, NULL, NULL, measured_storage_pcr);
 	printf("%s [1.1]: ret = %d\n", __func__, ret);
 	if (!ret && !memcmp(context.signature, expected_context_signature,
 			    CONTEXT_SIGNATURE_SIZE)) {
@@ -600,12 +644,24 @@ new_measurement:
 
 	/* Step 5 */
 terminate:
-	/* write_context_to_storage won't yield if there's an error. Therefore,
-	 * we explicitly yield instead of doing it through
-	 * write_context_to_storage.
+	/*
+	 * Before writing to storage, we check if it is trustworthy.
+	 * Note that this is only needed/useful when we did not find any context
+	 * in storage and contacted the server. In future runs, we are simply
+	 * trusting this check in the first run.
 	 */
-	gapi->write_context_to_storage(0);
-	gapi->yield_secure_storage_access();
+	printf("%s [5]: context_found = %d\n", __func__, context_found);
+	printf("%s [6]: trustworthy_storage_service = %d\n", __func__,
+	       trustworthy_storage_service);
+	if (!context_found && trustworthy_storage_service) {
+		insecure_printf("Storing data to storage for future.\n");
+		/* write_context_to_storage won't yield if there's an error.
+		 * Therefore, we explicitly yield instead of doing it through
+		 * write_context_to_storage.
+		 */
+		gapi->write_context_to_storage(0);
+		gapi->yield_secure_storage_access();
+	}
 
 	terminate_bluetooth_session();
 	terminate_network_session();
