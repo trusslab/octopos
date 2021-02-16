@@ -169,15 +169,30 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	/* FIXME: should we check to see whether we have previously created a partition for this app? */
 
-	/* FIXME: enforce any limits/timeouts? 
-	 * Yes, the untrusted should be limited to MAILBOX_DEFAULT_TIMEOUT_VAL
-	 */
-	if (limit > MAILBOX_MAX_LIMIT_VAL ||
-	    timeout > MAILBOX_DEFAULT_TIMEOUT_VAL) {
-		printf("Error: %s: limit (%d) or timeout (%d) too large\n",
-		       __func__, limit, timeout);
+	if (limit > MAILBOX_MAX_LIMIT_VAL) {
+		printf("Error: %s: limit (%d) too large\n", __func__, limit);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
+	}
+
+	if (runtime_proc_id == P_UNTRUSTED) {
+		/* The untrusted domain uses the storage domain frequently.
+		 * We limit its usage to MAILBOX_DEFAULT_TIMEOUT_VAL per
+		 * request in order not to starve other domains.
+		 */
+		if (timeout > MAILBOX_DEFAULT_TIMEOUT_VAL) {
+			printf("Error: %s: timeout (%d) too large for the "
+			       "untrusted domain\n", __func__, timeout);
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			return;
+		}
+	} else {
+		if (timeout > 100) {
+			printf("Error: %s: timeout (%d) too large\n", __func__,
+			       timeout);
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			return;
+		}
 	}
 
 	wait_for_storage();

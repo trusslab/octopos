@@ -685,6 +685,7 @@ int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
 }
 
 int set_up_context(void *addr, uint32_t size, int do_yield,
+		   uint32_t partition_size, limit_t limit, timeout_t timeout,
 		   queue_update_callback_t callback, uint8_t *expected_pcr,
 		   uint8_t *return_pcr)
 {
@@ -698,9 +699,11 @@ int set_up_context(void *addr, uint32_t size, int do_yield,
 	context_size = size;
 	context_set = true;
 	/* Now, let's retrieve the context. */
-	int ret = request_secure_storage_access(100, 200,
-				MAILBOX_DEFAULT_TIMEOUT_VAL, callback,
-				expected_pcr, return_pcr);
+	//int ret = request_secure_storage_access(100, 200,
+	//			MAILBOX_DEFAULT_TIMEOUT_VAL, callback,
+	int ret = request_secure_storage_access(partition_size, limit, timeout,
+						callback, expected_pcr,
+						return_pcr);
 	if (ret) {
 		printf("Error (%s): Failed to get secure access to storage.\n",
 		       __func__);

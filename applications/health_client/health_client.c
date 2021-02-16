@@ -93,6 +93,9 @@ char session_word[32];
 
 int has_network = 0;
 int has_bluetooth = 0;
+int has_storage = 0;
+int has_context_update = 0;
+int context_found = 0;
 
 static int _str2ip(char *str, unsigned int *ip)
 {
@@ -147,6 +150,26 @@ static void terminate_bluetooth_session(void)
 
 static void *yield_resources(void *data)
 {
+	printf("%s [1]: has_storage = %d, has_context_update = %d, "
+	       "context_found = %d, trustworthy_storage_service = %d\n", __func__,
+	       has_storage, has_context_update, context_found,
+	       trustworthy_storage_service);
+	/*
+	 * Before writing to storage, we check if it is trustworthy.
+	 * Note that this is only needed/useful when we did not find any context
+	 * in storage and contacted the server. In future runs, we are simply
+	 * trusting this check in the first run.
+	 */
+	if (has_storage && has_context_update &&
+	    (context_found || (!context_found && trustworthy_storage_service))) {
+		printf("%s [2]\n", __func__);
+		/* write_context_to_storage won't yield if there's an error.
+		 * Therefore, we explicitly yield instead of doing it through
+		 * write_context_to_storage.
+		 */
+		gapi->write_context_to_storage(0);
+	}
+
 	if (has_bluetooth) {
 		terminate_bluetooth_session();
 		gapi->yield_secure_bluetooth_access();
@@ -156,7 +179,10 @@ static void *yield_resources(void *data)
 		terminate_network_session();
 		gapi->yield_network_access();
 	}
-			
+
+	if (has_storage)
+		gapi->yield_secure_storage_access();
+		
 	gapi->terminate_app();
 
 	return NULL;
@@ -475,7 +501,6 @@ void app_main(struct runtime_api *api)
 	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
 	uint16_t glucose_measurement;
 	uint8_t dose;
-	int context_found = 0;
 	printf("%s [1]\n", __func__);
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
@@ -498,13 +523,18 @@ void app_main(struct runtime_api *api)
 
 	api->set_up_secure_storage_key(secure_storage_key);
 	ret = api->set_up_context((void *) &context, sizeof(struct app_context),
-				  0, NULL, NULL, measured_storage_pcr);
+				  0, 100, 200, 100, queue_update_callback, NULL,
+				  measured_storage_pcr);
 	printf("%s [1.1]: ret = %d\n", __func__, ret);
-	if (!ret && !memcmp(context.signature, expected_context_signature,
+	if (!ret) {
+		has_storage = 1;
+		if (!memcmp(context.signature, expected_context_signature,
 			    CONTEXT_SIGNATURE_SIZE)) {
-		insecure_printf("Found measurements from previous run(s).\n");
-		context_found = 1;
-		goto new_measurement;
+			insecure_printf("Found measurements from previous "
+					"run(s).\n");
+			context_found = 1;
+			goto new_measurement;
+		}
 	}
 		
 	memcpy(context.signature, expected_context_signature,
@@ -514,7 +544,7 @@ void app_main(struct runtime_api *api)
 	ret = connect_to_server();
 	if (ret) {
 		insecure_printf("Error: couldn't connect to the server.\n");
-		return;
+		goto terminate_storage;
 	}
 	printf("%s [2]\n", __func__);
 
@@ -553,7 +583,7 @@ new_measurement:
 	 * after a reboot of the bluetooth proc, its PCR won't match the
 	 * expected value.
 	 */
-	ret = gapi->request_secure_bluetooth_access(glucose_monitor, 100, 100,
+	ret = gapi->request_secure_bluetooth_access(glucose_monitor, 200, 100,
 						    queue_update_callback,
 						    //context.bluetooth_pcr);
 						    NULL);
@@ -599,6 +629,8 @@ new_measurement:
 		goto terminate;
 	}
 
+	has_context_update = 1;
+
 	terminate_bluetooth_session();
 	has_bluetooth = 0;
 	gapi->yield_secure_bluetooth_access();
@@ -610,7 +642,7 @@ new_measurement:
 	 * after a reboot of the bluetooth proc, its PCR won't match the
 	 * expected value.
 	 */
-	ret = gapi->request_secure_bluetooth_access(insulin_pump, 100, 100,
+	ret = gapi->request_secure_bluetooth_access(insulin_pump, 200, 100,
 						    queue_update_callback,
 						    //context.bluetooth_pcr);
 						    NULL);
@@ -658,14 +690,13 @@ terminate:
 	printf("%s [5]: context_found = %d\n", __func__, context_found);
 	printf("%s [6]: trustworthy_storage_service = %d\n", __func__,
 	       trustworthy_storage_service);
-	if (!context_found && trustworthy_storage_service) {
+	if (context_found || (!context_found && trustworthy_storage_service)) {
 		insecure_printf("Storing data to storage for future.\n");
 		/* write_context_to_storage won't yield if there's an error.
 		 * Therefore, we explicitly yield instead of doing it through
 		 * write_context_to_storage.
 		 */
 		gapi->write_context_to_storage(0);
-		gapi->yield_secure_storage_access();
 	}
 
 terminate_bluetooth:
@@ -677,6 +708,10 @@ terminate_network:
 	has_network = 0;
 	terminate_network_session();
 	gapi->yield_network_access();
+
+terminate_storage:
+	has_storage = 0;
+	gapi->yield_secure_storage_access();
 }
 
 #endif
