@@ -1317,14 +1317,14 @@ int bluetooth_send_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 		return ERR_INVALID;
 	}
 
+	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	memcpy(btp->data, data, len);
+
 	ret = set_btp_am_addr(btp, am_addr);
 	if (ret) {
 		printf("Error: %s: invalid am_addr (%d)\n", __func__, am_addr);
 		return ret;
 	}
-
-	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-	memcpy(btp->data, data, len);
 
 	/* the arg is the number of packets */
 	BLUETOOTH_SET_ONE_ARG(IO_OP_SEND_DATA, 1)

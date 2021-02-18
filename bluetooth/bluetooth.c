@@ -361,6 +361,8 @@ static void process_cmd(uint8_t *buf)
 			BLUETOOTH_SET_ONE_RET(ERR_INVALID)
 			break;
 		}
+
+		printf("%s [1]: am_addr = %d\n", __func__, am_addr);
 			
 		if (!bound_devices[am_addr]) {
 			printf("Error: %s: device %d not bound\n", __func__,

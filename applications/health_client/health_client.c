@@ -139,15 +139,24 @@ static void terminate_network_session(void)
 static void terminate_bluetooth_session(uint8_t bt_am_addr)
 {
 	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
+	int ret;
 
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_send_data(bt_am_addr, msg, BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(bt_am_addr, msg, BTPACKET_FIXED_DATA_SIZE);
+	ret = gapi->bluetooth_send_data(bt_am_addr, msg,
+					BTPACKET_FIXED_DATA_SIZE);
+	if (ret)
+		goto error;
 
-	if (msg[0] != 1) {
-		insecure_printf("Error: couldn't deauthenticate bluetooth "
-				"device.\n");
-	}
+	ret = gapi->bluetooth_recv_data(bt_am_addr, msg,
+					BTPACKET_FIXED_DATA_SIZE);
+
+	if (ret || (msg[0] != 1))
+		goto error;
+
+	return;
+
+error:
+	insecure_printf("Error: couldn't deauthenticate bluetooth device.\n");
 }
 
 static void *yield_resources(void *data)
@@ -614,12 +623,18 @@ new_measurement:
 			"monitor and insulin pump.\n");
 
 	/* Authenticate */
-	gapi->bluetooth_send_data(bt_am_addrs[0],
-				  context.glucose_monitor_password,
-				  BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(bt_am_addrs[0], msg,
-				  BTPACKET_FIXED_DATA_SIZE);
-	if (msg[0] != 1) {
+	ret = gapi->bluetooth_send_data(bt_am_addrs[0],
+					context.glucose_monitor_password,
+					BTPACKET_FIXED_DATA_SIZE);
+	if (ret) {
+		insecure_printf("Error: couldn't successfully send a message "
+				"to the glucose monitor for authentication.\n");
+		goto terminate_bluetooth;
+	}
+
+	ret = gapi->bluetooth_recv_data(bt_am_addrs[0], msg,
+					BTPACKET_FIXED_DATA_SIZE);
+	if (ret || (msg[0] != 1)) {
 		insecure_printf("Error: couldn't authenticate with the glucose "
 				"monitor\n");
 		goto terminate_bluetooth;
@@ -630,11 +645,17 @@ new_measurement:
 	/* send/receive msgs */
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
 	msg[0] = 1;
-	gapi->bluetooth_send_data(bt_am_addrs[0], msg,
-				  BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(bt_am_addrs[0], msg,
-				  BTPACKET_FIXED_DATA_SIZE);
-	if (msg[0] != 1) {
+	ret = gapi->bluetooth_send_data(bt_am_addrs[0], msg,
+					BTPACKET_FIXED_DATA_SIZE);
+	if (ret) {
+		insecure_printf("Error: couldn't successfully send a message "
+				"to the glucose monitor.\n");
+		goto terminate_bluetooth;
+	}
+
+	ret = gapi->bluetooth_recv_data(bt_am_addrs[0], msg,
+					BTPACKET_FIXED_DATA_SIZE);
+	if (ret || (msg[0] != 1)) {
 		insecure_printf("Error: couldn't get measurement from the "
 				"glucose monitor.\n");
 		goto terminate_bluetooth;
@@ -679,12 +700,19 @@ new_measurement:
 	//insecure_printf("Connected to the insulin pump.\n");
 
 	/* Authenticate */
-	gapi->bluetooth_send_data(bt_am_addrs[1], context.insulin_pump_password,
-				  BTPACKET_FIXED_DATA_SIZE);
+	ret = gapi->bluetooth_send_data(bt_am_addrs[1],
+					context.insulin_pump_password,
+					BTPACKET_FIXED_DATA_SIZE);
+	if (ret) {
+		insecure_printf("Error: couldn't successfully send a message "
+				"to the insulin pump for authentication.\n");
+		goto terminate;
+	}
+
 	printf("%s [8]\n", __func__);
-	gapi->bluetooth_recv_data(bt_am_addrs[1], msg,
+	ret = gapi->bluetooth_recv_data(bt_am_addrs[1], msg,
 				  BTPACKET_FIXED_DATA_SIZE);
-	if (msg[0] != 1) {
+	if (ret || (msg[0] != 1)) {
 		insecure_printf("Error: couldn't authenticate with the insulin "
 				"pump\n");
 		goto terminate;
@@ -696,11 +724,17 @@ new_measurement:
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
 	msg[0] = 1;
 	msg[1] = dose;
-	gapi->bluetooth_send_data(bt_am_addrs[1], msg,
-				  BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(bt_am_addrs[1], msg,
-				  BTPACKET_FIXED_DATA_SIZE);
-	if (msg[0] != 1) {
+	ret = gapi->bluetooth_send_data(bt_am_addrs[1], msg,
+					BTPACKET_FIXED_DATA_SIZE);
+	if (ret) {
+		insecure_printf("Error: couldn't successfully send a message "
+				"to the insulin pump.\n");
+		goto terminate;
+	}
+
+	ret = gapi->bluetooth_recv_data(bt_am_addrs[1], msg,
+					BTPACKET_FIXED_DATA_SIZE);
+	if (ret || (msg[0] != 1)) {
 		insecure_printf("Error: insulin injection failed.\n");
 		goto terminate;
 	}
