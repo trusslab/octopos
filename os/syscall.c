@@ -81,6 +81,26 @@
 	}							\
 	data = &buf[11];					\
 
+#define SYSCALL_GET_THREE_ARGS_DATA				\
+	uint32_t arg0, arg1, arg2;				\
+	uint8_t data_size, *data;				\
+	DESERIALIZE_32(&arg0, &buf[2]);				\
+	DESERIALIZE_32(&arg1, &buf[6]);				\
+	DESERIALIZE_32(&arg2, &buf[10]);			\
+	uint8_t _max_size = MAILBOX_QUEUE_MSG_SIZE - 15;	\
+	if (_max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
+	}							\
+	data_size = buf[14];					\
+	if (data_size > _max_size) {				\
+		printf("Error: size not supported\n");		\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
+	}							\
+	data = &buf[15];					\
+
 /* FIXME: add reset logic for other I/O servers as well. */
 bool bluetooth_proc_need_reset = false;
 
@@ -94,14 +114,20 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 }
 
 /* FIXME: move somewhere else */
-static uint32_t send_bind_cmd_to_bluetooth(uint8_t *device_name)
+static uint32_t send_bind_cmd_to_bluetooth(uint8_t *device_names,
+					   uint32_t num_devices,
+					   uint8_t *resp_data)
 {
-	BLUETOOTH_SET_ZERO_ARGS_DATA(IO_OP_BIND_RESOURCE, device_name,
-				     BD_ADDR_LEN)
+	BLUETOOTH_SET_ONE_ARG_DATA(IO_OP_BIND_RESOURCE, num_devices,
+				   device_names, num_devices * BD_ADDR_LEN)
 
 	send_cmd_to_bluetooth(buf);
 
-	BLUETOOTH_GET_ONE_RET
+	BLUETOOTH_GET_ONE_RET_DATA
+	if (((uint32_t) _size) != num_devices)
+		return ERR_INVALID;
+
+	memcpy(resp_data, data, _size); 
 
 	return ret0;
 }
@@ -425,13 +451,16 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 
 	case SYSCALL_REQUEST_BLUETOOTH_ACCESS: {
-		SYSCALL_GET_TWO_ARGS_DATA
+		SYSCALL_GET_THREE_ARGS_DATA
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
-		uint8_t *device_name = data;
+		uint32_t num_devices = arg2;
+		uint8_t *device_names = data;
+		uint8_t *resp_data = NULL;
 
-		if (data_size != BD_ADDR_LEN) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+		if (data_size != (num_devices * BD_ADDR_LEN)) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
 			break;
 		}
 
@@ -441,20 +470,33 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		/* FIXME: arbitrary thresholds. */
 		if (limit > 200 || timeout > 100) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
 			break;
 		}
+		printf("%s [1]: bluetooth\n", __func__);
 
 		/* Reset bluetooth proc if needed */
 		if (bluetooth_proc_need_reset)
 			reset_proc(P_BLUETOOTH);
+		printf("%s [2]: bluetooth\n", __func__);
 
 		bluetooth_proc_need_reset = true;
 
+		resp_data = (uint8_t *) malloc(num_devices * sizeof(uint8_t));
+		if (!resp_data) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_MEMORY, &dummy, 0)
+			break;
+		}
+
 		/* Send msg to the bluetooth service to bind the resource */
-		uint32_t ret = send_bind_cmd_to_bluetooth(device_name);
+		uint32_t ret = send_bind_cmd_to_bluetooth(device_names,
+							  num_devices,
+							  resp_data);
 		if (ret) {
-			SYSCALL_SET_ONE_RET(ret)
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA(ret, &dummy, 0)
 			break;
 		}
 
@@ -464,7 +506,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		int iret4 = is_queue_available(Q_BLUETOOTH_CMD_OUT);
 		/* Or should we make this blocking? */
 		if (!iret1 || !iret2 || !iret3 || !iret4) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_AVAILABLE, &dummy, 0)
 			break;
 		}
 
@@ -486,7 +529,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 					      runtime_proc_id, (limit_t) limit,
 					      (timeout_t) timeout);
 
-		SYSCALL_SET_ONE_RET(0)
+		SYSCALL_SET_ONE_RET_DATA(0, resp_data, num_devices)
+		free(resp_data);
 		break;
 	}
 #endif

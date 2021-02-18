@@ -1008,7 +1008,8 @@ static int connect_socket(struct socket *sock, struct sock_addr *skaddr)
 {
 	/* FIXME: 20 packets for connect is an over-approximation. */
 	if (!has_network_access || (network_access_count < 10)) {
-		printf("%s: Error: has no or insufficient network access.\n", __func__);
+		printf("%s: Error: has no or insufficient network access.\n",
+		       __func__);
 		return ERR_INVALID;
 	}
 
@@ -1020,8 +1021,10 @@ static int connect_socket(struct socket *sock, struct sock_addr *skaddr)
 static int read_from_socket(struct socket *sock, void *buf, int len)
 {
 	/* FIXME: calculate more precisely how many packets will be needed. */
-	if (!has_network_access || (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
-		printf("%s: Error: has no or insufficient network access.\n", __func__);
+	if (!has_network_access ||
+	    (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
+		printf("%s: Error: has no or insufficient network access.\n",
+		       __func__);
 		return 0;
 	}
 
@@ -1034,8 +1037,10 @@ static int read_from_socket(struct socket *sock, void *buf, int len)
 static int write_to_socket(struct socket *sock, void *buf, int len)
 {
 	/* FIXME: calculate more precisely how many packets will be needed. */
-	if (!has_network_access || (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
-		printf("%s: Error: has no or insufficient network access.\n", __func__);
+	if (!has_network_access ||
+	    (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
+		printf("%s: Error: has no or insufficient network access.\n",
+		       __func__);
 		return 0;
 	}
 
@@ -1045,8 +1050,12 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 	return _write(sock, buf, len);
 }
 
-static int verify_bluetooth_service_state(uint8_t *device_name)
+static int verify_bluetooth_service_state(uint8_t *device_names,
+					  uint32_t num_devices,
+					  uint8_t *am_addrs)
 {
+	uint32_t found = 0;
+
 	BLUETOOTH_SET_ZERO_ARGS(IO_OP_QUERY_STATE)
 
 	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
@@ -1061,24 +1070,45 @@ static int verify_bluetooth_service_state(uint8_t *device_name)
 
 	/* data[0] is bound. Must be 1.
 	 * data[1] is used. Must be 0.
-	 * &data[2] is the starting addr for the bound device name.
+	 * data[2] is num_devicesl Must be equal to what we expect.
+	 * &data[3] is the starting addr for the bound device name/am_addr pairs.
 	 */
-	if ((_size != (3 + BD_ADDR_LEN)) || (data[0] != 1) ||
-	    (data[1] != 0) || !memcmp(&data[2], device_name, BD_ADDR_LEN)) {
-		printf("Error: %s: bluetooth service state not verified.\n",
-		       __func__);
+	if ((_size != (3 + (num_devices * (BD_ADDR_LEN + 1)))) ||
+	    (data[0] != 1) || (data[1] != 0) ||
+	    (((uint32_t) data[2]) != num_devices)) {
+		printf("Error: %s: bluetooth service state not verified "
+		       "(first check).\n", __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	for (int i = 0; i < num_devices; i++) {
+		for (int j = 0; j < num_devices; j++) { 
+			if (!memcmp(&data[3 + (i * (BD_ADDR_LEN + 1))],
+				    &device_names[j * BD_ADDR_LEN],
+				    BD_ADDR_LEN) &&
+			    data[3 + (i * (BD_ADDR_LEN + 1)) + BD_ADDR_LEN] ==
+								am_addrs[i])
+				found++;
+		}
+	}
+
+	if (found != num_devices) {
+		printf("Error: %s: bluetooth service state not verified "
+		       "(second check).\n", __func__);
 		return ERR_UNEXPECTED;
 	}
 
 	return 0;
 }
 
-static int request_secure_bluetooth_access(uint8_t *device_name,
-					   limit_t limit, timeout_t timeout,
+static int request_secure_bluetooth_access(uint8_t *device_names,
+					   uint32_t num_devices, limit_t limit,
+					   timeout_t timeout, uint8_t *am_addrs,
 					   queue_update_callback_t callback,
 					   uint8_t *expected_pcr)
 {
 	int ret;
+	uint8_t ret_data[MAILBOX_QUEUE_MSG_SIZE];
 
 	/* request access to the queues */
 	reset_queue_sync(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -1086,13 +1116,21 @@ static int request_secure_bluetooth_access(uint8_t *device_name,
 	reset_queue_sync(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	reset_queue_sync(Q_BLUETOOTH_DATA_OUT, 0);
 
-	SYSCALL_SET_TWO_ARGS_DATA(SYSCALL_REQUEST_BLUETOOTH_ACCESS,
+	SYSCALL_SET_THREE_ARGS_DATA(SYSCALL_REQUEST_BLUETOOTH_ACCESS,
 				  (uint32_t) limit, (uint32_t) timeout,
-				  device_name, BD_ADDR_LEN)
+				  num_devices, device_names,
+				  num_devices * BD_ADDR_LEN)
 	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET
+	SYSCALL_GET_ONE_RET_DATA(ret_data)
 	if (ret0)
 		return (int) ret0;
+
+	if (((uint32_t) _size) != num_devices) {
+		printf("%s: Error: invalid response from the OS\n", __func__);
+		return ERR_INVALID;
+	}
+
+	memcpy(am_addrs, ret_data, _size);
 
 	/* Verify mailbox state */
 	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_IN, limit, timeout);
@@ -1180,7 +1218,7 @@ static int request_secure_bluetooth_access(uint8_t *device_name,
 	}
 
 	/* Verify bluetooth service state */
-	ret = verify_bluetooth_service_state(device_name);
+	ret = verify_bluetooth_service_state(device_names, num_devices, am_addrs);
 	if (ret) {
 		printf("Error: %s: invalid state sent from the bluetooth "
 		       "service.\n", __func__);
@@ -1233,15 +1271,56 @@ static int yield_secure_bluetooth_access(void)
 	return 0;
 }
 
-int bluetooth_send_data(uint8_t *data, uint32_t len)
+/* FIXME: ugly. */
+/* FIXME: duplicate in bluetooth/bluetooth.c */
+static int set_btp_am_addr(struct btpacket *btp, uint8_t am_addr)
+{
+	switch(am_addr) {
+	case 0:
+		btp->header1.am_addr = 0;
+		return 0;
+	case 1:
+		btp->header1.am_addr = 1;
+		return 0;
+	case 2:
+		btp->header1.am_addr = 2;
+		return 0;
+	case 3:
+		btp->header1.am_addr = 3;
+		return 0;
+	case 4:
+		btp->header1.am_addr = 4;
+		return 0;
+	case 5:
+		btp->header1.am_addr = 5;
+		return 0;
+	case 6:
+		btp->header1.am_addr = 6;
+		return 0;
+	case 7:
+		btp->header1.am_addr = 7;
+		return 0;
+	default:
+		return ERR_INVALID;
+	}
+}
+
+int bluetooth_send_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 {
 	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	struct btpacket *btp = (struct btpacket *) buf_large;
+	int ret;
 
 	if (len > BTPACKET_FIXED_DATA_SIZE) {
 		printf("Error: %s: can't send more than %d bytes\n", __func__,
 		       BTPACKET_FIXED_DATA_SIZE);
 		return ERR_INVALID;
+	}
+
+	ret = set_btp_am_addr(btp, am_addr);
+	if (ret) {
+		printf("Error: %s: invalid am_addr (%d)\n", __func__, am_addr);
+		return ret;
 	}
 
 	memset(buf_large, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
@@ -1264,7 +1343,7 @@ int bluetooth_send_data(uint8_t *data, uint32_t len)
 	return 0;
 }
 
-int bluetooth_recv_data(uint8_t *data, uint32_t len)
+int bluetooth_recv_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 {
 	uint8_t buf_large[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 	struct btpacket *btp = (struct btpacket *) buf_large;
@@ -1276,6 +1355,12 @@ int bluetooth_recv_data(uint8_t *data, uint32_t len)
 	}
 
 	runtime_recv_msg_from_queue_large(buf_large, Q_BLUETOOTH_DATA_OUT);
+
+	if (((uint8_t) btp->header1.am_addr) != am_addr) {
+		printf("Error: %s: message from unexpected bluetooth device.\n",
+		       __func__);
+		return ERR_UNEXPECTED;
+	}
 
 	memcpy(data, btp->data, len);
 

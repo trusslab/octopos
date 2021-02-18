@@ -97,6 +97,8 @@ int has_storage = 0;
 int has_context_update = 0;
 int context_found = 0;
 
+uint8_t bt_am_addrs[2];
+
 static int _str2ip(char *str, unsigned int *ip)
 {
 	unsigned int a, b, c, d;
@@ -134,13 +136,13 @@ static void terminate_network_session(void)
 	}
 }
 
-static void terminate_bluetooth_session(void)
+static void terminate_bluetooth_session(uint8_t bt_am_addr)
 {
 	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
 
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_send_data(msg, BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_send_data(bt_am_addr, msg, BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_recv_data(bt_am_addr, msg, BTPACKET_FIXED_DATA_SIZE);
 
 	if (msg[0] != 1) {
 		insecure_printf("Error: couldn't deauthenticate bluetooth "
@@ -171,7 +173,8 @@ static void *yield_resources(void *data)
 	}
 
 	if (has_bluetooth) {
-		terminate_bluetooth_session();
+		terminate_bluetooth_session(bt_am_addrs[0]);
+		terminate_bluetooth_session(bt_am_addrs[1]);
 		gapi->yield_secure_bluetooth_access();
 	}
 
@@ -501,6 +504,8 @@ void app_main(struct runtime_api *api)
 	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
 	uint16_t glucose_measurement;
 	uint8_t dose;
+	uint32_t num_bt_devices = 2;
+	uint8_t bt_device_names[BD_ADDR_LEN * 2];
 	printf("%s [1]\n", __func__);
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
@@ -510,6 +515,7 @@ void app_main(struct runtime_api *api)
 	}
 
 	gapi = api;
+
 
 	/* Step 1 */
 	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
@@ -577,13 +583,24 @@ void app_main(struct runtime_api *api)
 new_measurement:
 	/* Step 4: authenticate & send/receive messages */
 	/* Step 4.1: get a measurement from the glucose monitor */
-	insecure_printf("Connecting to the glucose monitor now.\n");
+	insecure_printf("Connecting to the bluetooth services now.\n");
 
 	/* FIXME: can't check the PCR until new TPM architecture is ready since
 	 * after a reboot of the bluetooth proc, its PCR won't match the
 	 * expected value.
 	 */
-	ret = gapi->request_secure_bluetooth_access(glucose_monitor, 200, 100,
+	/* This means that glucose_monitor will be index 0 in am_addrs and
+	 * insulin_pump will be index 1 */
+	memcpy(bt_device_names, glucose_monitor, BD_ADDR_LEN);	
+	memcpy(bt_device_names + BD_ADDR_LEN, insulin_pump, BD_ADDR_LEN);	
+	
+	/* FIXME: can't check the PCR until new TPM architecture is ready since
+	 * after a reboot of the bluetooth proc, its PCR won't match the
+	 * expected value.
+	 */
+	ret = gapi->request_secure_bluetooth_access(bt_device_names,
+						    num_bt_devices, 200, 100,
+						    bt_am_addrs,
 						    queue_update_callback,
 						    //context.bluetooth_pcr);
 						    NULL);
@@ -593,12 +610,15 @@ new_measurement:
 	}
 
 	has_bluetooth = 1;
-	insecure_printf("Connected to the glucose monitor.\n");
+	insecure_printf("Connected to the bluetooth service to use the glucose "
+			"monitor and insulin pump.\n");
 
 	/* Authenticate */
-	gapi->bluetooth_send_data(context.glucose_monitor_password,
+	gapi->bluetooth_send_data(bt_am_addrs[0],
+				  context.glucose_monitor_password,
 				  BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_recv_data(bt_am_addrs[0], msg,
+				  BTPACKET_FIXED_DATA_SIZE);
 	if (msg[0] != 1) {
 		insecure_printf("Error: couldn't authenticate with the glucose "
 				"monitor\n");
@@ -610,8 +630,10 @@ new_measurement:
 	/* send/receive msgs */
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
 	msg[0] = 1;
-	gapi->bluetooth_send_data(msg, BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_send_data(bt_am_addrs[0], msg,
+				  BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_recv_data(bt_am_addrs[0], msg,
+				  BTPACKET_FIXED_DATA_SIZE);
 	if (msg[0] != 1) {
 		insecure_printf("Error: couldn't get measurement from the "
 				"glucose monitor.\n");
@@ -628,36 +650,40 @@ new_measurement:
 		insecure_printf("No insulin injection is needed. Terminating.\n");
 		goto terminate;
 	}
+	printf("%s [5]\n", __func__);
 
 	has_context_update = 1;
 
-	terminate_bluetooth_session();
-	has_bluetooth = 0;
-	gapi->yield_secure_bluetooth_access();
+	//terminate_bluetooth_session();
+	//has_bluetooth = 0;
+	//gapi->yield_secure_bluetooth_access();
+	printf("%s [6]\n", __func__);
 
-	insecure_printf("Need to inject %d doses of insulin. Connecting to "
-			"the insulin pump now.\n", dose);
+	insecure_printf("Need to inject %d doses of insulin.\n", dose);
 
-	/* FIXME: can't check the PCR until new TPM architecture is ready since
-	 * after a reboot of the bluetooth proc, its PCR won't match the
-	 * expected value.
-	 */
-	ret = gapi->request_secure_bluetooth_access(insulin_pump, 200, 100,
-						    queue_update_callback,
-						    //context.bluetooth_pcr);
-						    NULL);
-	if (ret) {
-		insecure_printf("Error: couldn't get access to bluetooth.\n");
-		goto terminate;
-	}
+	///* FIXME: can't check the PCR until new TPM architecture is ready since
+	// * after a reboot of the bluetooth proc, its PCR won't match the
+	// * expected value.
+	// */
+	//ret = gapi->request_secure_bluetooth_access(insulin_pump, 200, 100,
+	//					    queue_update_callback,
+	//					    //context.bluetooth_pcr);
+	//					    NULL);
+	//printf("%s [7]\n", __func__);
+	//if (ret) {
+	//	insecure_printf("Error: couldn't get access to bluetooth.\n");
+	//	goto terminate;
+	//}
 
-	has_bluetooth = 1;
-	insecure_printf("Connected to the insulin pump.\n");
+	//has_bluetooth = 1;
+	//insecure_printf("Connected to the insulin pump.\n");
 
 	/* Authenticate */
-	gapi->bluetooth_send_data(context.insulin_pump_password,
+	gapi->bluetooth_send_data(bt_am_addrs[1], context.insulin_pump_password,
 				  BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	printf("%s [8]\n", __func__);
+	gapi->bluetooth_recv_data(bt_am_addrs[1], msg,
+				  BTPACKET_FIXED_DATA_SIZE);
 	if (msg[0] != 1) {
 		insecure_printf("Error: couldn't authenticate with the insulin "
 				"pump\n");
@@ -670,8 +696,10 @@ new_measurement:
 	memset(msg, 0x0, BTPACKET_FIXED_DATA_SIZE);
 	msg[0] = 1;
 	msg[1] = dose;
-	gapi->bluetooth_send_data(msg, BTPACKET_FIXED_DATA_SIZE);
-	gapi->bluetooth_recv_data(msg, BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_send_data(bt_am_addrs[1], msg,
+				  BTPACKET_FIXED_DATA_SIZE);
+	gapi->bluetooth_recv_data(bt_am_addrs[1], msg,
+				  BTPACKET_FIXED_DATA_SIZE);
 	if (msg[0] != 1) {
 		insecure_printf("Error: insulin injection failed.\n");
 		goto terminate;
@@ -701,7 +729,8 @@ terminate:
 
 terminate_bluetooth:
 	has_bluetooth = 0;
-	terminate_bluetooth_session();
+	terminate_bluetooth_session(bt_am_addrs[0]);
+	terminate_bluetooth_session(bt_am_addrs[1]);
 	gapi->yield_secure_bluetooth_access();
 
 terminate_network:

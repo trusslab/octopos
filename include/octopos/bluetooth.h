@@ -5,6 +5,7 @@
 #if !defined(UNTRUSTED_DOMAIN) && !defined(APPLICATION)
 #include "arch/syscall.h"
 #endif
+#include <octopos/error.h>
 
 /* BD_ADDR is 48 bits */
 #define BD_ADDR_LEN	6
@@ -21,38 +22,43 @@
 	buf[0] = (uint8_t) op;				\
 	SERIALIZE_32(arg0, &buf[1])			\
 
-#define BLUETOOTH_SET_ZERO_ARGS_DATA(op, data, size)		\
+#define BLUETOOTH_SET_ONE_ARG_DATA(op, arg0, data, size)	\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
 	buf[0] = (uint8_t) op;					\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;		\
-	if (max_size < 256 && size <= ((int) max_size)) {	\
-		buf[1] = (uint8_t) size;			\
-		memcpy(&buf[2], data, size);			\
+	SERIALIZE_32(arg0, &buf[1])				\
+	uint8_t _max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
+	if (_max_size < 256 && size <= ((int) _max_size)) {	\
+		buf[5] = (uint8_t) size;			\
+		memcpy(&buf[6], data, size);			\
 	} else {						\
 		printf("Error: invalid max_size or size\n");	\
-		buf[1] = 0;					\
+		buf[6] = 0;					\
 	}
 
 #define BLUETOOTH_GET_ONE_ARG				\
 	uint32_t arg0;					\
-	arg0 = *((uint32_t *) &buf[1]);			\
+	DESERIALIZE_32(&arg0, &buf[1]);			\
 
-#define BLUETOOTH_GET_ZERO_ARGS_DATA						\
+#define BLUETOOTH_GET_ONE_ARG_DATA						\
+	uint32_t arg0;								\
+	DESERIALIZE_32(&arg0, &buf[1]);						\
 	uint8_t *data;								\
-	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 2;			\
-	if (max_size >= 256) {							\
+	uint8_t _size, _max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
+	if (_max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
-		BLUETOOTH_SET_ONE_RET(ERR_INVALID)				\
+		char dummy;							\
+		BLUETOOTH_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)		\
 		break;								\
 	}									\
-	_size = buf[1];								\
-	if (_size > max_size) {							\
+	_size = buf[5];								\
+	if (_size > _max_size) {						\
 		printf("Error (%s): size not supported\n", __func__);		\
-		BLUETOOTH_SET_ONE_RET(ERR_INVALID)				\
+		char dummy;							\
+		BLUETOOTH_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)		\
 		break;								\
 	}									\
-	data = &buf[2];								\
+	data = &buf[6];								\
 
 /* FIXME: why don't we zero the buf in set_ret funcs? */
 #define BLUETOOTH_SET_ONE_RET(ret0)				\
