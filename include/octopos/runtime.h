@@ -113,13 +113,15 @@ struct runtime_api {
 	int (*yield_network_access)(void);
 
 	/* bluetooth */
-	int (*request_secure_bluetooth_access)(uint8_t *device_name,
+	int (*request_secure_bluetooth_access)(uint8_t *device_names,
+					       uint32_t num_devices,
 					       limit_t limit, timeout_t timeout,
+					       uint8_t *am_addrs,
 					       queue_update_callback_t callback,
 					       uint8_t *expected_pcr);
 	int (*yield_secure_bluetooth_access)(void);
-	int (*bluetooth_send_data)(uint8_t *data, uint32_t len);
-	int (*bluetooth_recv_data)(uint8_t *data, uint32_t len);
+	int (*bluetooth_send_data)(uint8_t am_addr, uint8_t *data, uint32_t len);
+	int (*bluetooth_recv_data)(uint8_t am_addr, uint8_t *data, uint32_t len);
 #endif
 };
 #endif /* UNTRUSTED_DOMAIN */
