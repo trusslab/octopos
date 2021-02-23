@@ -178,22 +178,28 @@ static void *yield_resources(void *data)
 		 * Therefore, we explicitly yield instead of doing it through
 		 * write_context_to_storage.
 		 */
+		context_found = 0;
+		trustworthy_storage_service = 0;
 		gapi->write_context_to_storage(0);
 	}
 
 	if (has_bluetooth) {
+		has_bluetooth = 0;
 		terminate_bluetooth_session(bt_am_addrs[0]);
 		terminate_bluetooth_session(bt_am_addrs[1]);
 		gapi->yield_secure_bluetooth_access();
 	}
 
 	if (has_network) {
+		has_network = 0;
 		terminate_network_session();
 		gapi->yield_network_access();
 	}
 
-	if (has_storage)
+	if (has_storage) {
+		has_storage = 0;
 		gapi->yield_secure_storage_access();
+	}
 		
 	gapi->terminate_app();
 
@@ -225,7 +231,7 @@ static void queue_update_callback(uint8_t queue_id, limit_t limit,
 	}
 }
 
-static int connect_to_server(void)
+static int request_network_access(void)
 {
 	int err = 0;
 	/* init arguments */
@@ -256,6 +262,11 @@ static int connect_to_server(void)
 
 	has_network = 1;
 
+	return 0;
+}
+
+static int connect_to_server(void)
+{
 	if (gapi->connect_socket(sock, &skaddr) < 0) {
 		insecure_printf("%s: Error: _connect\n", __func__);
 		return -1;
@@ -494,6 +505,8 @@ extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
 	/*
+	 * Step 0: Request all needed I/O services. Request the storage service
+	 *	   last in order to allow other services to boot, if needed.
 	 * Step 1: Check secure storage for previously-stored passwords and
 	 *	   measurements. If found, skip to Step 4.
 	 * Step 2: Connect to the server and perform remote attestation of
@@ -525,8 +538,48 @@ void app_main(struct runtime_api *api)
 
 	gapi = api;
 
+	/* Step 0 */
+	/* Request access to the network service */
+	ret = request_network_access();
+	if (ret) {
+		insecure_printf("%s: Error: network queue access\n", __func__);
+		goto terminate;
+	}
 
-	/* Step 1 */
+	/* Request access to the bluetooth service */
+	insecure_printf("Connecting to the bluetooth services now.\n");
+
+	/* FIXME: can't check the PCR until new TPM architecture is ready since
+	 * after a reboot of the bluetooth proc, its PCR won't match the
+	 * expected value.
+	 */
+	/* This means that glucose_monitor will be index 0 in am_addrs and
+	 * insulin_pump will be index 1 */
+	memcpy(bt_device_names, glucose_monitor, BD_ADDR_LEN);	
+	memcpy(bt_device_names + BD_ADDR_LEN, insulin_pump, BD_ADDR_LEN);	
+	
+	/* FIXME: can't check the PCR until new TPM architecture is ready since
+	 * after a reboot of the bluetooth proc, its PCR won't match the
+	 * expected value.
+	 */
+	ret = gapi->request_secure_bluetooth_access(bt_device_names,
+						    num_bt_devices, 200, 100,
+						    bt_am_addrs,
+						    queue_update_callback,
+						    //context.bluetooth_pcr);
+						    NULL);
+	if (ret) {
+		insecure_printf("Error: couldn't get access to bluetooth.\n");
+		goto terminate;
+	}
+
+	has_bluetooth = 1;
+	insecure_printf("Connected to the bluetooth service to use the glucose "
+			"monitor and insulin pump.\n");
+
+
+
+	/* Step 1 (including part of Step 0 to request access to storage) */
 	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
 	/* generate a key */
 	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
@@ -559,14 +612,14 @@ void app_main(struct runtime_api *api)
 	ret = connect_to_server();
 	if (ret) {
 		insecure_printf("Error: couldn't connect to the server.\n");
-		goto terminate_storage;
+		goto terminate;
 	}
 	printf("%s [2]\n", __func__);
 
 	ret = perform_remote_attestation();
 	if (ret) {
 		insecure_printf("Error: remote attestation failed.\n");
-		goto terminate_network;
+		goto terminate;
 	}
 	printf("%s [3]\n", __func__);
 
@@ -577,7 +630,7 @@ void app_main(struct runtime_api *api)
 	ret = establish_secure_channel();
 	if (ret) {
 		insecure_printf("Error: couldn't establish a secure channel.\n");
-		goto terminate_network;
+		goto terminate;
 	}
 	printf("%s [4]\n", __func__);
 
@@ -586,41 +639,41 @@ void app_main(struct runtime_api *api)
 	if (ret) {
 		insecure_printf("Error: couldn't receive the passwords for"
 				"bluetooth devices.\n");
-		goto terminate_network;
+		goto terminate;
 	}
 
 new_measurement:
 	/* Step 4: authenticate & send/receive messages */
 	/* Step 4.1: get a measurement from the glucose monitor */
-	insecure_printf("Connecting to the bluetooth services now.\n");
+	//insecure_printf("Connecting to the bluetooth services now.\n");
 
-	/* FIXME: can't check the PCR until new TPM architecture is ready since
-	 * after a reboot of the bluetooth proc, its PCR won't match the
-	 * expected value.
-	 */
-	/* This means that glucose_monitor will be index 0 in am_addrs and
-	 * insulin_pump will be index 1 */
-	memcpy(bt_device_names, glucose_monitor, BD_ADDR_LEN);	
-	memcpy(bt_device_names + BD_ADDR_LEN, insulin_pump, BD_ADDR_LEN);	
-	
-	/* FIXME: can't check the PCR until new TPM architecture is ready since
-	 * after a reboot of the bluetooth proc, its PCR won't match the
-	 * expected value.
-	 */
-	ret = gapi->request_secure_bluetooth_access(bt_device_names,
-						    num_bt_devices, 200, 100,
-						    bt_am_addrs,
-						    queue_update_callback,
-						    //context.bluetooth_pcr);
-						    NULL);
-	if (ret) {
-		insecure_printf("Error: couldn't get access to bluetooth.\n");
-		goto terminate_network;
-	}
+	///* FIXME: can't check the PCR until new TPM architecture is ready since
+	// * after a reboot of the bluetooth proc, its PCR won't match the
+	// * expected value.
+	// */
+	///* This means that glucose_monitor will be index 0 in am_addrs and
+	// * insulin_pump will be index 1 */
+	//memcpy(bt_device_names, glucose_monitor, BD_ADDR_LEN);	
+	//memcpy(bt_device_names + BD_ADDR_LEN, insulin_pump, BD_ADDR_LEN);	
+	//
+	///* FIXME: can't check the PCR until new TPM architecture is ready since
+	// * after a reboot of the bluetooth proc, its PCR won't match the
+	// * expected value.
+	// */
+	//ret = gapi->request_secure_bluetooth_access(bt_device_names,
+	//					    num_bt_devices, 200, 100,
+	//					    bt_am_addrs,
+	//					    queue_update_callback,
+	//					    //context.bluetooth_pcr);
+	//					    NULL);
+	//if (ret) {
+	//	insecure_printf("Error: couldn't get access to bluetooth.\n");
+	//	goto terminate_network;
+	//}
 
-	has_bluetooth = 1;
-	insecure_printf("Connected to the bluetooth service to use the glucose "
-			"monitor and insulin pump.\n");
+	//has_bluetooth = 1;
+	//insecure_printf("Connected to the bluetooth service to use the glucose "
+	//		"monitor and insulin pump.\n");
 
 	/* Authenticate */
 	ret = gapi->bluetooth_send_data(bt_am_addrs[0],
@@ -629,7 +682,7 @@ new_measurement:
 	if (ret) {
 		insecure_printf("Error: couldn't successfully send a message "
 				"to the glucose monitor for authentication.\n");
-		goto terminate_bluetooth;
+		goto terminate;
 	}
 
 	ret = gapi->bluetooth_recv_data(bt_am_addrs[0], msg,
@@ -637,7 +690,7 @@ new_measurement:
 	if (ret || (msg[0] != 1)) {
 		insecure_printf("Error: couldn't authenticate with the glucose "
 				"monitor\n");
-		goto terminate_bluetooth;
+		goto terminate;
 	}
 
 	insecure_printf("Authenticated with the glucose monitor.\n");
@@ -650,7 +703,7 @@ new_measurement:
 	if (ret) {
 		insecure_printf("Error: couldn't successfully send a message "
 				"to the glucose monitor.\n");
-		goto terminate_bluetooth;
+		goto terminate;
 	}
 
 	ret = gapi->bluetooth_recv_data(bt_am_addrs[0], msg,
@@ -658,7 +711,7 @@ new_measurement:
 	if (ret || (msg[0] != 1)) {
 		insecure_printf("Error: couldn't get measurement from the "
 				"glucose monitor.\n");
-		goto terminate_bluetooth;
+		goto terminate;
 	}
 
 	glucose_measurement = *((uint16_t *) &msg[1]);
@@ -758,23 +811,28 @@ terminate:
 		 * Therefore, we explicitly yield instead of doing it through
 		 * write_context_to_storage.
 		 */
+		context_found = 0;
+		trustworthy_storage_service = 0;
 		gapi->write_context_to_storage(0);
 	}
 
-terminate_bluetooth:
-	has_bluetooth = 0;
-	terminate_bluetooth_session(bt_am_addrs[0]);
-	terminate_bluetooth_session(bt_am_addrs[1]);
-	gapi->yield_secure_bluetooth_access();
+	if (has_storage) {
+		has_storage = 0;
+		gapi->yield_secure_storage_access();
+	}
 
-terminate_network:
-	has_network = 0;
-	terminate_network_session();
-	gapi->yield_network_access();
+	if (has_bluetooth) {
+		has_bluetooth = 0;
+		terminate_bluetooth_session(bt_am_addrs[0]);
+		terminate_bluetooth_session(bt_am_addrs[1]);
+		gapi->yield_secure_bluetooth_access();
+	}
 
-terminate_storage:
-	has_storage = 0;
-	gapi->yield_secure_storage_access();
+	if (has_network) {
+		has_network = 0;
+		terminate_network_session();
+		gapi->yield_network_access();
+	}
 }
 
 #endif
