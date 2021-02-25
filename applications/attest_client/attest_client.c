@@ -72,6 +72,7 @@ void send_large_packet(struct runtime_api *api, uint8_t* data, size_t size)
 
 static void send_receive(struct runtime_api *api)
 {
+	int rc = 0;
 	char buf[MSG_LENGTH];
 	int len;
 	uint8_t *signature = NULL;
@@ -95,9 +96,12 @@ static void send_receive(struct runtime_api *api)
 
 		int pcr_selected = atoi(pcr);
 		uint32_t pcr_list[] = { (uint32_t) pcr_selected };
-		api->request_tpm_attestation_report(pcr_list, 1, nonce,
+		rc = api->request_tpm_attestation_report(pcr_list, 1, nonce,
 						    &signature, &sig_size,
 						    &quote, &quote_size);
+		if (rc != 0) {
+			goto out_attest;
+		}
 
 		packet = (uint8_t *) malloc(sig_size + quote_size + 1);
 		if (!packet) {
@@ -111,8 +115,9 @@ static void send_receive(struct runtime_api *api)
 		memcpy(packet + 1 + sig_size, quote, quote_size);
 
 		send_large_packet(api, packet, 1 + sig_size + quote_size);
-		
+
 		free(packet);
+out_attest:
 		free(quote);
 		free(signature);
 	}

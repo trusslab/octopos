@@ -8,7 +8,7 @@ The built-in remote attestation using Trusted Platform Module (TPM) in OctopOS.
 
 Attestation Process
 ===================
-This is a test stage implementation. So it will have some different with the true attestation process.
+This is a test stage implementation. So there are some differences comparing with the real attestation process.
 
 1. The client-side attestor connects to the remote-side verifier.
 2. Verifier send a nonce to the attestor.

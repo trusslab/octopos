@@ -63,7 +63,6 @@ int main(int argc, char *argv[])
 	prepare_bootloader(name, argc - 2, argv + 2);
 	copy_file_from_boot_partition(name, path);
 
-		
 	/* Add exec permission for the copied file */
 	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
 	
@@ -74,7 +73,6 @@ int main(int argc, char *argv[])
 	
 	/* FIXME */
 	if (!strcmp(name, "runtime")) {
-
 		/* Create the args for execv */
 		char new_name[128];
 		memset(new_name, 0x0, 128);
