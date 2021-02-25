@@ -872,7 +872,7 @@ int init_os_mailbox(void)
 	}
 
 	Status = XIntc_Connect(&intc,
-			XPAR_MICROBLAZE_6_AXI_INTC_FIT_TIMER_2_INTERRUPT_INTR,
+			XPAR_OS_SUBSYS_MICROBLAZE_6_AXI_INTC_OS_SUBSYS_FIT_TIMER_2_INTERRUPT_INTR,
 		(XInterruptHandler)handle_fixed_timer_interrupts,
 		(void *)0);
 	if (Status != XST_SUCCESS) {
@@ -955,7 +955,7 @@ int init_os_mailbox(void)
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_RUNTIME1]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_RUNTIME2]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_UNTRUSTED]);
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_6_AXI_INTC_FIT_TIMER_2_INTERRUPT_INTR);
+	XIntc_Enable(&intc, XPAR_OS_SUBSYS_MICROBLAZE_6_AXI_INTC_OS_SUBSYS_AXI_UARTLITE_3_INTERRUPT_INTR);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_SERIAL_OUT]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_KEYBOARD]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_RUNTIME1]);
@@ -1023,7 +1023,7 @@ int init_os_mailbox(void)
 	cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
 
 	/* Initialize GPIO. This is an ad-hoc impl of secure reset */
-	Status = XGpio_Initialize(&reset_gpio_0, XPAR_AXI_GPIO_1_DEVICE_ID);
+	Status = XGpio_Initialize(&reset_gpio_0, XPAR_OS_SUBSYS_AXI_GPIO_1_DEVICE_ID);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("Error: XGpio_initialize failed");
 		return -XST_FAILURE;
