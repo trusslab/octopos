@@ -12,6 +12,7 @@
 
 #define TSS_LOG_LVL_NONE    "ALL+none"
 #define TSS_LOG_LVL_ERROR   "ALL+error"
+#define TSS_LOG_LVL_WARNING "ALL+warning"
 #define TSS_LOG_LVL_DEBUG   "ALL+debug"
 #define TSS_LOG_LVL_TRACE   "ALL+trace"
 
@@ -84,11 +85,12 @@ int tpm_attest(uint8_t processor, uint8_t *nonce,
 			   uint32_t *pcr_list, size_t pcr_list_size,
 			   uint8_t **signature, size_t *signature_size, 
 			   char** quote_info);
+int tpm_reset_pcrs(uint8_t processor, uint32_t *pcr_list, size_t pcr_list_size);
 
 /* Wrapper of FAPI and ESAPI */
 int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor);
 int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor);
-int tpm_finalize(FAPI_CONTEXT **context);
+void tpm_finalize(FAPI_CONTEXT **context);
 int tpm_read(FAPI_CONTEXT* context, uint8_t processor, uint8_t* buf, 
 			 char** log, BOOL print);
 int tpm_extend(FAPI_CONTEXT* context, uint8_t processor, uint8_t *hash_buf);
@@ -96,6 +98,7 @@ int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 			  uint32_t *pcr_list, size_t pcr_list_size,
 			  uint8_t **signature, size_t *signature_size, 
 			  char** quote_info, char **pcr_event_log);
+int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected);
 
 /* Support function */
 void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size);

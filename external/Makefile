@@ -30,3 +30,6 @@ uninstall:
 	make uninstall -C ./tpm2-abrmd
 	make uninstall -C ./tpm2-tss
 	rm ./ibmtpm/tpm_server
+
+uninstall-local:
+	make uninstall-local -C ./tpm2-tss

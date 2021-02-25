@@ -25,3 +25,7 @@ clean:
 	for dir in $(DIRS_CLEAN); do \
 		$(MAKE) clean -C $$dir; \
 	done
+
+uninstall-local:
+	rm NVChip
+	$(MAKE) uninstall-local -C $(EXTERNAL_DIR)
