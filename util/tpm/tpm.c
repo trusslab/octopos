@@ -84,21 +84,15 @@ int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor)
 	return_if_error_exception(rc, "Fapi Provision Error.", 
 				  TSS2_FAPI_RC_ALREADY_PROVISIONED);
 
-	/* Create AK */
-	rc = Fapi_CreateKey(*context, "HS/SRK/AK", "sign,noDa", "", NULL);
-	return_if_error_exception(rc, "Fapi Create Initial Key Error.", 
-				  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
-
 	rc = tpm_set_locality(*context, processor);
 	return_if_error_no_msg(rc);
 
 	return 0;
 }
 
-int tpm_finalize(FAPI_CONTEXT **context)
+void tpm_finalize(FAPI_CONTEXT **context)
 {
 	Fapi_Finalize(context);
-	return 0;
 }
 
 int tpm_read(FAPI_CONTEXT *context, uint8_t processor, uint8_t *buf, 
@@ -168,12 +162,34 @@ int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 	      uint8_t **signature, size_t *signature_size,
 	      char** quote_info, char **pcr_event_log)
 {
+	TSS2_RC rc;
 	char *certificate = NULL;
-	TSS2_RC rc = Fapi_Quote(context, pcr_list, pcr_list_size,
+
+	/* Create attestation key (AK), if exists, ignore */
+	rc = Fapi_CreateKey(context, "HS/SRK/AK", "sign,noDa", "", NULL);
+	return_if_error_exception(rc, "Fapi Create Initial Key Error.", 
+				  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
+
+	rc = Fapi_Quote(context, pcr_list, pcr_list_size,
 				"HS/SRK/AK", "TPM-Quote", nonce,
 				TPM_AT_NONCE_LENGTH, quote_info, signature,
 				signature_size, pcr_event_log, &certificate);
-	return_if_error(rc, "Quote Error");
+	return_if_error(rc, "Quote Error.");
+	return 0;
+}
+
+int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected)
+{
+	TSS2_RC rc;
+	ESYS_CONTEXT *esys_context = NULL;
+
+	rc = Fapi_GetEsys(context, &esys_context);
+	return_if_error(rc, "Get Esys Error.");
+
+	rc = Esys_PCR_Reset(esys_context, pcr_selected,
+			    ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE);
+	return_if_error(rc, "PCR Reset Error.");
+	
 	return 0;
 }
 
@@ -184,18 +200,19 @@ int tpm_measure_service(char* path, uint8_t processor)
 	uint8_t hash_value[TPM_EXTEND_HASH_SIZE] = {0};
 
 	rc = hash_file(path, hash_value);
-	return_if_error_no_msg(rc);
+	return_if_error_label(rc, out_measure_service);
 
 	rc = tpm_initialize(&context, processor);
-	return_if_error_no_msg(rc);
+	return_if_error_label(rc, out_measure_service);
 	
 	rc = tpm_extend(context, processor, hash_value);
-	return_if_error_no_msg(rc);
+	return_if_error_label(rc, out_measure_service);
 	
 	rc = tpm_read(context, processor, NULL, NULL, 1);
-	return_if_error_no_msg(rc);
-	
-	rc = tpm_finalize(&context);
+	return_if_error_label(rc, out_measure_service);
+
+out_measure_service:
+	tpm_finalize(&context);
 	return rc;
 }
 
@@ -208,9 +225,10 @@ int tpm_processor_read_pcr(uint8_t processor, uint8_t *pcr_value)
 	return_if_error_no_msg(rc);
 	
 	rc = tpm_read(context, processor, pcr_value, NULL, 1);
-	return_if_error_no_msg(rc);
-	
-	rc = tpm_finalize(&context);
+	return_if_error_label(rc, out_processor_read_pcr);
+
+out_processor_read_pcr:	
+	tpm_finalize(&context);
 	return rc;
 }
 
@@ -230,6 +248,24 @@ int tpm_attest(uint8_t processor, uint8_t *nonce,
 		       signature_size, quote_info, &pcr_event_log);
 	return_if_error_no_msg(rc);
 	
-	rc = tpm_finalize(&context);
+	tpm_finalize(&context);
 	return rc;
+}
+
+int tpm_reset_pcrs(uint8_t processor, uint32_t *pcr_list, size_t pcr_list_size)
+{
+	int rc = 0;
+	size_t pcr_index = 0;
+	FAPI_CONTEXT *context = NULL;
+
+	rc = tpm_initialize(&context, processor);
+	return_if_error_no_msg(rc);
+
+	for (; pcr_index < pcr_list_size; pcr_index++) {
+		rc = tpm_reset(context, *(pcr_list + pcr_index));
+		return_if_error_no_msg(rc);
+	}
+	
+	tpm_finalize(&context);
+	return rc; 
 }
