@@ -40,6 +40,7 @@ uint8_t measured_network_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t storage_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t measured_storage_pcr[TPM_EXTEND_HASH_SIZE];
 int trustworthy_storage_service = 0;
+uint8_t measured_bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
 
 #define CONTEXT_SIGNATURE_SIZE	4
 /* Used to check if context returned from storage is valid or junk */
@@ -318,8 +319,9 @@ static int perform_remote_attestation(void)
 	char success = 0;
 	char init_cmd = 1;
 	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
-	uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
-	uint8_t num_pcr_slots = 2;
+	//uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
+	uint32_t pcr_slots[] = {(uint32_t) PROC_TO_PCR(runtime_proc_id)};
+	uint8_t num_pcr_slots = 1;
 	int ret;
 
 	if (gapi->write_to_socket(sock, &init_cmd, 1) < 0) {
@@ -356,6 +358,8 @@ static int perform_remote_attestation(void)
 				"failed\n");
 		return -1;
 	}
+
+	sleep(20);
 
 	packet = (uint8_t *) malloc(sig_size + quote_size + 1);
 	if (!packet) { 
@@ -409,7 +413,6 @@ static int perform_remote_attestation(void)
 		trustworthy_storage_service = 0;
 	else
 		trustworthy_storage_service = 1;
-	
 
 	if (gapi->read_from_socket(sock, network_pcr,
 				   TPM_EXTEND_HASH_SIZE) < 0) {
@@ -565,9 +568,9 @@ void app_main(struct runtime_api *api)
 	ret = gapi->request_secure_bluetooth_access(bt_device_names,
 						    num_bt_devices, 200, 100,
 						    bt_am_addrs,
-						    queue_update_callback,
-						    //context.bluetooth_pcr);
-						    NULL);
+						    queue_update_callback, NULL,
+						    measured_bluetooth_pcr);
+
 	if (ret) {
 		insecure_printf("Error: couldn't get access to bluetooth.\n");
 		goto terminate;
@@ -643,6 +646,15 @@ void app_main(struct runtime_api *api)
 	}
 
 new_measurement:
+	/* perform local attestation for bluetooth */
+	ret = memcmp(measured_bluetooth_pcr, context.bluetooth_pcr,
+		     TPM_EXTEND_HASH_SIZE);
+	if (ret) {
+		insecure_printf("Error: bluetooth services does not pass the "
+				"local attestation.\n");
+		goto terminate;
+	}
+
 	/* Step 4: authenticate & send/receive messages */
 	/* Step 4.1: get a measurement from the glucose monitor */
 	//insecure_printf("Connecting to the bluetooth services now.\n");
