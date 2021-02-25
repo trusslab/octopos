@@ -321,6 +321,14 @@ int main(int argc, char *argv[])
 		error("ERROR quote verification failed");
 	}
 
+	/* Verification of the quote tells us that our app is running in one
+	 * of the runtimes. We can be sure that we're talking to that runtime
+	 * since other runtimes won't have the ability to read the PCR for this
+	 * runtime.
+	 *
+	 * FIXME: add locality check for attestation reports to TPM.
+	 */
+
 	buffer[0] = 1;
 	n = write(newsockfd, buffer, 1);
 	if (n < 0)

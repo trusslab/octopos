@@ -81,8 +81,9 @@ struct runtime_api {
 	int (*recv_msg_on_secure_ipc)(char *msg, int *size);
 
 	/* tpm attestation */
-	int (*request_tpm_attestation_report)(uint32_t *pcr_list, size_t pcr_list_size, 
-					      char* nonce, uint8_t **signature, size_t *sig_size,
+	int (*request_tpm_attestation_report)(uint32_t *pcr_list,
+					      size_t pcr_list_size, char* nonce,
+					      uint8_t **signature, size_t *sig_size,
 					      uint8_t **quote, size_t *quote_size);
 
 	/* Local API */
@@ -116,7 +117,8 @@ struct runtime_api {
 					       limit_t limit, timeout_t timeout,
 					       uint8_t *am_addrs,
 					       queue_update_callback_t callback,
-					       uint8_t *expected_pcr);
+					       uint8_t *expected_pcr,
+					       uint8_t *return_pcr);
 	int (*yield_secure_bluetooth_access)(void);
 	int (*bluetooth_send_data)(uint8_t am_addr, uint8_t *data, uint32_t len);
 	int (*bluetooth_recv_data)(uint8_t am_addr, uint8_t *data, uint32_t len);

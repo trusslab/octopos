@@ -1105,7 +1105,8 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 					   uint32_t num_devices, limit_t limit,
 					   timeout_t timeout, uint8_t *am_addrs,
 					   queue_update_callback_t callback,
-					   uint8_t *expected_pcr)
+					   uint8_t *expected_pcr,
+					   uint8_t *return_pcr)
 {
 	int ret;
 	uint8_t ret_data[MAILBOX_QUEUE_MSG_SIZE];
@@ -1192,7 +1193,9 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_BLUETOOTH, expected_pcr);
 		if (ret) {
-			/* FIXME: the next two error blocks are identical. */
+			/* FIXME: the next three error blocks are almost
+			 * identical.
+			 */
 			/* FIXME: also, has a lot in common with the yield func.
 			 * (the same for other I/Os)
 			 */
@@ -1214,6 +1217,28 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
 			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
 			return ERR_UNEXPECTED;
+		}
+	} else if (return_pcr) {
+		ret = read_tpm_pcr_for_proc(P_BLUETOOTH, return_pcr);
+		if (ret) {
+			printf("%s: Error: couldn't read PCR\n", __func__);
+			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+			wait_until_empty(Q_BLUETOOTH_DATA_IN,
+					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+			return ERR_FAULT;
 		}
 	}
 
@@ -1370,8 +1395,9 @@ int bluetooth_recv_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 #endif
 
 static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_size, 
-					  char* nonce, uint8_t **signature, size_t *sig_size,
-					  uint8_t **quote, size_t *quote_size)
+					  char* nonce, uint8_t **signature,
+					  size_t *sig_size, uint8_t **quote,
+					  size_t *quote_size)
 {
 	int rc = 0;
 	rc = tpm_attest(p_runtime, (uint8_t *) nonce, pcr_list, pcr_list_size,
