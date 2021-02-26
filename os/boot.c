@@ -19,14 +19,12 @@ int untrusted_needs_help_with_boot = 0;
 
 static void help_boot_proc(uint8_t proc_id, char *filename)
 {
-	printf("%s [1]: proc_id = %d\n", __func__, proc_id);
 	/* Help with reading the image off of storage */
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
-	printf("%s [2]: proc_id = %d\n", __func__, proc_id);
 }
 
 static void help_boot_keyboard_proc(void)
@@ -46,9 +44,7 @@ static void help_boot_network_proc(void)
 
 static void help_boot_bluetooth_proc(void)
 {
-	printf("%s [1]\n", __func__);
 	help_boot_proc(P_BLUETOOTH, (char *) "bluetooth");
-	printf("%s [2]\n", __func__);
 }
 
 void help_boot_runtime_proc(uint8_t runtime_proc_id)
@@ -76,16 +72,13 @@ void help_boot_procs(int boot_untrusted)
 int reset_proc(uint8_t proc_id)
 {
 	int ret;
-	printf("%s [1]: proc_id = %d\n", __func__, proc_id);
 
 	if (proc_id == P_STORAGE)
 		close_file_system();
-	printf("%s [2]: proc_id = %d\n", __func__, proc_id);
 
 	ret = pmu_reset_proc(proc_id);
 	if (ret)
 		return ret;	
-	printf("%s [3]: proc_id = %d\n", __func__, proc_id);
 
 	if (proc_id == P_RUNTIME1 || proc_id == P_RUNTIME2) {
 		/* set the state of runtime procs to resetting */
@@ -123,7 +116,6 @@ int reset_proc(uint8_t proc_id)
 			untrusted_needs_help_with_boot = 0;
 		}
 	}
-	printf("%s [4]: proc_id = %d\n", __func__, proc_id);
 
 	return 0;
 }

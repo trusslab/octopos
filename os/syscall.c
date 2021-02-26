@@ -105,7 +105,8 @@
 bool bluetooth_proc_need_reset = false;
 
 /* response for async syscalls */
-void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size)
+void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line,
+				      int size)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	SYSCALL_SET_ONE_RET_DATA(0, line, size)
@@ -132,7 +133,8 @@ static uint32_t send_bind_cmd_to_bluetooth(uint8_t *device_names,
 	return ret0;
 }
 
-static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
+static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
+			   bool *no_response, int *late_processing)
 {
 	uint16_t syscall_nr;
 
@@ -255,9 +257,11 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 
 		if (runtime_proc->app->output_dst)
-			ret = ipc_send_data(runtime_proc->app, data, (int) data_size);
+			ret = ipc_send_data(runtime_proc->app, data,
+					    (int) data_size);
 		else
-			ret = app_write_to_shell(runtime_proc->app, data, data_size);
+			ret = app_write_to_shell(runtime_proc->app, data,
+						 data_size);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
@@ -299,7 +303,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_WRITE_TO_FILE: {
 		uint32_t ret;
 		SYSCALL_GET_TWO_ARGS_DATA
-		ret = (uint32_t) file_system_write_to_file(arg0, data, (int) data_size, (int) arg1);
+		ret = (uint32_t) file_system_write_to_file(arg0, data,
+							   (int) data_size,
+							   (int) arg1);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
@@ -309,15 +315,19 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
 		SYSCALL_GET_THREE_ARGS
 		int size = (int) arg1;
-		/* FIXME: the size info should only be in the corresponding de/marshalling macro. */
+		/* FIXME: the size info should only be in the corresponding
+		 * de/marshalling macro.
+		 */
 		if (size > (MAILBOX_QUEUE_MSG_SIZE - 5)) {
 			printf("Error: read size too big. Will truncate\n");
 			size = MAILBOX_QUEUE_MSG_SIZE - 5;
 		}
-		fs_ret = file_system_read_from_file(arg0, ret_buf, size, (int) arg2);
+		fs_ret = file_system_read_from_file(arg0, ret_buf, size,
+						    (int) arg2);
 		/* safety check */
 		if (fs_ret > size) {
-			printf("Error: unexpected return from file_system_read_from_file\n");
+			printf("Error: unexpected return from "
+			       "file_system_read_from_file\n");
 			fs_ret = size;
 		}
 		ret = (uint32_t) fs_ret;
@@ -327,7 +337,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_WRITE_FILE_BLOCKS: {
 		uint32_t ret;
 		SYSCALL_GET_THREE_ARGS
-		ret = (uint32_t) file_system_write_file_blocks(arg0, (int) arg1, (int) arg2, runtime_proc_id);
+		ret = (uint32_t) file_system_write_file_blocks(arg0, (int) arg1,
+							       (int) arg2,
+							       runtime_proc_id);
 		if (ret)
 			*late_processing = SYSCALL_WRITE_FILE_BLOCKS;
 		SYSCALL_SET_ONE_RET(ret)
@@ -336,7 +348,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_READ_FILE_BLOCKS: {
 		uint32_t ret;
 		SYSCALL_GET_THREE_ARGS
-		ret = (uint32_t) file_system_read_file_blocks(arg0, (int) arg1, (int) arg2, runtime_proc_id);
+		ret = (uint32_t) file_system_read_file_blocks(arg0, (int) arg1,
+							      (int) arg2,
+							      runtime_proc_id);
 		if (ret)
 			*late_processing = SYSCALL_READ_FILE_BLOCKS;
 		SYSCALL_SET_ONE_RET(ret)
@@ -372,14 +386,18 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_CREATION: {
-		handle_request_secure_storage_creation_syscall(runtime_proc_id, buf);
+		handle_request_secure_storage_creation_syscall(runtime_proc_id,
+							       buf);
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_ACCESS: {
-		handle_request_secure_storage_access_syscall(runtime_proc_id, buf);
+		handle_request_secure_storage_access_syscall(runtime_proc_id,
+							     buf);
 		break;
 	}
-	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
+	/* FIXME: we also to need to deal with cases that the app does not
+	 * properly call the delete
+	 */
 	case SYSCALL_DELETE_SECURE_STORAGE: {
 		handle_delete_secure_storage_syscall(runtime_proc_id, buf);
 		break;
@@ -474,12 +492,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
 			break;
 		}
-		printf("%s [1]: bluetooth\n", __func__);
 
 		/* Reset bluetooth proc if needed */
 		if (bluetooth_proc_need_reset)
 			reset_proc(P_BLUETOOTH);
-		printf("%s [2]: bluetooth\n", __func__);
 
 		bluetooth_proc_need_reset = true;
 
@@ -584,7 +600,9 @@ static void handle_untrusted_syscall(uint8_t *buf)
 		handle_request_secure_storage_access_syscall(P_UNTRUSTED, buf);
 		break;
 	}
-	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
+	/* FIXME: we also to need to deal with cases that the app does not
+	 * properly call the delete
+	 */
 	case SYSCALL_DELETE_SECURE_STORAGE: {
 		handle_delete_secure_storage_syscall(P_UNTRUSTED, buf);
 		break;
@@ -616,7 +634,8 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		bool no_response = false;
 		int late_processing = NUM_SYSCALLS;
 
-		handle_syscall(runtime_proc_id, buf, &no_response, &late_processing);
+		handle_syscall(runtime_proc_id, buf, &no_response,
+			       &late_processing);
 
 		/* send response */
 		if (!no_response) {

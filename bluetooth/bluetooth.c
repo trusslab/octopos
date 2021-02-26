@@ -252,7 +252,6 @@ static void process_cmd(uint8_t *buf)
 		 * Persistent ones need a time-out.
 		 * Can provide TPM measurements if resource needs authentication
 		 */
-
 		/* No op for Bluetooth */
 		printf("Error: %s: create_resource op not supported by the "
 		       "Bluetooth service\n", __func__);
@@ -280,7 +279,6 @@ static void process_cmd(uint8_t *buf)
 		 * Other device specific info:
 		 *	network packet header
 		 */
-
 		uint8_t state[3 + (BD_ADDR_LEN * NUM_RESOURCES)];
 		uint32_t state_size = 2;
 
@@ -361,8 +359,6 @@ static void process_cmd(uint8_t *buf)
 			break;
 		}
 
-		printf("%s [1]: am_addr = %d\n", __func__, am_addr);
-			
 		if (!bound_devices[am_addr]) {
 			printf("Error: %s: device %d not bound\n", __func__,
 			       am_addr);

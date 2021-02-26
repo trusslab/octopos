@@ -162,10 +162,6 @@ error:
 
 static void *yield_resources(void *data)
 {
-	printf("%s [1]: has_storage = %d, has_context_update = %d, "
-	       "context_found = %d, trustworthy_storage_service = %d\n", __func__,
-	       has_storage, has_context_update, context_found,
-	       trustworthy_storage_service);
 	/*
 	 * Before writing to storage, we check if it is trustworthy.
 	 * Note that this is only needed/useful when we did not find any context
@@ -174,7 +170,6 @@ static void *yield_resources(void *data)
 	 */
 	if (has_storage && has_context_update &&
 	    (context_found || (!context_found && trustworthy_storage_service))) {
-		printf("%s [2]\n", __func__);
 		/* write_context_to_storage won't yield if there's an error.
 		 * Therefore, we explicitly yield instead of doing it through
 		 * write_context_to_storage.
@@ -409,7 +404,6 @@ static int perform_remote_attestation(void)
 	 */
 	ret = memcmp(measured_storage_pcr, storage_pcr,
 		     TPM_EXTEND_HASH_SIZE);
-	printf("%s [1]: ret = %d\n", __func__, ret);
 	if (ret)
 		trustworthy_storage_service = 0;
 	else
@@ -483,8 +477,6 @@ static void calculate_dose_update_context(uint16_t glucose_measurement,
 
 		glucose_measurement_avg = (glucose_measurement +
 					   context.glucose_measurement_avg) / 2;
-		printf("%s [1]: glucose_measurement_avg = %d\n", __func__,
-		       glucose_measurement_avg);
 
 		if (glucose_measurement_avg > 200)
 			*dose = 2;
@@ -533,7 +525,6 @@ void app_main(struct runtime_api *api)
 	uint8_t dose;
 	uint32_t num_bt_devices = 2;
 	uint8_t bt_device_names[BD_ADDR_LEN * 2];
-	printf("%s [1]\n", __func__);
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
 		printf("Error: %s: BTPACKET_FIXED_DATA_SIZE must be 32 (%d)\n",
@@ -598,7 +589,6 @@ void app_main(struct runtime_api *api)
 	ret = api->set_up_context((void *) &context, sizeof(struct app_context),
 				  0, 100, 200, 100, queue_update_callback, NULL,
 				  measured_storage_pcr);
-	printf("%s [1.1]: ret = %d\n", __func__, ret);
 	if (!ret) {
 		has_storage = 1;
 		if (!memcmp(context.signature, expected_context_signature,
@@ -619,14 +609,12 @@ void app_main(struct runtime_api *api)
 		insecure_printf("Error: couldn't connect to the server.\n");
 		goto terminate;
 	}
-	printf("%s [2]\n", __func__);
 
 	ret = perform_remote_attestation();
 	if (ret) {
 		insecure_printf("Error: remote attestation failed.\n");
 		goto terminate;
 	}
-	printf("%s [3]\n", __func__);
 
 	/* From here on, we need to check the PCR for I/O services we get access
 	 * to.
@@ -637,7 +625,6 @@ void app_main(struct runtime_api *api)
 		insecure_printf("Error: couldn't establish a secure channel.\n");
 		goto terminate;
 	}
-	printf("%s [4]\n", __func__);
 
 	/* Step 3 */
 	ret = receive_bluetooth_devices_passwords();
@@ -674,36 +661,6 @@ new_measurement:
 	}
 
 	/* Step 4.2: get a measurement from the glucose monitor */
-	//insecure_printf("Connecting to the bluetooth services now.\n");
-
-	///* FIXME: can't check the PCR until new TPM architecture is ready since
-	// * after a reboot of the bluetooth proc, its PCR won't match the
-	// * expected value.
-	// */
-	///* This means that glucose_monitor will be index 0 in am_addrs and
-	// * insulin_pump will be index 1 */
-	//memcpy(bt_device_names, glucose_monitor, BD_ADDR_LEN);	
-	//memcpy(bt_device_names + BD_ADDR_LEN, insulin_pump, BD_ADDR_LEN);	
-	//
-	///* FIXME: can't check the PCR until new TPM architecture is ready since
-	// * after a reboot of the bluetooth proc, its PCR won't match the
-	// * expected value.
-	// */
-	//ret = gapi->request_secure_bluetooth_access(bt_device_names,
-	//					    num_bt_devices, 200, 100,
-	//					    bt_am_addrs,
-	//					    queue_update_callback,
-	//					    //context.bluetooth_pcr);
-	//					    NULL);
-	//if (ret) {
-	//	insecure_printf("Error: couldn't get access to bluetooth.\n");
-	//	goto terminate_network;
-	//}
-
-	//has_bluetooth = 1;
-	//insecure_printf("Connected to the bluetooth service to use the glucose "
-	//		"monitor and insulin pump.\n");
-
 	/* Authenticate */
 	ret = gapi->bluetooth_send_data(bt_am_addrs[0],
 					context.glucose_monitor_password,
@@ -753,33 +710,10 @@ new_measurement:
 		insecure_printf("No insulin injection is needed. Terminating.\n");
 		goto terminate;
 	}
-	printf("%s [5]\n", __func__);
 
 	has_context_update = 1;
 
-	//terminate_bluetooth_session();
-	//has_bluetooth = 0;
-	//gapi->yield_secure_bluetooth_access();
-	printf("%s [6]\n", __func__);
-
 	insecure_printf("Need to inject %d doses of insulin.\n", dose);
-
-	///* FIXME: can't check the PCR until new TPM architecture is ready since
-	// * after a reboot of the bluetooth proc, its PCR won't match the
-	// * expected value.
-	// */
-	//ret = gapi->request_secure_bluetooth_access(insulin_pump, 200, 100,
-	//					    queue_update_callback,
-	//					    //context.bluetooth_pcr);
-	//					    NULL);
-	//printf("%s [7]\n", __func__);
-	//if (ret) {
-	//	insecure_printf("Error: couldn't get access to bluetooth.\n");
-	//	goto terminate;
-	//}
-
-	//has_bluetooth = 1;
-	//insecure_printf("Connected to the insulin pump.\n");
 
 	/* Authenticate */
 	ret = gapi->bluetooth_send_data(bt_am_addrs[1],
@@ -791,7 +725,6 @@ new_measurement:
 		goto terminate;
 	}
 
-	printf("%s [8]\n", __func__);
 	ret = gapi->bluetooth_recv_data(bt_am_addrs[1], msg,
 				  BTPACKET_FIXED_DATA_SIZE);
 	if (ret || (msg[0] != 1)) {
@@ -832,9 +765,6 @@ terminate:
 	 * in storage and contacted the server. In future runs, we are simply
 	 * trusting this check in the first run.
 	 */
-	printf("%s [5]: context_found = %d\n", __func__, context_found);
-	printf("%s [6]: trustworthy_storage_service = %d\n", __func__,
-	       trustworthy_storage_service);
 	if (context_found || (!context_found && trustworthy_storage_service)) {
 		insecure_printf("Storing data to storage for future.\n");
 		/* write_context_to_storage won't yield if there's an error.
@@ -864,5 +794,4 @@ terminate:
 		gapi->yield_network_access();
 	}
 }
-
 #endif
