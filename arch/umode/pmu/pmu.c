@@ -14,6 +14,7 @@
 #include <sys/wait.h>
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
+#include <tpm/tpm.h>
 #include <arch/pmu.h>
 
 int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
@@ -260,6 +261,12 @@ static int start_bluetooth_proc(void)
 	char *const args[] = {(char *) "bootloader_other", (char *) "bluetooth",
 			      NULL};
 	char path[] = "./bootloader/bootloader_other";
+	/* FIXME: Mingyi: this returns an error.
+	 * Note that since we are in the PMU, we can only set the locality to
+	 * PMU's locality. (And this needs to be enforced.)
+	 */
+	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_BLUETOOTH)};
+	tpm_reset_pcrs(P_PMU, pcr_list, 1);
 	return start_proc(path, args, fd_bluetooth_log, 0, 0, 0);
 }
 

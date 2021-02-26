@@ -221,6 +221,12 @@ int tpm_processor_read_pcr(uint8_t processor, uint8_t *pcr_value)
 	int rc = 0;
 	FAPI_CONTEXT *context = NULL;
 
+	/* FIXME: Mingyi: the locality should be changed to the locality of
+	 * the calling processor, not the locality of the parameter processor.
+	 * For example, when runtime calls this function (in runtime/runtime.c),
+	 * the locality should be set to the locality of that runtime and this
+	 * must be enforced.
+	 */
 	rc = tpm_initialize(&context, processor);
 	return_if_error_no_msg(rc);
 	
