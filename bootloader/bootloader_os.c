@@ -1,13 +1,16 @@
 /* OctopOS bootloader for OS */
+#if !defined(ARCH_SEC_HW_BOOT) || defined(ARCH_SEC_HW_BOOT_OS)
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
+#include <semaphore.h>
+#endif
 #include <stdint.h>
 #include <unistd.h>
-#include <semaphore.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <octopos/tpm.h>
@@ -127,3 +130,4 @@ void send_measurement_to_tpm(char *path)
 	
 	close_os_mailbox();
 }
+#endif

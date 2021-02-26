@@ -173,6 +173,8 @@ u32 page_map[NUM_PARTITIONS][PAGE_MAP_MAX_VIRT_PAGE] = {0};
 #define PARTITION_HEADER_SECTOR_LENGTH NUM_PARTITIONS
 #define PARTITION_DATA_SECTOR_OFFSET PARTITION_HEADER_SECTOR_OFFSET + PARTITION_HEADER_SECTOR_LENGTH
 
+#define BOOT_IMAGE_OFFSET 100
+
 #define MIN_PARTITION_SECTOR_SIZE 3
 
 #define create_header_offset 0
@@ -504,6 +506,31 @@ static int partition_read(int partition_id, int page_id, void *ptr)
 	return STORAGE_BLOCK_SIZE;
 }
 
+/* it directly reads physical address. for reading boot images only */
+int partition_read_physical(u32 data_address, u32 size, void *ptr)
+{
+	u32 status;
+
+	if (!is_aligned_64(ptr)) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_FAULT;
+	}
+
+	/* read partition */
+	status = FlashRead(data_address,
+					size,
+					ReadCmd,
+					CmdBfr,
+					(u8 *) ptr);
+
+	if (status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_FAULT;
+	}
+
+	return size;
+}
+
 static int partition_write_header(int partition_id, u32 offset, u32 length, void *ptr)
 {
 //	SEC_HW_DEBUG_HANG();
@@ -563,7 +590,7 @@ static int partition_write(int partition_id, int page_id, void *ptr)
 		return ERR_INVALID;
 
 	/* Check if requested page id goes beyond allocated partition size */
-	if (page_id >= partition_sizes[partition_id] / STORAGE_BLOCK_SIZE) {
+	if (page_id > partition_sizes[partition_id] / STORAGE_BLOCK_SIZE) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_PERMISSION;
 	}
@@ -594,6 +621,26 @@ static int partition_write(int partition_id, int page_id, void *ptr)
 		asm("nop");
 
 	return STORAGE_BLOCK_SIZE;
+}
+
+/* it directly writes to physical address. for writing boot images only */
+int partition_write_physical(u32 data_address, u32 size, void *ptr)
+{
+	u32 status;
+
+	// FIXME!!! this is wrong, cannot do cross page writes
+	status = FlashWrite(data_address, size, WriteCmd, (u8 *) ptr);
+
+	if (status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_FAULT;
+	}
+
+	// FIXME: a small delay is needed for the write to finish.
+	for (int i=0; i < 1000; i++)
+		asm("nop");
+
+	return size;
 }
 #endif
 
@@ -1282,6 +1329,7 @@ void process_request(uint8_t *buf)
 	}
 }
 
+#ifndef ARCH_SEC_HW_BOOT
 int main(int argc, char **argv)
 {
 	/* Non-buffering stdout */
@@ -1297,3 +1345,4 @@ int main(int argc, char **argv)
 	storage_event_loop();
 	close_storage();
 }
+#endif

@@ -194,7 +194,7 @@ static const struct block_device_operations obd_fops = {
  * And now the modules code and kernel interface.
  */
 unsigned long obd_size =
-	(STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE * STORAGE_BLOCK_SIZE) / 1024;
+	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE / 1024;
 module_param(obd_size, ulong, 0444);
 MODULE_PARM_DESC(obd_size, "Size of the partition (in kB) requested from the "
 		 "OctopOS storage service.");

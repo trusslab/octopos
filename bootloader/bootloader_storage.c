@@ -1,23 +1,39 @@
 /* OctopOS bootloader for storage */
+#if !defined(ARCH_SEC_HW_BOOT) || defined(ARCH_SEC_HW_BOOT_STORAGE)
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
-#include <stdint.h>
+#include <semaphore.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <semaphore.h>
+#endif
+#include <stdint.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <octopos/tpm.h>
 #include <os/file_system.h>
 #include <tpm/hash.h>
+#ifndef ARCH_SEC_HW_BOOT
 #include <arch/mailbox.h>
+#else
+#include <arch/mailbox_storage.h>
+#include "xil_printf.h"
+#include "arch/sec_hw.h"
+#include "sleep.h"
+#include "xstatus.h"
 
+int partition_read_physical(u32 data_address, u32 size, void *ptr);
+
+#endif
+
+
+#ifndef ARCH_SEC_HW_BOOT
 /* in file system wrapper */
 extern FILE *filep;
 /* FIXME: why should we need the total_blocks in bootloader? */
@@ -100,10 +116,22 @@ void close_mailbox(void)
 	close(fd_out);
 	close(fd_intr);
 }
+#endif
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
+#ifndef ARCH_SEC_HW_BOOT
 	/* no op */
+#else
+	int Status;
+
+	Status = init_storage();
+	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
+		return;
+	}
+
+#endif
 }
 
 /*
@@ -115,6 +143,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
  */
 int copy_file_from_boot_partition(char *filename, char *path)
 {
+#ifndef ARCH_SEC_HW_BOOT
 	uint32_t fd;
 	FILE *copy_filep;
 	uint8_t buf[STORAGE_BLOCK_SIZE];
@@ -128,6 +157,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	}
 
 	total_blocks = STORAGE_BOOT_PARTITION_SIZE;
+
 	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
@@ -166,10 +196,15 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 	close_file_system();
 	fclose(filep);
+#else
+
+#endif
 
 	return 0;
 }
 
+
+#ifndef ARCH_SEC_HW_BOOT
 void send_measurement_to_tpm(char *path)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
@@ -199,3 +234,6 @@ void send_measurement_to_tpm(char *path)
 
 	close_mailbox();
 }
+#endif
+
+#endif

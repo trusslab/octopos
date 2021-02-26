@@ -166,6 +166,7 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
+#ifndef ARCH_SEC_HW_BOOT
 	/* Initialize OCTOPOS_XMbox */
 	Config_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_STORAGE_MBOX_CMD_IN_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_cmd_in, Config_cmd_in, Config_cmd_in->BaseAddress);
@@ -354,6 +355,7 @@ int init_storage(void)
 	read_translation_log_and_initialize_mappings();
 
 	initialize_storage_space();
+#endif
 
 	return XST_SUCCESS;
 }

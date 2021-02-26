@@ -1,4 +1,4 @@
-#ifndef ARCH_SEC_HW_OS
+#if !defined(ARCH_SEC_HW_OS) && !defined(ARCH_SEC_HW_BOOT)
 
 /* OctopOS OS support for boot, reboot, processor reset, and shutdown */
 
