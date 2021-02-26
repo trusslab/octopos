@@ -319,9 +319,8 @@ static int perform_remote_attestation(void)
 	char success = 0;
 	char init_cmd = 1;
 	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
-	//uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
-	uint32_t pcr_slots[] = {(uint32_t) PROC_TO_PCR(runtime_proc_id)};
-	uint8_t num_pcr_slots = 1;
+	uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
+	uint8_t num_pcr_slots = 2;
 	int ret;
 
 	if (gapi->write_to_socket(sock, &init_cmd, 1) < 0) {
@@ -358,8 +357,6 @@ static int perform_remote_attestation(void)
 				"failed\n");
 		return -1;
 	}
-
-	sleep(20);
 
 	packet = (uint8_t *) malloc(sig_size + quote_size + 1);
 	if (!packet) { 
@@ -405,7 +402,11 @@ static int perform_remote_attestation(void)
 		return -1;
 	}
 
-	/* check the storage PCR val */
+	/* Check the storage PCR val.
+	 * Note that we're only checking the storage PCR in the first run
+	 * where we contact the server. This means that the storage service
+	 * is not trusted in future runs.
+	 */
 	ret = memcmp(measured_storage_pcr, storage_pcr,
 		     TPM_EXTEND_HASH_SIZE);
 	printf("%s [1]: ret = %d\n", __func__, ret);
@@ -510,17 +511,18 @@ void app_main(struct runtime_api *api)
 	/*
 	 * Step 0: Request all needed I/O services. Request the storage service
 	 *	   last in order to allow other services to boot, if needed.
-	 * Step 1: Check secure storage for previously-stored passwords and
+	 * Step 1: Check storage for previously-stored passwords and
 	 *	   measurements. If found, skip to Step 4.
 	 * Step 2: Connect to the server and perform remote attestation of
-	 *	   the app itself, bluetooth, and network.
+	 *	   the app itself, storage, and network.
 	 *	   Upon successful attestation, establish a secure channel.
 	 * Step 3: Receive passwords for both bluetooth devices.
-	 * Step 4: Authenticate with bluetooth devices.
-	 *	   Upon success, read from glucose_monitor (sensor) and write
-	 *	   to insulin_pump (actuator).
+	 * Step 4: Perform local attestation of the bluetooth service.
+	 *	   Upon successful attestation, authenticate with bluetooth
+	 *	   devices. Upon success authentication, read from
+	 *	   glucose_monitor (sensor) and write to insulin_pump (actuator).
 	 * Step 5: Keep track of the usage of the queues (limit and timeout).
-	 *	   Secure yield access when about to expire. For bluetooth,
+	 *	   Yield secure access when about to expire. For bluetooth,
 	 *	   terminate the sessions with devices. For network, terminate
 	 *	   the session with the server. For storage, write the latest
 	 *	   version of the context data to storage.
@@ -646,7 +648,23 @@ void app_main(struct runtime_api *api)
 	}
 
 new_measurement:
-	/* perform local attestation for bluetooth */
+	/* Step 4: perform local attestation, authenticate & send/receive
+	 * messages */
+
+	/* Step 4.1: Perform local attestation for bluetooth.
+	 * We need to do this if we have found context information in secure
+	 * storage or not. If we have not found that and this is the first run,
+	 * then we have received the bluetooth PCR value from the server and
+	 * need to check it here. If we have found the context information, we
+	 * still need to do the check using the bluetooth PCR value stored in
+	 * the first run in order to make sure we don't send the passwords of
+	 * the bluetooth devices to a malicious bluetooth service. As mentioned
+	 * in a comment in perform_remote_attestation(), in follow-up runs, we
+	 * can't perform local attestation of the storage service and hence
+	 * it's not trusted. Yet, that is not a problem here since a malicious
+	 * storage service won't have the correct passwords and hence can't
+	 * cause the app to do any harm.
+	 */
 	ret = memcmp(measured_bluetooth_pcr, context.bluetooth_pcr,
 		     TPM_EXTEND_HASH_SIZE);
 	if (ret) {
@@ -655,8 +673,7 @@ new_measurement:
 		goto terminate;
 	}
 
-	/* Step 4: authenticate & send/receive messages */
-	/* Step 4.1: get a measurement from the glucose monitor */
+	/* Step 4.2: get a measurement from the glucose monitor */
 	//insecure_printf("Connecting to the bluetooth services now.\n");
 
 	///* FIXME: can't check the PCR until new TPM architecture is ready since
@@ -730,7 +747,7 @@ new_measurement:
 	insecure_printf("glucose measurement = %d (mg/dL).\n",
 			glucose_measurement);
 
-	/* Step 4.2: if needed, send an injection request to the insulin pump */
+	/* Step 4.3: if needed, send an injection request to the insulin pump */
 	calculate_dose_update_context(glucose_measurement, &dose, context_found);
 	if (!dose) {
 		insecure_printf("No insulin injection is needed. Terminating.\n");
@@ -806,7 +823,8 @@ new_measurement:
 
 	insecure_printf("Insulin successfully adminstered.\n");
 
-	/* Step 5 */
+	/* Step 5: terminate. We're also keeping track of resource usage in
+	 * queue_update_callback() */
 terminate:
 	/*
 	 * Before writing to storage, we check if it is trustworthy.
