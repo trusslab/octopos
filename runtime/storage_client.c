@@ -699,8 +699,6 @@ int set_up_context(void *addr, uint32_t size, int do_yield,
 	context_size = size;
 	context_set = true;
 	/* Now, let's retrieve the context. */
-	//int ret = request_secure_storage_access(100, 200,
-	//			MAILBOX_DEFAULT_TIMEOUT_VAL, callback,
 	int ret = request_secure_storage_access(partition_size, limit, timeout,
 						callback, expected_pcr,
 						return_pcr);
