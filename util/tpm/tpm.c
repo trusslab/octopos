@@ -187,7 +187,7 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected)
 	return_if_error(rc, "Get Esys Error.");
 
 	rc = Esys_PCR_Reset(esys_context, pcr_selected,
-			    ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE);
+			    ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE);
 	return_if_error(rc, "PCR Reset Error.");
 	
 	return 0;
