@@ -1401,7 +1401,7 @@ static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_si
 					  size_t *quote_size)
 {
 	int rc = 0;
-	rc = tpm_attest(p_runtime, (uint8_t *) nonce, pcr_list, pcr_list_size,
+	rc = tpm_attest((uint8_t *) nonce, pcr_list, pcr_list_size,
 			signature, sig_size, (char **) quote);
 	if (rc != 0)
 		return rc;
@@ -1415,7 +1415,7 @@ static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_si
  */
 int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 {
-	tpm_processor_read_pcr(proc_id, pcr_val);
+	tpm_processor_read_pcr(PROC_TO_PCR(proc_id), pcr_val);
 	return 0;
 }
 
@@ -1669,6 +1669,7 @@ int main()
 		printf("%s: Error: couldn't initialize the runtime\n", __func__);
 		return -1;
 	}
+	enforce_running_process(p_runtime);
 
 	/* initialize syscall response queue */
 	/* FIXME: release memory on exit */

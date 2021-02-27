@@ -91,6 +91,8 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 void send_measurement_to_tpm(char *path)
 {
-	tpm_measure_service(path, P_OS);
+	enforce_running_process(P_OS);
+	tpm_measure_service(path);
+	cancel_running_process();
 	close_os_mailbox();
 }
