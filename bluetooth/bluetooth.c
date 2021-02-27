@@ -275,15 +275,17 @@ static void process_cmd(uint8_t *buf)
 		 * Used or not?
 		 * If authentication is needed, is it authenticated?
 		 * If bound, resource name size and then resouce name.
-		 * TPM quote.
 		 * Other device specific info:
 		 *	network packet header
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
 		 */
 		uint8_t state[3 + (BD_ADDR_LEN * NUM_RESOURCES)];
 		uint32_t state_size = 2;
 
 		state[0] = bound;
 		state[1] = used;
+		used = 1;
 		if (bound) {
 			int num_bound_devices = 0;
 			for (int i = 0; i < NUM_RESOURCES; i++) {
@@ -310,13 +312,15 @@ static void process_cmd(uint8_t *buf)
 	case IO_OP_AUTHENTICATE:
 		/*
 		 * Used when resource needs authentication.
-		 * If needed, TPM quote need to be sent for authentication.
 		 * "authenticated" global variable will be set on success
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
 		 */
 
 		/* No op for Bluetooth */
 		printf("Error: %s: authenticate op not supported by the "
 		       "Bluetooth service\n", __func__);
+		used = 1;
 		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
 		break;
 
@@ -384,11 +388,33 @@ static void process_cmd(uint8_t *buf)
 		/* No op for bluetooth */
 		printf("Error: %s: receive_data op not supported by the "
 		       "Bluetooth service\n", __func__);
+		used = 1;
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		break;
+
+	case IO_OP_DESTROY_RESOURCE:
+		/*
+		 * Return error if "bound" not set.
+		 * Return error if authentication is needed and not authenticated. 
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
+		 * Destroy resource(s).
+		 */ 
+
+		/* No op for bluetooth */
+		printf("Error: %s: destroy_resource op not supported by the "
+		       "Bluetooth service\n", __func__);
+		used = 1;
 		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
 		break;
 
 	default:
+		/*
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
+		 */
 		printf("Error: %s: unknown op (%d)\n", __func__, buf[0]);
+		used = 1;
 		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
 		break;
 	}
