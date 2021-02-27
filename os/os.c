@@ -13,6 +13,7 @@
 #ifndef ARCH_SEC_HW
 #include <os/boot.h>
 #endif
+#include <tpm/tpm.h>
 #include <arch/mailbox_os.h>
 #ifndef ARCH_SEC_HW
 #include <arch/pmu.h>
@@ -64,6 +65,8 @@ int main()
 	int ret = init_os_mailbox();
 	if (ret)
 		return ret;
+
+	enforce_running_process(P_OS);
 
 #ifndef ARCH_SEC_HW
 	connect_to_pmu();

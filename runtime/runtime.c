@@ -40,8 +40,9 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <octopos/bluetooth.h>
-#include <tpm/tpm.h>
+/* FIXME: tpm/tpm.h should be moved to octopos/tpm.h */
 #include <tpm/hash.h>
+#include <tpm/tpm.h>
 #include <arch/mailbox_runtime.h>
 
 #ifdef ARCH_SEC_HW
@@ -362,7 +363,8 @@ static void *tcp_receive(void *_data)
 	while (1) {
 		uint8_t *buf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		if (!buf) {
-			printf("%s: Error: could not allocate memory for buf\n", __func__);
+			printf("Error: %s: could not allocate memory for buf\n",
+			       __func__);
 			exit(-1);
 		}
 
@@ -371,7 +373,8 @@ static void *tcp_receive(void *_data)
 
 		data = ip_receive(buf, &data_size);
 		if (!data_size) {
-			printf("%s: Error: bad network data message\n", __func__);
+			printf("Error: %s: bad network data message\n",
+			       __func__);
 			continue;
 		}
 
@@ -381,7 +384,8 @@ static void *tcp_receive(void *_data)
 		/* FIXME: add */
 		//pkb_safe();
 		if (data_size != (pkb->pk_len + sizeof(*pkb))) {
-			printf("%s: Error: packet size is not correct.\n", __func__);
+			printf("Error: %s: packet size is not correct.\n",
+			       __func__);
 			return NULL;
 		}
 
@@ -497,7 +501,7 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
 #else
-		printf("%s: Error: failed to attest secure keyboard access\n",
+		printf("Error: %s: failed to attest secure keyboard access\n",
 		       __func__);
 #endif
 		return ERR_FAULT;
@@ -513,7 +517,7 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_KEYBOARD, expected_pcr);
 		if (ret) {
-			printf("%s: Error: unexpected PCR\n", __func__);
+			printf("Error: %s: unexpected PCR\n", __func__);
 			mailbox_yield_to_previous_owner(Q_KEYBOARD);
 			
 			queue_limits[Q_KEYBOARD] = 0;
@@ -572,7 +576,7 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 #ifdef ARCH_SEC_HW
 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
 #else
-		printf("%s: Error: failed to attest secure keyboard access\n",
+		printf("Error: %s: failed to attest secure keyboard access\n",
 		       __func__);
 #endif
 		return ERR_FAULT;
@@ -588,7 +592,7 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_SERIAL_OUT, expected_pcr);
 		if (ret) {
-			printf("%s: Error: unexpected PCR\n", __func__);
+			printf("Error: %s: unexpected PCR\n", __func__);
 			wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
 			mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
 
@@ -819,7 +823,7 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
 						     limit, timeout);
 	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure ipc send queue "
+		printf("Error: %s: failed to attest secure ipc send queue "
 		       "access\n", __func__);
 		return ERR_FAULT;
 	}
@@ -830,7 +834,7 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 	attest_ret = mailbox_attest_queue_access(q_runtime,
 					WRITE_ACCESS, count, other runtime);
 	if (!attest_ret) {
-		printf("%s: Error: failed to attest secure ipc recv queue access\n", __func__);
+		printf("Error: %s: failed to attest secure ipc recv queue access\n", __func__);
 		return ERR_FAULT;
 	}*/
 #endif
@@ -982,7 +986,7 @@ static void close_socket(struct socket *sock)
 
 	/* FIXME: 5 for close is an over-approximation (it only needs 1). */
 	if (!has_network_access || (network_access_count < 5)) {
-		printf("%s: Error: has no or insufficient network access.\n", __func__);
+		printf("Error: %s: has no or insufficient network access.\n", __func__);
 		do_close = false;
 	}
 
@@ -1008,7 +1012,7 @@ static int connect_socket(struct socket *sock, struct sock_addr *skaddr)
 {
 	/* FIXME: 20 packets for connect is an over-approximation. */
 	if (!has_network_access || (network_access_count < 10)) {
-		printf("%s: Error: has no or insufficient network access.\n",
+		printf("Error: %s: has no or insufficient network access.\n",
 		       __func__);
 		return ERR_INVALID;
 	}
@@ -1023,7 +1027,7 @@ static int read_from_socket(struct socket *sock, void *buf, int len)
 	/* FIXME: calculate more precisely how many packets will be needed. */
 	if (!has_network_access ||
 	    (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
-		printf("%s: Error: has no or insufficient network access.\n",
+		printf("Error: %s: has no or insufficient network access.\n",
 		       __func__);
 		return 0;
 	}
@@ -1039,7 +1043,7 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 	/* FIXME: calculate more precisely how many packets will be needed. */
 	if (!has_network_access ||
 	    (network_access_count < ((len / MAILBOX_QUEUE_MSG_SIZE_LARGE) + 1))) {
-		printf("%s: Error: has no or insufficient network access.\n",
+		printf("Error: %s: has no or insufficient network access.\n",
 		       __func__);
 		return 0;
 	}
@@ -1127,7 +1131,7 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 		return (int) ret0;
 
 	if (((uint32_t) _size) != num_devices) {
-		printf("%s: Error: invalid response from the OS\n", __func__);
+		printf("Error: %s: invalid response from the OS\n", __func__);
 		return ERR_INVALID;
 	}
 
@@ -1136,14 +1140,14 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	/* Verify mailbox state */
 	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_IN, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure bluetooth cmd write "
+		printf("Error: %s: failed to attest secure bluetooth cmd write "
 		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
 	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_OUT, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure bluetooth cmd read "
+		printf("Error: %s: failed to attest secure bluetooth cmd read "
 		       "access\n", __func__);
 		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
@@ -1152,7 +1156,7 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 
 	ret = mailbox_attest_queue_access(Q_BLUETOOTH_DATA_IN, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure bluetooth data write "
+		printf("Error: %s: failed to attest secure bluetooth data write "
 		       "access\n", __func__);
 		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
@@ -1162,7 +1166,7 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 
 	ret = mailbox_attest_queue_access(Q_BLUETOOTH_DATA_OUT, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure bluetooth data read "
+		printf("Error: %s: failed to attest secure bluetooth data read "
 		       "access\n", __func__);
 		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
 		wait_until_empty(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -1199,7 +1203,7 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 			/* FIXME: also, has a lot in common with the yield func.
 			 * (the same for other I/Os)
 			 */
-			printf("%s: Error: unexpected PCR\n", __func__);
+			printf("Error: %s: unexpected PCR\n", __func__);
 			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
 			wait_until_empty(Q_BLUETOOTH_DATA_IN,
 					 MAILBOX_QUEUE_SIZE_LARGE);
@@ -1221,7 +1225,7 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	} else if (return_pcr) {
 		ret = read_tpm_pcr_for_proc(P_BLUETOOTH, return_pcr);
 		if (ret) {
-			printf("%s: Error: couldn't read PCR\n", __func__);
+			printf("Error: %s: couldn't read PCR\n", __func__);
 			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
 			wait_until_empty(Q_BLUETOOTH_DATA_IN,
 					 MAILBOX_QUEUE_SIZE_LARGE);
@@ -1409,6 +1413,9 @@ static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_si
 	return 0;
 }
 
+/* FIXME: why do we need this func? Why not just directly use
+ * tpm_processor_read_pcr()?
+ */
 int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 {
 	tpm_processor_read_pcr(PROC_TO_PCR(proc_id), pcr_val);
@@ -1444,7 +1451,6 @@ static void load_application(char *msg)
 		.get_file_size = get_file_size,
 		.close_file = close_file,
 		.remove_file = remove_file,
-		.set_up_secure_storage_key = set_up_secure_storage_key,
 		.request_secure_storage_access = request_secure_storage_access,
 		.yield_secure_storage_access = yield_secure_storage_access,
 		.delete_and_yield_secure_storage = delete_and_yield_secure_storage,
@@ -1641,12 +1647,14 @@ int main()
 	}
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
-		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
+		printf("Error: %s: storage data queue msg size must be equal "
+		       "to storage block size\n", __func__);
 		return -1;
 	}
 #ifdef ARCH_UMODE
 	if (argc != 2) {
-		printf("Error: incorrect command. Use ``runtime <runtime_ID>''.\n");
+		printf("Error: %s: incorrect command. Use ``runtime "
+		       "<runtime_ID>''.\n", __func__);
 		return -1;
 	}
 
@@ -1657,20 +1665,23 @@ int main()
 	printf("%s: runtime%d init\n", __func__, runtime_id);
 
 	if (runtime_id < 1 || runtime_id > 2) {
-		printf("Error: invalid runtime ID.\n");
+		printf("Error: %s: invalid runtime ID.\n", __func__);
 		return -1;
 	}
 	int ret = init_runtime(runtime_id);
 
 	if (ret) {
-		printf("%s: Error: couldn't initialize the runtime\n", __func__);
+		printf("Error: %s: couldn't initialize the runtime\n", __func__);
 		return -1;
 	}
 	enforce_running_process(p_runtime);
 
+	enforce_running_process(p_runtime);
+
 	/* initialize syscall response queue */
 	/* FIXME: release memory on exit */
-	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+						       MAILBOX_QUEUE_MSG_SIZE);
 	srq_size = MAILBOX_QUEUE_SIZE;
 	srq_msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	srq_counter = 0;
@@ -1688,7 +1699,8 @@ int main()
 #ifdef ARCH_UMODE
 	ret = net_stack_init();
 	if (ret) {
-		printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
+		printf("Error: %s: couldn't initialize the runtime network "
+		       "stack\n", __func__);
 		return -1;
 	}
 #endif

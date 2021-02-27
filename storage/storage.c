@@ -14,10 +14,15 @@
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
+#include <octopos/io.h>
 #include <octopos/error.h>
+#include <tpm/hash.h>
+#include <tpm/tpm.h>
 
 #include "arch/mailbox_storage.h"
 #include "arch/syscall.h"
+
+#define STORAGE_KEY_SIZE	TPM_EXTEND_HASH_SIZE  /* bytes */
 
 #ifdef ARCH_SEC_HW_STORAGE
 #include "ff.h"
@@ -209,55 +214,68 @@ struct partition {
 	uint32_t size; /* in blocks */
 	char data_name[256];
 	char create_name[256];
-	char lock_name[256];
-	bool is_created;
-	bool is_locked;
+	char keys_name[256];
+	uint8_t is_created;
 };
 
 #define NUM_PARTITIONS		6
 
 /* FIXME: determine partitions and their sizes dynamically. */
 struct partition partitions[NUM_PARTITIONS];
+/*
+ * The following is assumed elsewhere and hence must be the case here.
+ * Partition 0 is the boot partition.
+ * Partition 1 is the root fs partition for the untrusted domain.
+ */
 uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
-	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100};
+	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100, 100};
 
-bool is_queue_set_bound = false;
-int bound_partition = -1;
-
-uint8_t config_key[STORAGE_KEY_SIZE];
-bool is_config_locked = false;
+uint8_t bound_partition = 0xFF; /* 0xFF is an invalid partition number. */
+uint8_t bound = 0;
+uint8_t used = 0;
+uint8_t authenticated = 0;
 
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 void initialize_storage_space(void)
 {
+	FILE *filep, *filep2;
+	struct partition *partition;
+	int suffix, i;
+	uint32_t tag, size, j;
+
 #ifdef ARCH_UMODE
 	chdir("./storage");
 #endif
-	for (int i = 0; i < NUM_PARTITIONS; i++) {
-		struct partition *partition;
-		int suffix = i;
+	for (i = 0; i < NUM_PARTITIONS; i++) {
+		suffix = i;
 		partition = &partitions[i];
 		partition->size = partition_sizes[i];
 
 		memset(partition->data_name, 0x0, 256);
-		sprintf(partition->data_name, "octopos_partition_%d_data", suffix);
+		sprintf(partition->data_name, "octopos_partition_%d_data",
+			suffix);
 
 		memset(partition->create_name, 0x0, 256);
-		sprintf(partition->create_name, "octopos_partition_%d_create", suffix);
+		sprintf(partition->create_name, "octopos_partition_%d_create",
+			suffix);
 
-		memset(partition->lock_name, 0x0, 256);
-		sprintf(partition->lock_name, "octopos_partition_%d_lock", suffix);
+		memset(partition->keys_name, 0x0, 256);
+		sprintf(partition->keys_name, "octopos_partition_%d_keys",
+			suffix);
 
-		FILE *filep = fop_open(partition->data_name, "r");
+		filep = fop_open(partition->data_name, "r");
 		if (!filep) {
-			/* create empty file */
-			FILE *filep2 = fop_open(partition->data_name, "w");
-			/* populate with zeros (so that first read doesn't return an error */
 			uint8_t zero_block[STORAGE_BLOCK_SIZE];
+			/* create empty file */
+			filep2 = fop_open(partition->data_name, "w");
+			/* populate with zeros (so that first read doesn't
+			 * return an error
+			 */
 			memset(zero_block, 0x0, STORAGE_BLOCK_SIZE);
 			fop_seek(filep2, 0, SEEK_SET);
-			for (uint32_t j = 0; j < partition->size; j++)
-				fop_write(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep2);
+			for (j = 0; j < partition->size; j++)
+				fop_write(zero_block, sizeof(uint8_t),
+					  STORAGE_BLOCK_SIZE, filep2);
 			fop_close(filep2);
 		} else {
 			fop_close(filep);
@@ -267,75 +285,55 @@ void initialize_storage_space(void)
 		filep = fop_open(partition->create_name, "r");
 		if (!filep) {
 			/* create empty file */
-			FILE *filep2 = fop_open(partition->create_name, "w");
+			filep2 = fop_open(partition->create_name, "w");
 			fop_close(filep2);
-			/* Also wipe lock info (which should not have any valid key anyway. */
-			filep2 = fop_open(partition->lock_name, "w");
+			/* Also wipe keys info (which should not have any valid
+			 * key anyway).
+			 */
+			filep2 = fop_open(partition->keys_name, "w");
 			fop_close(filep2);
-			partition->is_locked = false;
 			continue;
 		}
 
 		fop_seek(filep, 0, SEEK_SET);
-		uint32_t tag = 0;
-		uint32_t size = (uint32_t) fop_read(&tag, sizeof(uint8_t), 4, filep);
+		tag = 0;
+		size = (uint32_t) fop_read(&tag, sizeof(uint8_t), 4, filep);
 		fop_close(filep);
 		if (size == 4 && tag == 1) {
-			partition->is_created = true;
+			partition->is_created = 1;
 		} else {
 			/* create empty file */
-			FILE *filep2 = fop_open(partition->create_name, "w");
+			filep2 = fop_open(partition->create_name, "w");
 			fop_close(filep2);
-			/* Also wipe any key info. This should not normally happen. */
-			filep2 = fop_open(partition->lock_name, "w");
+			/* Also wipe any key info. This should not normally
+			 * happen.
+			 */
+			filep2 = fop_open(partition->keys_name, "w");
 			fop_close(filep2);
-			partition->is_locked = false;
 			continue;
-		}
-
-		/* lock partitions that have an active key */
-		filep = fop_open(partition->lock_name, "r");
-		if (!filep) {
-			/* create empty file */
-			FILE *filep2 = fop_open(partition->lock_name, "w");
-			fop_close(filep2);
-			partition->is_locked = false;
-			continue;
-		}
-
-		uint8_t key[STORAGE_KEY_SIZE];
-		fop_seek(filep, 0, SEEK_SET);
-		size = (uint32_t) fop_read(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
-		fop_close(filep);
-		if (size == STORAGE_KEY_SIZE) {
-			partition->is_locked = true;
-		} else {
-			/* wipe lock file */
-			FILE *filep2 = fop_open(partition->lock_name, "w");
-			fop_close(filep2);
-			partition->is_locked = false;
 		}
 	}
-
-	/* set an initial config key */
-	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-		config_key[i] = i;
 }
 
 static int set_partition_key(uint8_t *data, int partition_id)
 {
-	FILE *filep = fop_open(partitions[partition_id].lock_name, "r+");
+	FILE *filep;
+	uint32_t size;
+	
+	filep = fop_open(partitions[partition_id].keys_name, "w");
 	if (!filep) {
-		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
+		printf("Error: %s: couldn't open %s\n", __func__,
+		       partitions[partition_id].keys_name);
 		return ERR_FAULT;
 	}
 
 	fop_seek(filep, 0, SEEK_SET);
-	uint32_t size = (uint32_t) fop_write(data, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
+	size = (uint32_t) fop_write(data, sizeof(uint8_t), STORAGE_KEY_SIZE,
+				    filep);
 	fop_close(filep);
 	if (size < STORAGE_KEY_SIZE) {
 		/* make sure to delete what was written */
-		filep = fop_open(partitions[partition_id].lock_name, "w");
+		filep = fop_open(partitions[partition_id].keys_name, "w");
 		fop_close(filep);
 		return ERR_FAULT;
 	}
@@ -345,432 +343,680 @@ static int set_partition_key(uint8_t *data, int partition_id)
 
 static int remove_partition_key(int partition_id)
 {
-	FILE *filep = fop_open(partitions[partition_id].lock_name, "w");
+	FILE *filep = fop_open(partitions[partition_id].keys_name, "w");
 	if (!filep) {
-		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
+		printf("Error: %s: couldn't open %s\n", __func__,
+		       partitions[partition_id].keys_name);
 		return ERR_FAULT;
 	}
+
 	fop_close(filep);
+
 	return 0;
 }
 
-static int unlock_partition(uint8_t *data, int partition_id)
+static int authenticate_partition(int partition_id, uint8_t proc_id)
 {
 	uint8_t key[STORAGE_KEY_SIZE];
-	FILE *filep = fop_open(partitions[partition_id].lock_name, "r");
-	if (!filep) {
-		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].lock_name);
-		return ERR_FAULT;
-	}
-
-	fop_seek(filep, 0, SEEK_SET);
-	uint32_t size = (uint32_t) fop_read(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
-	fop_close(filep);
-	if (size != STORAGE_KEY_SIZE) {
-		/* TODO: if the key file is corrupted, then we might need to unlock, otherwise, we'll lose the partition. */
-		return ERR_FAULT;
-	}
-
-	for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
-		if (key[i] != data[i])
-			return ERR_INVALID;
-	}
-
-	partitions[partition_id].is_locked = false;
+	uint8_t tpm_pcr[STORAGE_KEY_SIZE];
+	FILE *filep;
+	uint32_t size;
+	int ret;
+	
+#ifndef ARCH_UMODE
 	return 0;
+#endif
+
+	ret = tpm_processor_read_pcr(PROC_TO_PCR(proc_id), tpm_pcr);
+	if (ret) {
+		printf("Error: %s: couldn't read TPM PCR for proc %d.\n",
+		       __func__, proc_id);
+		return ERR_FAULT;
+	}
+
+	filep = fop_open(partitions[partition_id].keys_name, "r");
+	if (!filep) {
+		printf("Error: %s: couldn't open %s\n", __func__,
+		       partitions[partition_id].keys_name);
+		return ERR_FAULT;
+	}
+
+	/* We allow up to two keys and assume they're stored back to back
+	 * in the lock file.
+	 */
+	fop_seek(filep, 0, SEEK_SET);
+	size = (uint32_t) fop_read(key, sizeof(uint8_t), STORAGE_KEY_SIZE,
+				   filep);
+
+	if (size != STORAGE_KEY_SIZE) {
+		printf("Error: %s: corrupted key data.\n", __func__);
+		fop_close(filep);
+		return ERR_FAULT;
+	}
+
+	ret = memcmp(key, tpm_pcr, STORAGE_KEY_SIZE);
+	if (!ret) {
+		fop_close(filep);
+		return 0;
+	}
+
+	/* second key? */
+	fop_seek(filep, STORAGE_KEY_SIZE, SEEK_SET);
+	size = (uint32_t) fop_read(key, sizeof(uint8_t), STORAGE_KEY_SIZE,
+				   filep);
+	if (!size) {
+		/* We don't have a second key. */
+		fop_close(filep);
+		return ERR_FOUND;
+	} else if (size != STORAGE_KEY_SIZE) {
+		printf("Error: %s: corrupted key data (2).\n", __func__);
+		fop_close(filep);
+		return ERR_FAULT;
+	}
+
+	/* We have a second key. */
+	ret = memcmp(key, tpm_pcr, STORAGE_KEY_SIZE);
+	if (!ret) {
+		fop_close(filep);
+		return 0;
+	}
+
+	fop_close(filep);
+	return ERR_FOUND;
 }
 
 static int wipe_partition(int partition_id)
 {
-#ifdef ARCH_SEC_HW_STORAGE
-	FILINFO finfo;
-	UINT NumBytesWritten = 0;
-	uint8_t zero_buf[STORAGE_BLOCK_SIZE] = {0};
-	f_stat(partitions[partition_id].data_name, &finfo);
-#endif
+	uint8_t zero_block[STORAGE_BLOCK_SIZE];
+	uint32_t i;
+
 	FILE *filep = fop_open(partitions[partition_id].data_name, "w");
 	if (!filep) {
-		printf("%s: Error: couldn't open %s\n", __func__, partitions[partition_id].data_name);
+		printf("Error: %s: couldn't open %s\n", __func__,
+		       partitions[partition_id].data_name);
 		return ERR_FAULT;
 	}
-#ifdef ARCH_SEC_HW_STORAGE
-	f_write(filep, (const void*)zero_buf, finfo.fsize, &NumBytesWritten);
-#endif
+
+	/* populate with zeros (so that first read next time doesn't return an
+	 * error
+	 */
+	memset(zero_block, 0x0, STORAGE_BLOCK_SIZE);
+	fop_seek(filep, 0, SEEK_SET);
+	for (i = 0; i < partitions[partition_id].size; i++)
+		fop_write(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE,
+			  filep);
+
 	fop_close(filep);
 	return 0;
 }
 
-void process_request(uint8_t *buf)
+/*
+ * Return error if bound, used, or authenticated is set.
+ * Return error if invalid resource name
+ * Bind the resource to the data queues.
+ * Set the global var "bound"
+ * This is irreversible until reset.
+ */
+static void storage_bind_resource(uint8_t *buf)
 {
-	FILE *filep = NULL;
+	uint32_t partition_id;
 
-	/* write */
-	if (buf[0] == STORAGE_OP_WRITE) {
-		if (!is_queue_set_bound) {
-			printf("%s: Error: no partition is bound to queue set\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		int partition_id = bound_partition;
-
-		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-			printf("%s: Error: invalid partition ID\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		if (partitions[partition_id].is_locked) {
-			printf("%s: Error: partition is locked\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		filep = fop_open(partitions[partition_id].data_name, "r+");
-		if (!filep) {
-			printf("%s: Error: couldn't open %s for write\n", __func__,
-						partitions[partition_id].data_name);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		STORAGE_GET_TWO_ARGS
-		uint32_t start_block = arg0;
-		uint32_t num_blocks = arg1;
-		if (start_block + num_blocks > partitions[partition_id].size) {
-			printf("%s: Error: invalid args\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			fop_close(filep);
-			return;
-		}
-		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
-		fop_seek(filep, seek_off, SEEK_SET);
-		uint8_t data_buf[STORAGE_BLOCK_SIZE];
-		uint32_t size = 0;
-		for (uint32_t i = 0; i < num_blocks; i++) {
-			read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
-			size += (uint32_t) fop_write(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
-		}
-		STORAGE_SET_ONE_RET(size);
-		fop_close(filep);
-	} else if (buf[0] == STORAGE_OP_READ) { /* read */
-		if (!is_queue_set_bound) {
-			printf("%s: Error: no partition is bound to queue set\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		int partition_id = bound_partition;
-
-		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-			printf("%s: Error: invalid partition ID\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		if (partitions[partition_id].is_locked) {
-			printf("%s: Error: partition is locked\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		filep = fop_open(partitions[partition_id].data_name, "r");
-		if (!filep) {
-			printf("%s: Error: couldn't open %s for read\n", __func__,
-						partitions[partition_id].data_name);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		STORAGE_GET_TWO_ARGS
-		uint32_t start_block = arg0;
-		uint32_t num_blocks = arg1;
-		if (start_block + num_blocks > partitions[partition_id].size) {
-			printf("%s: Error: invalid args\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			fop_close(filep);
-			return;
-		}
-		uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
-		fop_seek(filep, seek_off, SEEK_SET);
-		uint8_t data_buf[STORAGE_BLOCK_SIZE];
-		uint32_t size = 0;
-		for (uint32_t i = 0; i < num_blocks; i++) {
-			size += (uint32_t) fop_read(data_buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
-			write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
-		}
-		STORAGE_SET_ONE_RET(size);
-		fop_close(filep);
-	} else if (buf[0] == STORAGE_OP_SET_KEY) {
-		if (!is_queue_set_bound) {
-			printf("%s: Error: no partition is bound to queue set\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		int partition_id = bound_partition;
-
-		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-			printf("%s: Error: invalid partition ID\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		if (partitions[partition_id].is_locked) {
-			printf("%s: Error: can't set the key for a locked partition\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		STORAGE_GET_ZERO_ARGS_DATA
-		if (data_size != STORAGE_KEY_SIZE) {
-			printf("%s: Error: incorrect key size\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		uint32_t ret = (uint32_t) set_partition_key(data, partition_id);
-		STORAGE_SET_ONE_RET(ret)
-	} else if (buf[0] == STORAGE_OP_UNLOCK) {
-		STORAGE_GET_ZERO_ARGS_DATA
-		if (data_size != STORAGE_KEY_SIZE) {
-			printf("%s: Error: incorrect key size (sent for unlocking)\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		int partition_id = -1;
-
-		for (int i = 0; i < NUM_PARTITIONS; i++) {
-			int ret = unlock_partition(data, i);
-			if (!ret) {
-				partition_id = i;
-				break;
-			}			
-		}
-
-		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-			STORAGE_SET_ONE_RET(ERR_EXIST)
-			return;
-		}
-
-		if (partitions[partition_id].is_locked) {
-			STORAGE_SET_ONE_RET(ERR_FAULT)
-			return;
-		}
-
-		bound_partition = partition_id;
-		is_queue_set_bound = true;
-
-		STORAGE_SET_ONE_RET(0)
-	} else if (buf[0] == STORAGE_OP_LOCK) {
-		if (!is_queue_set_bound) {
-			printf("%s: Error: no partition is bound to queue set\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		int partition_id = bound_partition;
-
-		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-			printf("%s: Error: invalid partition ID\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		partitions[partition_id].is_locked = true;
-		bound_partition = -1;
-		is_queue_set_bound = false;
-			
-		STORAGE_SET_ONE_RET(0)
-	} else if (buf[0] == STORAGE_OP_WIPE) {
-		if (!is_queue_set_bound) {
-			printf("%s: Error: no partition is bound to queue set\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		int partition_id = bound_partition;
-
-		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-			printf("%s: Error: invalid partition ID\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-		if (partitions[partition_id].is_locked) {
-			printf("%s: Error: partition is locked\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-		int ret = wipe_partition(partition_id);
-		if (ret) {
-			printf("%s: Error: couldn't wipe the partition\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_FAULT)
-			return;
-		}
-
-		ret = remove_partition_key(partition_id);
-		if (ret) {
-			printf("%s: Error: couldn't remove partition key\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_FAULT)
-			return;
-		}
-
-		bound_partition = -1;
-		is_queue_set_bound = false;
-
-		STORAGE_SET_ONE_RET(0)
-	/* creates a new secure partition */
-	/* FIXME: temp implementation */
-	} else if (buf[0] == STORAGE_OP_CREATE_SECURE_PARTITION) {
-		if (is_config_locked) {
-			printf("%s: Error: config is locked (create partition op)\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		STORAGE_GET_ONE_ARG_DATA
-		if (data_size != STORAGE_KEY_SIZE) {
-			printf("%s: Error: incorrect key size\n", __func__);
-			STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
-			return;
-		}
-		uint32_t partition_size = arg0;
-
-		int partition_id = -1;
-
-		for (int i = 0; i < NUM_PARTITIONS; i++) {
-			if (!partitions[i].is_created && partitions[i].size == partition_size) {
-				partition_id = i;
-				break;
-			}
-		}
-
-		if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-			printf("%s: Error: no partitions with the requested size available\n", __func__);
-			STORAGE_SET_TWO_RETS(ERR_AVAILABLE, 0)
-			return;
-		}
-
-		int ret = set_partition_key(data, partition_id);
-		if (ret) {
-			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-			return;
-		}
-
-		filep = fop_open(partitions[partition_id].create_name, "r+");
-		if (!filep) {
-			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-			return;
-		}
-
-		fop_seek(filep, 0, SEEK_SET);
-		uint32_t tag = 1;
-		uint32_t size = (uint32_t) fop_write(&tag, sizeof(uint8_t), 4, filep);
-		fop_close(filep);
-		if (size != 4) {
-			STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
-			if (size > 0) { /* partial write */
-				/* wipe the file */
-				FILE *filep2 = fop_open(partitions[partition_id].create_name, "w");
-				fop_close(filep2);
-			}
-			return;
-		}
-
-		partitions[partition_id].is_created = true;
-
-		/* FIXME: don't return the partition ID */
-		STORAGE_SET_TWO_RETS(0, partition_id)
-	} else if (buf[0] == STORAGE_OP_DELETE_SECURE_PARTITION) {
-		if (is_config_locked) {
-			printf("%s: Error: config is locked (delete partition op)\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		STORAGE_GET_ONE_ARG
-		uint32_t partition_id = arg0;
-
-		if (partition_id >= NUM_PARTITIONS) {
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		if (!partitions[partition_id].is_created) {
-			printf("%s: Error: partition does not exist\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_EXIST)
-			return;
-		}
-
-		if (is_queue_set_bound && (bound_partition == (int) partition_id)) {
-			printf("%s: Error: partition currently bound to the queue set\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-		if (partitions[partition_id].is_locked) {
-			printf("%s: Error: can't delete a locked partition\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		partitions[partition_id].is_created = false;
-		/* wipe the create and lock files of the partition */
-		FILE *filep2 = fop_open(partitions[partition_id].create_name, "w");
-		fop_close(filep2);
-		filep2 = fop_open(partitions[partition_id].lock_name, "w");
-		fop_close(filep2);
-		/* FIXME: do we need to wipe the partition content? */
-
-		STORAGE_SET_ONE_RET(0)
-	} else if (buf[0] == STORAGE_OP_SET_CONFIG_KEY) {
-		if (is_config_locked) {
-			printf("%s: Error: config is locked (set config key op)\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		STORAGE_GET_ZERO_ARGS_DATA
-		if (data_size != STORAGE_KEY_SIZE) {
-			printf("%s: Error: incorrect config key size\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-			config_key[i] = data[i];
-
-		STORAGE_SET_ONE_RET(0)
-
-	} else if (buf[0] == STORAGE_OP_UNLOCK_CONFIG) {
-		if (!is_config_locked) {
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		STORAGE_GET_ZERO_ARGS_DATA
-		if (data_size != STORAGE_KEY_SIZE) {
-			printf("%s: Error: incorrect key size (sent for unlocking config)\n", __func__);
-			STORAGE_SET_ONE_RET(ERR_INVALID)
-			return;
-		}
-
-		for (int i = 0; i < STORAGE_KEY_SIZE; i++) {
-			if (config_key[i] != data[i]) {
-				STORAGE_SET_ONE_RET(ERR_INVALID);
-				return;
-			}
-		}
-
-		is_config_locked = false;
-
-		STORAGE_SET_ONE_RET(0)
-	} else if (buf[0] == STORAGE_OP_LOCK_CONFIG) {
-		is_config_locked = true;
-		STORAGE_SET_ONE_RET(0)
-	} else {
+	if (bound || used || authenticated) {
+		printf("Error: %s: the bind op is invalid if bound (%d), "
+		       "used (%d), or authenticated (%d) is set.\n", __func__,
+		       bound, used, authenticated);
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
+	}
+
+	STORAGE_GET_ONE_ARG
+	partition_id = arg0;
+
+	if (partition_id >= NUM_PARTITIONS) {
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	bound_partition = partition_id;
+	bound = 1;
+
+	STORAGE_SET_ONE_RET(0)
+}
+
+/*
+ * Bound or not?
+ * Used or not?
+ * If authentication is needed, is it authenticated?
+ * If bound, resource name size and then resouce name.
+ * If needed, is resource created/destroyed?
+ * Other device specific info:
+ *	network packet header
+ * If global flag "used" not set, set it.
+ * This is irreversible until reset.
+ */
+static void storage_query_state(uint8_t *buf)
+{
+	uint8_t state[5], partition_id;
+	uint32_t state_size = 5;
+
+	state[0] = bound;
+	state[1] = used;
+	used = 1;
+	
+	state[2] = authenticated;
+	
+	partition_id = bound_partition;
+
+	state[3] = bound_partition;
+
+	/* Technically, an unnecessary check. */
+	if (partition_id >= NUM_PARTITIONS) {
+		printf("Error: %s: invalid ID for the bound partition\n",
+		       __func__);
+		state[4] = 0;
+	} else {
+		state[4] = partitions[partition_id].is_created;
+	}
+
+	STORAGE_SET_ONE_RET_DATA(0, state, state_size)
+}
+
+/*
+ * Return error if "bound" not set.
+ * Return error if authentication is needed and not authenticated. 
+ * Return error if bound resource not created (destroyed).
+ * If global flag "used" not set, set it.
+ * This is irreversible until reset.
+ * Process incoming data on data queue (one or multiple).
+ */
+static void storage_send_data(uint8_t *buf)
+{
+	FILE *filep;
+	uint8_t partition_id;
+	uint32_t start_block, num_blocks, seek_off, size, i;
+	uint8_t data_buf[STORAGE_BLOCK_SIZE];
+	
+	used = 1;
+
+	if (!bound || !authenticated) {
+		printf("Error: %s: the send_data op is invalid if bound (%d) "
+		       "or authenticated (%d) is not set.\n", __func__,
+		       bound, authenticated);
+		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+		return;
+	}
+
+	partition_id = bound_partition;
+
+	/* Technically, an unnecessary check. */
+	if (partition_id >= NUM_PARTITIONS) {
+		printf("Error: %s: invalid ID for the bound partition\n",
+		       __func__);
+		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+		return;
+	}
+
+	if (!partitions[partition_id].is_created) {
+		printf("Error: %s: partition does not exist\n", __func__);
+		STORAGE_SET_TWO_RETS(ERR_EXIST, 0)
+		return;
+	}
+
+	filep = fop_open(partitions[partition_id].data_name, "r+");
+	if (!filep) {
+		printf("Error: %s: couldn't open %s for write\n", __func__,
+					partitions[partition_id].data_name);
+		STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
+		return;
+	}
+
+	STORAGE_GET_TWO_ARGS
+	start_block = arg0;
+	num_blocks = arg1;
+	
+	if (start_block + num_blocks > partitions[partition_id].size) {
+		printf("Error: %s: invalid args\n", __func__);
+		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+		fop_close(filep);
+		return;
+	}
+
+	seek_off = start_block * STORAGE_BLOCK_SIZE;
+	fop_seek(filep, seek_off, SEEK_SET);
+	size = 0;
+
+	for (i = 0; i < num_blocks; i++) {
+		read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
+		size += (uint32_t) fop_write(data_buf, sizeof(uint8_t),
+					     STORAGE_BLOCK_SIZE, filep);
+	}
+
+	STORAGE_SET_TWO_RETS(0, size)
+	fop_close(filep);
+}
+
+/*
+ * Return error if "bound" not set.
+ * Return error if authentication is needed and not authenticated. 
+ * Return error if bound resource not created (destroyed).
+ * If global flag "used" not set, set it.
+ * This is irreversible until reset.
+ * Process incoming data on data queue (one or multiple).
+ */
+static void storage_receive_data(uint8_t *buf)
+{
+	FILE *filep;
+	uint8_t partition_id;
+	uint32_t start_block, num_blocks, seek_off, size, i;
+	uint8_t data_buf[STORAGE_BLOCK_SIZE];
+
+	used = 1;
+
+	if (!bound || !authenticated) {
+		printf("Error: %s: the receive_data op is invalid if bound (%d) "
+		       "or authenticated (%d) is not set.\n", __func__,
+		       bound, authenticated);
+		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+		return;
+	}
+
+	partition_id = bound_partition;
+	
+	/* Technically, an unnecessary check. */
+	if (partition_id >= NUM_PARTITIONS) {
+		printf("Error: %s: invalid ID for the bound partition\n",
+		       __func__);
+		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+		return;
+	}
+
+	if (!partitions[partition_id].is_created) {
+		printf("Error: %s: partition does not exist\n", __func__);
+		STORAGE_SET_TWO_RETS(ERR_EXIST, 0)
+		return;
+	}
+
+	filep = fop_open(partitions[partition_id].data_name, "r");
+	if (!filep) {
+		printf("Error: %s: couldn't open %s for read\n", __func__,
+					partitions[partition_id].data_name);
+		STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
+		return;
+	}
+
+	STORAGE_GET_TWO_ARGS
+	start_block = arg0;
+	num_blocks = arg1;
+	
+	if (start_block + num_blocks > partitions[partition_id].size) {
+		printf("Error: %s: invalid args\n", __func__);
+		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+		fop_close(filep);
+		return;
+	}
+	
+	seek_off = start_block * STORAGE_BLOCK_SIZE;
+	fop_seek(filep, seek_off, SEEK_SET);
+	size = 0;
+	
+	for (i = 0; i < num_blocks; i++) {
+		size += (uint32_t) fop_read(data_buf, sizeof(uint8_t),
+					    STORAGE_BLOCK_SIZE, filep);
+		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
+	}
+
+	STORAGE_SET_TWO_RETS(0, size)
+	fop_close(filep);
+}
+
+/* 
+ * Create a new resource
+ * Not usable if any resource is bound
+ * Non-persistent resources deleted upon reset.
+ * Persistent ones need a method to be destroyed, e.g., an explicit calls or
+ * a time-out.
+ * Receives TPM measurements if resource needs authentication
+ *
+ * FIXME: our current implementation does not allow creating arbitrary-sized
+ * partitions.
+ *
+ */
+static void storage_create_resource(uint8_t *buf)
+{
+	FILE *filep, *filep2;
+	uint32_t partition_id, tag, size;
+	int ret;
+
+	if (bound) {
+		printf("Error: %s: some partition is bound to queue set\n",
+		       __func__);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	STORAGE_GET_ONE_ARG_DATA
+	if (data_size != STORAGE_KEY_SIZE) {
+		printf("Error: %s: incorrect key (TPM hash) size\n", __func__);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	partition_id = arg0;
+
+	if (partition_id >= NUM_PARTITIONS) {
+		printf("Error: %s: invalid requested partition ID (%d)\n",
+		       __func__, partition_id);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	ret = set_partition_key(data, partition_id);
+	if (ret) {
+		STORAGE_SET_ONE_RET(ERR_FAULT)
+		return;
+	}
+
+	filep = fop_open(partitions[partition_id].create_name, "w");
+	if (!filep) {
+		printf("Error: %s: Couldn't open %s.\n", __func__,
+		       partitions[partition_id].create_name);
+		STORAGE_SET_ONE_RET(ERR_FAULT)
+		return;
+	}
+
+	fop_seek(filep, 0, SEEK_SET);
+	tag = 1;
+	size = (uint32_t) fop_write(&tag, sizeof(uint8_t), 4, filep);
+	fop_close(filep);
+	if (size != 4) {
+		STORAGE_SET_ONE_RET(ERR_FAULT)
+		if (size > 0) { /* partial write */
+			/* wipe the file */
+			filep2 = fop_open(partitions[partition_id].create_name,
+					  "w");
+			fop_close(filep2);
+		}
+		return;
+	}
+
+	partitions[partition_id].is_created = 1;
+
+	STORAGE_SET_ONE_RET(0)
+}
+
+/* 
+ * List available resources.
+ * Not usable if resource bound.
+ * If authentication is used, return keys (i.e., TPM measurements) for resources.
+ * Can be implemented to return all data in one response or in separate queries.
+ */
+static void storage_query_all_resources(uint8_t *buf)
+{
+	FILE *filep;
+	uint32_t size;
+	uint32_t num_partitions;
+	uint8_t partition_id;
+
+	if (bound) {
+		printf("Error: %s: the query_all_resources op cannot be used "
+		       "when some partition is bound\n", __func__);
+		char dummy;
+		STORAGE_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
+		return;
+	}
+
+	STORAGE_GET_TWO_ARGS
+
+	if (arg0 == 0) {
+		/* query the number of partitions */
+		num_partitions = NUM_PARTITIONS;
+		STORAGE_SET_ONE_RET_DATA(0, &num_partitions, 4)
+	} else if (arg0 == 1) {
+		/* query info of a specific partition
+		 *
+		 * data:
+		 * 4 bytes for partition size
+		 * 1 byte for is_created
+		 * if is_created, STORAGE_KEY_SIZE bytes for the key
+		 */
+		uint8_t data[5 + STORAGE_KEY_SIZE];
+		uint8_t key[STORAGE_KEY_SIZE];
+
+		partition_id = arg1;
+
+		if (partition_id >= NUM_PARTITIONS) {
+			printf("Error: %s: invalid partition_id (%d)\n",
+			       __func__, partition_id);
+			char dummy;
+			STORAGE_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
+			return;
+		}
+
+		memcpy(data, &partitions[partition_id].size, 4);
+
+		data[4] = partitions[partition_id].is_created;
+
+		if (data[4]) {
+			filep = fop_open(partitions[partition_id].keys_name,
+					 "r");
+			if (!filep) {
+				printf("Error: %s: couldn't open %s\n", __func__,
+				       partitions[partition_id].keys_name);
+				char dummy;
+				STORAGE_SET_ONE_RET_DATA(ERR_FAULT, &dummy, 0)
+				return;
+			}
+
+			fop_seek(filep, 0, SEEK_SET);
+			size = (uint32_t) fop_read(key, sizeof(uint8_t),
+						   STORAGE_KEY_SIZE, filep);
+			fop_close(filep);
+
+			if (size != STORAGE_KEY_SIZE) {
+				printf("Error: %s: corrupted key data.\n",
+				       __func__);
+				char dummy;
+				STORAGE_SET_ONE_RET_DATA(ERR_FAULT, &dummy, 0)
+				return;
+			}
+
+			memcpy(&data[5], key, STORAGE_KEY_SIZE);
+		}
+
+		STORAGE_SET_ONE_RET_DATA(0, &data, 5 + STORAGE_KEY_SIZE)
+	}
+}
+
+/*
+ * Used when resource needs authentication.
+ * Return error if "bound" not set.
+ * Return error if "authenticated" already set.
+ * Return error if bound resource not created (destroyed).
+ * "authenticated" global variable will be set on success
+ * If global flag "used" not set, set it.
+ * This is irreversible until reset.
+ * May require/receive signature for the TPM measurement
+ *
+ * @proc_id: ID of the requesting processor.
+ */
+static void storage_authenticate(uint8_t *buf, uint8_t proc_id)
+{
+	uint8_t partition_id;
+	int ret;
+
+	used = 1;
+
+	if (!bound) {
+		printf("Error: %s: no partition is bound to queue set\n",
+		       __func__);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	if (authenticated) {
+		printf("Error: %s: already authenticated.\n", __func__);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	partition_id = bound_partition;
+
+	/* Technically, an unnecessary check. */
+	if (bound_partition >= NUM_PARTITIONS) {
+		printf("Error: %s: invalid ID for the bound partition\n",
+		       __func__);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	if (!partitions[partition_id].is_created) {
+		printf("Error: %s: partition does not exist\n", __func__);
+		STORAGE_SET_ONE_RET(ERR_EXIST)
+		return;
+	}
+
+	ret = authenticate_partition(partition_id, proc_id);
+	if (ret) {
+		printf("Error: %s: authentication failed\n",__func__);
+		STORAGE_SET_ONE_RET(ERR_PERMISSION)
+		return;
+	}			
+
+	authenticated = 1;
+
+	STORAGE_SET_ONE_RET(0)
+}
+
+/*
+ * Return error if "bound" not set.
+ * Return error if "authenticated" not set.
+ * "authenticated" global variable will be unset.
+ * If global flag "used" not set, set it.
+ * This is irreversible until rest.
+ */
+static void storage_deauthenticate(uint8_t *buf)
+{
+	used = 1;
+
+	if (!bound || !authenticated) {
+		printf("Error: %s: the deauthenticate op is invalid if bound "
+		       "(%d) or authenticated (%d) is not set.\n", __func__,
+		       bound, authenticated);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	authenticated = 0;	
+		
+	STORAGE_SET_ONE_RET(0)
+}
+
+/*
+ * Return error if "bound" not set.
+ * Return error if authentication is needed and not authenticated. 
+ * Return error if bound resource not created (destroyed).
+ * If global flag "used" not set, set it.
+ * This is irreversible until reset.
+ * Destroy resource(s).
+ * After a resource is destroyed, it cannot be used.
+ * Deauthenticate if needed.
+ */ 
+static void storage_destroy_resource(uint8_t *buf)
+{
+	uint8_t partition_id;
+	int ret;
+	FILE *filep;
+
+	used = 1;
+
+	if (!bound || !authenticated) {
+		printf("Error: %s: the destroy_resource op is invalid if bound "
+		       "(%d) or authenticated (%d) is not set.\n", __func__,
+		       bound, authenticated);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	partition_id = bound_partition;
+
+	if (partition_id >= NUM_PARTITIONS) {
+		printf("Error: %s: invalid partition ID\n", __func__);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	if (!partitions[partition_id].is_created) {
+		printf("Error: %s: partition does not exist\n", __func__);
+		STORAGE_SET_ONE_RET(ERR_EXIST)
+		return;
+	}
+
+	authenticated = 0;
+	
+	ret = wipe_partition(partition_id);
+	if (ret)
+		printf("Error: %s: couldn't wipe the partition\n", __func__);
+
+	ret = remove_partition_key(partition_id);
+	if (ret)
+		printf("Error: %s: couldn't remove partition key\n", __func__);
+
+	partitions[partition_id].is_created = 0;
+	/* wipe the create file of the partition */
+	filep = fop_open(partitions[partition_id].create_name, "w");
+	fop_close(filep);
+
+	STORAGE_SET_ONE_RET(0)
+}
+
+void process_request(uint8_t *buf, uint8_t proc_id)
+{
+	switch (buf[0]) {
+	case IO_OP_QUERY_ALL_RESOURCES:
+		storage_query_all_resources(buf);	
+		break;
+
+	case IO_OP_CREATE_RESOURCE:
+		storage_create_resource(buf);
+		break;
+
+	case IO_OP_BIND_RESOURCE:
+		storage_bind_resource(buf);		
+		break;
+
+	case IO_OP_QUERY_STATE:
+		storage_query_state(buf);
+		break;
+
+	case IO_OP_AUTHENTICATE:
+		storage_authenticate(buf, proc_id);
+		break;
+
+	case IO_OP_SEND_DATA:
+		storage_send_data(buf);
+		break;
+
+	case IO_OP_RECEIVE_DATA:
+		storage_receive_data(buf);
+		break;
+
+	case IO_OP_DEAUTHENTICATE:
+		storage_deauthenticate(buf);
+		break;
+
+	case IO_OP_DESTROY_RESOURCE:
+		storage_destroy_resource(buf);
+		break;
+
+	default:
+		/*
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
+		 */
+		printf("Error: %s: unknown op (%d)\n", __func__, buf[0]);
+		used = 1;
+		STORAGE_SET_ONE_RET(ERR_INVALID)
+		break;
 	}
 }
 
@@ -791,9 +1037,18 @@ int main(int argc, char **argv)
 	}
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
-		printf("Error: storage data queue msg size must be equal to storage block size\n");
+		printf("Error: storage data queue msg size must be equal to "
+		       "storage block size\n");
 		return -1;
 	}
+
+	if (STORAGE_KEY_SIZE != TPM_EXTEND_HASH_SIZE) {
+		printf("Error: storage key size must be equal to the TPM "
+		       "extend hash size\n");
+		return -1;
+	}
+
+	enforce_running_process(P_STORAGE);
 
 	init_storage();
 	storage_event_loop();

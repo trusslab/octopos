@@ -46,21 +46,23 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
-		printf("Error: %s: Couldn't open file %s in octopos file system.\n",
-		       __func__, filename);
+		printf("Error: %s: Couldn't open file %s in octopos file "
+		       "system.\n", __func__, filename);
 		return -1;
 	}
 
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
-		printf("Error: %s: Couldn't open the target file (%s).\n", __func__, path);
+		printf("Error: %s: Couldn't open the target file (%s).\n",
+		       __func__, path);
 		return -1;
 	}
 
 	offset = 0;
 
 	while (1) {
-		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE, offset);
+		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE,
+						   offset);
 		if (_size == 0)
 			break;
 

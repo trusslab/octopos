@@ -163,9 +163,9 @@ static int start_proc(char *path, char *const args[], int fd_log,
 static int start_mailbox_proc(void)
 {
 	int ret;
-
 	char *const args[] = {(char *) "mailbox", NULL};
 	char path[] = "./arch/umode/mailbox/mailbox";
+
 	ret = start_proc(path, args, fd_mailbox_log, 0, 0, 0);
 	mailbox_ready = 1;
 
@@ -175,9 +175,9 @@ static int start_mailbox_proc(void)
 static int start_tpm_server_proc(void)
 {
 	int ret;
-
 	char *const args[] = {(char *) "tpm_server", NULL};
 	char path[] = "./external/ibmtpm/tpm_server";
+	
 	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
 	return ret;
@@ -186,12 +186,12 @@ static int start_tpm_server_proc(void)
 static int start_tpm2_abrmd_proc(void)
 {
 	int ret;
-
 	/* FIXME: run as tss user (sudo -u tss ...) and remove --allow-root.
 	 * see docs/tpm.rst */
 	char *const args[] = {(char *) "tpm2-abrmd", (char *) "--tcti=mssim",
 			      (char *) "--allow-root", NULL};
 	char path[] = "/usr/local/sbin/tpm2-abrmd";
+	
 	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
 	return ret;
@@ -201,6 +201,10 @@ static int start_os_proc(void)
 {
 	char *const args[] = {(char *) "bootloader_os", (char *) "os", NULL};
 	char path[] = "./bootloader/bootloader_os";
+	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_OS)};
+
+	tpm_reset_pcrs(pcr_list, 1);
+
 	return start_proc(path, args, fd_os_log, 0, 0, 0);
 }
 
@@ -209,6 +213,10 @@ static int start_keyboard_proc(void)
 	char *const args[] = {(char *) "bootloader_other", (char *) "keyboard",
 			      NULL};
 	char path[] = "./bootloader/bootloader_other";
+	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_KEYBOARD)};
+
+	tpm_reset_pcrs(pcr_list, 1);
+
 	return start_proc(path, args, fd_keyboard_log, 1, 0, 0);
 }
 
@@ -217,6 +225,10 @@ static int start_serial_out_proc(void)
 	char *const args[] = {(char *) "bootloader_other", (char *) "serial_out",
 			      NULL};
 	char path[] = "./bootloader/bootloader_other";
+	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_SERIAL_OUT)};
+
+	tpm_reset_pcrs(pcr_list, 1);
+
 	return start_proc(path, args, fd_serial_out_log, 0, 1, 0);
 }
 
@@ -226,16 +238,21 @@ static int start_runtime_proc(char *runtime_id)
 	char *const args[] = {(char *) "bootloader", (char *) "runtime",
 			      runtime_id, NULL};
 	char path[] = "./bootloader/bootloader_other";
-	
+	uint32_t pcr_list[1];
+
 	if (*runtime_id == '1') {
 		fd_log = fd_runtime1_log;
+		pcr_list[0] =  (uint32_t) PROC_TO_PCR(P_RUNTIME1);
 	} else if (*runtime_id == '2') {
 		fd_log = fd_runtime2_log;
+		pcr_list[0] =  (uint32_t) PROC_TO_PCR(P_RUNTIME2);
 	} else {
 		printf("Error: %s: invalid runtime ID (%c)\n", __func__,
 		       *runtime_id);
 		return ERR_INVALID;
 	}
+
+	tpm_reset_pcrs(pcr_list, 1);
 
 	return start_proc(path, args, fd_log, 0, 0, 0);
 }
@@ -245,6 +262,10 @@ static int start_storage_proc(void)
 	char *const args[] = {(char *) "bootloader_storage", (char *) "storage",
 			      NULL};
 	char path[] = "./bootloader/bootloader_storage";
+	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_STORAGE)};
+
+	tpm_reset_pcrs(pcr_list, 1);
+
 	return start_proc(path, args, fd_storage_log, 0, 0, 0);
 }
 
@@ -253,6 +274,10 @@ static int start_network_proc(void)
 	char *const args[] = {(char *) "bootloader_other", (char *) "network",
 			      NULL};
 	char path[] = "./bootloader/bootloader_other";
+	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_NETWORK)};
+
+	tpm_reset_pcrs(pcr_list, 1);
+
 	return start_proc(path, args, fd_network_log, 0, 0, 0);
 }
 
@@ -262,7 +287,9 @@ static int start_bluetooth_proc(void)
 			      NULL};
 	char path[] = "./bootloader/bootloader_other";
 	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_BLUETOOTH)};
+
 	tpm_reset_pcrs(pcr_list, 1);
+
 	return start_proc(path, args, fd_bluetooth_log, 0, 0, 0);
 }
 
@@ -272,6 +299,10 @@ static int start_untrusted_proc(void)
 		(char *) "root=/dev/octopos_blk",
 		(char *) "mem=128M", NULL};
 	char path[] = "./bootloader/bootloader_other";
+	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_UNTRUSTED)};
+
+	tpm_reset_pcrs(pcr_list, 1);
+
 	return start_proc(path, args, fd_untrusted_log, 0, 0, 1);
 }
 

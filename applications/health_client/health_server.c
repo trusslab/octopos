@@ -325,8 +325,6 @@ int main(int argc, char *argv[])
 	 * of the runtimes. We can be sure that we're talking to that runtime
 	 * since other runtimes won't have the ability to read the PCR for this
 	 * runtime.
-	 *
-	 * FIXME: add locality check for attestation reports to TPM.
 	 */
 
 	buffer[0] = 1;
