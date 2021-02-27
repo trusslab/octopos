@@ -173,7 +173,10 @@ u32 page_map[NUM_PARTITIONS][PAGE_MAP_MAX_VIRT_PAGE] = {0};
 #define PARTITION_HEADER_SECTOR_LENGTH NUM_PARTITIONS
 #define PARTITION_DATA_SECTOR_OFFSET PARTITION_HEADER_SECTOR_OFFSET + PARTITION_HEADER_SECTOR_LENGTH
 
+/* boot images store at this sector and beyond */
 #define BOOT_IMAGE_OFFSET 100
+/* FIXME: max image size supported is 128KB (sector size) */
+#define BOOT_IMAGE_PER_IMAGE_SIZE 1
 
 #define MIN_PARTITION_SECTOR_SIZE 3
 
@@ -212,7 +215,7 @@ extern u8 ReadCmd;
 extern u8 WriteCmd;
 extern u8 CmdBfr[8];
 extern FlashInfo Flash_Config_Table[];
-#define QSPI_PAGE_SIZE 512
+
 int FlashErase(u32 Address, u32 ByteCount,
 		u8 *WriteBfrPtr);
 int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
@@ -291,9 +294,6 @@ static int partition_erase(int partition_id, int part)
 {
 	struct partition *partition;
 	u32 header_address, data_address, status;
-//	uint8_t zero_block[QSPI_PAGE_SIZE + 5] __attribute__ ((aligned(64)));
-
-//	memset(zero_block, 0xfa, QSPI_PAGE_SIZE);
 
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
@@ -506,31 +506,6 @@ static int partition_read(int partition_id, int page_id, void *ptr)
 	return STORAGE_BLOCK_SIZE;
 }
 
-/* it directly reads physical address. for reading boot images only */
-int partition_read_physical(u32 data_address, u32 size, void *ptr)
-{
-	u32 status;
-
-	if (!is_aligned_64(ptr)) {
-		SEC_HW_DEBUG_HANG();
-		return ERR_FAULT;
-	}
-
-	/* read partition */
-	status = FlashRead(data_address,
-					size,
-					ReadCmd,
-					CmdBfr,
-					(u8 *) ptr);
-
-	if (status != XST_SUCCESS) {
-		SEC_HW_DEBUG_HANG();
-		return ERR_FAULT;
-	}
-
-	return size;
-}
-
 static int partition_write_header(int partition_id, u32 offset, u32 length, void *ptr)
 {
 //	SEC_HW_DEBUG_HANG();
@@ -539,7 +514,7 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 	if (partition_id >= NUM_PARTITIONS)
 		return ERR_INVALID;
 
-	if (length > QSPI_PAGE_SIZE)
+	if (length > Flash_Config_Table[FCTIndex].PageSize)
 		return ERR_INVALID;
 
 //	if (!is_aligned_64(ptr)) {
@@ -590,7 +565,7 @@ static int partition_write(int partition_id, int page_id, void *ptr)
 		return ERR_INVALID;
 
 	/* Check if requested page id goes beyond allocated partition size */
-	if (page_id > partition_sizes[partition_id] / STORAGE_BLOCK_SIZE) {
+	if (page_id >= partition_sizes[partition_id] / STORAGE_BLOCK_SIZE) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_PERMISSION;
 	}
@@ -623,25 +598,114 @@ static int partition_write(int partition_id, int page_id, void *ptr)
 	return STORAGE_BLOCK_SIZE;
 }
 
-/* it directly writes to physical address. for writing boot images only */
-int partition_write_physical(u32 data_address, u32 size, void *ptr)
+/* directly reads physical address. for reading boot images only */
+int partition_read_physical(u32 data_address, u32 size, void *ptr)
 {
 	u32 status;
 
-	// FIXME!!! this is wrong, cannot do cross page writes
-	status = FlashWrite(data_address, size, WriteCmd, (u8 *) ptr);
+	if (data_address % Flash_Config_Table[FCTIndex].PageSize != 0) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_INVALID;
+	}
+
+	if (size % Flash_Config_Table[FCTIndex].PageSize != 0) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_INVALID;
+	}
+
+	if (!is_aligned_64(ptr)) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_FAULT;
+	}
+
+	/* read partition */
+	status = FlashRead(data_address,
+					size,
+					ReadCmd,
+					CmdBfr,
+					(u8 *) ptr);
 
 	if (status != XST_SUCCESS) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
 	}
 
-	// FIXME: a small delay is needed for the write to finish.
-	for (int i=0; i < 1000; i++)
-		asm("nop");
+	return size;
+}
+
+/* directly writes to physical address. for writing boot images only */
+int partition_write_physical(u32 data_address, u32 size, void *ptr)
+{
+	u32 page_count, page;
+
+	if (data_address % Flash_Config_Table[FCTIndex].SectSize != 0) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_INVALID;
+	}
+ 
+	if (size % Flash_Config_Table[FCTIndex].PageSize != 0) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_INVALID;
+	}
+
+	FlashErase(data_address, 1024, CmdBfr);
+
+	page_count = size / Flash_Config_Table[FCTIndex].PageSize;
+
+	for (page = 0; page < page_count; page++) {
+		FlashWrite(data_address + page * Flash_Config_Table[FCTIndex].PageSize,
+					Flash_Config_Table[FCTIndex].PageSize, 
+					WriteCmd, 
+					(u8 *) ptr + page * Flash_Config_Table[FCTIndex].PageSize);
+	}
 
 	return size;
 }
+
+/*
+ * @pid: processor id
+ * Boot image storage starts at BOOT_IMAGE_OFFSET, and each image
+ * gets 1 sector. This should be enough.
+ */
+inline u32 get_boot_image_address(int pid)
+{
+	u32 address = 
+		(BOOT_IMAGE_OFFSET + pid * BOOT_IMAGE_PER_IMAGE_SIZE) *
+		Flash_Config_Table[FCTIndex].SectSize;
+
+	return address;
+}
+
+int load_boot_image_from_storage(int pid, u32 size, void *ptr)
+{
+	u32 address;
+
+	if (pid >= NUM_PROCESSORS) {
+		return ERR_INVALID;
+	}
+
+	address = get_boot_image_address(pid);
+	
+	partition_read_physical(address, size, ptr);
+
+	return 0;
+}
+
+int write_boot_image_to_storage(int pid, u32 size, void *ptr)
+{
+	u32 address;
+
+	if (pid >= NUM_PROCESSORS) {
+		return ERR_INVALID;
+	}
+
+	address = get_boot_image_address(pid);
+
+	partition_write_physical(address, size, ptr);
+
+	return 0;
+}
+
 #endif
 
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
