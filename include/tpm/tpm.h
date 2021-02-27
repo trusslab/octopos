@@ -10,11 +10,14 @@
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_rc.h>
 
-#define TSS_LOG_LVL_NONE    "ALL+none"
-#define TSS_LOG_LVL_ERROR   "ALL+error"
-#define TSS_LOG_LVL_WARNING "ALL+warning"
-#define TSS_LOG_LVL_DEBUG   "ALL+debug"
-#define TSS_LOG_LVL_TRACE   "ALL+trace"
+/* FIX: duplicate define */
+#define INVALID_PROCESSOR	11
+
+#define TSS_LOG_LVL_NONE	"ALL+none"
+#define TSS_LOG_LVL_ERROR	"ALL+error"
+#define TSS_LOG_LVL_WARNING	"ALL+warning"
+#define TSS_LOG_LVL_DEBUG	"ALL+debug"
+#define TSS_LOG_LVL_TRACE	"ALL+trace"
 
 /**
 * PCR No.    Allocation
@@ -32,23 +35,23 @@
 * 34         PMU PCR
 * 35-40      Placeholder
 */
-#define TPM_PCR_BANK(pcr)   (ESYS_TR_PCR0 + pcr)
-#define TPM_PCR_BASE        TPM_PCR_BANK(24)
-#define PCR_TO_PROC(pcr)    (pcr - TPM_PCR_BASE)
-#define PROC_TO_PCR(proc)   (proc + TPM_PCR_BASE)
+#define TPM_PCR_BANK(pcr)	(ESYS_TR_PCR0 + pcr)
+#define TPM_PCR_BASE		TPM_PCR_BANK(24)
+#define PCR_TO_PROC(pcr)	(pcr - TPM_PCR_BASE)
+#define PROC_TO_PCR(proc)	(proc + TPM_PCR_BASE)
 
-#define LOCALITY_BASE       0x80
-#define LOCALITY_OS         (LOCALITY_BASE)
-#define LOCALITY_KEYBOARD   (LOCALITY_BASE + 0x01)
-#define LOCALITY_SERIAL_OUT (LOCALITY_BASE + 0x02)
-#define LOCALITY_STORAGE    (LOCALITY_BASE + 0x03)
-#define LOCALITY_NETWORK    (LOCALITY_BASE + 0x04)
-#define LOCALITY_BLUETOOTH  (LOCALITY_BASE + 0x05)
-#define LOCALITY_RUNTIME1   (LOCALITY_BASE + 0x06)
-#define LOCALITY_RUNTIME2   (LOCALITY_BASE + 0x07)
-#define LOCALITY_UNTRUSTED  (LOCALITY_BASE + 0x08)
-#define LOCALITY_PMU        (LOCALITY_BASE + 0x09)
-#define PROC_LOCALITY(proc) (LOCALITY_BASE + (proc - 1))
+#define LOCALITY_BASE		0x80
+#define LOCALITY_OS		(LOCALITY_BASE)
+#define LOCALITY_KEYBOARD	(LOCALITY_BASE + 0x01)
+#define LOCALITY_SERIAL_OUT	(LOCALITY_BASE + 0x02)
+#define LOCALITY_STORAGE	(LOCALITY_BASE + 0x03)
+#define LOCALITY_NETWORK	(LOCALITY_BASE + 0x04)
+#define LOCALITY_BLUETOOTH	(LOCALITY_BASE + 0x05)
+#define LOCALITY_RUNTIME1	(LOCALITY_BASE + 0x06)
+#define LOCALITY_RUNTIME2	(LOCALITY_BASE + 0x07)
+#define LOCALITY_UNTRUSTED	(LOCALITY_BASE + 0x08)
+#define LOCALITY_PMU		(LOCALITY_BASE + 0x09)
+#define PROC_LOCALITY(proc)	(LOCALITY_BASE + (proc - 1))
 
 /* Copied macro from TPM2-TSS */
 #define SAFE_FREE(S) if((S) != NULL) {free((void*) (S)); (S)=NULL;}
@@ -78,29 +81,31 @@
         return r;  \
     }
 
-/* Top-level TPM API for extending / reading / attestation */
-int tpm_measure_service(char* path, uint8_t processor);
-int tpm_processor_read_pcr(uint8_t processor, uint8_t *pcr_value);
-int tpm_attest(uint8_t processor, uint8_t *nonce, 
-			   uint32_t *pcr_list, size_t pcr_list_size,
-			   uint8_t **signature, size_t *signature_size, 
-			   char** quote_info);
-int tpm_reset_pcrs(uint8_t processor, uint32_t *pcr_list, size_t pcr_list_size);
+/* Hash support function */
+void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size);
+int hash_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *byte_buffer);
+int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value);
 
 /* Wrapper of FAPI and ESAPI */
 int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor);
-int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor);
+int tpm_initialize(FAPI_CONTEXT **context);
 void tpm_finalize(FAPI_CONTEXT **context);
-int tpm_read(FAPI_CONTEXT* context, uint8_t processor, uint8_t* buf, 
-			 char** log, BOOL print);
-int tpm_extend(FAPI_CONTEXT* context, uint8_t processor, uint8_t *hash_buf);
+int tpm_read(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *buf,
+	     char **log, BOOL print);
+int tpm_extend(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *hash_buf);
 int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
-			  uint32_t *pcr_list, size_t pcr_list_size,
-			  uint8_t **signature, size_t *signature_size, 
-			  char** quote_info, char **pcr_event_log);
+	      uint32_t *pcr_list, size_t pcr_list_size,
+	      uint8_t **signature, size_t *signature_size, 
+	      char** quote_info, char **pcr_event_log);
 int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected);
 
-/* Support function */
-void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size);
-int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value);
+/* Top-level TPM API exposed for calling */
+int enforce_running_process(uint8_t processor);
+int cancel_running_process();
+int tpm_measure_service(char* path);
+int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value);
+int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
+	       size_t pcr_list_size, uint8_t **signature,
+	       size_t *signature_size, char** quote_info);
+int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size);
 #endif

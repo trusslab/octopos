@@ -261,12 +261,8 @@ static int start_bluetooth_proc(void)
 	char *const args[] = {(char *) "bootloader_other", (char *) "bluetooth",
 			      NULL};
 	char path[] = "./bootloader/bootloader_other";
-	/* FIXME: Mingyi: this returns an error.
-	 * Note that since we are in the PMU, we can only set the locality to
-	 * PMU's locality. (And this needs to be enforced.)
-	 */
 	uint32_t pcr_list[] = {(uint32_t) PROC_TO_PCR(P_BLUETOOTH)};
-	tpm_reset_pcrs(P_PMU, pcr_list, 1);
+	tpm_reset_pcrs(pcr_list, 1);
 	return start_proc(path, args, fd_bluetooth_log, 0, 0, 0);
 }
 
@@ -706,6 +702,8 @@ int main(int argc, char **argv)
 		printf("Error: couldn't create tpm semaphore.\n");
 		exit(-1);
 	}
+
+	enforce_running_process(P_PMU);
 
 	mkfifo(FIFO_PMU_TO_OS, 0666);
 	mkfifo(FIFO_PMU_FROM_OS, 0666);
