@@ -214,7 +214,7 @@ void load_application_arch(char *path, struct runtime_api *api)
 		return;
 	}
 
-	tpm_measure_service(path, p_runtime);
+	tpm_measure_service(path);
 
 	(*app_main)(api);
 }

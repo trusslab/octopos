@@ -1,6 +1,13 @@
 #include <tpm/tpm.h>
 #include <tpm/hash.h>
 
+uint8_t running_processor = 0;
+
+/* Hash support function:
+ *   print_digest
+ *   hash_to_byte_structure
+ *   prepare_extend
+ */
 void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size)
 {
 	printf("PCR %d: ", pcr_index);
@@ -52,6 +59,14 @@ int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value)
 	return 0;
 }
 
+/* Wrapper of FAPI and ESAPI
+ *   tpm_set_locality
+ *   tpm_initialize
+ *   tpm_finalize
+ *   tpm_read
+ *   tpm_quote
+ *   tpm_reset
+ */
 int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor)
 {
 	TSS2_RC rc = TSS2_RC_SUCCESS;
@@ -66,7 +81,7 @@ int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor)
 	return 0;
 }
 
-int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor)
+int tpm_initialize(FAPI_CONTEXT **context)
 {
 	TSS2_RC rc = TSS2_RC_SUCCESS;
 	
@@ -81,11 +96,8 @@ int tpm_initialize(FAPI_CONTEXT **context, uint8_t processor)
 	return_if_error(rc, "Fapi Initialization Error.");
 
 	rc = Fapi_Provision(*context, NULL, NULL, NULL);
-	return_if_error_exception(rc, "Fapi Provision Error.", 
+	return_if_error_exception(rc, "Fapi Provision Error.",
 				  TSS2_FAPI_RC_ALREADY_PROVISIONED);
-
-	rc = tpm_set_locality(*context, processor);
-	return_if_error_no_msg(rc);
 
 	return 0;
 }
@@ -95,13 +107,12 @@ void tpm_finalize(FAPI_CONTEXT **context)
 	Fapi_Finalize(context);
 }
 
-int tpm_read(FAPI_CONTEXT *context, uint8_t processor, uint8_t *buf, 
-			 char **log, BOOL print)
+int tpm_read(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *buf,
+	     char **log, BOOL print)
 {
 	TSS2_RC rc = TSS2_RC_SUCCESS;
 	uint8_t *digest = NULL;
 	size_t digest_size = 0;
-	uint32_t pcr_index = PROC_TO_PCR(processor);
 
 	rc = Fapi_PcrRead(context, pcr_index, &digest, &digest_size, log);
 	return_if_error(rc, "PCR Read Error.");
@@ -120,10 +131,7 @@ int tpm_read(FAPI_CONTEXT *context, uint8_t processor, uint8_t *buf,
 	return 0;
 }
 
-/* FAPI_PcrExtend uses TPM_EVENT extending all hashes slots.
- * So here just uses ESYS_CONTEXT.
-*/
-int tpm_extend(FAPI_CONTEXT *context, uint8_t processor, uint8_t *hash_buf)
+int tpm_extend(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *hash_buf)
 {
 	TSS2_RC rc;
 	ESYS_CONTEXT *esys_context = NULL;
@@ -137,7 +145,6 @@ int tpm_extend(FAPI_CONTEXT *context, uint8_t processor, uint8_t *hash_buf)
 			}
 		}}
 	};
-	uint32_t pcr_index = PROC_TO_PCR(processor);
 
 	convert_hash_to_str(hash_buf, hash_str);
 	int ret = prepare_extend(hash_str, &digests);
@@ -146,6 +153,9 @@ int tpm_extend(FAPI_CONTEXT *context, uint8_t processor, uint8_t *hash_buf)
 		return -1;
 	}
 
+	/* FAPI_PcrExtend uses TPM_EVENT extending all hashes slots.
+	 * So here just uses ESYS_CONTEXT.
+	 */
 	rc = Fapi_GetEsys(context, &esys_context);
 	return_if_error(rc, "Get Esys Error.");
 
@@ -171,9 +181,9 @@ int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 				  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
 
 	rc = Fapi_Quote(context, pcr_list, pcr_list_size,
-				"HS/SRK/AK", "TPM-Quote", nonce,
-				TPM_AT_NONCE_LENGTH, quote_info, signature,
-				signature_size, pcr_event_log, &certificate);
+			"HS/SRK/AK", "TPM-Quote", nonce,
+			TPM_AT_NONCE_LENGTH, quote_info, signature,
+			signature_size, pcr_event_log, &certificate);
 	return_if_error(rc, "Quote Error.");
 	return 0;
 }
@@ -187,13 +197,37 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected)
 	return_if_error(rc, "Get Esys Error.");
 
 	rc = Esys_PCR_Reset(esys_context, pcr_selected,
-			    ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE);
+			    ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE);
 	return_if_error(rc, "PCR Reset Error.");
 	
 	return 0;
 }
 
-int tpm_measure_service(char* path, uint8_t processor)
+/* Top-level TPM API exposed for calling
+ *   enforce_running_process
+ *   cancel_running_process
+ *   tpm_measure_service
+ *   tpm_processor_read_pcr
+ *   tpm_attest
+ *   tpm_reset_pcrs
+ */
+int enforce_running_process(uint8_t processor)
+{
+	if (processor == 0 || processor >= INVALID_PROCESSOR) {
+		fprintf(stderr, "Invalid processor.\n");
+		return -1;
+	}
+	running_processor = processor;
+	return 0;
+}
+
+int cancel_running_process()
+{
+	running_processor = 0;
+	return 0;
+}
+
+int tpm_measure_service(char* path)
 {
 	int rc = 0;
 	FAPI_CONTEXT *context = NULL;
@@ -202,13 +236,16 @@ int tpm_measure_service(char* path, uint8_t processor)
 	rc = hash_file(path, hash_value);
 	return_if_error_label(rc, out_measure_service);
 
-	rc = tpm_initialize(&context, processor);
+	rc = tpm_initialize(&context);
+	return_if_error_label(rc, out_measure_service);
+
+	rc = tpm_set_locality(context, running_processor);
 	return_if_error_label(rc, out_measure_service);
 	
-	rc = tpm_extend(context, processor, hash_value);
+	rc = tpm_extend(context, PROC_TO_PCR(running_processor), hash_value);
 	return_if_error_label(rc, out_measure_service);
 	
-	rc = tpm_read(context, processor, NULL, NULL, 1);
+	rc = tpm_read(context, PROC_TO_PCR(running_processor), NULL, NULL, 1);
 	return_if_error_label(rc, out_measure_service);
 
 out_measure_service:
@@ -216,21 +253,18 @@ out_measure_service:
 	return rc;
 }
 
-int tpm_processor_read_pcr(uint8_t processor, uint8_t *pcr_value)
+int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value)
 {
 	int rc = 0;
 	FAPI_CONTEXT *context = NULL;
 
-	/* FIXME: Mingyi: the locality should be changed to the locality of
-	 * the calling processor, not the locality of the parameter processor.
-	 * For example, when runtime calls this function (in runtime/runtime.c),
-	 * the locality should be set to the locality of that runtime and this
-	 * must be enforced.
-	 */
-	rc = tpm_initialize(&context, processor);
+	rc = tpm_initialize(&context);
 	return_if_error_no_msg(rc);
+
+	rc = tpm_set_locality(context, running_processor);
+	return_if_error_label(rc, out_processor_read_pcr);
 	
-	rc = tpm_read(context, processor, pcr_value, NULL, 1);
+	rc = tpm_read(context, pcr_index, pcr_value, NULL, 1);
 	return_if_error_label(rc, out_processor_read_pcr);
 
 out_processor_read_pcr:	
@@ -238,16 +272,18 @@ out_processor_read_pcr:
 	return rc;
 }
 
-int tpm_attest(uint8_t processor, uint8_t *nonce,
-	       uint32_t *pcr_list, size_t pcr_list_size,
-	       uint8_t **signature, size_t *signature_size,
-	       char** quote_info)
+int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
+	       size_t pcr_list_size, uint8_t **signature,
+	       size_t *signature_size, char** quote_info)
 {
 	int rc = 0;
 	FAPI_CONTEXT *context = NULL;
 	char *pcr_event_log = NULL;
 
-	rc = tpm_initialize(&context, processor);
+	rc = tpm_initialize(&context);
+	return_if_error_no_msg(rc);
+
+	rc = tpm_set_locality(context, running_processor);
 	return_if_error_no_msg(rc);
 
 	rc = tpm_quote(context, nonce, pcr_list, pcr_list_size, signature,
@@ -258,13 +294,16 @@ int tpm_attest(uint8_t processor, uint8_t *nonce,
 	return rc;
 }
 
-int tpm_reset_pcrs(uint8_t processor, uint32_t *pcr_list, size_t pcr_list_size)
+int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size)
 {
 	int rc = 0;
 	size_t pcr_index = 0;
 	FAPI_CONTEXT *context = NULL;
 
-	rc = tpm_initialize(&context, processor);
+	rc = tpm_initialize(&context);
+	return_if_error_no_msg(rc);
+
+	rc = tpm_set_locality(context, running_processor);
 	return_if_error_no_msg(rc);
 
 	for (; pcr_index < pcr_list_size; pcr_index++) {

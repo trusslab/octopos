@@ -300,7 +300,8 @@ repeat:
 
 void send_measurement_to_tpm(char *path)
 {
-	tpm_measure_service(path, processor);
-
+	enforce_running_process(processor);
+	tpm_measure_service(path);
+	cancel_running_process();
 	close_mailbox();
 }
