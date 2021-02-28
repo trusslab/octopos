@@ -117,6 +117,11 @@ struct partition partitions[NUM_PARTITIONS];
 uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 128, 128, 128};
 
+#ifdef ARCH_SEC_HW_STORAGE
+uint32_t boot_image_sizes[NUM_PROCESSORS + 1] = 
+	{0, 0, 0, 0, STORAGE_IMAGE_SIZE, 0, 0, 0, 0 ,0 ,0};
+#endif
+
 bool is_queue_set_bound = false;
 int bound_partition = -1;
 
@@ -175,7 +180,10 @@ u32 page_map[NUM_PARTITIONS][PAGE_MAP_MAX_VIRT_PAGE] = {0};
 
 /* boot images store at this sector and beyond */
 #define BOOT_IMAGE_OFFSET 100
-/* FIXME: max image size supported is 128KB (sector size) */
+/* FIXME: max image size supported is 128KB (sector size)
+ * WARNING: Please do not change this value, bootloader assumes
+ * every image fits in one sector.
+ */
 #define BOOT_IMAGE_PER_IMAGE_SIZE 1
 
 #define MIN_PARTITION_SECTOR_SIZE 3
@@ -613,6 +621,11 @@ int partition_read_physical(u32 data_address, u32 size, void *ptr)
 		return ERR_INVALID;
 	}
 
+	if (size >= Flash_Config_Table[FCTIndex].SectSize) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_INVALID;
+	}
+
 	if (!is_aligned_64(ptr)) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
@@ -638,6 +651,7 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
 {
 	u32 page_count, page;
 
+	/* do not support mid-sector write */
 	if (data_address % Flash_Config_Table[FCTIndex].SectSize != 0) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_INVALID;
@@ -648,6 +662,14 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
 		return ERR_INVALID;
 	}
 
+	if (size >= Flash_Config_Table[FCTIndex].SectSize) {
+		SEC_HW_DEBUG_HANG();
+		return ERR_INVALID;
+	}
+
+	/* we already align data_address with sector start address.
+	 * erase size doesn't matter.
+	 */
 	FlashErase(data_address, 1024, CmdBfr);
 
 	page_count = size / Flash_Config_Table[FCTIndex].PageSize;
@@ -686,7 +708,7 @@ int load_boot_image_from_storage(int pid, u32 size, void *ptr)
 
 	address = get_boot_image_address(pid);
 	
-	partition_read_physical(address, size, ptr);
+	partition_read_physical(address, boot_image_sizes[pid], ptr);
 
 	return 0;
 }
@@ -701,7 +723,7 @@ int write_boot_image_to_storage(int pid, u32 size, void *ptr)
 
 	address = get_boot_image_address(pid);
 
-	partition_write_physical(address, size, ptr);
+	partition_write_physical(address, boot_image_sizes[pid], ptr);
 
 	return 0;
 }

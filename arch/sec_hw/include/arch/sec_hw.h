@@ -28,6 +28,9 @@ void cleanup_platform();
 #define false   0
 #define bool    _Bool
 
+#define STORAGE_IMAGE_SIZE 0
+
+
 /* This symbol is for debug only. It forces all mailbox to
  * wait on the queue until all expected bytes are delivered.
  */
