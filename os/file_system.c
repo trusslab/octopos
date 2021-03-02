@@ -18,6 +18,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
 #include <octopos/storage.h>
+#include <octopos/io.h>
 #include <os/storage.h>
 #include <os/file_system.h>
 #include <arch/mailbox_os.h>
@@ -161,10 +162,17 @@ static int remove_file_from_list(struct file *file)
 static uint32_t write_blocks(uint8_t *data, uint32_t start_block,
 			     uint32_t num_blocks)
 {
-	wait_for_storage();
+	int ret;
+
+	ret = wait_for_storage_for_os_use();
+	if (ret) {
+		printf("Error: %s: couldn't get proper access to the storage "
+		       "service.\n", __func__);
+		return 0;
+	}
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
-	buf[0] = STORAGE_OP_WRITE;
+	buf[0] = IO_OP_SEND_DATA;
 	send_msg_to_storage_no_response(buf);
 	for (uint32_t i = 0; i < num_blocks; i++)
 		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
@@ -178,10 +186,17 @@ static uint32_t write_blocks(uint8_t *data, uint32_t start_block,
 static uint32_t read_blocks(uint8_t *data, uint32_t start_block,
 			    uint32_t num_blocks)
 {
-	wait_for_storage();
+	int ret;
+
+	ret = wait_for_storage_for_os_use();
+	if (ret) {
+		printf("Error: %s: couldn't get proper access to the storage "
+		       "service.\n", __func__);
+		return 0;
+	}
 
 	STORAGE_SET_TWO_ARGS(start_block, num_blocks)
-	buf[0] = STORAGE_OP_READ;
+	buf[0] = IO_OP_RECEIVE_DATA;
 	send_msg_to_storage_no_response(buf);
 	for (uint32_t i = 0; i < num_blocks; i++)
 		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
@@ -667,6 +682,8 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block,
 				      uint32_t num_blocks,
 				      uint8_t runtime_proc_id)
 {
+	int ret;
+	struct file *file;
 	limit_t next_num_blocks = 0;
 	uint32_t total_written_blocks = 0;
 
@@ -675,7 +692,7 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block,
 		return 0;
 	}
 
-	struct file *file = file_array[fd];
+	file = file_array[fd];
 	if (!file) {
 		printf("%s: Error: invalid fd\n", __func__);
 		return 0;
@@ -717,7 +734,12 @@ repeat:
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
 	}
 
-	wait_for_storage();
+	ret = wait_for_storage_for_os_use();
+	if (ret) {
+		printf("Error: %s: couldn't get proper access to the storage "
+		       "service.\n", __func__);
+		return 0;
+	}
 
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
@@ -729,7 +751,7 @@ repeat:
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block +
 			     total_written_blocks, next_num_blocks)
-	buf[0] = STORAGE_OP_WRITE;
+	buf[0] = IO_OP_SEND_DATA;
 	send_msg_to_storage_no_response(buf);
 
 	if (num_blocks) {
@@ -759,6 +781,8 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 				     uint32_t num_blocks,
 				     uint8_t runtime_proc_id)
 {
+	int ret;
+	struct file *file;
 	limit_t next_num_blocks = 0;
 	uint32_t total_read_blocks = 0;
 
@@ -767,7 +791,7 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 		return 0;
 	}
 
-	struct file *file = file_array[fd];
+	file = file_array[fd];
 	if (!file) {
 		printf("%s: Error: invalid fd\n", __func__);
 		return 0;
@@ -800,7 +824,12 @@ repeat:
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
 	}
 
-	wait_for_storage();
+	ret = wait_for_storage_for_os_use();
+	if (ret) {
+		printf("Error: %s: couldn't get proper access to the storage "
+		       "service.\n", __func__);
+		return 0;
+	}
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
@@ -810,7 +839,7 @@ repeat:
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block +
 			     total_read_blocks, next_num_blocks)
-	buf[0] = STORAGE_OP_READ;
+	buf[0] = IO_OP_RECEIVE_DATA;
 	send_msg_to_storage_no_response(buf);
 
 	if (num_blocks) {

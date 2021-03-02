@@ -49,14 +49,14 @@
 		printf("Error (%s): max_size not supported\n", __func__);	\
 		char dummy;							\
 		BLUETOOTH_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)		\
-		break;								\
+		return;								\
 	}									\
 	_size = buf[5];								\
 	if (_size > _max_size) {						\
 		printf("Error (%s): size not supported\n", __func__);		\
 		char dummy;							\
 		BLUETOOTH_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)		\
-		break;								\
+		return;								\
 	}									\
 	data = &buf[6];								\
 

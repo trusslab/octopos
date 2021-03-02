@@ -40,6 +40,7 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <octopos/bluetooth.h>
+/* FIXME: tpm/tpm.h should be moved to octopos/tpm.h */
 #include <tpm/tpm.h>
 #include <tpm/hash.h>
 #include <arch/mailbox_runtime.h>
@@ -1409,6 +1410,9 @@ static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_si
 	return 0;
 }
 
+/* FIXME: why do we need this func? Why not just directly use
+ * tpm_processor_read_pcr()?
+ */
 int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 {
 	tpm_processor_read_pcr(proc_id, pcr_val);

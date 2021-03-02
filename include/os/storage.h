@@ -77,7 +77,18 @@
 	}									\
 	memcpy(data, &buf[5], _size);						\
 
-void wait_for_storage(void);
+struct partition {
+	uint32_t partition_id;
+	uint32_t size;
+	uint8_t is_created;
+};
+
+/* Status of the storage service */
+#define OS_ACCESS	0 /* OS has access but its partition isn't bound. */
+#define OS_USE		1 /* OS has access and its partition is bound. */
+#define APP_ACCESS	2 /* An app has access. */
+
+int wait_for_storage_for_os_use(void);
 void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 						    uint8_t *buf);
 void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,

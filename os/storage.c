@@ -1,7 +1,8 @@
 /* OctopOS storage code for the OS
  *
  * This file is used the OS and its bootloader.
- * We use macros ROLE_... to specialize, i.e., to compile only the needed code for each.
+ * We use macros ROLE_... to specialize, i.e., to compile only the needed code
+ * for each.
  */
 #include <arch/defines.h>
 #include <stdio.h>
@@ -17,161 +18,479 @@
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <octopos/syscall.h>
+#include <octopos/io.h>
 #include <octopos/error.h>
 #include <os/storage.h>
 #include <os/scheduler.h>
+#include <os/boot.h>
+#include <tpm/tpm.h>
 #include <arch/mailbox_os.h>
 
-uint8_t os_storage_key[STORAGE_KEY_SIZE];
-bool is_partition_locked = true;
+struct partition *partitions;
+uint32_t num_partitions = 0;
+uint8_t storage_status = OS_ACCESS;
+struct app *current_app_with_storage_access = NULL;
+struct partition *boot_partition = NULL;
 
-#ifdef ROLE_OS
-uint8_t os_storage_config_key[STORAGE_KEY_SIZE];
-bool is_storage_config_locked = false;
+//uint8_t os_storage_key[STORAGE_KEY_SIZE];
+//bool is_partition_locked = true;
 
-static int set_storage_config_key(uint8_t *key)
+//#ifdef ROLE_OS
+//uint8_t os_storage_config_key[STORAGE_KEY_SIZE];
+//bool is_storage_config_locked = false;
+//
+//static int set_storage_config_key(uint8_t *key)
+//{
+//	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+//	buf[0] = STORAGE_OP_SET_CONFIG_KEY;
+//	send_msg_to_storage_no_response(buf);
+//	get_response_from_storage(buf);
+//	STORAGE_GET_ONE_RET
+//	return (int) ret0;
+//}
+//
+//static int unlock_storage_config(uint8_t *key)
+//{
+//	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+//	buf[0] = STORAGE_OP_UNLOCK_CONFIG;
+//	send_msg_to_storage_no_response(buf);
+//	get_response_from_storage(buf);
+//	STORAGE_GET_ONE_RET
+//	return (int) ret0;
+//}
+//
+//static int lock_storage_config(void)
+//{
+//	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+//	buf[0] = STORAGE_OP_LOCK_CONFIG;
+//	send_msg_to_storage_no_response(buf);
+//	get_response_from_storage(buf);
+//	STORAGE_GET_ONE_RET
+//	return (int) ret0;
+//}
+//#endif /* ROLE_OS */
+//
+///* FIXME: modified from runtime/storage_client.c */
+//static int unlock_secure_storage(uint8_t *key)
+//{
+//	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
+//	buf[0] = STORAGE_OP_UNLOCK;
+//	send_msg_to_storage_no_response(buf);
+//	get_response_from_storage(buf);
+//	STORAGE_GET_ONE_RET
+//	return (int) ret0;
+//}
+//
+//#ifdef ROLE_OS
+///* FIXME: modified from runtime/storage_client.c */
+//static int lock_secure_storage(void)
+//{
+//	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+//	buf[0] = STORAGE_OP_LOCK;
+//	send_msg_to_storage_no_response(buf);
+//	get_response_from_storage(buf);
+//	STORAGE_GET_ONE_RET
+//	return (int) ret0;
+//}
+//#endif
+
+static int query_number_partitions(void)
 {
-	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
-	buf[0] = STORAGE_OP_SET_CONFIG_KEY;
+	uint32_t query_type, partition_id;
+	uint8_t data[MAILBOX_QUEUE_MSG_SIZE];
+
+	query_type = 0;
+	partition_id = 0; /* not used in this query */
+	
+	STORAGE_SET_TWO_ARGS(query_type, partition_id)
+	buf[0] = IO_OP_QUERY_ALL_RESOURCES;
+	
 	send_msg_to_storage_no_response(buf);
 	get_response_from_storage(buf);
-	STORAGE_GET_ONE_RET
+	
+	STORAGE_GET_ONE_RET_DATA(data)
+	
+	if (!ret0) {
+		if (_size == 4) {
+			memcpy(&num_partitions, data, 4);
+			return 0;
+		} else {
+			printf("Error: %s: unexpected returned data size.\n",
+			       __func__);
+			return ERR_UNEXPECTED;
+		}
+	}
+
 	return (int) ret0;
 }
 
-static int unlock_storage_config(uint8_t *key)
+static int query_partition(uint32_t partition_id, struct partition *partition)
 {
-	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
-	buf[0] = STORAGE_OP_UNLOCK_CONFIG;
-	send_msg_to_storage_no_response(buf);
-	get_response_from_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
+	uint32_t query_type;
+	uint8_t data[MAILBOX_QUEUE_MSG_SIZE];
 
-static int lock_storage_config(void)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	buf[0] = STORAGE_OP_LOCK_CONFIG;
+	query_type = 1;
+	
+	STORAGE_SET_TWO_ARGS(query_type, partition_id)
+	buf[0] = IO_OP_QUERY_ALL_RESOURCES;
+	
 	send_msg_to_storage_no_response(buf);
 	get_response_from_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
-#endif /* ROLE_OS */
-
-/* FIXME: modified from runtime/storage_client.c */
-static int unlock_secure_storage(uint8_t *key)
-{
-	STORAGE_SET_ZERO_ARGS_DATA(key, STORAGE_KEY_SIZE)
-	buf[0] = STORAGE_OP_UNLOCK;
-	send_msg_to_storage_no_response(buf);
-	get_response_from_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
-
-#ifdef ROLE_OS
-/* FIXME: modified from runtime/storage_client.c */
-static int lock_secure_storage(void)
-{
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	buf[0] = STORAGE_OP_LOCK;
-	send_msg_to_storage_no_response(buf);
-	get_response_from_storage(buf);
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
-#endif
-
-static int storage_create_secure_partition(uint8_t *temp_key, int *partition_id,
-					   uint32_t partition_size)
-{
-	STORAGE_SET_ONE_ARG_DATA(partition_size, temp_key, STORAGE_KEY_SIZE) 
-	buf[0] = STORAGE_OP_CREATE_SECURE_PARTITION;
-	send_msg_to_storage_no_response(buf);
-	get_response_from_storage(buf);
-	STORAGE_GET_TWO_RETS
+	
+	STORAGE_GET_ONE_RET_DATA(data)
+	
 	if (ret0)
 		return (int) ret0;
 
-	*partition_id = (int) ret1;
+	if (_size != (5 + STORAGE_KEY_SIZE)) {
+		printf("Error: %s: unexpected returned data size.\n", __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	partition->partition_id = partition_id;
+	memcpy(&partition->size, data, 4);
+	partition->is_created = data[4];
+	/* We don't currently store/use the key sent back in the query
+	 * (which is at &data[5]).
+	 */
+	//memcpy(partition->key, &data[5], STORAGE_KEY_SIZE);
 
 	return 0;
 }
 
-#ifdef ROLE_OS
-static int storage_delete_secure_partition(int partition_id)
+static int query_storage_partitions(void)
 {
-	STORAGE_SET_ONE_ARG(partition_id) 
-	buf[0] = STORAGE_OP_DELETE_SECURE_PARTITION;
+	uint32_t i;
+	int ret;
+
+	if (partitions) {
+		printf("Error: %s: partitions must be NULL\n", __func__);
+		return ERR_UNEXPECTED;
+	}
+
+	ret = query_number_partitions();
+	if (ret) {
+		printf("Error: %s: couldn't query the number of partitions\n",
+		       __func__);
+		return ret;
+	}
+
+	partitions = (struct partition *) malloc(num_partitions *
+						 sizeof(struct partition));
+	if (!partitions) {
+		printf("Error: %s: couldn't allocate memory for partitions.\n",
+		       __func__);
+		return ERR_MEMORY;
+	}
+
+	for (i = 0; i < num_partitions; i++) {
+		ret = query_partition(i, &partitions[i]);
+		if (ret) {
+			printf("Error: %s: failed to query partition %d\n",
+			       __func__, i);
+			return ERR_FAULT;
+		}
+	}
+
+	return 0;
+}
+
+/* boot partition is partition 0.
+ * Here, we do a sanity check on its size.
+ * We can do this check for now since we've fixed the size of the boot
+ * partition.
+ */
+static struct partition *get_boot_partition(void)
+{
+	/* This shouldn't happen, but we check anyway. */
+	if (!partitions) {
+		printf("Error: %s: partitions is NULL\n", __func__);
+		return NULL;
+	}
+
+	if (partitions[0].size != STORAGE_BOOT_PARTITION_SIZE) {
+		printf("Error: %s: unexpected size for the boot partition.\n",
+		       __func__);
+		return NULL;
+	}
+
+	return &partitions[0];
+}
+
+static int bind_partition(uint32_t partition_id)
+{
+	STORAGE_SET_ONE_ARG(partition_id)
+	buf[0] = IO_OP_BIND_RESOURCE;
+	
 	send_msg_to_storage_no_response(buf);
 	get_response_from_storage(buf);
+	
 	STORAGE_GET_ONE_RET
-
+	
 	return (int) ret0;
 }
+
+static int authenticate_with_storage_service(void)
+{
+	/* FIXME: use a macro for this. */
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	buf[0] = IO_OP_AUTHENTICATE;
+	
+	send_msg_to_storage_no_response(buf);
+	get_response_from_storage(buf);
+	
+	STORAGE_GET_ONE_RET
+	
+	return (int) ret0;
+}
+
+/*
+ * Check that all queues are available and that the partition is unlocked.
+ */
+static void wait_for_storage(void)
+{
+	int ret = is_queue_available(Q_STORAGE_CMD_IN);
+	if (!ret) {
+		wait_for_queue_availability(Q_STORAGE_CMD_IN);
+	}
+
+	ret = is_queue_available(Q_STORAGE_CMD_OUT);
+	if (!ret) {
+		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
+	}
+
+/* FIXME: now: why do we need this ifdef? */
+#ifdef ROLE_OS	
+	ret = is_queue_available(Q_STORAGE_DATA_IN);
+	if (!ret) {
+		wait_for_queue_availability(Q_STORAGE_DATA_IN);
+	}
+#endif
+
+	ret = is_queue_available(Q_STORAGE_DATA_OUT);
+	if (!ret) {
+		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
+	}
+
+//#ifdef ROLE_OS
+//	if (is_storage_config_locked) {
+//		unlock_storage_config(os_storage_config_key);
+//		is_storage_config_locked = false;
+//	}
+//#endif
+//
+//	if (is_partition_locked) {
+//		unlock_secure_storage(os_storage_key);
+//		is_partition_locked = false;
+//	}
+}
+
+int wait_for_storage_for_os_use(void)
+{
+	int ret;
+
+	if (storage_status != OS_USE) {
+		if (storage_status == OS_ACCESS) {
+			if (!boot_partition) {
+				printf("Error: %s: boot_partition is NULL\n",
+				       __func__);
+				return ERR_UNEXPECTED;
+			}
+
+			ret = bind_partition(boot_partition->partition_id);
+			if (ret) {
+				printf("Error: %s: couldn't bind the boot "
+				       "partition.\n", __func__);
+				return ERR_FAULT;
+			}
+
+			storage_status = OS_USE;
+		} else {
+			if (!boot_partition) {
+				printf("Error: %s: boot_partition is NULL "
+				       "(else)\n", __func__);
+				return ERR_UNEXPECTED;
+			}
+
+			wait_for_storage();
+			reset_proc(P_STORAGE);
+
+			storage_status = OS_ACCESS;
+			
+			ret = bind_partition(boot_partition->partition_id);
+			if (ret) {
+				printf("Error: %s: couldn't bind the boot "
+				       "partition (else).\n", __func__);
+				return ERR_FAULT;
+			}
+
+			storage_status = OS_USE;
+		}
+	}
+
+	return 0;
+}
+
+static int storage_create_secure_partition(uint8_t *app_key,
+					   uint8_t runtime_proc_id,
+					   uint32_t partition_size,
+					   uint32_t *partition_id)
+{
+	uint32_t i, _partition_id;
+
+	if (runtime_proc_id == P_UNTRUSTED) {
+		if ((num_partitions >= 2) &&
+		    (partitions[1].size == partition_size) &&
+		    !partitions[1].is_created) {
+			_partition_id = 1;
+		} else {
+			printf("Error: %s: couldn't find the proper partition "
+			       "for the untrusted domain.\n", __func__);
+			return ERR_EXIST;
+		}
+	} else {
+		for (i = 2; i < num_partitions; i++) { 
+			if ((partitions[i].size == partition_size) &&
+			    !partitions[i].is_created) {
+				_partition_id = i;
+				break;
+			}
+		}
+
+		if (i >= num_partitions) {
+			printf("Error: %s: couldn't find a proper partition "
+			       "for the domain.\n", __func__);
+			return ERR_EXIST;
+		}
+	}
+
+	STORAGE_SET_ONE_ARG_DATA(_partition_id, app_key, TPM_EXTEND_HASH_SIZE)
+	buf[0] = IO_OP_CREATE_RESOURCE;
+	
+	send_msg_to_storage_no_response(buf);
+	get_response_from_storage(buf);
+	
+	STORAGE_GET_ONE_RET
+
+	if (!ret0) {
+		partitions[_partition_id].is_created = 1;
+		*partition_id = _partition_id;
+	}
+	
+	return (int) ret0;
+}
+
+#ifdef ROLE_OS
+//static int storage_delete_secure_partition(int partition_id)
+//{
+//	STORAGE_SET_ONE_ARG(partition_id) 
+//	buf[0] = STORAGE_OP_DELETE_SECURE_PARTITION;
+//	send_msg_to_storage_no_response(buf);
+//	get_response_from_storage(buf);
+//	STORAGE_GET_ONE_RET
+//
+//	return (int) ret0;
+//}
 
 void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 						    uint8_t *buf)
 {
+	uint32_t sec_partition_id = 0;
+	uint32_t partition_size;
+	struct runtime_proc *runtime_proc;
+	struct app *app;
+	uint8_t app_key[TPM_EXTEND_HASH_SIZE];
+	int ret;
+
 	SYSCALL_GET_ONE_ARG
-	uint32_t partition_size = arg0;
+	partition_size = arg0;
 
 	/* sanity check on the requested size:
 	 * the root_fs of the untrusted domain should be
 	 * the largest partition.
 	 */
 	if (partition_size > STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE) {
-		char dummy;
-		SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
+		SYSCALL_SET_TWO_RETS((uint32_t) ERR_INVALID, 0)
 		return;
 	}
 
-	int sec_partition_id = 0;
-
-	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+	runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
-		char dummy;
-		SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
+		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
 		return;
 	}
-	struct app *app = runtime_proc->app;
+	
+	app = runtime_proc->app;
 
-	/* temp key */
-	uint8_t temp_key[STORAGE_KEY_SIZE];
-	/* generate a key */
-	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-		/* FIXME: use a random number */
-		temp_key[i] = runtime_proc_id;
+	if (app->sec_partition_created) {
+		printf("Error: %s: app already has a secure storage "
+		       "partition.\n", __func__);
+		SYSCALL_SET_TWO_RETS((uint32_t) ERR_INVALID, 0)
+		return;
+	}
 
-	wait_for_storage();
-	int ret = storage_create_secure_partition(temp_key, &sec_partition_id,
-						  partition_size);
+	ret = tpm_processor_read_pcr(runtime_proc_id, app_key);
 	if (ret) {
-		char dummy;
-		SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_FAULT, &dummy, 0)
+		printf("Error: %s: couldn't read TPM PCR for runtime proc.\n",
+		       __func__);
+		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
+		return;
+	}
+
+	if (storage_status != OS_ACCESS) {
+		if (storage_status == OS_USE) {
+			reset_proc(P_STORAGE);
+			storage_status = OS_ACCESS;
+		} else {
+			wait_for_storage();
+			reset_proc(P_STORAGE);
+			storage_status = OS_ACCESS;
+		}
+	}
+
+	ret = storage_create_secure_partition(app_key, runtime_proc_id,
+					      partition_size, &sec_partition_id);
+	if (ret) {
+		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
 		return;
 	}
 
 	app->sec_partition_id = sec_partition_id;
 	app->sec_partition_created = true;
 
-	SYSCALL_SET_ONE_RET_DATA(0, temp_key, STORAGE_KEY_SIZE)
+	SYSCALL_SET_TWO_RETS(0, sec_partition_id)
 }
 
 void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 						  uint8_t *buf)
 {
-	SYSCALL_GET_TWO_ARGS
-	uint32_t limit = arg0;
-	uint32_t timeout = arg1;
+	uint32_t limit, timeout;
+	struct runtime_proc *runtime_proc;
+	struct app *app;
+	int ret;
 
-	/* FIXME: should we check to see whether we have previously created a partition for this app? */
+	SYSCALL_GET_TWO_ARGS
+	limit = arg0;
+	timeout = arg1;
 
 	if (limit > MAILBOX_MAX_LIMIT_VAL) {
 		printf("Error: %s: limit (%d) too large\n", __func__, limit);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+		return;
+	}
+
+	runtime_proc = get_runtime_proc(runtime_proc_id);
+	if (!runtime_proc || !runtime_proc->app) {
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+		return;
+	}
+
+	app = runtime_proc->app;
+
+	if (!app->sec_partition_created) {
+		printf("Error: %s: app does not have a secure storage"
+		       "partition.\n", __func__);
+		SYSCALL_SET_TWO_RETS((uint32_t) ERR_INVALID, 0)
 		return;
 	}
 
@@ -195,25 +514,35 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 	}
 
-	wait_for_storage();
-
-	if (!is_partition_locked) {
-		int ret = lock_secure_storage();
-		if (ret) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-			return;
-		}
-		is_partition_locked = true;
+	if ((storage_status == APP_ACCESS) &&
+	    (current_app_with_storage_access == app)) {
+		printf("Error: %s: app already has access to the storage "
+		       "queues.\n", __func__);
+		SYSCALL_SET_TWO_RETS((uint32_t) ERR_INVALID, 0)
+		return;
 	}
 
-	if (!is_storage_config_locked) {
-		int ret = lock_storage_config();
-		if (ret) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-			return;
+	if (storage_status != OS_ACCESS) {
+		if (storage_status == OS_USE) {
+			reset_proc(P_STORAGE);
+			current_app_with_storage_access = app;
+			storage_status = APP_ACCESS;
+		} else {
+			wait_for_storage();
+			reset_proc(P_STORAGE);
+			current_app_with_storage_access = app;
+			storage_status = APP_ACCESS;
 		}
-		is_storage_config_locked = true;
 	}
+
+	ret = bind_partition(app->sec_partition_id);
+	if (ret) {
+		printf("Error: %s: couldn't bind the storage service to "
+		       "partition (%d).\n", __func__, app->sec_partition_id);
+		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
+		return;
+	}
+
 
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -235,108 +564,68 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	SYSCALL_SET_ONE_RET(0)
 }
 
+/* FIXME: now: delete this syscall. */
 void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
 					  uint8_t *buf)
 {
-	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
-	if (!runtime_proc || !runtime_proc->app) {
-		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-		return;
-	}
-	struct app *app = runtime_proc->app;
+	//struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+	//if (!runtime_proc || !runtime_proc->app) {
+	//	SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+	//	return;
+	//}
+	//struct app *app = runtime_proc->app;
 
-	if (!app->sec_partition_created) {
-		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-		return;
-	}
+	//if (!app->sec_partition_created) {
+	//	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+	//	return;
+	//}
 
-	wait_for_storage();
-	storage_delete_secure_partition(app->sec_partition_id);
-	app->sec_partition_created = false;
-	app->sec_partition_id = -1;
+	//wait_for_storage();
+	//storage_delete_secure_partition(app->sec_partition_id);
+	//app->sec_partition_created = false;
+	//app->sec_partition_id = -1;
 
-	SYSCALL_SET_ONE_RET(0)
+	//SYSCALL_SET_ONE_RET(0)
 }
 #endif /* ROLE_OS */
 
-/*
- * Check that all queues are available and that the partition is unlocked.
- */
-void wait_for_storage(void)
-{
-	int ret = is_queue_available(Q_STORAGE_CMD_IN);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_CMD_IN);
-	}
-
-	ret = is_queue_available(Q_STORAGE_CMD_OUT);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
-	}
-
-#ifdef ROLE_OS	
-	ret = is_queue_available(Q_STORAGE_DATA_IN);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_IN);
-	}
-#endif
-
-	ret = is_queue_available(Q_STORAGE_DATA_OUT);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
-	}
-
-#ifdef ROLE_OS
-	if (is_storage_config_locked) {
-		unlock_storage_config(os_storage_config_key);
-		is_storage_config_locked = false;
-	}
-#endif
-
-	if (is_partition_locked) {
-		unlock_secure_storage(os_storage_key);
-		is_partition_locked = false;
-	}
-}
-
 uint32_t initialize_storage(void)
 {
-	uint32_t partition_size = STORAGE_BOOT_PARTITION_SIZE;
+	int ret;
 
-	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-		os_storage_key[i] = i + 3;
-
-#ifdef ROLE_OS
-	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-		os_storage_config_key[i] = i + 4;
-
-	set_storage_config_key(os_storage_config_key);
-#endif
-
-	/* unlock the storage (mainly needed to deal with reset-related interruptions.
-	 * won't do anything if it's the first time accessing the secure storage) */
-	int unlock_ret = unlock_secure_storage(os_storage_key);
-	if (unlock_ret == ERR_EXIST) {
-		int unused_partition_id;
-		int create_ret = storage_create_secure_partition(os_storage_key,
-						&unused_partition_id, partition_size);
-		if (create_ret) {
-			printf("Error (%s): couldn't initialize the storage partition for the OS.\n",
-											__func__);
-			exit(-1);
-		}
-		/* FIXME: verify the partition size? */
-		int unlock_ret_2 = unlock_secure_storage(os_storage_key);
-		if (unlock_ret_2) {
-			printf("Error (%s): couldn't unlock the storage partition for the OS.\n",
-											__func__);
-			exit(-1);
-		}
-	} else if (unlock_ret) {
-		printf("Error (%s): unexpected response from the storage response.\n", __func__);
+	ret = query_storage_partitions();
+	if (ret) {
+		printf("Error: %s: couldn't successfully query storage "
+		       "partitions\n", __func__);
 		exit(-1);
 	}
-	is_partition_locked = false;
 
-	return partition_size;
+	boot_partition = get_boot_partition();
+	if (!boot_partition) {
+		printf("Error: %s: couldn't find the boot partition.\n",
+		       __func__);
+		exit(-1);
+	}
+
+	if (!boot_partition->is_created) {
+		printf("Error: %s: boot partition isn't created.\n", __func__);
+		exit(-1);
+	}
+
+	storage_status = OS_USE;
+
+	ret = bind_partition(boot_partition->partition_id);
+	if (ret) {
+		printf("Error: %s: couldn't bind the boot partition.\n",
+		       __func__);
+	}
+
+	ret = authenticate_with_storage_service();
+	if (ret) {
+		printf("Error: %s: couldn't authenticate with the storage "
+		       "service to access the boot partition.\n", __func__);
+		exit(-1);
+	}
+
+	return boot_partition->size;
 }

@@ -8,6 +8,7 @@
 #define IO_OP_AUTHENTICATE		5
 #define IO_OP_SEND_DATA			6
 #define IO_OP_RECEIVE_DATA		7
-#define IO_OP_DESTROY_RESOURCE		8
+#define IO_OP_DEAUTHENTICATE		8
+#define IO_OP_DESTROY_RESOURCE		9
 
 #endif
