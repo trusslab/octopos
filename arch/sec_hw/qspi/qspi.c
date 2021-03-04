@@ -850,6 +850,18 @@ int initialize_qspi_flash()
 	return XST_SUCCESS;
 }
 
+void cleanup_qspi_flash()
+{
+	int Status;
+
+	if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
+		Status = FlashEnterExit4BAddMode(EXIT_4B);
+		if (Status != XST_SUCCESS)
+			while(1) sleep(1);
+	}
+
+}
+
 /*****************************************************************************/
 /**
  *
@@ -1259,7 +1271,9 @@ int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	if (qspi_device_inited) {
+#ifndef ARCH_SEC_HW_BOOT
 		Xil_ExceptionDisable();
+#endif
 
 //		if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
 //			Status = FlashEnterExit4BAddMode(ENTER_4B);
@@ -1395,7 +1409,9 @@ int FlashWrite(u32 Address, u32 ByteCount, u8 Command,
 //			}
 //		}
 
+#ifndef ARCH_SEC_HW_BOOT
 		Xil_ExceptionEnable();
+#endif
 	}
 	return 0;
 }
@@ -1430,7 +1446,9 @@ int FlashErase(u32 Address, u32 ByteCount,
 	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	if (qspi_device_inited) {
+#ifndef ARCH_SEC_HW_BOOT
 		Xil_ExceptionDisable();
+#endif
 
 //		if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
 //			Status = FlashEnterExit4BAddMode(ENTER_4B);
@@ -1652,7 +1670,9 @@ int FlashErase(u32 Address, u32 ByteCount,
 //		}
 
 
+#ifndef ARCH_SEC_HW_BOOT
 		Xil_ExceptionEnable();
+#endif
 	}
 	return 0;
 }
@@ -1689,7 +1709,10 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 	XQspiPsu *QspiPsuPtr = &QspiPsuInstance;
 
 	if (qspi_device_inited) {
+
+#ifndef ARCH_SEC_HW_BOOT
 		Xil_ExceptionDisable();
+#endif
 
 //		if (Flash_Config_Table[FCTIndex].FlashDeviceSize > SIXTEENMB) {
 //			Status = FlashEnterExit4BAddMode(ENTER_4B);
@@ -1805,8 +1828,9 @@ int FlashRead(u32 Address, u32 ByteCount, u8 Command,
 //				return XST_FAILURE;
 //			}
 //		}
-
+#ifndef ARCH_SEC_HW_BOOT
 		Xil_ExceptionEnable();
+#endif
 	}
 
 	return 0;

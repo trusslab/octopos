@@ -621,11 +621,6 @@ int partition_read_physical(u32 data_address, u32 size, void *ptr)
 		return ERR_INVALID;
 	}
 
-	if (size >= Flash_Config_Table[FCTIndex].SectSize) {
-		SEC_HW_DEBUG_HANG();
-		return ERR_INVALID;
-	}
-
 	if (!is_aligned_64(ptr)) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
@@ -649,7 +644,7 @@ int partition_read_physical(u32 data_address, u32 size, void *ptr)
 /* directly writes to physical address. for writing boot images only */
 int partition_write_physical(u32 data_address, u32 size, void *ptr)
 {
-	u32 page_count, page;
+	u32 page_count, sector_count, page, sec;
 
 	/* do not support mid-sector write */
 	if (data_address % Flash_Config_Table[FCTIndex].SectSize != 0) {
@@ -662,7 +657,10 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
 		return ERR_INVALID;
 	}
 
-	if (size >= Flash_Config_Table[FCTIndex].SectSize) {
+	sector_count = size / Flash_Config_Table[FCTIndex].SectSize +
+				(size % Flash_Config_Table[FCTIndex].SectSize != 0);
+
+	if (sector_count >= MAC_ALLOWED_IMAGE_SIZE_IN_SECTOR) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_INVALID;
 	}
@@ -670,7 +668,8 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
 	/* we already align data_address with sector start address.
 	 * erase size doesn't matter.
 	 */
-	FlashErase(data_address, 1024, CmdBfr);
+	for (sec = 0; sec < sector_count; sec++)
+		FlashErase(data_address + Flash_Config_Table[FCTIndex].SectSize * sec, 1024, CmdBfr);
 
 	page_count = size / Flash_Config_Table[FCTIndex].PageSize;
 
@@ -689,7 +688,7 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
  * Boot image storage starts at BOOT_IMAGE_OFFSET, and each image
  * gets 1 sector. This should be enough.
  */
-inline u32 get_boot_image_address(int pid)
+static u32 get_boot_image_address(int pid)
 {
 	u32 address = 
 		(BOOT_IMAGE_OFFSET + pid * BOOT_IMAGE_PER_IMAGE_SIZE) *
@@ -698,7 +697,7 @@ inline u32 get_boot_image_address(int pid)
 	return address;
 }
 
-int load_boot_image_from_storage(int pid, u32 size, void *ptr)
+int load_boot_image_from_storage(int pid, void *ptr)
 {
 	u32 address;
 
@@ -713,7 +712,7 @@ int load_boot_image_from_storage(int pid, u32 size, void *ptr)
 	return 0;
 }
 
-int write_boot_image_to_storage(int pid, u32 size, void *ptr)
+int write_boot_image_to_storage(int pid, void *ptr)
 {
 	u32 address;
 

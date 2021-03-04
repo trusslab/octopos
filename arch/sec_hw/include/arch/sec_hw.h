@@ -28,7 +28,11 @@ void cleanup_platform();
 #define false   0
 #define bool    _Bool
 
-#define STORAGE_IMAGE_SIZE 0
+/* image size measured in bytes. it must be a multiple of 512. 
+ * its okay to be bigger than actual size (ceiling to the next multiple of 512).
+ */
+#define MAC_ALLOWED_IMAGE_SIZE_IN_SECTOR 3
+#define STORAGE_IMAGE_SIZE 261632
 
 
 /* This symbol is for debug only. It forces all mailbox to

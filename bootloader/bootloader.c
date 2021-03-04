@@ -15,8 +15,131 @@
 #include <octopos/syscall.h>
 
 #ifdef ARCH_SEC_HW_BOOT
+
+#include <arch/sec_hw.h>
+#include <arch/portab.h>
+#include <arch/srec_errors.h>
+#include <arch/srec.h>
+
 void init_platform();
 void cleanup_platform();
+void cleanup_qspi_flash();
+
+
+/* Defines */
+#define CR       13
+//#define VERBOSE
+
+/* Declarations */
+static void display_progress (uint32 lines);
+static uint8 load_exec ();
+static uint8 flash_get_srec_line (uint8 *buf);
+extern void init_stdout();
+
+extern int srec_line;
+extern uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
+
+extern void outbyte(char c);
+
+
+/* Data structures */
+static srec_info_t srinfo;
+static uint8 sr_buf[SREC_MAX_BYTES];
+static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
+
+static uint8 *flbuf;
+
+#ifdef VERBOSE
+static int8 *errors[] = {
+    "",
+    "Error while copying executable image into RAM",
+    "Error while reading an SREC line from flash",
+    "SREC line is corrupted",
+    "SREC has invalid checksum."
+};
+#endif
+
+#ifdef VERBOSE
+static void display_progress (uint32 count)
+{
+    /* Send carriage return */
+    outbyte (CR);
+    print  ("Bootloader: Processed (0x)");
+    putnum (count);
+    print (" S-records");
+}
+#endif
+
+static uint8 load_exec ()
+{
+    uint8 ret;
+    void (*laddr)();
+    int8 done = 0;
+
+    srinfo.sr_data = sr_data_buf;
+
+    while (!done) {
+        if ((ret = flash_get_srec_line (sr_buf)) != 0)
+            return ret;
+
+        if ((ret = decode_srec_line (sr_buf, &srinfo)) != 0)
+            return ret;
+
+#ifdef VERBOSE
+        display_progress (srec_line);
+#endif
+        switch (srinfo.type) {
+            case SREC_TYPE_0:
+                break;
+            case SREC_TYPE_1:
+            case SREC_TYPE_2:
+            case SREC_TYPE_3:
+                memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+                break;
+            case SREC_TYPE_5:
+                break;
+            case SREC_TYPE_7:
+            case SREC_TYPE_8:
+            case SREC_TYPE_9:
+                laddr = (void (*)())srinfo.addr;
+                done = 1;
+                ret = 0;
+                break;
+        }
+    }
+//    SEC_HW_DEBUG_HANG();
+#ifdef VERBOSE
+    print ("\r\nExecuting program starting at address: ");
+    putnum ((uint32)laddr);
+    print ("\r\n");
+#endif
+
+    (*laddr)();
+
+    /* We will be dead at this point */
+    return 0;
+}
+
+
+static uint8 flash_get_srec_line (uint8 *buf)
+{
+    uint8 c;
+    int count = 0;
+
+    while (1) {
+        c  = *flbuf++;
+        if (c == 0xD) {
+            /* Eat up the 0xA too */
+            c = *flbuf++;
+            return 0;
+        }
+
+        *buf++ = c;
+        count++;
+        if (count > SREC_MAX_BYTES)
+            return LD_SREC_LINE_ERROR;
+    }
+}
 #endif
 
 void prepare_bootloader(char *filename, int argc, char *argv[]);
@@ -45,7 +168,6 @@ int main()
 
 	char *name = argv[1];
 #else /* ARCH_SEC_HW_BOOT */
-
 	int runtime_id = 0;
 	char *runtime_name[2] = {0};
 
@@ -113,8 +235,15 @@ int main()
 		execv(path, args);
 	}
 #else
-	/* init_platform() has been called in mailbox_XXX */
-	cleanup_platform();
+//	/* init_platform() has been called in mailbox_XXX */
+//	cleanup_platform();
+	cleanup_qspi_flash();
+
+    flbuf = binary;
+    load_exec();
+
+    /* we are in error if load_exec() returns */
+    SEC_HW_DEBUG_HANG();
 #endif
 
 	return 0;
