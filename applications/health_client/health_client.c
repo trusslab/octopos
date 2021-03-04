@@ -576,16 +576,6 @@ void app_main(struct runtime_api *api)
 
 
 	/* Step 1 (including part of Step 0 to request access to storage) */
-	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
-	/* generate a key */
-	for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-		secure_storage_key[i] = i + 5;
-
-	/* FIXME: how to do local attestation for storage, i.e., check its PCR
-	 * val?
-	 */
-
-	api->set_up_secure_storage_key(secure_storage_key);
 	ret = api->set_up_context((void *) &context, sizeof(struct app_context),
 				  0, 100, 200, 100, queue_update_callback, NULL,
 				  measured_storage_pcr);

@@ -48,7 +48,6 @@ struct runtime_api {
 	int (*remove_file)(char *filename);
 
 	/* secure storage */
-	int (*set_up_secure_storage_key)(uint8_t *key);
 	int (*request_secure_storage_access)(uint32_t partition_size,
 					     limit_t limit, timeout_t timeout,
 					     queue_update_callback_t callback,

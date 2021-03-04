@@ -1,8 +1,10 @@
 #ifndef _OS_INCLUDE_STORAGE_H_
 #define _OS_INCLUDE_STORAGE_H_
 
-#define PARTITION_SIZE		1000 /* blocks */
+#include <tpm/hash.h>
 #include <arch/syscall.h>
+
+#define PARTITION_SIZE		1000 /* blocks */
 
 #define STORAGE_SET_ONE_ARG(arg0)				\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
@@ -55,12 +57,12 @@
 
 #define STORAGE_GET_ONE_RET				\
 	uint32_t ret0;					\
-	DESERIALIZE_32(&ret0, &buf[0]);	\
+	DESERIALIZE_32(&ret0, &buf[0]);			\
 
 #define STORAGE_GET_TWO_RETS				\
 	uint32_t ret0, ret1;				\
-	DESERIALIZE_32(&ret0, &buf[0]);	\
-	DESERIALIZE_32(&ret1, &buf[4]);	\
+	DESERIALIZE_32(&ret0, &buf[0]);			\
+	DESERIALIZE_32(&ret1, &buf[4]);			\
 
 #define STORAGE_GET_ONE_RET_DATA(data)						\
 	uint32_t ret0;								\
@@ -81,6 +83,7 @@ struct partition {
 	uint32_t partition_id;
 	uint32_t size;
 	uint8_t is_created;
+	uint8_t key[TPM_EXTEND_HASH_SIZE];
 };
 
 /* Status of the storage service */

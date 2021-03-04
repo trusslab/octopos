@@ -1,10 +1,6 @@
 #ifndef __STORAGE_OCTOPOS_CORE_H_
 #define __STORAGE_OCTOPOS_CORE_H_
 
-#include <tpm/hash.h>
-
-#define STORAGE_KEY_SIZE	TPM_EXTEND_HASH_SIZE  /* bytes */
-
 #ifdef ARCH_SEC_HW
 #define STORAGE_BLOCK_SIZE	64  /* bytes */
 #else

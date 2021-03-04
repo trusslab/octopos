@@ -98,11 +98,6 @@ void secure_login(struct runtime_api *api)
 	api->close_file(fd);
 	
 	insecure_printf("Now testing secure storage\n");
-	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
-	/* generate a key */
-	for (i = 0; i < STORAGE_KEY_SIZE; i++)
-		secure_storage_key[i] = i;
-	api->set_up_secure_storage_key(secure_storage_key);
 	ret = api->request_secure_storage_access(100, 200,
 						 MAILBOX_DEFAULT_TIMEOUT_VAL,
 						 NULL, NULL, NULL);

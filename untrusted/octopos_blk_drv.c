@@ -268,13 +268,7 @@ out:
 
 static int __init obd_init(void)
 {
-	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
 	int i;
-
-	for (i = 0; i < STORAGE_KEY_SIZE; i++)
-		secure_storage_key[i] = i + 2;
-
-	set_up_secure_storage_key(secure_storage_key);
 
 	if (register_blkdev(OCTOPOS_BLK_MAJOR, "octopos_blk"))
 		return -EIO;
@@ -295,10 +289,14 @@ static int __init obd_init(void)
 		timer_setup(&timer, delayed_obd_init, 0);
 		mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
 	} else {
-		register_timeout_update_callback(Q_STORAGE_CMD_IN, obd_queue_timeout_update);
-		register_timeout_update_callback(Q_STORAGE_CMD_OUT, obd_queue_timeout_update);
-		register_timeout_update_callback(Q_STORAGE_DATA_IN, obd_queue_timeout_update);
-		register_timeout_update_callback(Q_STORAGE_DATA_OUT, obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_CMD_IN,
+						 obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_CMD_OUT,
+						 obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_DATA_IN,
+						 obd_queue_timeout_update);
+		register_timeout_update_callback(Q_STORAGE_DATA_OUT,
+						 obd_queue_timeout_update);
 	}
 
 	INIT_WORK(&yield_wq, obd_yield_storage_queues);

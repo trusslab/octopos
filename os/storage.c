@@ -142,7 +142,7 @@ static int query_partition(uint32_t partition_id, struct partition *partition)
 	if (ret0)
 		return (int) ret0;
 
-	if (_size != (5 + STORAGE_KEY_SIZE)) {
+	if (_size != (5 + TPM_EXTEND_HASH_SIZE)) {
 		printf("Error: %s: unexpected returned data size.\n", __func__);
 		return ERR_UNEXPECTED;
 	}
@@ -150,10 +150,7 @@ static int query_partition(uint32_t partition_id, struct partition *partition)
 	partition->partition_id = partition_id;
 	memcpy(&partition->size, data, 4);
 	partition->is_created = data[4];
-	/* We don't currently store/use the key sent back in the query
-	 * (which is at &data[5]).
-	 */
-	//memcpy(partition->key, &data[5], STORAGE_KEY_SIZE);
+	memcpy(partition->key, &data[5], TPM_EXTEND_HASH_SIZE);
 
 	return 0;
 }
@@ -244,6 +241,7 @@ static int authenticate_with_storage_service(void)
 	return (int) ret0;
 }
 
+#ifdef ROLE_OS
 /*
  * Check that all queues are available and that the partition is unlocked.
  */
@@ -259,7 +257,7 @@ static void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
 
-/* FIXME: now: why do we need this ifdef? */
+/* FIXME: why do we need this ifdef? */
 #ifdef ROLE_OS	
 	ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
@@ -284,6 +282,7 @@ static void wait_for_storage(void)
 //		is_partition_locked = false;
 //	}
 }
+#endif
 
 int wait_for_storage_for_os_use(void)
 {
@@ -306,6 +305,7 @@ int wait_for_storage_for_os_use(void)
 
 			storage_status = OS_USE;
 		} else {
+#ifdef ROLE_OS
 			if (!boot_partition) {
 				printf("Error: %s: boot_partition is NULL "
 				       "(else)\n", __func__);
@@ -325,12 +325,17 @@ int wait_for_storage_for_os_use(void)
 			}
 
 			storage_status = OS_USE;
+#else /* ROLE_OS */
+			printf("Error: %s: unexpected state.\n", __func__);
+			exit(-1);
+#endif /* ROLE_OS */
 		}
 	}
 
 	return 0;
 }
 
+#ifdef ROLE_OS	
 static int storage_create_secure_partition(uint8_t *app_key,
 					   uint8_t runtime_proc_id,
 					   uint32_t partition_size,
@@ -380,7 +385,6 @@ static int storage_create_secure_partition(uint8_t *app_key,
 	return (int) ret0;
 }
 
-#ifdef ROLE_OS
 //static int storage_delete_secure_partition(int partition_id)
 //{
 //	STORAGE_SET_ONE_ARG(partition_id) 
@@ -395,8 +399,7 @@ static int storage_create_secure_partition(uint8_t *app_key,
 void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 						    uint8_t *buf)
 {
-	uint32_t sec_partition_id = 0;
-	uint32_t partition_size;
+	uint32_t sec_partition_id = 0, partition_size, i;
 	struct runtime_proc *runtime_proc;
 	struct app *app;
 	uint8_t app_key[TPM_EXTEND_HASH_SIZE];
@@ -422,19 +425,28 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	
 	app = runtime_proc->app;
 
+	/* Let's see if the app already has a partition. */
 	if (app->sec_partition_created) {
-		printf("Error: %s: app already has a secure storage "
-		       "partition.\n", __func__);
-		SYSCALL_SET_TWO_RETS((uint32_t) ERR_INVALID, 0)
+		SYSCALL_SET_TWO_RETS(0, app->sec_partition_id)
 		return;
 	}
 
 	ret = tpm_processor_read_pcr(runtime_proc_id, app_key);
 	if (ret) {
-		printf("Error: %s: couldn't read TPM PCR for runtime proc.\n",
-		       __func__);
+		printf("Error: %s: couldn't read TPM PCR for runtime proc %d.\n",
+		       __func__, runtime_proc_id);
 		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
 		return;
+	}
+
+	/* The partition might have been created in previous runs. Therefore,
+	 * let's check the query data we received from the storage service too.
+	 */
+	for (i = 1; i < num_partitions; i++) {
+		if (!memcmp(app_key, partitions[i].key, TPM_EXTEND_HASH_SIZE)) {
+			SYSCALL_SET_TWO_RETS(0, i)
+			return;
+		}
 	}
 
 	if (storage_status != OS_ACCESS) {
@@ -563,30 +575,29 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	SYSCALL_SET_ONE_RET(0)
 }
-
-/* FIXME: now: delete this syscall. */
-void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
-					  uint8_t *buf)
-{
-	//struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
-	//if (!runtime_proc || !runtime_proc->app) {
-	//	SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
-	//	return;
-	//}
-	//struct app *app = runtime_proc->app;
-
-	//if (!app->sec_partition_created) {
-	//	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-	//	return;
-	//}
-
-	//wait_for_storage();
-	//storage_delete_secure_partition(app->sec_partition_id);
-	//app->sec_partition_created = false;
-	//app->sec_partition_id = -1;
-
-	//SYSCALL_SET_ONE_RET(0)
-}
+//
+//void handle_delete_secure_storage_syscall(uint8_t runtime_proc_id,
+//					  uint8_t *buf)
+//{
+//	//struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+//	//if (!runtime_proc || !runtime_proc->app) {
+//	//	SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+//	//	return;
+//	//}
+//	//struct app *app = runtime_proc->app;
+//
+//	//if (!app->sec_partition_created) {
+//	//	SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+//	//	return;
+//	//}
+//
+//	//wait_for_storage();
+//	//storage_delete_secure_partition(app->sec_partition_id);
+//	//app->sec_partition_created = false;
+//	//app->sec_partition_id = -1;
+//
+//	//SYSCALL_SET_ONE_RET(0)
+//}
 #endif /* ROLE_OS */
 
 uint32_t initialize_storage(void)

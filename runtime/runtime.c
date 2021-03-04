@@ -42,7 +42,6 @@
 #include <octopos/bluetooth.h>
 /* FIXME: tpm/tpm.h should be moved to octopos/tpm.h */
 #include <tpm/tpm.h>
-#include <tpm/hash.h>
 #include <arch/mailbox_runtime.h>
 
 #ifdef ARCH_SEC_HW
@@ -1448,7 +1447,6 @@ static void load_application(char *msg)
 		.get_file_size = get_file_size,
 		.close_file = close_file,
 		.remove_file = remove_file,
-		.set_up_secure_storage_key = set_up_secure_storage_key,
 		.request_secure_storage_access = request_secure_storage_access,
 		.yield_secure_storage_access = yield_secure_storage_access,
 		.delete_and_yield_secure_storage = delete_and_yield_secure_storage,

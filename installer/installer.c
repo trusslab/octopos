@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <octopos/storage.h>
+#include <tpm/hash.h>
 #include <os/file_system.h>
 
 /* in file system wrapper */
@@ -129,7 +130,7 @@ static int copy_file_to_partition(char *filename, char *path)
 	return 0;
 }
 
-int main(int argc, char **argv)
+static int prepare_boot_partition(void)
 {
 	/* create new file or delete existing file */
 	filep = fopen("./storage/octopos_partition_0_data", "w");
@@ -244,11 +245,162 @@ int main(int argc, char **argv)
 				 (char *) "./installer/aligned_network", 1);
 	copy_file_from_partition((char *) "bluetooth",
 				 (char *) "./installer/aligned_bluetooth", 1);
+	copy_file_from_partition((char *) "linux",
+				 (char *) "./installer/aligned_linux", 1);
 	
 	printf("installer: total number of written blocks = %d\n", total_blocks);
 
 	close_file_system();
 	fclose(filep);
+
+	return 0;
+}
+
+/* Both the OS bootloader and OS access this partition.
+ * The OS PCR register will be zero when the bootloader is running and before
+ * it extends the register with the hash of the OS executable.
+ */
+static int set_up_key_for_boot_partition(void)
+{
+	FILE *lfilep;
+	uint8_t os_pcr[TPM_EXTEND_HASH_SIZE];
+	uint8_t file_hash[TPM_EXTEND_HASH_SIZE];
+	uint8_t *buffers[2];
+	uint32_t buffer_sizes[2];
+	uint8_t zero_pcr[TPM_EXTEND_HASH_SIZE];
+	uint32_t size;
+
+	memset(zero_pcr, 0x0, TPM_EXTEND_HASH_SIZE);
+
+	/* create new file or delete existing file */
+	lfilep = fopen("./storage/octopos_partition_0_keys", "w");
+	if (!lfilep) {
+		printf("Error: %s: Couldn't open the partition lock file (w).\n",
+		       __func__);
+		return -1;
+	}
+	fclose(lfilep);
+
+	/* open for read and write */
+	lfilep = fopen("./storage/octopos_partition_0_keys", "r+");
+	if (!lfilep) {
+		printf("Error: %s: Couldn't open the partition file (r+).\n",
+		       __func__);
+		return -1;
+	}
+	
+	buffer_sizes[0] = TPM_EXTEND_HASH_SIZE;
+	buffer_sizes[1] = TPM_EXTEND_HASH_SIZE;
+	
+	/* OS PCR */
+	hash_file((char *) "./os/os", file_hash);
+	buffers[0] = zero_pcr;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, os_pcr);
+
+	fseek(filep, 0, SEEK_SET);
+	/* zero_pcr is for the OS bootloader. */
+	size = (uint32_t) fwrite(zero_pcr, sizeof(uint8_t),
+				 TPM_EXTEND_HASH_SIZE, lfilep);
+	if (size != TPM_EXTEND_HASH_SIZE) {
+		printf("Error: %s: couldn't write the OS bootloader PCR.\n",
+		       __func__);
+		fclose(lfilep);
+		return -1;
+	}
+
+	fseek(filep, TPM_EXTEND_HASH_SIZE, SEEK_SET);
+	size = (uint32_t) fwrite(os_pcr, sizeof(uint8_t), TPM_EXTEND_HASH_SIZE,
+				 lfilep);
+	if (size != TPM_EXTEND_HASH_SIZE) {
+		printf("Error: %s: couldn't write the OS PCR.\n", __func__);
+		fclose(lfilep);
+		return -1;
+	}
+
+	fclose(lfilep);
+
+	return 0;
+}
+
+static int set_up_key_for_untrusted_rootfs_partition(void)
+{
+	FILE *lfilep;
+	uint8_t untrusted_pcr[TPM_EXTEND_HASH_SIZE];
+	uint8_t file_hash[TPM_EXTEND_HASH_SIZE];
+	uint8_t *buffers[2];
+	uint32_t buffer_sizes[2];
+	uint8_t zero_pcr[TPM_EXTEND_HASH_SIZE];
+	uint32_t size;
+
+	memset(zero_pcr, 0x0, TPM_EXTEND_HASH_SIZE);
+
+	/* create new file or delete existing file */
+	lfilep = fopen("./storage/octopos_partition_1_keys", "w");
+	if (!lfilep) {
+		printf("Error: %s: Couldn't open the partition lock file (w).\n",
+		       __func__);
+		return -1;
+	}
+	fclose(lfilep);
+
+	/* open for read and write */
+	lfilep = fopen("./storage/octopos_partition_1_keys", "r+");
+	if (!lfilep) {
+		printf("Error: %s: Couldn't open the partition file (r+).\n",
+		       __func__);
+		return -1;
+	}
+	
+	/* generate PCR digest for OS bootloader and OS. */
+	buffer_sizes[0] = TPM_EXTEND_HASH_SIZE;
+	buffer_sizes[1] = TPM_EXTEND_HASH_SIZE;
+	
+	/* Linux PCR */
+	hash_file((char *) "./installer/aligned_linux", file_hash);
+	buffers[0] = zero_pcr;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, untrusted_pcr);
+
+	fseek(filep, 0, SEEK_SET);
+	size = (uint32_t) fwrite(untrusted_pcr, sizeof(uint8_t),
+				 TPM_EXTEND_HASH_SIZE, lfilep);
+	if (size != TPM_EXTEND_HASH_SIZE) {
+		printf("Error: %s: couldn't write the untrusted_pcr.\n",
+		       __func__);
+		fclose(lfilep);
+		return -1;
+	}
+
+	fclose(lfilep);
+
+	return 0;
+}
+
+int main(int argc, char **argv)
+{
+	int ret;
+
+	ret = prepare_boot_partition();	
+	if (ret) {
+		printf("Error: %s: couldn't prepare the boot partition.\n",
+		       __func__);
+		return ret;
+	}
+
+	ret = set_up_key_for_boot_partition();
+	if (ret) {
+		printf("Error: %s: couldn't set up key for the boot "
+		       "partition.\n", __func__);
+		return ret;
+	}
+
+	ret = set_up_key_for_untrusted_rootfs_partition();
+	if (ret) {
+		printf("Error: %s: couldn't set up key for the untrusted "
+		       "rootfs partition.\n", __func__);
+		return ret;
+	}
 
 	return 0;
 }	
