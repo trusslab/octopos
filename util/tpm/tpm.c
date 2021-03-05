@@ -1,7 +1,7 @@
 #include <tpm/tpm.h>
 #include <tpm/hash.h>
 
-uint8_t running_processor = 0;
+static uint8_t running_processor = 0;
 
 /* Hash support function:
  *   print_digest
@@ -12,7 +12,7 @@ void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size)
 {
 	printf("PCR %d: ", pcr_index);
 	for (size_t index = 0; index < digest_size; index++)
-		printf("%x", *(digest + index));
+		printf("%02x", *(digest + index));
 	printf("\n");
 }
 
