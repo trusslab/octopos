@@ -19,6 +19,7 @@
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 
+#ifndef ARCH_SEC_HW_BOOT
 extern int fd_out;
 extern sem_t interrupts[];
 
@@ -130,4 +131,17 @@ void send_measurement_to_tpm(char *path)
 	
 	close_os_mailbox();
 }
+#else
+void prepare_bootloader(char *filename, int argc, char *argv[])
+{
+
+}
+
+int copy_file_from_boot_partition(char *filename, char *path)
+{
+	return 0;
+}
+
+#endif
+
 #endif
