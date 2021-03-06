@@ -1,4 +1,4 @@
-#ifndef ARCH_SEC_HW
+//#ifndef ARCH_SEC_HW
 
 /* socket_client app */
 #include <stdio.h>
@@ -57,6 +57,8 @@ static void send_receive(struct runtime_api *api)
 
 	if (api->connect_socket(sock, &skaddr) < 0) {
 		printf("%s: Error: _connect\n", __func__);
+		//mj_temp
+		while(1);
 		return;
 	}
 
@@ -74,11 +76,15 @@ static void send_receive(struct runtime_api *api)
 		insecure_printf("%.*s\n", len, buf);
 	}
 }
-
+#ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
+#else /*ARCH_SEC_HW*/
+void socket_client(struct runtime_api *api)
+#endif /*ARCH_SEC_HW*/
 {
 	int err = 0;
+	struct socket *tmp;
 	/* init arguments */
 	memset(&skaddr, 0x0, sizeof(skaddr));
 	type = SOCK_STREAM;	/* default TCP stream */
@@ -107,7 +113,6 @@ void app_main(struct runtime_api *api)
 	send_receive(api);
 
 out:	/* close and out */
-	struct socket *tmp;
 	if (sock) {
 		tmp = sock;
 		sock = NULL;
@@ -115,4 +120,4 @@ out:	/* close and out */
 	}
 	api->yield_network_access();
 }
-#endif
+//#endif

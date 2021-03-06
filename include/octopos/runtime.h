@@ -61,7 +61,7 @@ struct runtime_api {
 	uint8_t (*get_runtime_proc_id)(void);
 	uint8_t (*get_runtime_queue_id)(void);
 
-#ifndef ARCH_SEC_HW
+//#ifndef ARCH_SEC_HW
 	/* socket and network */
 	struct socket *(*create_socket)(int family, int type, int protocol,
 					struct sock_addr *skaddr);
@@ -74,7 +74,7 @@ struct runtime_api {
 	int (*write_to_socket)(struct socket *sock, void *buf, int len);
 	int (*request_network_access)(int count);
 	int (*yield_network_access)(void);
-#endif
+//#endif
 };
 #endif /* UNTRUSTED_DOMAIN */
 

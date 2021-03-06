@@ -6,6 +6,15 @@
 #include "ip.h"
 #include "netif.h"
 #include "route.h"
+#else /*ARCH_SEC_HW*/
+#include <network/lib.h>
+#include <network/socket.h>
+#include <network/sock.h>
+#include <network/udp.h>
+#include <network/ip.h>
+#include <network/netif.h>
+#include <network/route.h>
+#endif /*ARCH_SEC_HW*/
 
 #define UDP_PORTS	0x10000
 #define UDP_HASH_SIZE	128
@@ -308,7 +317,8 @@ void udp_init(void)
 	}
 	udp_table.best_slot = 0;
 	udp_table.best_update = UDP_BEST_UPDATE;
-	pthread_mutex_init(&udp_table.mutex, NULL);
+	/*FIXME PTHREAD MJ*/
+//	pthread_mutex_init(&udp_table.mutex, NULL);
 	/* udp ip id */
 	udp_id = 0;
 }
@@ -324,4 +334,3 @@ struct sock *udp_alloc_sock(int protocol)
 	udp_id++;
 	return &udp_sk->sk;
 }
-#endif

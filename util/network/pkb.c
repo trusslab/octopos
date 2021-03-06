@@ -1,9 +1,16 @@
+#ifndef ARCH_SEC_HW
 #include <stdio.h>
 #include <ctype.h>
-
 #include "netif.h"
 #include "ether.h"
 #include "lib.h"
+#else /*ARCH_SEC_HW*/
+#include <stdio.h>
+#include <ctype.h>
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/lib.h>
+#endif /*ARCH_SEC_HW*/
 
 #define MAX_PKBS 200
 int free_pkbs = 0;

@@ -4,6 +4,13 @@
 #include "route.h"
 #include "ip.h"
 #include "tcp.h"
+#else /*ARCH_SEC_HW*/
+#include <network/lib.h>
+#include <network/netif.h>
+#include <network/route.h>
+#include <network/ip.h>
+#include <network/tcp.h>
+#endif /*ARCH_SEC_HW*/
 
 static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 			unsigned int saddr, unsigned int daddr)
@@ -204,4 +211,3 @@ void tcp_send_fin(struct tcp_sock *tsk)
 			_ntohs(otcp->dst));
 	tcp_send_out(tsk, opkb, NULL);
 }
-#endif

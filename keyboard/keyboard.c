@@ -25,7 +25,7 @@ int main(int argc, char **argv)
 {
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s: keyboard init\n", __func__);
+	printf("%s: keyboard init\n\r", __func__);
 
 	int ret = init_keyboard();
 	if (ret)

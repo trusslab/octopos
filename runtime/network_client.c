@@ -54,7 +54,7 @@ static int send_msg_to_network(uint8_t *buf)
 	return 0;
 }
 
-#ifndef ARCH_SEC_HW
+//#ifndef ARCH_SEC_HW
 // TODO: missing pkbuf definition
 void ip_send_out(struct pkbuf *pkb)
 {
@@ -62,7 +62,7 @@ void ip_send_out(struct pkbuf *pkb)
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size)
 	send_msg_to_network(buf);
 }
-#endif
+//#endif
 
 uint8_t *ip_receive(uint8_t *buf, uint16_t *size)
 {
@@ -140,16 +140,17 @@ int request_network_access(int count)
 		return ERR_FAULT;
 	}
 
+	has_network_access = true;
 	int ret = net_start_receive();
 	if (ret) {
 		printf("Error: set_up_receive failed\n");
 		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 		mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 		mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
+		has_network_access = false;
 		return ERR_FAULT;
 	}
 
-	has_network_access = true;
 	network_access_count = count;
 
 	return 0;

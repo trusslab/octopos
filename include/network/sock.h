@@ -1,4 +1,4 @@
-#ifndef ARCH_SEC_HW
+//#ifndef ARCH_SEC_HW
 #ifndef __SOCK_H
 #define __SOCK_H
 
@@ -89,4 +89,4 @@ extern int free_socks;
 
 #endif	/* sock.h */
 
-#endif
+//#endif

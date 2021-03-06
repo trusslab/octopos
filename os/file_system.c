@@ -874,6 +874,7 @@ int file_system_remove_file(char *filename)
 }
 #endif /* ROLE_OS */
 
+#ifdef ARCH_MM
 void initialize_file_system(uint32_t _partition_num_blocks)
 {
 	/* initialize fd bitmap */
@@ -955,7 +956,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
 }
-
+#endif
 void close_file_system(void)
 {
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 

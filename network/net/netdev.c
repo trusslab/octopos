@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW_NETWORK
 /*
  *  Lowest net device code:
  *    independent net device layer
@@ -102,3 +103,4 @@ int local_address(unsigned int addr)
 	}
 	return 0;
 }
+#endif

@@ -1,11 +1,21 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "netif.h"
 #include "ip.h"
 #include "icmp.h"
 #include "lib.h"
 #include "route.h"
 #include "list.h"
-
 #include "netcfg.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/list.h>
+#include <network/ip.h>
+#include <network/icmp.h>
+#include <network/route.h>
+#include <network/lib.h>
+#include <network/netcfg.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 static LIST_HEAD(rt_head);
 

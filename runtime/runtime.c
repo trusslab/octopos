@@ -32,6 +32,18 @@
 #include <runtime/network_client.h>
 #endif
 
+
+#ifdef ARCH_SEC_HW
+#include <sys/stat.h>
+#include <runtime/runtime.h>
+#include <runtime/storage_client.h>
+#include <network/sock.h>
+#include <network/socket.h>
+#include <network/netif.h>
+#include <network/tcp_timer.h>
+#include <runtime/network_client.h>
+#endif
+
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
@@ -46,12 +58,15 @@
 #include "xparameters.h"
 #include "arch/sec_hw.h"
 #include "xil_cache.h"
+
+#include <network/ip.h>
+#include <network/tcp.h>
 #endif
 /* FIXME: remove */
 #ifdef ARCH_UMODE
 #include "tcp.h"
 #include "ip.h"
-#include "raw.h"
+//#include "raw.h"
 #endif
 
 #ifdef ARCH_SEC_HW
@@ -194,7 +209,7 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 #endif
 }
 
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 /* network */
 int local_address(unsigned int addr)
 {
@@ -216,9 +231,12 @@ int rt_output(struct pkbuf *pkb)
 	exit(-1);
 	return 0;
 }
+extern bool has_network_access;
+extern int network_access_count;
 
+#ifndef ARCH_SEC_HW
 static void *tcp_receive(void *_data)
-{
+{	
 	while (1) {
 		uint8_t *buf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		if (!buf) {
@@ -230,9 +248,9 @@ static void *tcp_receive(void *_data)
 		uint16_t data_size;
 
 		data = ip_receive(buf, &data_size);
-		if (!data_size) {
+		if (!data_size || data==NULL) {
 			printf("%s: Error: bad network data message\n", __func__);
-			continue;
+			return NULL;
 		}
 
 		struct pkbuf *pkb = (struct pkbuf *) data;
@@ -245,31 +263,83 @@ static void *tcp_receive(void *_data)
 			return NULL;
 		}
 
-		/* FIXME: is the call to raw_in() needed? */
-		raw_in(pkb);
+		///* FIXME: is the call to raw_in() needed? */
+		//raw_in(pkb);
 		tcp_in(pkb);
 		free(buf);
 	}
 }
+#else /*ARCH_SEC_HW*/
+uint8_t net_buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+int tcp_receive()
+{
+//	uint8_t *buf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
+//	if (!buf) {
+//		printf("%s: Error: could not allocate memory for buf\n", __func__);
+//		exit(-1);
+//	}
+
+//	uint8_t *data;
+//	uint16_t data_size;
+
+	int bytes_read;
+	if(!has_network_access){
+		return -1;
+	}
+
+
+	bytes_read = sem_wait_one_time_receive_buf(&interrupts[Q_NETWORK_DATA_OUT], Mbox_regs[Q_NETWORK_DATA_OUT], net_buf);
+	if (bytes_read == NULL){
+		return -1;
+	}
+        MY_NETWORK_GET_ZERO_ARGS_DATA
+	if (!data_size) {
+		printf("%s: Error: bad network data message\n", __func__);
+		return -1;
+	}
+
+	struct pkbuf *pkb = (struct pkbuf *) data;
+	pkb->pk_refcnt = 2; /* prevents the TCP code from freeing the pkb */
+	list_init(&pkb->pk_list);
+	/* FIXME: add */
+	//pkb_safe();
+	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
+		printf("%s: Error: packet size is not correct.\n", __func__);
+		return -1;
+	}
+
+	/* FIXME: is the call to raw_in() needed? */
+//	raw_in(pkb);
+	tcp_in(pkb);
+//	free(buf);
+
+	return 0;
+}
+#endif /*ARCH_SEC_HW*/
+
 
 int net_start_receive(void)
 {
 	/* tcp receive */
 	/* FIXME: process received message on the main thread */
+
+#ifndef ARCH_SEC_HW
 	int ret = pthread_create(&tcp_threads[1], NULL, (pfunc_t) tcp_receive, NULL);
 	if (ret) {
 		printf("Error: couldn't launch tcp_threads[1]\n");
 		return ret;
 	}
-
+#endif
 	return 0;
 }
 
 void net_stop_receive(void)
 {
+#ifndef ARCH_SEC_HW
 	int ret = pthread_cancel(tcp_threads[1]);
 	if (ret)
 		printf("Error: couldn't kill tcp_threads[1]");
+#endif
 }
 
 int net_stack_init(void)
@@ -278,22 +348,25 @@ int net_stack_init(void)
 
 	/* tcp timer */
 	/* FIXME: do we need this? */
+#ifndef ARCH_SEC_HW
 	int ret = pthread_create(&tcp_threads[0], NULL, (pfunc_t) tcp_timer, NULL);
 	if (ret) {
 		printf("Error: couldn't launch tcp_threads[0]\n");
 		return -1;
 	}
-
+#endif
 	return 0;
 }
 
 void net_stack_exit(void)
 {
+#ifndef ARCH_SEC_HW
 	int ret = pthread_cancel(tcp_threads[0]);
 	if (ret)
 		printf("Error: couldn't kill tcp_threads[0]");
+#endif	
 }
-#endif
+//#endif
 
 /* Only to be used for queues that runtime writes to */
 /* FIXME: busy-waiting */
@@ -662,10 +735,8 @@ static uint8_t get_runtime_queue_id(void)
 	return (uint8_t) q_runtime;
 }
 
-extern bool has_network_access;
-extern int network_access_count;
 
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 static struct socket *create_socket(int family, int type, int protocol,
 					struct sock_addr *skaddr)
 {
@@ -757,7 +828,7 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 	return _write(sock, buf, len);
 }
 
-#endif
+//#endif
 
 static int request_tpm_access(limit_t limit)
 {
@@ -933,7 +1004,7 @@ static void load_application(char *msg)
 		.request_tpm_attestation_report = request_tpm_attestation_report,
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
 		.close_socket = close_socket,
@@ -944,7 +1015,7 @@ static void load_application(char *msg)
 		.write_to_socket = write_to_socket,
 		.request_network_access = request_network_access,
 		.yield_network_access = yield_network_access,
-#endif
+//#endif
 	};
 
 	load_application_arch(msg, &api);
@@ -1049,10 +1120,10 @@ int main()
 #endif /* ARCH_SEC_HW */
 
 	int runtime_id = -1;
-
+#ifndef ARCH_SEC_HW
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-
+#endif
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
 		exit(-1);
@@ -1091,18 +1162,18 @@ int main()
 
 	sem_init(&srq_sem, 0, MAILBOX_QUEUE_SIZE);
 
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 	ret = net_stack_init();
 	if (ret) {
 		printf("%s: Error: couldn't initialize the runtime network stack\n", __func__);
 		return -1;
 	}
-#endif
+//#endif
 
 	runtime_core();
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 	net_stack_exit();
-#endif
+//#endif
 
 	close_runtime();
 

@@ -34,6 +34,10 @@ OCTOPOS_XMbox	Mbox_output,
 				Mbox_storage_cmd_out,
 				Mbox_storage_data_in,
 				Mbox_storage_data_out,
+				Mbox_network_cmd_in,
+				Mbox_network_cmd_out,
+				Mbox_network_data_in,
+				Mbox_network_data_out,
 				Mbox_untrusted,
 				Mbox_osu;
 
@@ -417,7 +421,18 @@ void write_to_storage_data_queue(uint8_t *buf)
 
 int send_cmd_to_network(uint8_t *buf) 
 {
-	//TODO: Implement
+	//MJ: copied from send_cmd_to_untrusted
+	sem_wait_impatient_send(
+		&interrupts[Q_NETWORK_CMD_IN], 
+		Mbox_regs[Q_NETWORK_CMD_IN], 
+		(u32*) buf);
+	printf("%s: req send to network wait for resp\n\r",__func__);
+	sem_wait_impatient_receive_buf(
+		&interrupts[Q_NETWORK_CMD_OUT], 
+		Mbox_regs[Q_NETWORK_CMD_OUT],
+		(uint8_t*) buf);
+	printf("%s: resp received from network\n\r",__func__);
+	return 0;
 }
 
 int send_cmd_to_untrusted(uint8_t *buf)
@@ -445,11 +460,22 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
+		case Q_NETWORK_CMD_OUT:
+			OCTOPOS_XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD);
+			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			break;
+		case Q_NETWORK_DATA_OUT:
+			OCTOPOS_XMbox_SetReceiveThreshold(Mbox_regs[queue_id], MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			break;
+
 		case Q_SERIAL_OUT:
 		case Q_RUNTIME1:
 		case Q_RUNTIME2:
 		case Q_STORAGE_CMD_IN:
 		case Q_STORAGE_DATA_IN:
+		case Q_NETWORK_CMD_IN:
+		case Q_NETWORK_DATA_IN:
 			OCTOPOS_XMbox_SetSendThreshold(Mbox_regs[queue_id], 0);
 			OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[queue_id], OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 			break;
@@ -522,6 +548,17 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			
 			sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 			sem_post(&availables[Q_STORAGE_CMD_IN]);
+		}  else if (callback_ref == &Mbox_network_data_in) {
+			/* Storage data in */
+			_SEC_HW_DEBUG("from Mbox_network_data_in");
+
+			sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+			sem_post(&availables[Q_NETWORK_DATA_IN]);
+		} else if (callback_ref == &Mbox_network_cmd_in) {
+			_SEC_HW_DEBUG("from Mbox_network_cmd_in");
+			
+			sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
+			sem_post(&availables[Q_NETWORK_CMD_IN]);
 		}
 		
 	} else if (mask & OCTOPOS_XMB_IX_RTA) {
@@ -569,6 +606,20 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
 			sem_post(&availables[Q_STORAGE_CMD_OUT]);
 			sem_post(&interrupts[Q_STORAGE_CMD_OUT]);
+		} else if (callback_ref == &Mbox_network_data_out) {
+			/* Storage data out */
+			_SEC_HW_DEBUG("from Mbox_network_data_out");
+
+			sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
+			sem_post(&availables[Q_NETWORK_DATA_OUT]);
+			sem_post(&interrupts[Q_NETWORK_DATA_OUT]);
+		} else if (callback_ref == &Mbox_network_cmd_out) {
+			/* Storage cmd out */
+			_SEC_HW_DEBUG("from Mbox_network_cmd_out");
+
+			sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, 0);
+			sem_post(&availables[Q_NETWORK_CMD_OUT]);
+			sem_post(&interrupts[Q_NETWORK_CMD_OUT]);
 		}
 	} else if (mask & OCTOPOS_XMB_IX_ERR) {
 		_SEC_HW_ERROR("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
@@ -603,7 +654,8 @@ int init_os_mailbox(void)
 	OCTOPOS_XMbox_Config	*ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4,
 					*ConfigPtr_runtime1, *ConfigPtr_runtime2, *Config_storage_cmd_in,
 					*Config_storage_cmd_out, *Config_storage_data_in, *Config_storage_data_out,
-					*Config_untrusted, *Config_osu;
+					*Config_network_cmd_in,*Config_network_cmd_out, *Config_network_data_in,
+					*Config_network_data_out, *Config_untrusted, *Config_osu;
 
 	init_platform();
 	OMboxIds_init();
@@ -707,6 +759,58 @@ int init_os_mailbox(void)
 		return -XST_FAILURE;
 	}
 
+
+
+	Config_network_data_in = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_NETWORK_DATA_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_network_data_in, 
+		Config_network_data_in,
+		Config_network_data_in->BaseAddress
+		);
+	if (Status != XST_SUCCESS)
+	{
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_NETWORK_DATA_IN_DEVICE_ID);
+		return -XST_FAILURE;
+	}
+
+	Config_network_data_out = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_NETWORK_DATA_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_network_data_out, 
+		Config_network_data_out,
+		Config_network_data_out->BaseAddress
+		);
+	if (Status != XST_SUCCESS)
+	{
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_NETWORK_DATA_OUT_DEVICE_ID);
+		return -XST_FAILURE;
+	}
+
+	Config_network_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_NETWORK_CMD_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_network_cmd_in, 
+		Config_network_cmd_in,
+		Config_network_cmd_in->BaseAddress
+		);
+	if (Status != XST_SUCCESS)
+	{
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_NETWORK_CMD_IN_DEVICE_ID);
+		return -XST_FAILURE;
+	}
+
+	Config_network_cmd_out = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_NETWORK_CMD_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_network_cmd_out, 
+		Config_network_cmd_out,
+		Config_network_cmd_out->BaseAddress
+		);
+	if (Status != XST_SUCCESS)
+	{
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_OS_MBOX_Q_NETWORK_CMD_OUT_DEVICE_ID);
+		return -XST_FAILURE;
+	}
+
+
+
 	Config_untrusted = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_UNTRUSTED_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(
 		&Mbox_untrusted, 
@@ -766,6 +870,20 @@ int init_os_mailbox(void)
 
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+
+
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_network_cmd_in, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_network_cmd_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_network_cmd_out, MAILBOX_DEFAULT_RX_THRESHOLD);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_network_cmd_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_network_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_network_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+
+	OCTOPOS_XMbox_SetSendThreshold(&Mbox_network_data_in, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_network_data_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+
 
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
@@ -879,74 +997,141 @@ int init_os_mailbox(void)
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc, 
-			OMboxIntrs[P_OS][Q_STORAGE_CMD_IN],
-		(XInterruptHandler)handle_mailbox_interrupts, 
-		(void*)&Mbox_storage_cmd_in);
+//	Status = XIntc_Connect(&intc,
+//			OMboxIntrs[P_OS][Q_STORAGE_CMD_IN],
+//		(XInterruptHandler)handle_mailbox_interrupts,
+//		(void*)&Mbox_storage_cmd_in);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+
+//	Status = XIntc_Connect(&intc,
+//			OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT],
+//		(XInterruptHandler)handle_mailbox_interrupts,
+//		(void*)&Mbox_storage_cmd_out);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+
+//	Status = XIntc_Connect(&intc,
+//			OMboxIntrs[P_OS][Q_STORAGE_DATA_IN],
+//		(XInterruptHandler)handle_mailbox_interrupts,
+//		(void*)&Mbox_storage_data_in);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+
+//	Status = XIntc_Connect(&intc,
+//			OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT],
+//		(XInterruptHandler)handle_mailbox_interrupts,
+//		(void*)&Mbox_storage_data_out);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+
+//	Status = XIntc_Connect(&intc,
+//			OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN],
+//		(XInterruptHandler)handle_change_queue_interrupts,
+//		(void*)Q_STORAGE_CMD_IN);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+
+//	Status = XIntc_Connect(&intc,
+//			OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT],
+//		(XInterruptHandler)handle_change_queue_interrupts,
+//		(void*)Q_STORAGE_CMD_OUT);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+
+//	Status = XIntc_Connect(&intc,
+//			OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN],
+//		(XInterruptHandler)handle_change_queue_interrupts,
+//		(void*)Q_STORAGE_DATA_IN);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+
+//	Status = XIntc_Connect(&intc,
+//			OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT],
+//		(XInterruptHandler)handle_change_queue_interrupts,
+//		(void*)Q_STORAGE_DATA_OUT);
+//	if (Status != XST_SUCCESS) {
+//		return XST_FAILURE;
+//	}
+
+	Status = XIntc_Connect(&intc,
+			OMboxIntrs[P_OS][Q_NETWORK_CMD_IN],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)&Mbox_network_cmd_in);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc, 
-			OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT],
-		(XInterruptHandler)handle_mailbox_interrupts, 
-		(void*)&Mbox_storage_cmd_out);
+	Status = XIntc_Connect(&intc,
+			OMboxIntrs[P_OS][Q_NETWORK_CMD_OUT],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)&Mbox_network_cmd_out);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc, 
-			OMboxIntrs[P_OS][Q_STORAGE_DATA_IN],
-		(XInterruptHandler)handle_mailbox_interrupts, 
-		(void*)&Mbox_storage_data_in);
+	Status = XIntc_Connect(&intc,
+			OMboxIntrs[P_OS][Q_NETWORK_DATA_IN],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)&Mbox_network_data_in);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc, 
-			OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT],
-		(XInterruptHandler)handle_mailbox_interrupts, 
-		(void*)&Mbox_storage_data_out);
+	Status = XIntc_Connect(&intc,
+			OMboxIntrs[P_OS][Q_NETWORK_DATA_OUT],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)&Mbox_network_data_out);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc, 
-			OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN],
-		(XInterruptHandler)handle_change_queue_interrupts, 
-		(void*)Q_STORAGE_CMD_IN);
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_OS][Q_NETWORK_CMD_IN],
+		(XInterruptHandler)handle_change_queue_interrupts,
+		(void*)Q_NETWORK_CMD_IN);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc, 
-			OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT],
-		(XInterruptHandler)handle_change_queue_interrupts, 
-		(void*)Q_STORAGE_CMD_OUT);
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_OS][Q_NETWORK_CMD_OUT],
+		(XInterruptHandler)handle_change_queue_interrupts,
+		(void*)Q_NETWORK_CMD_OUT);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc, 
-			OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN],
-		(XInterruptHandler)handle_change_queue_interrupts, 
-		(void*)Q_STORAGE_DATA_IN);
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_OS][Q_NETWORK_DATA_IN],
+		(XInterruptHandler)handle_change_queue_interrupts,
+		(void*)Q_NETWORK_DATA_IN);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc, 
-			OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT],
-		(XInterruptHandler)handle_change_queue_interrupts, 
-		(void*)Q_STORAGE_DATA_OUT);
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_OS][Q_NETWORK_DATA_OUT],
+		(XInterruptHandler)handle_change_queue_interrupts,
+		(void*)Q_NETWORK_DATA_OUT);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
-
-	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_IN]);
-	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT]);
-	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_IN]);
-	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT]);
+//	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_IN]);
+//	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT]);
+//	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_IN]);
+//	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_OUT]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_NETWORK_CMD_IN]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_NETWORK_CMD_OUT]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_NETWORK_DATA_IN]);
+	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_NETWORK_DATA_OUT]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_SERIAL_OUT]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_KEYBOARD]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_OS1]);
@@ -960,10 +1145,14 @@ int init_os_mailbox(void)
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_KEYBOARD]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_RUNTIME1]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_RUNTIME2]);
-	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN]);
-	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT]);
-	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN]);
-	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT]);
+//	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_IN]);
+//	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_CMD_OUT]);
+//	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_IN]);
+//	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_STORAGE_DATA_OUT]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_NETWORK_CMD_IN]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_NETWORK_CMD_OUT]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_NETWORK_DATA_IN]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_NETWORK_DATA_OUT]);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
@@ -982,6 +1171,10 @@ int init_os_mailbox(void)
 	Mbox_regs[Q_STORAGE_CMD_OUT] = &Mbox_storage_cmd_out;
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
 	Mbox_regs[Q_STORAGE_DATA_IN] = &Mbox_storage_data_in;
+	Mbox_regs[Q_NETWORK_CMD_IN] = &Mbox_network_cmd_in;
+	Mbox_regs[Q_NETWORK_CMD_OUT] = &Mbox_network_cmd_out;
+	Mbox_regs[Q_NETWORK_DATA_OUT] = &Mbox_network_data_out;
+	Mbox_regs[Q_NETWORK_DATA_IN] = &Mbox_network_data_in;
 	Mbox_regs[Q_UNTRUSTED] = &Mbox_untrusted;
 	Mbox_regs[Q_OSU] = &Mbox_osu;
 
@@ -993,6 +1186,10 @@ int init_os_mailbox(void)
 	Mbox_ctrl_regs[Q_STORAGE_CMD_OUT] = OCTOPOS_OS_Q_STORAGE_OUT_2_BASEADDR;
 	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_OS_Q_STORAGE_DATA_OUT_BASEADDR;
 	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_OS_Q_STORAGE_DATA_IN_BASEADDR;
+	Mbox_ctrl_regs[Q_NETWORK_CMD_IN] = OCTOPOS_OS_Q_NETWORK_IN_2_BASEADDR;
+	Mbox_ctrl_regs[Q_NETWORK_CMD_OUT] = OCTOPOS_OS_Q_NETWORK_OUT_2_BASEADDR;
+	Mbox_ctrl_regs[Q_NETWORK_DATA_OUT] = OCTOPOS_OS_Q_NETWORK_DATA_OUT_BASEADDR;
+	Mbox_ctrl_regs[Q_NETWORK_DATA_IN] = OCTOPOS_OS_Q_NETWORK_DATA_IN_BASEADDR;
 
 	/* Initialize semaphores */
 	sem_init(&interrupts[Q_OS1], 0, 0);
@@ -1004,6 +1201,10 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
+	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, MAILBOX_QUEUE_SIZE_LARGE);
+	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
+	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
+	sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, 0);
 	sem_init(&interrupts[Q_SENSOR], 0, 0);
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
@@ -1015,6 +1216,10 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_IN], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_OUT], 0, 1);
+	sem_init(&availables[Q_NETWORK_DATA_IN], 0, 1);
+	sem_init(&availables[Q_NETWORK_DATA_OUT], 0, 1);
+	sem_init(&availables[Q_NETWORK_CMD_IN], 0, 1);
+	sem_init(&availables[Q_NETWORK_CMD_OUT], 0, 1);
 	sem_init(&availables[Q_SENSOR], 0, 1);
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);

@@ -1,8 +1,16 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "ether.h"
 #include "arp.h"
 #include "lib.h"
 #include "list.h"
 #include "compile.h"
+//#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/list.h>
+#include <network/ether.h>
+#include <network/arp.h>
+#include <network/lib.h>
+#include <network/compile.h>
+//#endif /*ARCH_SEC_HW_NETWORK*/
 
 #define arp_cache_head (&arp_cache[0])
 #define arp_cache_end (&arp_cache[ARP_CACHE_SZ])
@@ -225,3 +233,4 @@ void arp_cache_traverse(void)
 	}
 	arp_cache_unlock();
 }
+#endif /*ARCH_SEC_HW_NETWORK*/

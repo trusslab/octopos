@@ -225,101 +225,101 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
-	Status = XIntc_Connect(&intc,
-			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_FIXED_INTR,
-		(XInterruptHandler)handle_mailbox_interrupts,
-		(void*)&Mbox_storage_data_out);
-	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed",
-				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_FIXED_INTR);
-		return XST_FAILURE;
-	}
+
 
 	Status = XIntc_Connect(&intc,
-			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR,
+			OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_IN],
 		(XInterruptHandler)handle_mailbox_interrupts,
 		(void*)&Mbox_storage_data_in);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed",
-				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR);
+				OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_IN]);
 		return XST_FAILURE;
 	}
 
 	Status = XIntc_Connect(&intc,
-			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_FIXED_INTR,
+			OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_OUT],
 		(XInterruptHandler)handle_mailbox_interrupts,
-		(void*)&Mbox_storage_cmd_out);
+		(void*)&Mbox_storage_data_out);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed",
-				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_FIXED_INTR);
+				OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_OUT]);
 		return XST_FAILURE;
 	}
 
 	Status = XIntc_Connect(&intc,
-			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_FIXED_INTR,
+			OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_IN],
 		(XInterruptHandler)handle_mailbox_interrupts,
 		(void*)&Mbox_storage_cmd_in);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed",
-				XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_FIXED_INTR);
+				OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_IN]);
 		return XST_FAILURE;
 	}
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_CTRL_FIXED_INTR,
+			OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_OUT],
 		(XInterruptHandler)handle_change_queue_interrupts, 
-		(void*)Q_STORAGE_CMD_IN);
+		(void*)&Mbox_storage_cmd_out);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_CTRL_FIXED_INTR);
+				OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_OUT]);
 		return XST_FAILURE;
 	}
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_CTRL_FIXED_INTR,
-		(XInterruptHandler)handle_change_queue_interrupts, 
-		(void*)Q_STORAGE_CMD_OUT);
-	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_CTRL_FIXED_INTR);
-		return XST_FAILURE;
-	}
-
-	Status = XIntc_Connect(&intc, 
-		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_CTRL_FIXED_INTR,
+			OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_IN],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_DATA_IN);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_CTRL_FIXED_INTR);
+				OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_IN]);
 		return XST_FAILURE;
 	}
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL_FIXED_INTR,
+			OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_OUT],
 		(XInterruptHandler)handle_change_queue_interrupts, 
 		(void*)Q_STORAGE_DATA_OUT);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL_FIXED_INTR);
+				OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_OUT]);
 		return XST_FAILURE;
 	}
 
+	Status = XIntc_Connect(&intc, 
+			OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_IN],
+		(XInterruptHandler)handle_change_queue_interrupts, 
+		(void*)Q_STORAGE_CMD_IN);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed", 
+				OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_IN]);
+		return XST_FAILURE;
+	}
+	Status = XIntc_Connect(&intc,
+			OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_OUT],
+		(XInterruptHandler)handle_mailbox_interrupts,
+		(void*)Q_STORAGE_CMD_OUT);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Connect %d failed",
+				OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_OUT]);
+		return XST_FAILURE;
+	}
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Start failed");
 		return XST_FAILURE;
 	}
-	
+
 	/* Enable interrupts */
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_FIXED_INTR);
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_FIXED_INTR);
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_FIXED_INTR);
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_FIXED_INTR);
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_CTRL_FIXED_INTR);
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_CTRL_FIXED_INTR);
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_CTRL_FIXED_INTR);
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_4_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_CTRL_FIXED_INTR);
+	XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_IN]);
+	XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_OUT]);
+	XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_IN]);
+	XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_OUT]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_IN]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_OUT]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_IN]);
+	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_OUT]);
 
 	Xil_ExceptionInit();
 

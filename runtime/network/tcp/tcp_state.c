@@ -6,7 +6,12 @@
 #include "netif.h"
 #include "tcp.h"
 #include "ip.h"
-
+#else /*ARCH_SEC_HW*/
+#include <network/lib.h>
+#include <network/netif.h>
+#include <network/tcp.h>
+#include <network/ip.h>
+#endif /*ARCH_SEC_HW*/
 const char *tcp_state_string[TCP_MAX_STATE] = {
 	"Unknown tcp state: 0",
 	"CLOSED",
@@ -573,4 +578,3 @@ drop:
 	free_pkb(pkb);
 }
 
-#endif

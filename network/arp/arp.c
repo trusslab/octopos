@@ -1,7 +1,14 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "netif.h"
 #include "ether.h"
 #include "arp.h"
 #include "lib.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/arp.h>
+#include <network/lib.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 #define BRD_HWADDR ((unsigned char *)"\xff\xff\xff\xff\xff\xff")
 

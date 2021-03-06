@@ -5,7 +5,14 @@
 #include "list.h"
 #include "lib.h"
 #include "wait.h"
-
+#else /*ARCH_SEC_HW*/
+#include <network/socket.h>
+#include <network/sock.h>
+#include <network/inet.h>
+#include <network/list.h>
+#include <network/lib.h>
+#include <network/wait.h>
+#endif /*ARCH_SEC_HW*/
 /*
  * TODO:
  * socket state manage!
@@ -210,4 +217,4 @@ void socket_init(void)
 {
 	inet_init();
 }
-#endif
+//#endif

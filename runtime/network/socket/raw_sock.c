@@ -7,6 +7,16 @@
 #include "lib.h"
 #include "list.h"
 #include "wait.h"
+#else /*ARCH_SEC_HW*/
+#include <network/socket.h>
+#include <network/sock.h>
+#include <network/netif.h>
+#include <network/raw.h>
+#include <network/ip.h>
+#include <network/lib.h>
+#include <network/list.h>
+#include <network/wait.h>
+#endif /*ARCH_SEC_HW*/
 
 static unsigned short raw_id;
 static struct hlist_head raw_hash_table[IP_P_MAX];
@@ -139,4 +149,4 @@ struct sock *raw_lookup_sock(unsigned int src, unsigned int dst, int proto)
 	return sk;
 }
 
-#endif
+

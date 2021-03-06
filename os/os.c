@@ -49,7 +49,7 @@ int main()
 {
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s: OS init\n", __func__);
+	printf("%s: OS init\n\r", __func__);
 
 	int ret = init_os_mailbox();
 	if (ret)
@@ -59,10 +59,10 @@ int main()
 	connect_to_pmu();
 #endif
 
-	uint32_t partition_size = initialize_storage();
+//	uint32_t partition_size = initialize_storage();
 // FIXME remove ARCH_SEC_HW. initialize_file_system should be moved to boot
 #if defined(ARCH_UMODE) || defined(ARCH_SEC_HW)
-	initialize_file_system(partition_size);
+//	initialize_file_system(partition_size);
 #endif
 
 #ifndef ARCH_SEC_HW

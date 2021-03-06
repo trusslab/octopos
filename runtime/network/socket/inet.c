@@ -11,6 +11,19 @@
 #include "route.h"
 /* FIXME: remove */
 #include "netcfg.h"
+#else /*ARCH_SEC_HW*/
+#include <network/socket.h>
+#include <network/sock.h>
+#include <network/netif.h>
+#include <network/ip.h>
+#include <network/udp.h>
+#include <network/tcp.h>
+#include <network/raw.h>
+#include <network/inet.h>
+#include <network/lib.h>
+#include <network/route.h>
+#include <network/netcfg.h>
+#endif /*ARCH_SEC_HW*/
 
 static struct inet_type inet_type_table[SOCK_MAX] = {
 	[0] = {},
@@ -55,9 +68,9 @@ static int inet_socket(struct socket *sock, int protocol)
 	hlist_node_init(&sk->hash_list);
 	sk->protocol = protocol;
 	sk->sock = sock;
-	/* only used by raw ip */
-	if (sk->hash && sk->ops->hash)
-		sk->ops->hash(sk);
+//	/* only used by raw ip */
+//	if (sk->hash && sk->ops->hash)
+//		sk->ops->hash(sk);
 	return 0;
 }
 
@@ -235,9 +248,8 @@ struct socket_ops inet_ops = {
 
 void inet_init(void)
 {
-	raw_init();
+	//raw_init();
 	udp_init();
 	tcp_init();
 }
 
-#endif

@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW_NETWORK
 /*
  * special net device independent L2 code
  */
@@ -75,3 +76,4 @@ void net_timer(void)
 		ip_timer(1);
 	}
 }
+#endif

@@ -372,7 +372,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			SYSCALL_SET_ONE_RET(0)
 		break;
 	}
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		handle_allocate_socket_syscall(runtime_proc_id, buf);
 		break;
@@ -385,7 +385,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		handle_close_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
-#endif
+//#endif
 	case SYSCALL_DEBUG_OUTPUTS: {
 		SYSCALL_GET_ZERO_ARGS_DATA
 #ifdef ARCH_SEC_HW

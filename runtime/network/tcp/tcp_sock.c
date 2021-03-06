@@ -5,6 +5,14 @@
 #include "ip.h"
 #include "netif.h"
 #include "cbuf.h"
+#else /*ARCH_SEC_HW*/
+#include <network/socket.h>
+#include <network/tcp_hash.h>
+#include <network/tcp.h>
+#include <network/ip.h>
+#include <network/netif.h>
+#include <network/cbuf.h>
+#endif /*ARCH_SEC_HW*/
 
 static struct tcp_hash_table tcp_table;
 /* @src is for remote machine */
@@ -201,6 +209,9 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 	tcp_pre_wait_connect(tsk);
 	tcp_send_syn(tsk, NULL);
 	err = tcp_wait_connect(tsk);
+#ifdef ARCH_SEC_HW
+	sleep(0.1);
+#endif
 	if (err || tsk->state != TCP_ESTABLISHED) {
 		tcp_unhash(sk);
 		tcp_unbhash(tsk);
@@ -458,4 +469,3 @@ void tcp_init(void)
 	/* tcp ip id */
 	tcp_id = 0;
 }
-#endif
