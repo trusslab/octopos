@@ -119,7 +119,7 @@ uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 
 #ifdef ARCH_SEC_HW_STORAGE
 uint32_t boot_image_sizes[NUM_PROCESSORS + 1] = 
-	{0, 0, 0, 0, STORAGE_IMAGE_SIZE, 0, 0, 0, 0 ,0 ,0};
+	{0, OS_IMAGE_SIZE, 0, 0, STORAGE_IMAGE_SIZE, 0, 0, 0, 0 ,0 ,0};
 #endif
 
 bool is_queue_set_bound = false;

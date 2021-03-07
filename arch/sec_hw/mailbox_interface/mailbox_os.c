@@ -608,8 +608,10 @@ int init_os_mailbox(void)
 	init_platform();
 	OMboxIds_init();
 
+#ifndef ARCH_SEC_HW_BOOT
 	/* Wait until all other PL cores are loaded */
 	sleep(1);
+#endif
 
 	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_output, ConfigPtr, ConfigPtr->BaseAddress);
@@ -767,6 +769,7 @@ int init_os_mailbox(void)
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
+	#ifndef ARCH_SEC_HW_BOOT
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
 
@@ -970,6 +973,7 @@ int init_os_mailbox(void)
 		_SEC_HW_ERROR("XIntc_Start failed");
 		return XST_FAILURE;
 	}
+#endif
 
 	/* Initialize pointers for bookkeeping */
 	Mbox_regs[Q_OS1] = &Mbox_OS1;
@@ -1019,6 +1023,7 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);
 
+#ifndef ARCH_SEC_HW_BOOT
 	/* Initialize keyboard circular buffer */
 	cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
 
@@ -1031,6 +1036,7 @@ int init_os_mailbox(void)
 
 	XGpio_SetDataDirection(&reset_gpio_0, 1, 0x0);
 	XGpio_SetDataDirection(&reset_gpio_0, 2, 0x0);
+#endif
 
 	return XST_SUCCESS;
 }

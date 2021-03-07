@@ -120,56 +120,6 @@ static uint8 load_exec()
     return 0;
 }
 
-static uint8 load_srec_line()
-{
-    uint8 ret;
-    void (*laddr)();
-    int8 done = 0;
-
-    srinfo.sr_data = sr_data_buf;
-
-    while (!done) {
-        if ((ret = flash_get_srec_line (sr_buf)) != 0)
-            return ret;
-
-        if ((ret = decode_srec_line (sr_buf, &srinfo)) != 0)
-            return ret;
-
-#ifdef VERBOSE
-        display_progress (srec_line);
-#endif
-        switch (srinfo.type) {
-            case SREC_TYPE_0:
-                break;
-            case SREC_TYPE_1:
-            case SREC_TYPE_2:
-            case SREC_TYPE_3:
-                memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
-                break;
-            case SREC_TYPE_5:
-                break;
-            case SREC_TYPE_7:
-            case SREC_TYPE_8:
-            case SREC_TYPE_9:
-                laddr = (void (*)())srinfo.addr;
-                done = 1;
-                ret = 0;
-                break;
-        }
-    }
-
-#ifdef VERBOSE
-    print ("\r\nExecuting program starting at address: ");
-    putnum ((uint32)laddr);
-    print ("\r\n");
-#endif
-
-    (*laddr)();
-
-    /* We will be dead at this point */
-    return 0;
-}
-
 static uint8 flash_get_srec_line (uint8 *buf)
 {
     uint8 c;

@@ -8,9 +8,9 @@
 #ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
 #include <semaphore.h>
+#include <unistd.h>
 #endif
 #include <stdint.h>
-#include <unistd.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <octopos/tpm.h>
@@ -18,6 +18,12 @@
 #include <os/storage.h>
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
+#ifdef ARCH_SEC_HW_BOOT
+#include "xil_printf.h"
+#include "arch/sec_hw.h"
+#include "sleep.h"
+#include "xstatus.h"
+#endif
 
 #ifndef ARCH_SEC_HW_BOOT
 extern int fd_out;
@@ -134,7 +140,9 @@ void send_measurement_to_tpm(char *path)
 #else
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
-
+	int ret = init_os_mailbox();
+	if (ret)
+		SEC_HW_DEBUG_HANG();
 }
 
 int copy_file_from_boot_partition(char *filename, char *path)
