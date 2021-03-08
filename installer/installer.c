@@ -275,8 +275,8 @@ static int set_up_key_for_boot_partition(void)
 	/* create new file or delete existing file */
 	lfilep = fopen("./storage/octopos_partition_0_keys", "w");
 	if (!lfilep) {
-		printf("Error: %s: Couldn't open the partition lock file (w).\n",
-		       __func__);
+		printf("Error: %s: Couldn't open the partition keys file "
+		       "(w).\n", __func__);
 		return -1;
 	}
 	fclose(lfilep);
@@ -284,8 +284,8 @@ static int set_up_key_for_boot_partition(void)
 	/* open for read and write */
 	lfilep = fopen("./storage/octopos_partition_0_keys", "r+");
 	if (!lfilep) {
-		printf("Error: %s: Couldn't open the partition file (r+).\n",
-		       __func__);
+		printf("Error: %s: Couldn't open the partition keys file "
+		       "(r+).\n", __func__);
 		return -1;
 	}
 	
@@ -298,7 +298,7 @@ static int set_up_key_for_boot_partition(void)
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, os_pcr);
 
-	fseek(filep, 0, SEEK_SET);
+	fseek(lfilep, 0, SEEK_SET);
 	/* zero_pcr is for the OS bootloader. */
 	size = (uint32_t) fwrite(zero_pcr, sizeof(uint8_t),
 				 TPM_EXTEND_HASH_SIZE, lfilep);
@@ -309,7 +309,7 @@ static int set_up_key_for_boot_partition(void)
 		return -1;
 	}
 
-	fseek(filep, TPM_EXTEND_HASH_SIZE, SEEK_SET);
+	fseek(lfilep, TPM_EXTEND_HASH_SIZE, SEEK_SET);
 	size = (uint32_t) fwrite(os_pcr, sizeof(uint8_t), TPM_EXTEND_HASH_SIZE,
 				 lfilep);
 	if (size != TPM_EXTEND_HASH_SIZE) {
@@ -338,8 +338,8 @@ static int set_up_key_for_untrusted_rootfs_partition(void)
 	/* create new file or delete existing file */
 	lfilep = fopen("./storage/octopos_partition_1_keys", "w");
 	if (!lfilep) {
-		printf("Error: %s: Couldn't open the partition lock file (w).\n",
-		       __func__);
+		printf("Error: %s: Couldn't open the partition keys file "
+		       "(w).\n", __func__);
 		return -1;
 	}
 	fclose(lfilep);
@@ -347,8 +347,8 @@ static int set_up_key_for_untrusted_rootfs_partition(void)
 	/* open for read and write */
 	lfilep = fopen("./storage/octopos_partition_1_keys", "r+");
 	if (!lfilep) {
-		printf("Error: %s: Couldn't open the partition file (r+).\n",
-		       __func__);
+		printf("Error: %s: Couldn't open the partition keys file "
+		       "(r+).\n", __func__);
 		return -1;
 	}
 	
@@ -362,7 +362,7 @@ static int set_up_key_for_untrusted_rootfs_partition(void)
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, untrusted_pcr);
 
-	fseek(filep, 0, SEEK_SET);
+	fseek(lfilep, 0, SEEK_SET);
 	size = (uint32_t) fwrite(untrusted_pcr, sizeof(uint8_t),
 				 TPM_EXTEND_HASH_SIZE, lfilep);
 	if (size != TPM_EXTEND_HASH_SIZE) {
@@ -375,6 +375,56 @@ static int set_up_key_for_untrusted_rootfs_partition(void)
 	fclose(lfilep);
 
 	return 0;
+}
+
+static int mark_partition_as_created(char *create_filename)
+{
+	FILE *lfilep;
+	uint32_t tag = 1;
+	uint32_t size;
+
+	/* create new file or delete existing file */
+	lfilep = fopen(create_filename, "w");
+	if (!lfilep) {
+		printf("Error: %s: Couldn't open the partition create file "
+		       "(w) (%s).\n", __func__, create_filename);
+		return -1;
+	}
+	fclose(lfilep);
+
+	/* open for read and write */
+	lfilep = fopen(create_filename, "r+");
+	if (!lfilep) {
+		printf("Error: %s: Couldn't open the partition create file "
+		       "(r+) (%s).\n", __func__, create_filename);
+		return -1;
+	}
+	
+	fseek(lfilep, 0, SEEK_SET);
+	/* zero_pcr is for the OS bootloader. */
+	size = (uint32_t) fwrite(&tag, sizeof(uint8_t), 4, lfilep);
+	if (size != 4) {
+		printf("Error: %s: couldn't write to the create file.\n",
+		       __func__);
+		fclose(lfilep);
+		return -1;
+	}
+
+	fclose(lfilep);
+
+	return 0;
+}
+
+static int mark_boot_partition_as_created(void)
+{
+	return mark_partition_as_created((char *)
+					 "./storage/octopos_partition_0_create");
+}
+
+static int mark_untrusted_rootfs_partition_as_created(void)
+{
+	return mark_partition_as_created((char *)
+					 "./storage/octopos_partition_1_create");
 }
 
 int main(int argc, char **argv)
@@ -399,6 +449,20 @@ int main(int argc, char **argv)
 	if (ret) {
 		printf("Error: %s: couldn't set up key for the untrusted "
 		       "rootfs partition.\n", __func__);
+		return ret;
+	}
+
+	ret = mark_boot_partition_as_created();
+	if (ret) {
+		printf("Error: %s: couldn't mark the boot partition as "
+		       "created.\n", __func__);
+		return ret;
+	}
+
+	ret = mark_untrusted_rootfs_partition_as_created();
+	if (ret) {
+		printf("Error: %s: couldn't mark the untrusted rootfs "
+		       "partition as created.\n", __func__);
 		return ret;
 	}
 

@@ -90,7 +90,7 @@ static void mark_fd_as_unused(int _fd)
 	int fd = _fd - 1;
 
 	if (fd >= MAX_NUM_FD) {
-		printf("%s: Error: invalid fd %d\n", __func__, fd);
+		printf("Error: %s: invalid fd %d\n", __func__, fd);
 		return;
 	}
 
@@ -178,8 +178,14 @@ static uint32_t write_blocks(uint8_t *data, uint32_t start_block,
 		write_to_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
 	get_response_from_storage(buf);
 
-	STORAGE_GET_ONE_RET
-	return ret0;
+	STORAGE_GET_TWO_RETS
+	if (ret0) {
+		printf("Error: %s: storage service returned error (%d).\n",
+		       __func__, (int) ret0);
+		return 0;
+	}
+
+	return (int) ret1; /* size */
 }
 #endif /* ROLE_OS || ROLE_INSTALLER */
 
@@ -202,8 +208,14 @@ static uint32_t read_blocks(uint8_t *data, uint32_t start_block,
 		read_from_storage_data_queue(data + (i * STORAGE_BLOCK_SIZE));
 	get_response_from_storage(buf);
 
-	STORAGE_GET_ONE_RET
-	return ret0;
+	STORAGE_GET_TWO_RETS
+	if (ret0) {
+		printf("Error: %s: storage service returned error (%d).\n",
+		       __func__, (int) ret0);
+		return 0;
+	}
+
+	return (int) ret1; /* size */
 }
 
 static uint32_t read_from_block(uint8_t *data, uint32_t block_num,
@@ -550,18 +562,18 @@ uint32_t file_system_write_to_file(uint32_t fd, uint8_t *data, uint32_t size,
 				   uint32_t offset)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
-		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		printf("Error: %s: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
 
 	struct file *file = file_array[fd];
 	if (!file) {
-		printf("%s: Error: invalid fd\n", __func__);
+		printf("Error: %s: invalid fd\n", __func__);
 		return 0;
 	}
 
 	if (!file->opened) {
-		printf("%s: Error: file not opened!\n", __func__);
+		printf("Error: %s: file not opened!\n", __func__);
 		return 0;
 	}
 
@@ -617,22 +629,24 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size,
 				    uint32_t offset)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
-		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		printf("Error: %s: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
 
 	struct file *file = file_array[fd];
 	if (!file) {
-		printf("%s: Error: invalid fd\n", __func__);
+		printf("Error: %s: invalid fd\n", __func__);
 		return 0;
 	}
 
 	if (!file->opened) {
-		printf("%s: Error: file not opened!\n", __func__);
+		printf("Error: %s: file not opened!\n", __func__);
 		return 0;
 	}
 
 	if (offset >= file->size) {
+		printf("Error: %s: invalid offset (offset = %d, file->size = "
+		       "%d\n", __func__, offset, file->size);
 		return 0;
 	}
 
@@ -688,18 +702,18 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block,
 	uint32_t total_written_blocks = 0;
 
 	if (fd == 0 || fd >= MAX_NUM_FD) {
-		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		printf("Error: %s: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
 
 	file = file_array[fd];
 	if (!file) {
-		printf("%s: Error: invalid fd\n", __func__);
+		printf("Error: %s: invalid fd\n", __func__);
 		return 0;
 	}
 
 	if (!file->opened) {
-		printf("%s: Error: file not opened!\n", __func__);
+		printf("Error: %s: file not opened!\n", __func__);
 		return 0;
 	}
 
@@ -707,7 +721,7 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block,
 		if ((start_block > file->num_blocks) ||
 		    ((start_block == file->num_blocks) &&
 		     (file->size % STORAGE_BLOCK_SIZE))) {
-			printf("%s: Error: invalid args (start_block = %d, "
+			printf("Error: %s: invalid args (start_block = %d, "
 			       "num_blocks = %d, file->num_blocks = %d, "
 			       "file_size = %d)\n", __func__, start_block,
 			       num_blocks, file->num_blocks, file->size);
@@ -721,9 +735,15 @@ uint8_t file_system_write_file_blocks(uint32_t fd, uint32_t start_block,
 
 	/* FIXME: impose a reasonable limit here
 	if (num_blocks > ???) {
-		printf("%s: Error: num_blocks is too large\n", __func__);
+		printf("Error: %s: num_blocks is too large\n", __func__);
 		return 0;
 	}*/
+	ret = wait_for_storage_for_os_use();
+	if (ret) {
+		printf("Error: %s: couldn't get proper access to the storage "
+		       "service.\n", __func__);
+		return 0;
+	}
 
 repeat:
 	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
@@ -734,12 +754,7 @@ repeat:
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
 	}
 
-	ret = wait_for_storage_for_os_use();
-	if (ret) {
-		printf("Error: %s: couldn't get proper access to the storage "
-		       "service.\n", __func__);
-		return 0;
-	}
+	wait_for_storage();
 
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
@@ -767,7 +782,8 @@ repeat:
 void file_system_write_file_blocks_late(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	/* FIXME: pretty inefficient. Why wait if we don't check the response? */
+	/* FIXME: pretty inefficient. Why wait if we don't check the response?
+	 * Answer: it may be used for synchronization. */
 	get_response_from_storage(buf);
 }
 
@@ -787,23 +803,23 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 	uint32_t total_read_blocks = 0;
 
 	if (fd == 0 || fd >= MAX_NUM_FD) {
-		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		printf("Error: %s: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
 
 	file = file_array[fd];
 	if (!file) {
-		printf("%s: Error: invalid fd\n", __func__);
+		printf("Error: %s: invalid fd\n", __func__);
 		return 0;
 	}
 
 	if (!file->opened) {
-		printf("%s: Error: file not opened!\n", __func__);
+		printf("Error: %s: file not opened!\n", __func__);
 		return 0;
 	}
 
 	if ((start_block + num_blocks) > file->num_blocks) {
-		printf("%s: Error: invalid args (start_block = %d, "
+		printf("Error: %s: invalid args (start_block = %d, "
 		       "num_blocks = %d, file->num_blocks = %d)\n",
 		       __func__, start_block, num_blocks, file->num_blocks);
 		return 0;
@@ -811,9 +827,15 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 
 	/* FIXME: impose a reasonable limit here
 	if (num_blocks > ???) {
-		printf("%s: Error: num_blocks is too large\n", __func__);
+		printf("Error: %s: num_blocks is too large\n", __func__);
 		return 0;
 	}*/
+	ret = wait_for_storage_for_os_use();
+	if (ret) {
+		printf("Error: %s: couldn't get proper access to the storage "
+		       "service.\n", __func__);
+		return 0;
+	}
 
 repeat:
 	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
@@ -824,12 +846,7 @@ repeat:
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
 	}
 
-	ret = wait_for_storage_for_os_use();
-	if (ret) {
-		printf("Error: %s: couldn't get proper access to the storage "
-		       "service.\n", __func__);
-		return 0;
-	}
+	wait_for_storage();
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
@@ -855,25 +872,26 @@ repeat:
 void file_system_read_file_blocks_late(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	/* FIXME: pretty inefficient. Why wait if we don't check the response? */
+	/* FIXME: pretty inefficient. Why wait if we don't check the response?
+	 * Answer: it's used for synchronization (e.g., in help_boot_proc). */
 	get_response_from_storage(buf);
 }
 
 uint32_t file_system_get_file_num_blocks(uint32_t fd)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
-		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		printf("Error: %s: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
 
 	struct file *file = file_array[fd];
 	if (!file) {
-		printf("%s: Error: invalid fd\n", __func__);
+		printf("Error: %s: invalid fd\n", __func__);
 		return 0;
 	}
 
 	if (!file->opened) {
-		printf("%s: Error: file not opened!\n", __func__);
+		printf("Error: %s: file not opened!\n", __func__);
 		return 0;
 	}
 
@@ -884,18 +902,18 @@ uint32_t file_system_get_file_num_blocks(uint32_t fd)
 uint32_t file_system_get_file_size(uint32_t fd)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
-		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		printf("Error: %s: fd is 0 or too large (%d)\n", __func__, fd);
 		return 0;
 	}
 
 	struct file *file = file_array[fd];
 	if (!file) {
-		printf("%s: Error: invalid fd\n", __func__);
+		printf("Error: %s: invalid fd\n", __func__);
 		return 0;
 	}
 
 	if (!file->opened) {
-		printf("%s: Error: file not opened!\n", __func__);
+		printf("Error: %s: file not opened!\n", __func__);
 		return 0;
 	}
 
@@ -907,18 +925,18 @@ uint32_t file_system_get_file_size(uint32_t fd)
 int file_system_close_file(uint32_t fd)
 {
 	if (fd == 0 || fd >= MAX_NUM_FD) {
-		printf("%s: Error: fd is 0 or too large (%d)\n", __func__, fd);
+		printf("Error: %s: fd is 0 or too large (%d)\n", __func__, fd);
 		return ERR_INVALID;
 	}
 
 	struct file *file = file_array[fd];
 	if (!file) {
-		printf("%s: Error: invalid fd\n", __func__);
+		printf("Error: %s: invalid fd\n", __func__);
 		return ERR_INVALID;
 	}
 
 	if (!file->opened) {
-		printf("%s: Error: file not opened!\n", __func__);
+		printf("Error: %s: file not opened!\n", __func__);
 		return ERR_INVALID;
 	}
 
@@ -963,9 +981,10 @@ int file_system_remove_file(char *filename)
 
 void initialize_file_system(uint32_t _partition_num_blocks)
 {
+	printf("%s [1]\n", __func__);
 	/* initialize fd bitmap */
 	if (MAX_NUM_FD % 8) {
-		printf("%s: Error: MAX_NUM_FD must be divisible by 8\n",
+		printf("Error: %s: MAX_NUM_FD must be divisible by 8\n",
 		       __func__);
 		_exit(-1);
 	}
@@ -983,13 +1002,16 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 #endif
 
 	partition_num_blocks = _partition_num_blocks;
+	printf("%s [2]\n", __func__);
 
 	/* read the directory */
 	read_dir_data_from_storage();
+	printf("%s [3]\n", __func__);
 
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
+		printf("%s [4]\n", __func__);
 		/* retrieve file info */
 		uint16_t num_files = *((uint16_t *) &dir_data[4]);
 		dir_data_ptr = 6;
@@ -1029,6 +1051,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			add_file_to_list(file);
 		}
 	} else {
+		printf("%s [5]\n", __func__);
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 		/* initialize signature */
 		dir_data[0] = '$';
@@ -1042,12 +1065,13 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 		/* update the directory in storage */
 		flush_dir_data_to_storage();
 #else
-		printf("%s: Error: didn't find a directory\n", __func__);
+		printf("Error: %s: didn't find a directory\n", __func__);
 #endif
 	}
 
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
+	printf("%s [6]\n", __func__);
 }
 
 void close_file_system(void)

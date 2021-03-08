@@ -43,6 +43,8 @@
 
 #ifdef UNTRUSTED_DOMAIN
 #define printf printk
+
+int need_auth = 0;
 #endif
 
 #ifndef UNTRUSTED_DOMAIN
@@ -279,16 +281,16 @@ static int authenticate_storage(void)
 	return (int) ret0;
 }
 
-static int bind_storage(void)
-{
-	STORAGE_SET_ONE_ARG(secure_partition_id)
-	buf[0] = IO_OP_BIND_RESOURCE;
-	
-	send_msg_to_storage(buf);
-	
-	STORAGE_GET_ONE_RET
-	return (int) ret0;
-}
+//static int bind_storage(void)
+//{
+//	STORAGE_SET_ONE_ARG(secure_partition_id)
+//	buf[0] = IO_OP_BIND_RESOURCE;
+//	
+//	send_msg_to_storage(buf);
+//	
+//	STORAGE_GET_ONE_RET
+//	return (int) ret0;
+//}
 
 static int query_and_verify_storage(void)
 {
@@ -311,7 +313,9 @@ static int query_and_verify_storage(void)
 		       __func__, _size);
 		return ERR_UNEXPECTED;
 	}
+	printf("%s [1]: secure_partition_id = %d\n", __func__, secure_partition_id);
 
+#ifndef UNTRUSTED_DOMAIN
 	if ((data[0] != 1) || (data[1] != 0) || (data[2] != 0) ||
 	    (data[3] != secure_partition_id) || (data[4] != 1)) {
 		printf("Error: %s: couldn't successfully verify the query "
@@ -321,6 +325,24 @@ static int query_and_verify_storage(void)
 		       data[2], data[3], data[4]);
 		return ERR_FAULT;
 	}
+#else
+	/* This is an optimization for the untrusted domain. We allow it to
+	 * continue using the storage service without a reset. The OS assists
+	 * in this optimization (in handle_request_secure_storage_access_syscall().
+	 */
+	if ((data[0] != 1) || (data[3] != secure_partition_id) ||
+	    (data[4] != 1)) {
+		printf("Error: %s: couldn't successfully verify the query "
+		       "response from the storage service (bound = %d, "
+		       "bound_partition = %d, is_created = %d).\n", __func__,
+		       data[0], data[3], data[4]);
+		return ERR_FAULT;
+	}
+
+	if (data[2] == 0)
+		need_auth = 1;
+	printf("%s [1]: need_auth = %d\n", __func__, need_auth);
+#endif
 
 	return 0;
 }
@@ -441,6 +463,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 						uint8_t *return_pcr)
 {
 	int ret;
+	printf("%s [1]\n", __func__);
 
 	if (!secure_storage_created) {
 		printf("Error: %s: secure storage not created.\n", __func__);
@@ -458,6 +481,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
+	printf("%s [2]\n", __func__);
 
 	/* FIXME: wait for OS to switch the queue. Microblaze does not have this problem */
 #ifdef CONFIG_ARM64
@@ -501,6 +525,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 		return ERR_FAULT;
 	}
+	printf("%s [3]\n", __func__);
 
 #ifndef UNTRUSTED_DOMAIN
 	/* Note: we set the limit/timeout values right after attestation and
@@ -539,6 +564,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 	queue_update_callbacks[Q_STORAGE_CMD_OUT] = callback;
 	queue_update_callbacks[Q_STORAGE_DATA_IN] = callback;
 	queue_update_callbacks[Q_STORAGE_DATA_OUT] = callback;
+	printf("%s [4]\n", __func__);
 #endif
 
 	ret = query_and_verify_storage();
@@ -548,14 +574,21 @@ static int request_secure_storage_queues_access(limit_t limit,
 		ret = ERR_UNEXPECTED;
 		goto error;
 	}
+	printf("%s [5]\n", __func__);
 
-	ret = bind_storage();
-	if (ret) {
-		printf("%s: Error: couldn't bind the storage partition\n",
-		       __func__);
-		ret = ERR_UNEXPECTED;
-		goto error;
-	}
+	//ret = bind_storage();
+	//if (ret) {
+	//	printf("%s: Error: couldn't bind the storage partition\n",
+	//	       __func__);
+	//	ret = ERR_UNEXPECTED;
+	//	goto error;
+	//}
+
+#ifdef UNTRUSTED_DOMAIN
+	/* FIXME: not pretty. */
+	if (!need_auth)
+		goto end;
+#endif
 
 	ret = authenticate_storage();
 	if (ret) {
@@ -564,7 +597,12 @@ static int request_secure_storage_queues_access(limit_t limit,
 		ret = ERR_UNEXPECTED;
 		goto error;
 	}
+	printf("%s [6]\n", __func__);
 
+#ifdef UNTRUSTED_DOMAIN
+	/* FIXME: not pretty. */
+end:
+#endif
 	has_access_to_secure_storage = true;
 
 	return 0;
@@ -602,6 +640,7 @@ int request_secure_storage_access(uint32_t partition_size,
 				  uint8_t *expected_pcr, uint8_t *return_pcr)
 {
 	int ret;
+	printf("%s [1]\n", __func__);
 
 	ret = request_secure_storage_creation(partition_size);
 	if (ret) {
@@ -609,6 +648,7 @@ int request_secure_storage_access(uint32_t partition_size,
 		       "failed.\n", __func__);
 		return ret;
 	}
+	printf("%s [2]\n", __func__);
 
 	ret = request_secure_storage_queues_access(limit, timeout,
 				callback, expected_pcr, return_pcr);	
@@ -617,6 +657,7 @@ int request_secure_storage_access(uint32_t partition_size,
 		       "queues.\n", __func__);
 		return ret;
 	}
+	printf("%s [3]\n", __func__);
 	
 	return 0;
 }

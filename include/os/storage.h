@@ -91,6 +91,7 @@ struct partition {
 #define OS_USE		1 /* OS has access and its partition is bound. */
 #define APP_ACCESS	2 /* An app has access. */
 
+void wait_for_storage(void);
 int wait_for_storage_for_os_use(void);
 void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 						    uint8_t *buf);

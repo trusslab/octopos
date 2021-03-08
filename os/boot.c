@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <octopos/mailbox.h>
 #include <octopos/runtime.h>
+#include <octopos/error.h>
 #include <os/file_system.h>
 #include <os/storage.h>
 #include <os/scheduler.h>
@@ -25,16 +26,21 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
+	wait_for_storage();
 }
 
 static void help_boot_keyboard_proc(void)
 {
+	printf("%s [1]\n", __func__);
 	help_boot_proc(P_KEYBOARD, (char *) "keyboard");
+	printf("%s [2]\n", __func__);
 }
 
 static void help_boot_serial_out_proc(void)
 {
+	printf("%s [1]\n", __func__);
 	help_boot_proc(P_SERIAL_OUT, (char *) "serial_out");
+	printf("%s [2]\n", __func__);
 }
 
 static void help_boot_network_proc(void)
@@ -54,7 +60,9 @@ void help_boot_runtime_proc(uint8_t runtime_proc_id)
 
 static void help_boot_untrusted_proc(void)
 {
+	printf("%s [1]\n", __func__);
 	help_boot_proc(P_UNTRUSTED, (char *) "linux");
+	printf("%s [2]\n", __func__);
 }
 
 void help_boot_procs(int boot_untrusted)
@@ -73,8 +81,11 @@ int reset_proc(uint8_t proc_id)
 {
 	int ret;
 
-	if (proc_id == P_STORAGE)
-		close_file_system();
+	if (proc_id == P_STORAGE) {
+		printf("Error: %s: unexpected proc_id (storage).\n", __func__);
+		return ERR_UNEXPECTED;
+		//close_file_system();
+	}
 
 	ret = pmu_reset_proc(proc_id);
 	if (ret)
@@ -104,9 +115,9 @@ int reset_proc(uint8_t proc_id)
 		 * confuse it.
 		 */
 		while (!is_queue_available(Q_STORAGE_DATA_OUT));
-	} else if (proc_id == P_STORAGE) {
-		uint32_t partition_size = initialize_storage();
-		initialize_file_system(partition_size);
+	//} else if (proc_id == P_STORAGE) {
+	//	uint32_t partition_size = initialize_storage();
+	//	initialize_file_system(partition_size);
 	} else if (proc_id == P_UNTRUSTED) {
 		if (!untrusted_needs_help_with_boot) {
 			untrusted_needs_help_with_boot = 1;
@@ -118,6 +129,15 @@ int reset_proc(uint8_t proc_id)
 	}
 
 	return 0;
+}
+
+int reset_proc_simple(uint8_t proc_id)
+{
+	int ret;
+
+	ret = pmu_reset_proc(proc_id);
+	
+	return ret;	
 }
 
 int reboot_system(void)

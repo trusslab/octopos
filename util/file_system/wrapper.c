@@ -9,8 +9,9 @@
 #include <arch/syscall.h>
 
 /* FIXME: copied from storage/storage.c */
-#define STORAGE_SET_ONE_RET(ret0)		\
-	SERIALIZE_32(ret0, &buf[0])
+#define STORAGE_SET_TWO_RETS(ret0, ret1)	\
+	SERIALIZE_32(ret0, &buf[0])		\
+	SERIALIZE_32(ret1, &buf[4])		\
 
 /* FIXME: copied from storage/storage.c */
 #define STORAGE_GET_TWO_ARGS		\
@@ -59,7 +60,7 @@ int send_msg_to_storage_no_response(uint8_t *buf)
 
 int get_response_from_storage(uint8_t *buf)
 {
-	STORAGE_SET_ONE_RET(size);
+	STORAGE_SET_TWO_RETS(0, size);
 	return 0;
 }
 

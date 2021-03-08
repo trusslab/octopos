@@ -31,6 +31,7 @@ uint32_t num_partitions = 0;
 uint8_t storage_status = OS_ACCESS;
 struct app *current_app_with_storage_access = NULL;
 struct partition *boot_partition = NULL;
+extern struct app untrusted_app;
 
 //uint8_t os_storage_key[STORAGE_KEY_SIZE];
 //bool is_partition_locked = true;
@@ -150,7 +151,9 @@ static int query_partition(uint32_t partition_id, struct partition *partition)
 	partition->partition_id = partition_id;
 	memcpy(&partition->size, data, 4);
 	partition->is_created = data[4];
-	memcpy(partition->key, &data[5], TPM_EXTEND_HASH_SIZE);
+
+	if (partition->is_created)
+		memcpy(partition->key, &data[5], TPM_EXTEND_HASH_SIZE);
 
 	return 0;
 }
@@ -172,6 +175,7 @@ static int query_storage_partitions(void)
 		return ret;
 	}
 
+	/* FIXME: we never free(). */
 	partitions = (struct partition *) malloc(num_partitions *
 						 sizeof(struct partition));
 	if (!partitions) {
@@ -179,6 +183,9 @@ static int query_storage_partitions(void)
 		       __func__);
 		return ERR_MEMORY;
 	}
+
+	memset(partitions, 0x0, num_partitions * sizeof(struct partition));
+	printf("%s [1]: num_partitions = %d\n", __func__, num_partitions);
 
 	for (i = 0; i < num_partitions; i++) {
 		ret = query_partition(i, &partitions[i]);
@@ -237,6 +244,7 @@ static int authenticate_with_storage_service(void)
 	get_response_from_storage(buf);
 	
 	STORAGE_GET_ONE_RET
+	printf("%s [1]: ret0 = %d\n", __func__, ret0);
 	
 	return (int) ret0;
 }
@@ -245,7 +253,7 @@ static int authenticate_with_storage_service(void)
 /*
  * Check that all queues are available and that the partition is unlocked.
  */
-static void wait_for_storage(void)
+void wait_for_storage(void)
 {
 	int ret = is_queue_available(Q_STORAGE_CMD_IN);
 	if (!ret) {
@@ -291,7 +299,7 @@ int wait_for_storage_for_os_use(void)
 	if (storage_status != OS_USE) {
 		if (storage_status == OS_ACCESS) {
 			if (!boot_partition) {
-				printf("Error: %s: boot_partition is NULL\n",
+				printf("Error: %s: boot partition is NULL\n",
 				       __func__);
 				return ERR_UNEXPECTED;
 			}
@@ -299,6 +307,14 @@ int wait_for_storage_for_os_use(void)
 			ret = bind_partition(boot_partition->partition_id);
 			if (ret) {
 				printf("Error: %s: couldn't bind the boot "
+				       "partition.\n", __func__);
+				return ERR_FAULT;
+			}
+
+			ret = authenticate_with_storage_service();
+			if (ret) {
+				printf("Error: %s: couldn't authenticate with "
+				       "the storage service to access the boot "
 				       "partition.\n", __func__);
 				return ERR_FAULT;
 			}
@@ -313,7 +329,12 @@ int wait_for_storage_for_os_use(void)
 			}
 
 			wait_for_storage();
-			reset_proc(P_STORAGE);
+			ret = reset_proc_simple(P_STORAGE);
+			if (ret) {
+				printf("Error: %s: couldn't reset the storage "
+				       "service.\n", __func__);
+				return ERR_FAULT;
+			}
 
 			storage_status = OS_ACCESS;
 			
@@ -321,6 +342,14 @@ int wait_for_storage_for_os_use(void)
 			if (ret) {
 				printf("Error: %s: couldn't bind the boot "
 				       "partition (else).\n", __func__);
+				return ERR_FAULT;
+			}
+
+			ret = authenticate_with_storage_service();
+			if (ret) {
+				printf("Error: %s: couldn't authenticate with "
+				       "the storage service to access the boot "
+				       "partition.\n", __func__);
 				return ERR_FAULT;
 			}
 
@@ -407,6 +436,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 
 	SYSCALL_GET_ONE_ARG
 	partition_size = arg0;
+	printf("%s [1]: partition_size = %d\n", __func__, partition_size);
 
 	/* sanity check on the requested size:
 	 * the root_fs of the untrusted domain should be
@@ -444,18 +474,34 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	 */
 	for (i = 1; i < num_partitions; i++) {
 		if (!memcmp(app_key, partitions[i].key, TPM_EXTEND_HASH_SIZE)) {
+			app->sec_partition_id = i;
+			app->sec_partition_created = true;
 			SYSCALL_SET_TWO_RETS(0, i)
+			printf("%s [2]: found an existing partition (%d)\n", __func__, i);
 			return;
 		}
 	}
+	printf("%s [3]: need to create a new partition\n", __func__);
 
 	if (storage_status != OS_ACCESS) {
 		if (storage_status == OS_USE) {
-			reset_proc(P_STORAGE);
+			ret = reset_proc_simple(P_STORAGE);
+			if (ret) {
+				printf("Error: %s: couldn't reset the storage "
+				       "service.\n", __func__);
+				SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
+				return;
+			}
 			storage_status = OS_ACCESS;
 		} else {
 			wait_for_storage();
-			reset_proc(P_STORAGE);
+			ret = reset_proc_simple(P_STORAGE);
+			if (ret) {
+				printf("Error: %s: couldn't reset the storage "
+				       "service (2).\n", __func__);
+				SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
+				return;
+			}
 			storage_status = OS_ACCESS;
 		}
 	}
@@ -480,6 +526,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	struct runtime_proc *runtime_proc;
 	struct app *app;
 	int ret;
+	int no_reset = 0;
 
 	SYSCALL_GET_TWO_ARGS
 	limit = arg0;
@@ -500,9 +547,9 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	app = runtime_proc->app;
 
 	if (!app->sec_partition_created) {
-		printf("Error: %s: app does not have a secure storage"
+		printf("Error: %s: app does not have a secure storage "
 		       "partition.\n", __func__);
-		SYSCALL_SET_TWO_RETS((uint32_t) ERR_INVALID, 0)
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
 
@@ -528,33 +575,68 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	if ((storage_status == APP_ACCESS) &&
 	    (current_app_with_storage_access == app)) {
-		printf("Error: %s: app already has access to the storage "
-		       "queues.\n", __func__);
-		SYSCALL_SET_TWO_RETS((uint32_t) ERR_INVALID, 0)
-		return;
+		if (is_queue_available(Q_STORAGE_CMD_IN) &&
+		    is_queue_available(Q_STORAGE_CMD_OUT) &&
+		    is_queue_available(Q_STORAGE_DATA_IN) &&
+		    is_queue_available(Q_STORAGE_DATA_OUT)) {
+			/* This can happen, for example, when the untrusted
+			 * domain uses up its quota and asks for access again.
+			 *
+			 * FIXME: there's a race condition here. The syscall
+			 * request might get to us before we handle the
+			 * change-of-ownership interrupts from these queues.
+			 */
+
+			/* This is an optimization so that we don't reset the
+			 * storage service again and again when it is being
+			 * used by the untrusted domain.
+			 */ 
+			if (app == &untrusted_app)
+				no_reset = 1;
+		} else {
+			printf("Error: %s: app already has access to the "
+			       "storage queues.\n", __func__);
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+			return;
+		}
 	}
 
-	if (storage_status != OS_ACCESS) {
+	if ((storage_status != OS_ACCESS) && !no_reset) {
 		if (storage_status == OS_USE) {
-			reset_proc(P_STORAGE);
+			ret = reset_proc_simple(P_STORAGE);
+			if (ret) {
+				printf("Error: %s: couldn't reset the storage "
+				       "service.\n", __func__);
+				SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+				return;
+			}
 			current_app_with_storage_access = app;
 			storage_status = APP_ACCESS;
 		} else {
 			wait_for_storage();
-			reset_proc(P_STORAGE);
-			current_app_with_storage_access = app;
-			storage_status = APP_ACCESS;
+			ret = reset_proc_simple(P_STORAGE);
+			if (ret) {
+				printf("Error: %s: couldn't reset the storage "
+				       "service (2).\n", __func__);
+				SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+				return;
+			}
 		}
 	}
 
-	ret = bind_partition(app->sec_partition_id);
-	if (ret) {
-		printf("Error: %s: couldn't bind the storage service to "
-		       "partition (%d).\n", __func__, app->sec_partition_id);
-		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
-		return;
-	}
+	current_app_with_storage_access = app;
+	storage_status = APP_ACCESS;
 
+	if (!no_reset) {
+		ret = bind_partition(app->sec_partition_id);
+		if (ret) {
+			printf("Error: %s: couldn't bind the storage service "
+			       "to partition (%d).\n", __func__,
+			       app->sec_partition_id);
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
+			return;
+		}
+	}
 
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -603,6 +685,18 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 uint32_t initialize_storage(void)
 {
 	int ret;
+	printf("%s [1]\n", __func__);
+
+#ifdef ROLE_OS
+	/* The bootloader has already used the partition. */
+	ret = reset_proc_simple(P_STORAGE);
+	if (ret) {
+		printf("Error: %s: couldn't reset the storage service.\n",
+		       __func__);
+		exit(-1);
+	}
+	printf("%s [2]\n", __func__);
+#endif
 
 	ret = query_storage_partitions();
 	if (ret) {
@@ -610,6 +704,7 @@ uint32_t initialize_storage(void)
 		       "partitions\n", __func__);
 		exit(-1);
 	}
+	printf("%s [3]\n", __func__);
 
 	boot_partition = get_boot_partition();
 	if (!boot_partition) {
@@ -617,11 +712,13 @@ uint32_t initialize_storage(void)
 		       __func__);
 		exit(-1);
 	}
+	printf("%s [4]\n", __func__);
 
 	if (!boot_partition->is_created) {
 		printf("Error: %s: boot partition isn't created.\n", __func__);
 		exit(-1);
 	}
+	printf("%s [5]\n", __func__);
 
 	storage_status = OS_USE;
 
@@ -629,7 +726,9 @@ uint32_t initialize_storage(void)
 	if (ret) {
 		printf("Error: %s: couldn't bind the boot partition.\n",
 		       __func__);
+		exit(-1);
 	}
+	printf("%s [6]\n", __func__);
 
 	ret = authenticate_with_storage_service();
 	if (ret) {
@@ -637,6 +736,7 @@ uint32_t initialize_storage(void)
 		       "service to access the boot partition.\n", __func__);
 		exit(-1);
 	}
+	printf("%s [7]: boot_partition->size = %d\n", __func__, boot_partition->size);
 
 	return boot_partition->size;
 }

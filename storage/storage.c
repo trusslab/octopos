@@ -228,7 +228,7 @@ struct partition partitions[NUM_PARTITIONS];
  * Partition 1 is the root fs partition for the untrusted domain.
  */
 uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
-	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100};
+	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100, 100};
 
 uint8_t bound_partition = 0xFF; /* 0xFF is an invalid partition number. */
 uint8_t bound = 0;
@@ -287,8 +287,8 @@ void initialize_storage_space(void)
 			/* create empty file */
 			filep2 = fop_open(partition->create_name, "w");
 			fop_close(filep2);
-			/* Also wipe lock info (which should not have any valid
-			 * key anyway.
+			/* Also wipe keys info (which should not have any valid
+			 * key anyway).
 			 */
 			filep2 = fop_open(partition->keys_name, "w");
 			fop_close(filep2);
@@ -342,7 +342,8 @@ static int set_partition_key(uint8_t *data, int partition_id)
 	FILE *filep;
 	uint32_t size;
 	
-	filep = fop_open(partitions[partition_id].keys_name, "r+");
+	printf("%s [1]: writing to %s\n", __func__, partitions[partition_id].keys_name);
+	filep = fop_open(partitions[partition_id].keys_name, "w");
 	if (!filep) {
 		printf("Error: %s: couldn't open %s\n", __func__,
 		       partitions[partition_id].keys_name);
@@ -449,21 +450,33 @@ static int authenticate_partition(int partition_id, uint8_t proc_id)
 
 static int wipe_partition(int partition_id)
 {
-#ifdef ARCH_SEC_HW_STORAGE
-	FILINFO finfo;
-	UINT NumBytesWritten = 0;
-	uint8_t zero_buf[STORAGE_BLOCK_SIZE] = {0};
-	f_stat(partitions[partition_id].data_name, &finfo);
-#endif
+//#ifdef ARCH_SEC_HW_STORAGE
+//	FILINFO finfo;
+//	UINT NumBytesWritten = 0;
+//	uint8_t zero_buf[STORAGE_BLOCK_SIZE] = {0};
+//	f_stat(partitions[partition_id].data_name, &finfo);
+//#endif
+	uint8_t zero_block[STORAGE_BLOCK_SIZE];
+	uint32_t i;
+
 	FILE *filep = fop_open(partitions[partition_id].data_name, "w");
 	if (!filep) {
 		printf("Error: %s: couldn't open %s\n", __func__,
 		       partitions[partition_id].data_name);
 		return ERR_FAULT;
 	}
-#ifdef ARCH_SEC_HW_STORAGE
-	f_write(filep, (const void*)zero_buf, finfo.fsize, &NumBytesWritten);
-#endif
+
+	/* populate with zeros (so that first read next time doesn't return an
+	 * error
+	 */
+	memset(zero_block, 0x0, STORAGE_BLOCK_SIZE);
+	fop_seek(filep, 0, SEEK_SET);
+	for (i = 0; i < partitions[partition_id].size; i++)
+		fop_write(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE,
+			  filep);
+//#ifdef ARCH_SEC_HW_STORAGE
+//	f_write(filep, (const void*)zero_buf, finfo.fsize, &NumBytesWritten);
+//#endif
 	fop_close(filep);
 	return 0;
 }
@@ -489,6 +502,7 @@ static void storage_bind_resource(uint8_t *buf)
 
 	STORAGE_GET_ONE_ARG
 	partition_id = arg0;
+	printf("%s [1]: partition_id = %d\n", __func__, partition_id);
 
 	if (partition_id >= NUM_PARTITIONS) {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
@@ -627,6 +641,7 @@ static void storage_receive_data(uint8_t *buf)
 	uint8_t partition_id;
 	uint32_t start_block, num_blocks, seek_off, size, i;
 	uint8_t data_buf[STORAGE_BLOCK_SIZE];
+	printf("%s [1]\n", __func__);
 
 	used = 1;
 
@@ -682,6 +697,7 @@ static void storage_receive_data(uint8_t *buf)
 					    STORAGE_BLOCK_SIZE, filep);
 		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 	}
+	printf("%s [2]\n", __func__);
 
 	STORAGE_SET_TWO_RETS(0, size)
 	fop_close(filep);
@@ -702,8 +718,8 @@ static void storage_receive_data(uint8_t *buf)
 static void storage_create_resource(uint8_t *buf)
 {
 	FILE *filep, *filep2;
-	uint32_t partition_size, tag, size;
-	int partition_id, i, ret;
+	uint32_t partition_id, tag, size;
+	int ret;
 
 	if (bound) {
 		printf("Error: %s: some partition is bound to queue set\n",
@@ -719,21 +735,23 @@ static void storage_create_resource(uint8_t *buf)
 		return;
 	}
 
-	partition_size = arg0;
-	partition_id = -1;
+	partition_id = arg0;
 
-	for (i = 0; i < NUM_PARTITIONS; i++) {
-		if (!partitions[i].is_created &&
-		    (partitions[i].size == partition_size)) {
-			partition_id = i;
-			break;
-		}
-	}
+	//for (i = 0; i < NUM_PARTITIONS; i++) {
+	//	printf("%s [2]: partitions[i].is_created = %d\n", __func__, partitions[i].is_created);
+	//	printf("%s [3]: partitions[i].size = %d\n", __func__, partitions[i].size);
+	//	if (!partitions[i].is_created &&
+	//	    (partitions[i].size == partition_size)) {
+	//		partition_id = i;
+	//		break;
+	//	}
+	//}
+	//printf("%s [4]: i = %d\n", __func__, i);
 
-	if (partition_id < 0 || partition_id >= NUM_PARTITIONS) {
-		printf("Error: %s: no partitions with the requested size "
-		       "available\n", __func__);
-		STORAGE_SET_ONE_RET(ERR_AVAILABLE)
+	if (partition_id >= NUM_PARTITIONS) {
+		printf("Error: %s: invalid requested partition ID (%d)\n",
+		       __func__, partition_id);
+		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
 
@@ -743,8 +761,11 @@ static void storage_create_resource(uint8_t *buf)
 		return;
 	}
 
-	filep = fop_open(partitions[partition_id].create_name, "r+");
+	printf("%s [1]: writing to %s\n", __func__, partitions[partition_id].create_name);
+	filep = fop_open(partitions[partition_id].create_name, "w");
 	if (!filep) {
+		printf("Error: %s: Couldn't open %s.\n", __func__,
+		       partitions[partition_id].create_name);
 		STORAGE_SET_ONE_RET(ERR_FAULT)
 		return;
 	}
@@ -779,7 +800,8 @@ static void storage_query_all_resources(uint8_t *buf)
 {
 	FILE *filep;
 	uint32_t size;
-	uint8_t num_partitions, partition_id;
+	uint32_t num_partitions;
+	uint8_t partition_id;
 
 	if (bound) {
 		printf("Error: %s: the query_all_resources op cannot be used "
@@ -845,9 +867,9 @@ static void storage_query_all_resources(uint8_t *buf)
 			}
 
 			memcpy(&data[5], key, STORAGE_KEY_SIZE);
-				
-			STORAGE_SET_ONE_RET_DATA(0, &data, 5 + STORAGE_KEY_SIZE)
 		}
+
+		STORAGE_SET_ONE_RET_DATA(0, &data, 5 + STORAGE_KEY_SIZE)
 	}
 }
 
@@ -900,9 +922,10 @@ static void storage_authenticate(uint8_t *buf, uint8_t proc_id)
 	}
 
 	ret = authenticate_partition(partition_id, proc_id);
-	if (!ret) {
+	if (ret) {
 		printf("Error: %s: authentication failed\n",__func__);
 		STORAGE_SET_ONE_RET(ERR_PERMISSION)
+		return;
 	}			
 
 	authenticated = 1;
@@ -996,42 +1019,52 @@ void process_request(uint8_t *buf, uint8_t proc_id)
 {
 	switch (buf[0]) {
 	case IO_OP_QUERY_ALL_RESOURCES:
+		printf("%s [1]\n", __func__);
 		storage_query_all_resources(buf);	
 		break;
 
 	case IO_OP_CREATE_RESOURCE:
+		printf("%s [2]\n", __func__);
 		storage_create_resource(buf);
 		break;
 
 	case IO_OP_BIND_RESOURCE:
+		printf("%s [3]\n", __func__);
 		storage_bind_resource(buf);		
 		break;
 
 	case IO_OP_QUERY_STATE:
+		printf("%s [4]\n", __func__);
 		storage_query_state(buf);
 		break;
 
 	case IO_OP_AUTHENTICATE:
+		printf("%s [5]\n", __func__);
 		storage_authenticate(buf, proc_id);
 		break;
 
 	case IO_OP_SEND_DATA:
+		printf("%s [6]\n", __func__);
 		storage_send_data(buf);
 		break;
 
 	case IO_OP_RECEIVE_DATA:
+		printf("%s [7]\n", __func__);
 		storage_receive_data(buf);
 		break;
 
 	case IO_OP_DEAUTHENTICATE:
+		printf("%s [8]\n", __func__);
 		storage_deauthenticate(buf);
 		break;
 
 	case IO_OP_DESTROY_RESOURCE:
+		printf("%s [9]\n", __func__);
 		storage_destroy_resource(buf);
 		break;
 
 	default:
+		printf("%s [10]\n", __func__);
 		/*
 		 * If global flag "used" not set, set it.
 		 * This is irreversible until reset.
