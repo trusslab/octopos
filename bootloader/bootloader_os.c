@@ -138,6 +138,8 @@ void send_measurement_to_tpm(char *path)
 	close_os_mailbox();
 }
 #else
+void os_request_boot_image_by_line(uint32_t proc_id, uint32_t runtime_id);
+
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	int ret = init_os_mailbox();
@@ -147,6 +149,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 
 int copy_file_from_boot_partition(char *filename, char *path)
 {
+	os_request_boot_image_by_line(P_OS, 0);
 	return 0;
 }
 

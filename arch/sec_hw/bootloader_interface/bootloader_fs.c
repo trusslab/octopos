@@ -52,35 +52,35 @@ void os_request_boot_image_by_line(uint32_t proc_id, uint32_t runtime_id)
 			read_from_storage_data_queue(line_buf + (j * STORAGE_BLOCK_SIZE));
 		}
 
-	        if ((ret = get_srec_line(line_buf, sr_buf)) != 0)
-	        	SEC_HW_DEBUG_HANG();
+        if ((ret = get_srec_line(line_buf, sr_buf)) != 0)
+        	SEC_HW_DEBUG_HANG();
 
-	        if ((ret = decode_srec_line(sr_buf, &srinfo)) != 0)
-	        	SEC_HW_DEBUG_HANG();
+        if ((ret = decode_srec_line(sr_buf, &srinfo)) != 0)
+        	SEC_HW_DEBUG_HANG();
 
-	        switch (srinfo.type) {
-	            case SREC_TYPE_0:
-	                break;
-	            case SREC_TYPE_1:
-	            case SREC_TYPE_2:
-	            case SREC_TYPE_3:
-	                memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
-	                break;
-	            case SREC_TYPE_5:
-	                break;
-	            case SREC_TYPE_7:
-	            case SREC_TYPE_8:
-	            case SREC_TYPE_9:
-	                laddr = (void (*)())srinfo.addr;
+        switch (srinfo.type) {
+            case SREC_TYPE_0:
+                break;
+            case SREC_TYPE_1:
+            case SREC_TYPE_2:
+            case SREC_TYPE_3:
+                memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+                break;
+            case SREC_TYPE_5:
+                break;
+            case SREC_TYPE_7:
+            case SREC_TYPE_8:
+            case SREC_TYPE_9:
+                laddr = (void (*)())srinfo.addr;
 
-	                /* sanity check */
-	                if (OS_IMAGE_LINE_NUMBER - 1 != i)
-	                	SEC_HW_DEBUG_HANG();
+                /* sanity check */
+                if (OS_IMAGE_LINE_NUMBER - 1 != i)
+                	SEC_HW_DEBUG_HANG();
 
-	                get_response_from_storage(buf);
+                get_response_from_storage(buf);
 
-	                (*laddr)();
-	                break;
+                (*laddr)();
+                break;
 	        }
 	}
 

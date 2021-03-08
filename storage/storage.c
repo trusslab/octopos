@@ -129,6 +129,7 @@ uint8_t config_key[STORAGE_KEY_SIZE];
 bool is_config_locked = false;
 
 #ifdef ARCH_SEC_HW_STORAGE
+uint8_t get_srec_line(uint8_t *line, uint8_t *buf);
 
 typedef struct __attribute__((__packed__)) {
 	u16 partition_id;
@@ -1382,6 +1383,7 @@ void process_request(uint8_t *buf)
 
 		STORAGE_SET_ONE_RET(0)
 
+#ifdef ARCH_SEC_HW_STORAGE
 	} else if (buf[0] == STORAGE_OP_UNLOCK_CONFIG) {
 		if (!is_config_locked) {
 			STORAGE_SET_ONE_RET(0)
@@ -1408,6 +1410,30 @@ void process_request(uint8_t *buf)
 	} else if (buf[0] == STORAGE_OP_LOCK_CONFIG) {
 		is_config_locked = true;
 		STORAGE_SET_ONE_RET(0)
+	} else if (buf[0] == STORAGE_OP_BOOT_REQ) {
+
+		STORAGE_GET_TWO_ARGS
+		uint32_t partition_id = arg0;
+		uint32_t runtime_id = arg1;
+		if (partition_id > NUM_PROCESSORS || runtime_id > NUM_RUNTIME_PROCS) {
+			SEC_HW_DEBUG_HANG();
+			printf("%s: Error: invalid args\n", __func__);
+			STORAGE_SET_ONE_RET(0)
+			return;
+		}
+
+		uint8_t data_buf[boot_image_sizes[partition_id] + 48] __attribute__ ((aligned(64)));
+		uint8_t line_buf[256 + 48] __attribute__ ((aligned(64)));
+		uint8_t *flbuf = data_buf;
+		load_boot_image_from_storage(partition_id, data_buf);
+
+		for (uint32_t i = 0; i < OS_IMAGE_LINE_NUMBER; i++) {
+			get_srec_line(flbuf, line_buf);
+			write_data_to_queue(line_buf, Q_STORAGE_DATA_OUT);
+		}
+
+		STORAGE_SET_ONE_RET(0);
+#endif
 	} else {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
