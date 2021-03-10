@@ -41,6 +41,7 @@
 #include <octopos/error.h>
 #include <octopos/bluetooth.h>
 /* FIXME: tpm/tpm.h should be moved to octopos/tpm.h */
+#include <tpm/hash.h>
 #include <tpm/tpm.h>
 #include <arch/mailbox_runtime.h>
 

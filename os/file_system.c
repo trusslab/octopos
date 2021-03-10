@@ -645,8 +645,6 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size,
 	}
 
 	if (offset >= file->size) {
-		printf("Error: %s: invalid offset (offset = %d, file->size = "
-		       "%d\n", __func__, offset, file->size);
 		return 0;
 	}
 

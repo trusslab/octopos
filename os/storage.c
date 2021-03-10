@@ -593,6 +593,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			 */ 
 			if (app == &untrusted_app)
 				no_reset = 1;
+			printf("%s [1]: no_reset = %d\n", __func__, no_reset);
 		} else {
 			printf("Error: %s: app already has access to the "
 			       "storage queues.\n", __func__);

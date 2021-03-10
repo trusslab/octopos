@@ -43,8 +43,6 @@
 
 #ifdef UNTRUSTED_DOMAIN
 #define printf printk
-
-int need_auth = 0;
 #endif
 
 #ifndef UNTRUSTED_DOMAIN
@@ -326,22 +324,21 @@ static int query_and_verify_storage(void)
 		return ERR_FAULT;
 	}
 #else
-	/* This is an optimization for the untrusted domain. We allow it to
+	/* For the untrusted domain, we don't check the "used" status.
+	 * This is an optimization for the untrusted domain. We allow it to
 	 * continue using the storage service without a reset. The OS assists
 	 * in this optimization (in handle_request_secure_storage_access_syscall().
+	 * Note that we still check for "authenticated". This is because before
+	 * yielding the storage access, the untrusted domain deauthenticates.
 	 */
-	if ((data[0] != 1) || (data[3] != secure_partition_id) ||
-	    (data[4] != 1)) {
+	if ((data[0] != 1) || (data[2] != 0) ||
+	    (data[3] != secure_partition_id) || (data[4] != 1)) {
 		printf("Error: %s: couldn't successfully verify the query "
 		       "response from the storage service (bound = %d, "
-		       "bound_partition = %d, is_created = %d).\n", __func__,
-		       data[0], data[3], data[4]);
+		       "authenticated = %d, bound_partition = %d, is_created = "
+		       "%d).\n", __func__, data[0], data[2], data[3], data[4]);
 		return ERR_FAULT;
 	}
-
-	if (data[2] == 0)
-		need_auth = 1;
-	printf("%s [1]: need_auth = %d\n", __func__, need_auth);
 #endif
 
 	return 0;
@@ -584,12 +581,6 @@ static int request_secure_storage_queues_access(limit_t limit,
 	//	goto error;
 	//}
 
-#ifdef UNTRUSTED_DOMAIN
-	/* FIXME: not pretty. */
-	if (!need_auth)
-		goto end;
-#endif
-
 	ret = authenticate_storage();
 	if (ret) {
 		printf("%s: Error: couldn't authenticate with the storage "
@@ -599,10 +590,6 @@ static int request_secure_storage_queues_access(limit_t limit,
 	}
 	printf("%s [6]\n", __func__);
 
-#ifdef UNTRUSTED_DOMAIN
-	/* FIXME: not pretty. */
-end:
-#endif
 	has_access_to_secure_storage = true;
 
 	return 0;
