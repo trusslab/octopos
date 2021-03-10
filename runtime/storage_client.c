@@ -793,7 +793,8 @@ int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
 	return (int) write_size;
 }
 
-int set_up_context(void *addr, uint32_t size, int do_yield,
+/* FIXME: bad and complex API. */
+int set_up_context(void *addr, uint32_t size, int do_yield, int *context_found,
 		   uint32_t partition_size, limit_t limit, timeout_t timeout,
 		   queue_update_callback_t callback, uint8_t *expected_pcr,
 		   uint8_t *return_pcr)
@@ -807,6 +808,8 @@ int set_up_context(void *addr, uint32_t size, int do_yield,
 	context_addr = addr;
 	context_size = size;
 	context_set = true;
+	if (context_found)
+		*context_found = 0;
 	/* Now, let's retrieve the context. */
 	int ret = request_secure_storage_access(partition_size, limit, timeout,
 						callback, expected_pcr,
@@ -821,20 +824,23 @@ int set_up_context(void *addr, uint32_t size, int do_yield,
 						context_size + CONTEXT_TAG_SIZE);
 	if (rret != (context_size + CONTEXT_TAG_SIZE)) {
 		printf("%s: Couldn't read from secure storage.\n", __func__);
-		yield_secure_storage_access();
-		return ERR_FAULT;
+		goto no_context;
 	}
 
 	if ((*(uint32_t *) context_block) != context_tag) {
 		printf("%s: No context to use.\n", __func__);
-		yield_secure_storage_access();
-		return ERR_INVALID;
+		goto no_context;
 	}
 
 	memcpy(context_addr, &context_block[CONTEXT_TAG_SIZE], context_size);
+	if (context_found)
+		*context_found = 1;
 
+no_context:
 	if (do_yield)
 		yield_secure_storage_access();
+	printf("%s [1]: context_set = %d\n", __func__, context_set);
+	printf("%s [2]: has_access_to_secure_storage = %d\n", __func__, has_access_to_secure_storage);
 
 	return 0;
 }
@@ -843,6 +849,8 @@ int write_context_to_storage(int do_yield)
 {
 	uint8_t context_block[STORAGE_BLOCK_SIZE];
 
+	printf("%s [1]: context_set = %d\n", __func__, context_set);
+	printf("%s [2]: has_access_to_secure_storage = %d\n", __func__, has_access_to_secure_storage);
 	if (!has_access_to_secure_storage || !context_set) {
 		printf("%s: Error: either the secure storage key or context "
 		       "not set or secure storage not previously set up\n",

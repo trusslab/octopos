@@ -1669,6 +1669,7 @@ int main()
 		printf("%s: Error: couldn't initialize the runtime\n", __func__);
 		return -1;
 	}
+
 	enforce_running_process(p_runtime);
 
 	/* initialize syscall response queue */

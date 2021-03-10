@@ -461,7 +461,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 
-	ret = tpm_processor_read_pcr(runtime_proc_id, app_key);
+	ret = tpm_processor_read_pcr(PROC_TO_PCR(runtime_proc_id), app_key);
 	if (ret) {
 		printf("Error: %s: couldn't read TPM PCR for runtime proc %d.\n",
 		       __func__, runtime_proc_id);

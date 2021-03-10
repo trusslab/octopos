@@ -66,8 +66,9 @@ struct runtime_api {
 					     uint32_t block_offset,
 					     uint32_t write_size);
 	int (*set_up_context)(void *addr, uint32_t size, int do_yield,
-			      uint32_t partition_size, limit_t limit,
-			      timeout_t timeout, queue_update_callback_t callback,
+			      int *context_found, uint32_t partition_size,
+			      limit_t limit, timeout_t timeout,
+			      queue_update_callback_t callback,
 			      uint8_t *expected_pcr, uint8_t *return_pcr);
 	int (*write_context_to_storage)(int do_yield);
 

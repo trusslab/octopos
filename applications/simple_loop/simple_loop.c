@@ -37,8 +37,8 @@ void simple_loop(struct runtime_api *api)
 #endif
 {
 	/* For context switch */
-	api->set_up_context((void *) &gcounter, 4, 1, 100, 200, 6, NULL, NULL,
-			    NULL);	
+	api->set_up_context((void *) &gcounter, 4, 1, NULL, 100, 200, 6, NULL,
+			    NULL, NULL);	
 
 	while (1) {
 		insecure_printf("gcounter = %d\n", gcounter);

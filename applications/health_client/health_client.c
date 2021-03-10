@@ -519,7 +519,7 @@ void app_main(struct runtime_api *api)
 	 *	   the session with the server. For storage, write the latest
 	 *	   version of the context data to storage.
 	 */
-	int ret;
+	int ret, context_found = 0;
 	uint8_t msg[BTPACKET_FIXED_DATA_SIZE];
 	uint16_t glucose_measurement;
 	uint8_t dose;
@@ -577,9 +577,10 @@ void app_main(struct runtime_api *api)
 
 	/* Step 1 (including part of Step 0 to request access to storage) */
 	ret = api->set_up_context((void *) &context, sizeof(struct app_context),
-				  0, 100, 200, 100, queue_update_callback, NULL,
+				  0, &context_found, 100, 200, 100,
+				  queue_update_callback, NULL,
 				  measured_storage_pcr);
-	if (!ret) {
+	if (!ret && context_found) {
 		has_storage = 1;
 		if (!memcmp(context.signature, expected_context_signature,
 			    CONTEXT_SIGNATURE_SIZE)) {

@@ -390,7 +390,7 @@ static int authenticate_partition(int partition_id, uint8_t proc_id)
 	return 0;
 #endif
 
-	ret = tpm_processor_read_pcr(proc_id, tpm_pcr);
+	ret = tpm_processor_read_pcr(PROC_TO_PCR(proc_id), tpm_pcr);
 	if (ret) {
 		printf("Error: %s: couldn't read TPM PCR for proc %d.\n",
 		       __func__, proc_id);
@@ -1103,6 +1103,8 @@ int main(int argc, char **argv)
 		       "extend hash size\n");
 		return -1;
 	}
+
+	enforce_running_process(P_STORAGE);
 
 	init_storage();
 	storage_event_loop();
