@@ -17,6 +17,12 @@
 #include "octopos/mailbox.h"
 #include "octopos/error.h"
 
+#include "netif/xadapter.h"
+
+extern void platform_enable_interrupts2();
+extern int initialize_network_hardware(struct netif *);
+struct netif *netif;
+
 #undef _SEC_HW_DEBUG
 #undef _SEC_HW_ERROR
 
@@ -367,8 +373,14 @@ int init_network(void)
 	XIntc_Enable(&intc, OMboxIntrs[P_NETWORK][Q_NETWORK_CMD_OUT]);
 	XIntc_Enable(&intc, OMboxIntrs[P_NETWORK][Q_NETWORK_CMD_IN]);
 
+	printf("net init [0] before psi2\n\r");
+	platform_setup_interrupts2(&intc);
+	printf("net init [1] after psi2\n\r");
+
+
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
+	printf("net init [2] after psi2\n\r");
 
 
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, 0);
@@ -376,8 +388,9 @@ int init_network(void)
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
 
+	initialize_network_hardware(netif);
 	printf("net init done\n\r");
-//	initialize_network_stack();
+
 
 	return XST_SUCCESS;
 }

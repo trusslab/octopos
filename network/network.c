@@ -162,8 +162,8 @@ void send_packet(uint8_t *buf)
 
 	NETWORK_GET_ZERO_ARGS_DATA
 	struct pkbuf *pkb = (struct pkbuf *) data;
-        dump_packet(pkb);
-//	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
+    dump_packet(pkb);
+//    pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
 //	list_init(&pkb->pk_list);
 //	/* FIXME: add */
 //	//pkb_safe();
@@ -230,7 +230,7 @@ int main(int argc, char **argv)
 
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s: network init\n", __func__);
+	printf("%s: network init s\n", __func__);
 
 	init_network();
 	network_event_loop();

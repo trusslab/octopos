@@ -1124,10 +1124,10 @@ int main()
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 #endif
-	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
-		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
-		exit(-1);
-	}
+//	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
+//		printf("Error (runtime): storage data queue msg size must be equal to storage block size\n");
+//		exit(-1);
+//	}
 #ifdef ARCH_UMODE
 	if (argc != 2) {
 		printf("Error: incorrect command. Use ``runtime <runtime_ID>''.\n");
