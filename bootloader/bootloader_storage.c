@@ -83,6 +83,8 @@
 int load_boot_image_from_storage(int pid, void *ptr);
 int write_boot_image_to_storage(int pid, void *ptr);
 
+extern uint32_t boot_image_sizes[NUM_PROCESSORS + 1];
+#define TARGET_BOOT_PROCESSOR P_OS
 
 /* if set, switch to image writer mode */
 //#define IMAGE_WRITER_MODE
@@ -90,8 +92,9 @@ int write_boot_image_to_storage(int pid, void *ptr);
 #ifndef IMAGE_WRITER_MODE
 uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #else
-uint8_t binary_DEBUG_READ_BACK[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
-#include "arch/bin/storage_image.h"
+//uint8_t binary_DEBUG_READ_BACK[OS_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
+//#include "arch/bin/storage_image.h"
+#include "arch/bin/os_image.h"
 #endif
 
 
@@ -266,13 +269,15 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #ifndef IMAGE_WRITER_MODE
 	load_boot_image_from_storage(P_STORAGE, binary);
 #else /* IMAGE_WRITER_MODE */
-	write_boot_image_to_storage(P_STORAGE, binary);
-	load_boot_image_from_storage(P_STORAGE, binary_DEBUG_READ_BACK);
 
-	for (int i = 0; i < STORAGE_IMAGE_SIZE; i++) {
-		if (binary[i] != binary_DEBUG_READ_BACK[i])
-			SEC_HW_DEBUG_HANG();
-	}
+//#define TARGET_BOOT_PROCESSOR P_STORAGE
+	write_boot_image_to_storage(TARGET_BOOT_PROCESSOR, binary);
+//	load_boot_image_from_storage(TARGET_BOOT_PROCESSOR, binary_DEBUG_READ_BACK);
+//
+//	for (int i = 0; i < boot_image_sizes[TARGET_BOOT_PROCESSOR]; i++) {
+//		if (binary[i] != binary_DEBUG_READ_BACK[i])
+//			SEC_HW_DEBUG_HANG();
+//	}
 
 	SEC_HW_DEBUG_HANG();
 #endif /* IMAGE_WRITER_MODE */

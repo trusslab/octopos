@@ -181,11 +181,6 @@ u32 page_map[NUM_PARTITIONS][PAGE_MAP_MAX_VIRT_PAGE] = {0};
 
 /* boot images store at this sector and beyond */
 #define BOOT_IMAGE_OFFSET 100
-/* FIXME: max image size supported is 128KB (sector size)
- * WARNING: Please do not change this value, bootloader assumes
- * every image fits in one sector.
- */
-#define BOOT_IMAGE_PER_IMAGE_SIZE 1
 
 #define MIN_PARTITION_SECTOR_SIZE 3
 
@@ -661,7 +656,7 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
 	sector_count = size / Flash_Config_Table[FCTIndex].SectSize +
 				(size % Flash_Config_Table[FCTIndex].SectSize != 0);
 
-	if (sector_count >= MAC_ALLOWED_IMAGE_SIZE_IN_SECTOR) {
+	if (sector_count > MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_INVALID;
 	}
@@ -686,13 +681,12 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
 
 /*
  * @pid: processor id
- * Boot image storage starts at BOOT_IMAGE_OFFSET, and each image
- * gets 1 sector. This should be enough.
+ * Boot image storage starts at BOOT_IMAGE_OFFSET
  */
 static u32 get_boot_image_address(int pid)
 {
 	u32 address = 
-		(BOOT_IMAGE_OFFSET + pid * BOOT_IMAGE_PER_IMAGE_SIZE) *
+		(BOOT_IMAGE_OFFSET + pid * MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR) *
 		Flash_Config_Table[FCTIndex].SectSize;
 
 	return address;
@@ -1383,7 +1377,6 @@ void process_request(uint8_t *buf)
 
 		STORAGE_SET_ONE_RET(0)
 
-#ifdef ARCH_SEC_HW_STORAGE
 	} else if (buf[0] == STORAGE_OP_UNLOCK_CONFIG) {
 		if (!is_config_locked) {
 			STORAGE_SET_ONE_RET(0)
@@ -1410,11 +1403,13 @@ void process_request(uint8_t *buf)
 	} else if (buf[0] == STORAGE_OP_LOCK_CONFIG) {
 		is_config_locked = true;
 		STORAGE_SET_ONE_RET(0)
+#ifdef ARCH_SEC_HW_STORAGE
 	} else if (buf[0] == STORAGE_OP_BOOT_REQ) {
 
 		STORAGE_GET_TWO_ARGS
 		uint32_t partition_id = arg0;
 		uint32_t runtime_id = arg1;
+
 		if (partition_id > NUM_PROCESSORS || runtime_id > NUM_RUNTIME_PROCS) {
 			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: invalid args\n", __func__);
@@ -1422,14 +1417,13 @@ void process_request(uint8_t *buf)
 			return;
 		}
 
-		uint8_t data_buf[boot_image_sizes[partition_id] + 48] __attribute__ ((aligned(64)));
-		uint8_t line_buf[256 + 48] __attribute__ ((aligned(64)));
-		uint8_t *flbuf = data_buf;
-		load_boot_image_from_storage(partition_id, data_buf);
+		u32 address = get_boot_image_address(partition_id);
+		u32 message_count = boot_image_sizes[partition_id] / STORAGE_BLOCK_SIZE;
+		uint8_t message_buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
 
-		for (uint32_t i = 0; i < OS_IMAGE_LINE_NUMBER; i++) {
-			get_srec_line(flbuf, line_buf);
-			write_data_to_queue(line_buf, Q_STORAGE_DATA_OUT);
+		for (u32 message = 0; message < message_count; message++) {
+			partition_read_physical(address + message * STORAGE_BLOCK_SIZE, STORAGE_BLOCK_SIZE, message_buf);
+			write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
 		}
 
 		STORAGE_SET_ONE_RET(0);
