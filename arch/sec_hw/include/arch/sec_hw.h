@@ -33,13 +33,7 @@ void cleanup_platform();
  */
 #define MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR 4
 #define STORAGE_IMAGE_SIZE 263168
-#define OS_IMAGE_SIZE 421888
-
-/* line number is for data transfer over mailbox.
- * each line has up to 255B (SREC_MAX_BYTES), padded with 0 to be 256B
- * FIXME: large queue: each 512 message should fit 2 lines
- */
-#define OS_IMAGE_LINE_NUMBER 9169
+#define OS_IMAGE_SIZE 422400
 
 /* special op code for boot image request */
 #define STORAGE_OP_BOOT_REQ 0xf

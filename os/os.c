@@ -61,11 +61,9 @@ int main()
 #endif
 
 	uint32_t partition_size = initialize_storage();
-	printf("[1]%d\r\n", ret);
 // FIXME remove ARCH_SEC_HW. initialize_file_system should be moved to boot
 #if defined(ARCH_UMODE) || defined(ARCH_SEC_HW)
 	initialize_file_system(partition_size);
-	printf("[2]%d\r\n", ret);
 #endif
 
 #ifndef ARCH_SEC_HW
@@ -73,7 +71,6 @@ int main()
 #endif
 
 	initialize_shell();
-	printf("[3]%d\r\n", ret);
 	initialize_scheduler();
 
 	while (1) {

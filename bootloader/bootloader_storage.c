@@ -91,14 +91,19 @@ extern uint32_t boot_image_sizes[NUM_PROCESSORS + 1];
 
 #ifndef IMAGE_WRITER_MODE
 uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
-#else
+#else /* IMAGE_WRITER_MODE */
+
 //uint8_t binary_DEBUG_READ_BACK[OS_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
-//#include "arch/bin/storage_image.h"
+#if (TARGET_BOOT_PROCESSOR == P_STORAGE)
+#include "arch/bin/storage_image.h"
+#elif (TARGET_BOOT_PROCESSOR == P_OS)
 #include "arch/bin/os_image.h"
 #endif
 
+#endif /* IMAGE_WRITER_MODE */
 
-#endif
+
+#endif /* ARCH_SEC_HW_BOOT */
 
 
 #ifndef ARCH_SEC_HW_BOOT
