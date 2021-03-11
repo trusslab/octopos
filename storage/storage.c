@@ -607,16 +607,6 @@ int partition_read_physical(u32 data_address, u32 size, void *ptr)
 {
 	u32 status;
 
-	if (data_address % Flash_Config_Table[FCTIndex].PageSize != 0) {
-		SEC_HW_DEBUG_HANG();
-		return ERR_INVALID;
-	}
-
-	if (size % Flash_Config_Table[FCTIndex].PageSize != 0) {
-		SEC_HW_DEBUG_HANG();
-		return ERR_INVALID;
-	}
-
 	if (!is_aligned_64(ptr)) {
 		SEC_HW_DEBUG_HANG();
 		return ERR_FAULT;
