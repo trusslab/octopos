@@ -119,6 +119,7 @@ struct runtime_api {
 					       queue_update_callback_t callback,
 					       uint8_t *expected_pcr,
 					       uint8_t *return_pcr);
+	int (*authenticate_with_bluetooth_service)(uint8_t *app_signature);
 	int (*yield_secure_bluetooth_access)(void);
 	int (*bluetooth_send_data)(uint8_t am_addr, uint8_t *data, uint32_t len);
 	int (*bluetooth_recv_data)(uint8_t am_addr, uint8_t *data, uint32_t len);

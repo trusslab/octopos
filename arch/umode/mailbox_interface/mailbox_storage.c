@@ -68,7 +68,8 @@ static void *handle_mailbox_interrupts(void *data)
 		if (interrupt > 0 && interrupt <= NUM_QUEUES) {
 			sem_post(&interrupts[interrupt]);
 		} else {
-			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
+			printf("Error: interrupt from an invalid queue (%d)\n",
+			       interrupt);
 			exit(-1);
 		}
 	}
@@ -148,7 +149,8 @@ int init_storage(void)
 	fd_in = open(FIFO_STORAGE_IN, O_RDONLY);
 	fd_intr = open(FIFO_STORAGE_INTR, O_RDONLY);
 
-	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	int ret = pthread_create(&mailbox_thread, NULL,
+				 handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;

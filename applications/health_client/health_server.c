@@ -20,6 +20,7 @@
 /* octopos header files */
 #define APPLICATION
 #include <tpm/hash.h>
+#include <tpm/rsa.h>
 
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
 
@@ -31,6 +32,7 @@ uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t storage_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t expected_pcr_digest[TPM_EXTEND_HASH_SIZE];
 char expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
+uint8_t app_signature[RSA_SIGNATURE_SIZE];
 
 static void error(const char *msg)
 {
@@ -224,6 +226,32 @@ static void generate_PCR_digests(void)
 	convert_hash_to_str(expected_pcr_digest, expected_pcr_digest_str);
 }
 
+static int read_app_signature(void)
+{
+	FILE *filep;
+	uint32_t size;
+
+	filep = fopen((char *) "./installer/health_client_signature", "r");
+	if (!filep) {
+		printf("Error: %s: Couldn't open ./installer/health_client_"
+		       "signature (r).\n", __func__);
+		return -1;
+	}
+
+	fseek(filep, 0, SEEK_SET);
+	size = (uint32_t) fread(app_signature, sizeof(uint8_t),
+				 RSA_SIGNATURE_SIZE, filep);
+	if (size != RSA_SIGNATURE_SIZE) {
+		printf("Error: %s: couldn't read the signature.\n", __func__);
+		fclose(filep);
+		return -1;
+	}
+
+	fclose(filep);
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int sockfd, newsockfd, portno;
@@ -237,6 +265,13 @@ int main(int argc, char *argv[])
 	printf("%s: health_server init\n", __func__);
 
 	generate_PCR_digests();	
+
+	ret = read_app_signature();
+	if (ret) {
+		printf("Error: %s: couldn't read the app signature.\n",
+		       __func__);
+		return -1;
+	}
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) 
@@ -332,7 +367,7 @@ int main(int argc, char *argv[])
 	if (n < 0)
 		error("ERROR writing to socket -- 3");
 
-	/* Send I/O service PCRs */
+	/* Send I/O service PCRs and app signature */
 	n = write(newsockfd, bluetooth_pcr, TPM_EXTEND_HASH_SIZE);
 	if (n < 0)
 		error("ERROR writing to socket -- bluetooth_pcr");
@@ -344,6 +379,10 @@ int main(int argc, char *argv[])
 	n = write(newsockfd, network_pcr, TPM_EXTEND_HASH_SIZE);
 	if (n < 0)
 		error("ERROR writing to socket -- network_pcr");
+
+	n = write(newsockfd, app_signature, RSA_SIGNATURE_SIZE);
+	if (n < 0)
+		error("ERROR writing to socket -- app_signature");
 
 	/* This is needed for attestation of the network service.
 	 * Right after we receive the PCR, we compare it with what we have

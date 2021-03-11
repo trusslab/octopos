@@ -80,9 +80,12 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	fclose(copy_filep);
 	file_system_close_file(fd);
 
-	close_file_system();
-
 	return 0;
+}
+
+void bootloader_close_file_system(void)
+{
+	close_file_system();
 }
 
 void send_measurement_to_tpm(char *path)

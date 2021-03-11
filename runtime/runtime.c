@@ -43,6 +43,7 @@
 /* FIXME: tpm/tpm.h should be moved to octopos/tpm.h */
 #include <tpm/hash.h>
 #include <tpm/tpm.h>
+#include <tpm/rsa.h>
 #include <arch/mailbox_runtime.h>
 
 #ifdef ARCH_SEC_HW
@@ -1074,12 +1075,13 @@ static int verify_bluetooth_service_state(uint8_t *device_names,
 
 	/* data[0] is bound. Must be 1.
 	 * data[1] is used. Must be 0.
-	 * data[2] is num_devicesl Must be equal to what we expect.
-	 * &data[3] is the starting addr for the bound device name/am_addr pairs.
+	 * data[2] is authenticated. Must be 0.
+	 * data[3] is num_devices. Must be equal to what we expect.
+	 * &data[4] is the starting addr for the bound device name/am_addr pairs.
 	 */
-	if ((_size != (3 + (num_devices * (BD_ADDR_LEN + 1)))) ||
-	    (data[0] != 1) || (data[1] != 0) ||
-	    (((uint32_t) data[2]) != num_devices)) {
+	if ((_size != (4 + (num_devices * (BD_ADDR_LEN + 1)))) ||
+	    (data[0] != 1) || (data[1] != 0) || (data[2] != 0) ||
+	    (((uint32_t) data[3]) != num_devices)) {
 		printf("Error: %s: bluetooth service state not verified "
 		       "(first check).\n", __func__);
 		return ERR_UNEXPECTED;
@@ -1087,10 +1089,10 @@ static int verify_bluetooth_service_state(uint8_t *device_names,
 
 	for (int i = 0; i < num_devices; i++) {
 		for (int j = 0; j < num_devices; j++) { 
-			if (!memcmp(&data[3 + (i * (BD_ADDR_LEN + 1))],
+			if (!memcmp(&data[4 + (i * (BD_ADDR_LEN + 1))],
 				    &device_names[j * BD_ADDR_LEN],
 				    BD_ADDR_LEN) &&
-			    data[3 + (i * (BD_ADDR_LEN + 1)) + BD_ADDR_LEN] ==
+			    data[4 + (i * (BD_ADDR_LEN + 1)) + BD_ADDR_LEN] ==
 								am_addrs[i])
 				found++;
 		}
@@ -1103,6 +1105,18 @@ static int verify_bluetooth_service_state(uint8_t *device_names,
 	}
 
 	return 0;
+}
+
+static int deauthenticate_bluetooth(void)
+{
+	BLUETOOTH_SET_ZERO_ARGS(IO_OP_DEAUTHENTICATE)
+
+	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
+	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
+
+	BLUETOOTH_GET_ONE_RET
+		
+	return (int) ret0;
 }
 
 static int request_secure_bluetooth_access(uint8_t *device_names,
@@ -1247,27 +1261,28 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	}
 
 	/* Verify bluetooth service state */
-	ret = verify_bluetooth_service_state(device_names, num_devices, am_addrs);
+	ret = verify_bluetooth_service_state(device_names, num_devices,
+					     am_addrs);
 	if (ret) {
 		printf("Error: %s: invalid state sent from the bluetooth "
 		       "service.\n", __func__);
-			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
-			wait_until_empty(Q_BLUETOOTH_DATA_IN,
-					 MAILBOX_QUEUE_SIZE_LARGE);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+		wait_until_empty(Q_BLUETOOTH_DATA_IN,
+				 MAILBOX_QUEUE_SIZE_LARGE);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+		mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
 
-			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
-			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
-			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
-			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
-			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
-			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
-			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
-			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
-			return ret;
+		queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+		queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+		queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+		queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+		queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+		queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+		queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+		queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+		return ret;
 	}
 
 	queue_update_callbacks[Q_BLUETOOTH_CMD_IN] = callback;
@@ -1281,8 +1296,54 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	return 0;
 }
 
+static int authenticate_with_bluetooth_service(uint8_t *app_signature)
+{
+	uint32_t remaining_size = RSA_SIGNATURE_SIZE;
+	uint32_t msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	uint32_t offset = 0;
+
+	BLUETOOTH_SET_ZERO_ARGS(IO_OP_AUTHENTICATE)
+
+	runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
+
+	/* send the signature */
+	while (remaining_size) {
+		if (remaining_size < msg_size)
+			msg_size = remaining_size;
+
+		memcpy(buf, app_signature + offset, msg_size); 
+		runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
+
+		if (remaining_size >= msg_size)
+			remaining_size -= msg_size;
+		else
+			remaining_size = 0;
+
+		offset += msg_size;
+	}
+
+	runtime_recv_msg_from_queue(buf, Q_BLUETOOTH_CMD_OUT);
+
+	BLUETOOTH_GET_ONE_RET
+		
+	return (int) ret0;
+}
+
 static int yield_secure_bluetooth_access(void)
 {
+	int ret;
+
+	if (!has_secure_bluetooth_access) {
+		return ERR_INVALID;
+	}
+
+	ret = deauthenticate_bluetooth();
+	if (ret) {
+		printf("%s: Error: failed to deauthenticate with the bluetooth "
+		       "service\n", __func__);
+		return ERR_FAULT;
+	}
+
 	has_secure_bluetooth_access = false;
 
 	wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -1453,7 +1514,8 @@ static void load_application(char *msg)
 		.remove_file = remove_file,
 		.request_secure_storage_access = request_secure_storage_access,
 		.yield_secure_storage_access = yield_secure_storage_access,
-		.delete_and_yield_secure_storage = delete_and_yield_secure_storage,
+		.delete_and_yield_secure_storage =
+					delete_and_yield_secure_storage,
 		.write_secure_storage_blocks = write_secure_storage_blocks,
 		.read_secure_storage_blocks = read_secure_storage_blocks,
 		.write_to_secure_storage_block = write_to_secure_storage_block,
@@ -1482,7 +1544,10 @@ static void load_application(char *msg)
 		.write_to_socket = write_to_socket,
 		.request_network_access = request_network_access,
 		.yield_network_access = yield_network_access,
-		.request_secure_bluetooth_access = request_secure_bluetooth_access,
+		.request_secure_bluetooth_access =
+					request_secure_bluetooth_access,
+		.authenticate_with_bluetooth_service =
+					authenticate_with_bluetooth_service,
 		.yield_secure_bluetooth_access = yield_secure_bluetooth_access,
 		.bluetooth_send_data = bluetooth_send_data,
 		.bluetooth_recv_data = bluetooth_recv_data,

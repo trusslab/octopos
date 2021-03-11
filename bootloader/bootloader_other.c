@@ -32,6 +32,9 @@ uint8_t processor = 0;
 
 int need_repeat = 0, total_count = 0;
 
+int file_copy_counter = 0;
+int reading_signature = 0;
+
 static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
 	uint8_t opcode[2];
@@ -76,7 +79,15 @@ static void *handle_mailbox_interrupts(void *data)
 			 * intended for the bootloader.
 			 */
 			num_storage_data_out_interrupts++;
-			if (!need_repeat && (num_storage_data_out_interrupts ==
+
+			if (!reading_signature)
+				continue;
+
+			/* FIXME: no guarantee that this will always work.
+			 * It should work most of the time when the signature
+			 * is delivered in one message only.
+			 */
+			if (!need_repeat && (num_storage_data_out_interrupts >=
 					     total_count)) {
 				return NULL;
 			}
@@ -233,6 +244,14 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		printf("Error: %s: unknown binary\n", __func__);
 		exit(-1);
 	}
+
+	init_mailbox();
+
+	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
+		printf("Error: %s: storage data queue msg size must be equal "
+		       "to storage block size\n", __func__);
+		exit(-1);
+	}
 }
 
 /*
@@ -248,14 +267,12 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int offset;
 
-	init_mailbox();
-
-	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
-		printf("Error: %s: storage data queue msg size must be equal "
-		       "to storage block size\n", __func__);
-		exit(-1);
+	if (file_copy_counter) {
+		reading_signature = 1;
 	}
-	
+
+	file_copy_counter++;
+
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
 		printf("Error: %s: Couldn't open the target file (%s).\n",
@@ -296,6 +313,11 @@ repeat:
 	fclose(copy_filep);
 
 	return 0;
+}
+
+void bootloader_close_file_system(void)
+{
+	/* no op */
 }
 
 void send_measurement_to_tpm(char *path)

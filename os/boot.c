@@ -20,13 +20,30 @@ int untrusted_needs_help_with_boot = 0;
 
 static void help_boot_proc(uint8_t proc_id, char *filename)
 {
-	/* Help with reading the image off of storage */
+#ifdef ARCH_UMODE
+	char signature_filename[128];
+#endif
+
+	/* Help with reading the image off of storage. */
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
 	wait_for_storage();
+
+#ifdef ARCH_UMODE
+	/* Help with reading the signature file needed for secure boot. */
+	strcpy(signature_filename, filename);
+	strcat(signature_filename, "_signature");
+
+	fd = file_system_open_file(signature_filename, FILE_OPEN_MODE);
+	num_blocks = file_system_get_file_num_blocks(fd);
+	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
+	file_system_read_file_blocks_late();
+	file_system_close_file(fd);
+	wait_for_storage();
+#endif
 }
 
 static void help_boot_keyboard_proc(void)
@@ -78,7 +95,6 @@ int reset_proc(uint8_t proc_id)
 	if (proc_id == P_STORAGE) {
 		printf("Error: %s: unexpected proc_id (storage).\n", __func__);
 		return ERR_UNEXPECTED;
-		//close_file_system();
 	}
 
 	ret = pmu_reset_proc(proc_id);

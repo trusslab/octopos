@@ -332,6 +332,8 @@ static int storage_create_secure_partition(uint8_t *app_key,
 
 	if (!ret0) {
 		partitions[_partition_id].is_created = 1;
+		memcpy(partitions[_partition_id].key, app_key,
+		       TPM_EXTEND_HASH_SIZE);
 		*partition_id = _partition_id;
 	}
 	
