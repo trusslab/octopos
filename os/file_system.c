@@ -979,7 +979,6 @@ int file_system_remove_file(char *filename)
 
 void initialize_file_system(uint32_t _partition_num_blocks)
 {
-	printf("%s [1]\n", __func__);
 	/* initialize fd bitmap */
 	if (MAX_NUM_FD % 8) {
 		printf("Error: %s: MAX_NUM_FD must be divisible by 8\n",
@@ -1000,16 +999,13 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 #endif
 
 	partition_num_blocks = _partition_num_blocks;
-	printf("%s [2]\n", __func__);
 
 	/* read the directory */
 	read_dir_data_from_storage();
-	printf("%s [3]\n", __func__);
 
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
-		printf("%s [4]\n", __func__);
 		/* retrieve file info */
 		uint16_t num_files = *((uint16_t *) &dir_data[4]);
 		dir_data_ptr = 6;
@@ -1049,7 +1045,6 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			add_file_to_list(file);
 		}
 	} else {
-		printf("%s [5]\n", __func__);
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 		/* initialize signature */
 		dir_data[0] = '$';
@@ -1069,7 +1064,6 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
-	printf("%s [6]\n", __func__);
 }
 
 void close_file_system(void)

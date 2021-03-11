@@ -250,7 +250,6 @@ void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
 {
 	uint8_t opcode[2];
 	mailbox_state_reg_t new_state;
-	printf("%s [1]: queue_id = %d, proc_id = %d\n", __func__, queue_id, proc_id);
 
 	new_state.owner = proc_id;
 

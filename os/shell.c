@@ -84,7 +84,6 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 {
 	/* FIXME: add support for passing args to apps */
 
-	printf("%s [1]\n", __func__);
 	if (first == 1 && last == 0 && input == 0) {
 		// First command
 		return sched_create_app(args[0]);
@@ -96,7 +95,6 @@ static int command(int input, int first, int last, int double_pipe, int bg)
 		return app_id;
 	} else {
 		// Last command
-		printf("%s [2]: args[0] = %s\n", __func__, args[0]);
 		int app_id = sched_create_app(args[0]);
 		if (input) {
 			sched_connect_apps(app_id, input, double_pipe);
@@ -208,8 +206,6 @@ static void process_input_line(char *line)
 		} else { 
 			memcpy(repeat_cmd, cmd, MAX_LINE_SIZE);
 			repeat_num = atoi(next + 1);
-			printf("%s [1]: repeat_num = %d\n", __func__, repeat_num);
-			printf("%s [2]: repeat_cmd = %s\n", __func__, repeat_cmd);
 			repeat_cmd_exists = true;
 			repeat_cmd_counter = 0;
 		}
@@ -228,7 +224,6 @@ void check_and_run_repeat_cmd(void)
 		return;
 
 	repeat_cmd_counter++;
-	printf("%s [1]: repeat_cmd_counter = %d\n", __func__, repeat_cmd_counter);
 
 	if (repeat_cmd_counter != repeat_num)
 		return;
@@ -417,7 +412,6 @@ static void split(char* cmd);
 static int run(char* cmd, int input, int first, int last, int double_pipe, int bg)
 {
 	split(cmd);
-	printf("%s [1]\n", __func__);
 	if (args[0] != NULL) {
 		if (strcmp(args[0], "halt") == 0) {
 			int ret;
@@ -457,7 +451,6 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			return 0;
 		}
 		n += 1;
-		printf("%s [2]: args[0] = %s\n", __func__, args[0]);
 		return command(input, first, last, double_pipe, bg);
 	}
 	return 0;

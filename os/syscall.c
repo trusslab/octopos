@@ -268,7 +268,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 	case SYSCALL_READ_FROM_SHELL: {
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc || !runtime_proc->app) {
-			//FIXME: return Error
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0);
+			break;
 		}
 
 		if (runtime_proc->app->input_src) {
@@ -281,6 +283,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 			} else {
 				char dummy;
 				SYSCALL_SET_ONE_RET_DATA(ret, &dummy, 0);
+				break;
 			}
 		}
 		break;
@@ -395,13 +398,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 							     buf);
 		break;
 	}
-	///* FIXME: we also to need to deal with cases that the app does not
-	// * properly call the delete
-	// */
-	//case SYSCALL_DELETE_SECURE_STORAGE: {
-	//	handle_delete_secure_storage_syscall(runtime_proc_id, buf);
-	//	break;
-	//}
 	case SYSCALL_REQUEST_SECURE_IPC: {
 		SYSCALL_GET_THREE_ARGS
 		uint8_t target_runtime_queue_id = arg0;
@@ -600,13 +596,6 @@ static void handle_untrusted_syscall(uint8_t *buf)
 		handle_request_secure_storage_access_syscall(P_UNTRUSTED, buf);
 		break;
 	}
-	///* FIXME: we also to need to deal with cases that the app does not
-	// * properly call the delete
-	// */
-	//case SYSCALL_DELETE_SECURE_STORAGE: {
-	//	handle_delete_secure_storage_syscall(P_UNTRUSTED, buf);
-	//	break;
-	//}
 #ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		handle_allocate_socket_syscall(P_UNTRUSTED, buf);

@@ -312,28 +312,6 @@ void initialize_storage_space(void)
 			fop_close(filep2);
 			continue;
 		}
-
-		///* lock partitions that have an active key */
-		//filep = fop_open(partition->keys_name, "r");
-		//if (!filep) {
-		//	/* create empty file */
-		//	FILE *filep2 = fop_open(partition->keys_name, "w");
-		//	fop_close(filep2);
-		//	continue;
-		//}
-
-		//uint8_t key[STORAGE_KEY_SIZE];
-		//fop_seek(filep, 0, SEEK_SET);
-		//size = (uint32_t) fop_read(key, sizeof(uint8_t), STORAGE_KEY_SIZE, filep);
-		//fop_close(filep);
-		//if (size == STORAGE_KEY_SIZE) {
-		//	partition->is_locked = true;
-		//} else {
-		//	/* wipe lock file */
-		//	FILE *filep2 = fop_open(partition->keys_name, "w");
-		//	fop_close(filep2);
-		//	partition->is_locked = false;
-		//}
 	}
 }
 
@@ -342,7 +320,6 @@ static int set_partition_key(uint8_t *data, int partition_id)
 	FILE *filep;
 	uint32_t size;
 	
-	printf("%s [1]: writing to %s\n", __func__, partitions[partition_id].keys_name);
 	filep = fop_open(partitions[partition_id].keys_name, "w");
 	if (!filep) {
 		printf("Error: %s: couldn't open %s\n", __func__,
@@ -450,12 +427,6 @@ static int authenticate_partition(int partition_id, uint8_t proc_id)
 
 static int wipe_partition(int partition_id)
 {
-//#ifdef ARCH_SEC_HW_STORAGE
-//	FILINFO finfo;
-//	UINT NumBytesWritten = 0;
-//	uint8_t zero_buf[STORAGE_BLOCK_SIZE] = {0};
-//	f_stat(partitions[partition_id].data_name, &finfo);
-//#endif
 	uint8_t zero_block[STORAGE_BLOCK_SIZE];
 	uint32_t i;
 
@@ -474,9 +445,7 @@ static int wipe_partition(int partition_id)
 	for (i = 0; i < partitions[partition_id].size; i++)
 		fop_write(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE,
 			  filep);
-//#ifdef ARCH_SEC_HW_STORAGE
-//	f_write(filep, (const void*)zero_buf, finfo.fsize, &NumBytesWritten);
-//#endif
+
 	fop_close(filep);
 	return 0;
 }
@@ -502,7 +471,6 @@ static void storage_bind_resource(uint8_t *buf)
 
 	STORAGE_GET_ONE_ARG
 	partition_id = arg0;
-	printf("%s [1]: partition_id = %d\n", __func__, partition_id);
 
 	if (partition_id >= NUM_PARTITIONS) {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
@@ -641,7 +609,6 @@ static void storage_receive_data(uint8_t *buf)
 	uint8_t partition_id;
 	uint32_t start_block, num_blocks, seek_off, size, i;
 	uint8_t data_buf[STORAGE_BLOCK_SIZE];
-	printf("%s [1]\n", __func__);
 
 	used = 1;
 
@@ -697,7 +664,6 @@ static void storage_receive_data(uint8_t *buf)
 					    STORAGE_BLOCK_SIZE, filep);
 		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 	}
-	printf("%s [2]\n", __func__);
 
 	STORAGE_SET_TWO_RETS(0, size)
 	fop_close(filep);
@@ -737,17 +703,6 @@ static void storage_create_resource(uint8_t *buf)
 
 	partition_id = arg0;
 
-	//for (i = 0; i < NUM_PARTITIONS; i++) {
-	//	printf("%s [2]: partitions[i].is_created = %d\n", __func__, partitions[i].is_created);
-	//	printf("%s [3]: partitions[i].size = %d\n", __func__, partitions[i].size);
-	//	if (!partitions[i].is_created &&
-	//	    (partitions[i].size == partition_size)) {
-	//		partition_id = i;
-	//		break;
-	//	}
-	//}
-	//printf("%s [4]: i = %d\n", __func__, i);
-
 	if (partition_id >= NUM_PARTITIONS) {
 		printf("Error: %s: invalid requested partition ID (%d)\n",
 		       __func__, partition_id);
@@ -761,7 +716,6 @@ static void storage_create_resource(uint8_t *buf)
 		return;
 	}
 
-	printf("%s [1]: writing to %s\n", __func__, partitions[partition_id].create_name);
 	filep = fop_open(partitions[partition_id].create_name, "w");
 	if (!filep) {
 		printf("Error: %s: Couldn't open %s.\n", __func__,
@@ -1019,52 +973,42 @@ void process_request(uint8_t *buf, uint8_t proc_id)
 {
 	switch (buf[0]) {
 	case IO_OP_QUERY_ALL_RESOURCES:
-		printf("%s [1]\n", __func__);
 		storage_query_all_resources(buf);	
 		break;
 
 	case IO_OP_CREATE_RESOURCE:
-		printf("%s [2]\n", __func__);
 		storage_create_resource(buf);
 		break;
 
 	case IO_OP_BIND_RESOURCE:
-		printf("%s [3]\n", __func__);
 		storage_bind_resource(buf);		
 		break;
 
 	case IO_OP_QUERY_STATE:
-		printf("%s [4]\n", __func__);
 		storage_query_state(buf);
 		break;
 
 	case IO_OP_AUTHENTICATE:
-		printf("%s [5]\n", __func__);
 		storage_authenticate(buf, proc_id);
 		break;
 
 	case IO_OP_SEND_DATA:
-		printf("%s [6]\n", __func__);
 		storage_send_data(buf);
 		break;
 
 	case IO_OP_RECEIVE_DATA:
-		printf("%s [7]\n", __func__);
 		storage_receive_data(buf);
 		break;
 
 	case IO_OP_DEAUTHENTICATE:
-		printf("%s [8]\n", __func__);
 		storage_deauthenticate(buf);
 		break;
 
 	case IO_OP_DESTROY_RESOURCE:
-		printf("%s [9]\n", __func__);
 		storage_destroy_resource(buf);
 		break;
 
 	default:
-		printf("%s [10]\n", __func__);
 		/*
 		 * If global flag "used" not set, set it.
 		 * This is irreversible until reset.

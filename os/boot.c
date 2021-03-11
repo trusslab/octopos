@@ -31,16 +31,12 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 
 static void help_boot_keyboard_proc(void)
 {
-	printf("%s [1]\n", __func__);
 	help_boot_proc(P_KEYBOARD, (char *) "keyboard");
-	printf("%s [2]\n", __func__);
 }
 
 static void help_boot_serial_out_proc(void)
 {
-	printf("%s [1]\n", __func__);
 	help_boot_proc(P_SERIAL_OUT, (char *) "serial_out");
-	printf("%s [2]\n", __func__);
 }
 
 static void help_boot_network_proc(void)
@@ -60,9 +56,7 @@ void help_boot_runtime_proc(uint8_t runtime_proc_id)
 
 static void help_boot_untrusted_proc(void)
 {
-	printf("%s [1]\n", __func__);
 	help_boot_proc(P_UNTRUSTED, (char *) "linux");
-	printf("%s [2]\n", __func__);
 }
 
 void help_boot_procs(int boot_untrusted)
@@ -115,9 +109,6 @@ int reset_proc(uint8_t proc_id)
 		 * confuse it.
 		 */
 		while (!is_queue_available(Q_STORAGE_DATA_OUT));
-	//} else if (proc_id == P_STORAGE) {
-	//	uint32_t partition_size = initialize_storage();
-	//	initialize_file_system(partition_size);
 	} else if (proc_id == P_UNTRUSTED) {
 		if (!untrusted_needs_help_with_boot) {
 			untrusted_needs_help_with_boot = 1;

@@ -81,7 +81,6 @@ int main(int argc, char *argv[])
 		char *const args[] = {new_name, (char *) argv[2], NULL};
 		execv(path, args);
 	} else if (!strcmp(name, "linux")) {
-		printf("%s [1]\n", __func__);
 		char *const args[] = {name, (char *) argv[2], (char *) argv[3], NULL};
 		execv(path, args);
 	} else {

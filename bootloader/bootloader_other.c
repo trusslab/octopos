@@ -196,7 +196,6 @@ void close_mailbox(void)
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
-	printf("%s [1]\n", __func__);
 	/* FIXME */
 	if (!strcmp(filename, "keyboard")) {
 		keyboard = 1;
@@ -228,7 +227,6 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 			exit(-1);
 		}
 	} else if (!strcmp(filename, "linux")) {
-		printf("%s [2]\n", __func__);
 		untrusted = 1;
 		processor = P_UNTRUSTED;
 	} else {
@@ -249,7 +247,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	FILE *copy_filep;
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int offset;
-	printf("%s [1]\n", __func__);
 
 	init_mailbox();
 
@@ -297,7 +294,6 @@ repeat:
 		goto repeat;
 
 	fclose(copy_filep);
-	printf("%s [2]\n", __func__);
 
 	return 0;
 }

@@ -43,7 +43,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int _size;
 	int offset;
-	printf("%s [1]\n", __func__);
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
@@ -62,10 +61,8 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	offset = 0;
 
 	while (1) {
-		printf("%s [2]\n", __func__);
 		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE,
 						   offset);
-		printf("%s [3]: _size = %d\n", __func__, _size);
 		if (_size == 0)
 			break;
 
@@ -79,7 +76,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 		offset += _size;
 	}
-	printf("%s [4]: offset = %d\n", __func__, offset);
 
 	fclose(copy_filep);
 	file_system_close_file(fd);

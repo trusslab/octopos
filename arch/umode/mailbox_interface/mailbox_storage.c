@@ -122,18 +122,10 @@ uint8_t read_request_get_owner_from_queue(uint8_t *buf)
 void storage_event_loop(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	//uint8_t opcode[2];
 	uint8_t proc_id;
 
-	//opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	
 	while(1) {
-		//memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		proc_id = read_request_get_owner_from_queue(buf);
-		//sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
-		//opcode[1] = Q_STORAGE_CMD_IN;
-		//write(fd_out, opcode, 2); 
-		//read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 		process_request(buf, proc_id);
 		send_response(buf, Q_STORAGE_CMD_OUT);
 	}

@@ -48,7 +48,6 @@ struct pkbuf *alloc_netdev_pkb(struct netdev *nd)
 
 struct pkbuf *copy_pkb(struct pkbuf *pkb)
 {
-	printf("%s [1]\n", __func__);
 	struct pkbuf *cpkb;
 	cpkb = xmalloc(pkb->pk_len);
 	memcpy(cpkb, pkb, pkb->pk_len);
