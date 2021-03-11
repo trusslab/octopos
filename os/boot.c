@@ -20,13 +20,32 @@ int untrusted_needs_help_with_boot = 0;
 
 static void help_boot_proc(uint8_t proc_id, char *filename)
 {
-	/* Help with reading the image off of storage */
+	/* Help with reading the image off of storage. */
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
 	wait_for_storage();
+
+#ifdef ARCH_UMODE
+	printf("%s [1]\n", __func__);
+	/* Help with reading the signature file needed for secure boot. */
+	/* FIXME: secure boot is implemented for bluetooth only. */
+	if (proc_id != P_BLUETOOTH)
+		return;
+	printf("%s [2]\n", __func__);
+
+	fd = file_system_open_file((char *) "bluetooth_signature",
+					    FILE_OPEN_MODE);
+	printf("%s [3]: fd = %d\n", __func__, fd);
+	num_blocks = file_system_get_file_num_blocks(fd);
+	printf("%s [4]: num_blocks = %d\n", __func__, num_blocks);
+	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
+	file_system_read_file_blocks_late();
+	file_system_close_file(fd);
+	wait_for_storage();
+#endif
 }
 
 static void help_boot_keyboard_proc(void)

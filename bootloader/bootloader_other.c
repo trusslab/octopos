@@ -32,6 +32,10 @@ uint8_t processor = 0;
 
 int need_repeat = 0, total_count = 0;
 
+int mailbox_initialized = 0;
+int reading_signature = 0;
+int secure_boot = 0;
+
 static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
 	uint8_t opcode[2];
@@ -76,6 +80,10 @@ static void *handle_mailbox_interrupts(void *data)
 			 * intended for the bootloader.
 			 */
 			num_storage_data_out_interrupts++;
+
+			if (secure_boot && !reading_signature)
+				continue;
+
 			if (!need_repeat && (num_storage_data_out_interrupts ==
 					     total_count)) {
 				return NULL;
@@ -209,6 +217,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	} else if (!strcmp(filename, "bluetooth")) {
 		bluetooth = 1;
 		processor = P_BLUETOOTH;
+		secure_boot = 1;
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {
 			printf("Error: %s: invalid number of args for runtime\n",
@@ -248,6 +257,11 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int offset;
 
+	if (mailbox_initialized) {
+		reading_signature = 1;
+		goto copy_file;
+	}
+
 	init_mailbox();
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
@@ -255,7 +269,10 @@ int copy_file_from_boot_partition(char *filename, char *path)
 		       "to storage block size\n", __func__);
 		exit(-1);
 	}
-	
+
+	mailbox_initialized = 1;
+
+copy_file:
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
 		printf("Error: %s: Couldn't open the target file (%s).\n",
@@ -265,8 +282,11 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 	offset = 0;
 repeat:
+	printf("%s [1]\n", __func__);
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
+	printf("%s [2]\n", __func__);
 	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
+	printf("%s [3]: count = %d\n", __func__, count);
 
 	/*
 	 * When the file is very large, which is, for example, the case

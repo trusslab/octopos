@@ -29,8 +29,10 @@ bootloader/os
 bootloader/runtime1
 bootloader/runtime2
 bootloader/linux
+installer/*signature
 installer/installer
 installer/copy*
 installer/aligned*
+installer/*signature
 external/ibmtpm/tpm_server
 util/tpm/tpm_shutdown/tpm_shutdown
