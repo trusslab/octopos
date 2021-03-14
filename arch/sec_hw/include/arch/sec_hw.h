@@ -32,7 +32,7 @@ void cleanup_platform();
  * its okay to be bigger than actual size (ceiling to the next multiple of 512).
  */
 #define MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR 4
-#define STORAGE_IMAGE_SIZE 263168
+#define STORAGE_IMAGE_SIZE 262656
 #define OS_IMAGE_SIZE 422400
 
 /* special op code for boot image request */

@@ -84,10 +84,11 @@ int load_boot_image_from_storage(int pid, void *ptr);
 int write_boot_image_to_storage(int pid, void *ptr);
 
 extern uint32_t boot_image_sizes[NUM_PROCESSORS + 1];
-#define TARGET_BOOT_PROCESSOR P_OS
 
 /* if set, switch to image writer mode */
 //#define IMAGE_WRITER_MODE
+//#define TARGET_BOOT_PROCESSOR P_OS
+#define TARGET_BOOT_PROCESSOR P_STORAGE
 
 #ifndef IMAGE_WRITER_MODE
 uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
