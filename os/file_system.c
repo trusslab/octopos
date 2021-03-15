@@ -481,6 +481,64 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 	}
 #endif /* ROLE_OS || ROLE_INSTALLER */
 
+#ifdef ARCH_SEC_HW_BOOT
+	if (!file && *filename == ':') {
+		file = (struct file *) malloc(sizeof(struct file));
+		if (!file)
+			return (uint32_t) 0;
+
+		strcpy(file->filename, filename + sizeof(char));
+
+		if (!strcmp(file->filename, "keyboard")) {
+			file->start_block = 0;
+			file->num_blocks = 0;
+			file->size = 0;
+		} else if (!strcmp(file->filename, "serial_out")) {
+			file->start_block = 0;
+			file->num_blocks = 0;
+			file->size = 0;
+		} else if (!strcmp(file->filename, "network")) {
+			file->start_block = 0;
+			file->num_blocks = 0;
+			file->size = 0;
+		} else if (!strcmp(file->filename, "os")) {
+			file->start_block = BOOT_IMAGE_BLOCK_OFFSET + P_OS;
+			file->num_blocks = OS_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
+			file->size = OS_IMAGE_SIZE;
+		} else if (!strcmp(file->filename, "storage")) {
+			file->start_block = BOOT_IMAGE_BLOCK_OFFSET + P_STORAGE;
+			file->num_blocks = STORAGE_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
+			file->size = STORAGE_IMAGE_SIZE;
+		} else if (!strcmp(file->filename, "runtime1")) {
+			file->start_block = 0;
+			file->num_blocks = 0;
+			file->size = 0;
+		} else if (!strcmp(file->filename, "runtime2")) {
+			file->start_block = 0;
+			file->num_blocks = 0;
+			file->size = 0;
+		} else if (!strcmp(file->filename, "linux")) {
+			file->start_block = 0;
+			file->num_blocks = 0;
+			file->size = 0;
+		} else {
+			printf("Error: %s: unknown binary (%s)\r\n",
+				__func__, 
+				file->filename);
+			exit(-1);
+		}
+
+		int ret = add_file_to_directory(file);
+		if (ret) {
+			release_file_blocks(file);
+			free(file);
+			return (uint32_t) 0;
+		}
+
+		add_file_to_list(file);
+	}
+#endif
+
 	if (file) {
 		int ret = get_unused_fd();
 		if (ret < 0)

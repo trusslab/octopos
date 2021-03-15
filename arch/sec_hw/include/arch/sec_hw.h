@@ -35,6 +35,9 @@ void cleanup_platform();
 #define STORAGE_IMAGE_SIZE 262656
 #define OS_IMAGE_SIZE 422400
 
+/* boot image offset */
+#define BOOT_IMAGE_BLOCK_OFFSET 0xFFFFFF
+
 /* special op code for boot image request */
 #define STORAGE_OP_BOOT_REQ 0xf
 

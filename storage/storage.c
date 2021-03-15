@@ -1073,6 +1073,31 @@ void process_request(uint8_t *buf)
 		STORAGE_GET_TWO_ARGS
 		uint32_t start_block = arg0;
 		uint32_t num_blocks = arg1;
+#ifdef ARCH_SEC_HW_STORAGE
+		/* handle special boot image files */
+		if (start_block >= BOOT_IMAGE_BLOCK_OFFSET) {
+			/* FIXME: this is an ad hoc way to get the booting processor id */
+			uint32_t partition_id = start_block - BOOT_IMAGE_BLOCK_OFFSET;
+
+			if (partition_id > NUM_PROCESSORS || runtime_id > NUM_RUNTIME_PROCS) {
+				SEC_HW_DEBUG_HANG();
+				printf("%s: Error: invalid args\n", __func__);
+				STORAGE_SET_ONE_RET(0)
+				return;
+			}
+
+			u32 address = get_boot_image_address(partition_id);
+			u32 message_count = boot_image_sizes[partition_id] / STORAGE_BLOCK_SIZE;
+			uint8_t message_buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
+
+			for (u32 message = 0; message < message_count; message++) {
+				partition_read_physical(address + message * STORAGE_BLOCK_SIZE, STORAGE_BLOCK_SIZE, message_buf);
+				write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
+			}
+
+			STORAGE_SET_ONE_RET(0);
+		}
+#endif
 		if (start_block + num_blocks > partitions[partition_id].size) {
 			SEC_HW_DEBUG_HANG();
 			printf("%s: Error: invalid args\n", __func__);
@@ -1396,27 +1421,7 @@ void process_request(uint8_t *buf)
 #ifdef ARCH_SEC_HW_STORAGE
 	} else if (buf[0] == STORAGE_OP_BOOT_REQ) {
 
-		STORAGE_GET_TWO_ARGS
-		uint32_t partition_id = arg0;
-		uint32_t runtime_id = arg1;
 
-		if (partition_id > NUM_PROCESSORS || runtime_id > NUM_RUNTIME_PROCS) {
-			SEC_HW_DEBUG_HANG();
-			printf("%s: Error: invalid args\n", __func__);
-			STORAGE_SET_ONE_RET(0)
-			return;
-		}
-
-		u32 address = get_boot_image_address(partition_id);
-		u32 message_count = boot_image_sizes[partition_id] / STORAGE_BLOCK_SIZE;
-		uint8_t message_buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
-
-		for (u32 message = 0; message < message_count; message++) {
-			partition_read_physical(address + message * STORAGE_BLOCK_SIZE, STORAGE_BLOCK_SIZE, message_buf);
-			write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
-		}
-
-		STORAGE_SET_ONE_RET(0);
 #endif
 	} else {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
