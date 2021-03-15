@@ -327,15 +327,58 @@ static int prepare_boot_partition(void)
 	copy_file_from_partition((char *) "linux",
 				 (char *) "./installer/aligned_linux", 1);
 
-	/* generate and add the signature for the bluetooth service needed
-	 * for secure boot.
-	 */
+	/* generate and add the signature files for secure boot. */
+	generate_signature((char *) "./installer/aligned_keyboard",
+			   (char *) "./installer/keyboard_signature");
+	generate_signature((char *) "./installer/aligned_serial_out",
+			   (char *) "./installer/serial_out_signature");
+	generate_signature((char *) "./storage/storage",
+			   (char *) "./installer/storage_signature");
+	generate_signature((char *) "./os/os",
+			   (char *) "./installer/os_signature");
+	generate_signature((char *) "./installer/aligned_runtime",
+			   (char *) "./installer/runtime_signature");
+	generate_signature((char *) "./installer/aligned_network",
+			   (char *) "./installer/network_signature");
 	generate_signature((char *) "./installer/aligned_bluetooth",
 			   (char *) "./installer/bluetooth_signature");
+	generate_signature((char *) "./installer/aligned_linux",
+			   (char *) "./installer/linux_signature");
+
+	copy_file_to_partition((char *) "keyboard_signature",
+			       (char *) "./installer/keyboard_signature");
+	copy_file_to_partition((char *) "serial_out_signature",
+			       (char *) "./installer/serial_out_signature");
+	copy_file_to_partition((char *) "storage_signature",
+			       (char *) "./installer/storage_signature");
+	copy_file_to_partition((char *) "os_signature",
+			       (char *) "./installer/os_signature");
+	copy_file_to_partition((char *) "runtime_signature",
+			       (char *) "./installer/runtime_signature");
+	copy_file_to_partition((char *) "network_signature",
+			       (char *) "./installer/network_signature");
 	copy_file_to_partition((char *) "bluetooth_signature",
 			       (char *) "./installer/bluetooth_signature");
+	copy_file_to_partition((char *) "linux_signature",
+			       (char *) "./installer/linux_signature");
+
+	/* For testing purposes, copy the files from partition */
+	copy_file_from_partition((char *) "keyboard_signature",
+				 (char *) "./installer/copy_keyboard_signature", 0);
+	copy_file_from_partition((char *) "serial_out_signature",
+				 (char *) "./installer/copy_serial_out_signature", 0);
+	copy_file_from_partition((char *) "storage_signature",
+				 (char *) "./installer/copy_storage_signature", 0);
+	copy_file_from_partition((char *) "os_signature",
+				 (char *) "./installer/copy_os_signature", 0);
+	copy_file_from_partition((char *) "runtime_signature",
+				 (char *) "./installer/copy_runtime_signature", 0);
+	copy_file_from_partition((char *) "network_signature",
+				 (char *) "./installer/copy_network_signature", 0);
 	copy_file_from_partition((char *) "bluetooth_signature",
 				 (char *) "./installer/copy_bluetooth_signature", 0);
+	copy_file_from_partition((char *) "linux_signature",
+				 (char *) "./installer/copy_linux_signature", 0);
 
 	printf("installer: total number of written blocks = %d\n", total_blocks);
 

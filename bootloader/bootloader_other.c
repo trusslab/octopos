@@ -32,9 +32,8 @@ uint8_t processor = 0;
 
 int need_repeat = 0, total_count = 0;
 
-int mailbox_initialized = 0;
+int file_copy_counter = 0;
 int reading_signature = 0;
-int secure_boot = 0;
 
 static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 {
@@ -81,7 +80,7 @@ static void *handle_mailbox_interrupts(void *data)
 			 */
 			num_storage_data_out_interrupts++;
 
-			if (secure_boot && !reading_signature)
+			if (!reading_signature)
 				continue;
 
 			if (!need_repeat && (num_storage_data_out_interrupts ==
@@ -217,7 +216,6 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	} else if (!strcmp(filename, "bluetooth")) {
 		bluetooth = 1;
 		processor = P_BLUETOOTH;
-		secure_boot = 1;
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {
 			printf("Error: %s: invalid number of args for runtime\n",
@@ -242,6 +240,14 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		printf("Error: %s: unknown binary\n", __func__);
 		exit(-1);
 	}
+
+	init_mailbox();
+
+	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
+		printf("Error: %s: storage data queue msg size must be equal "
+		       "to storage block size\n", __func__);
+		exit(-1);
+	}
 }
 
 /*
@@ -257,22 +263,12 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int offset;
 
-	if (mailbox_initialized) {
+	if (file_copy_counter) {
 		reading_signature = 1;
-		goto copy_file;
 	}
 
-	init_mailbox();
+	file_copy_counter++;
 
-	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
-		printf("Error: %s: storage data queue msg size must be equal "
-		       "to storage block size\n", __func__);
-		exit(-1);
-	}
-
-	mailbox_initialized = 1;
-
-copy_file:
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
 		printf("Error: %s: Couldn't open the target file (%s).\n",
@@ -316,6 +312,11 @@ repeat:
 	fclose(copy_filep);
 
 	return 0;
+}
+
+void bootloader_close_file_system(void)
+{
+	/* no op */
 }
 
 void send_measurement_to_tpm(char *path)

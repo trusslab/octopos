@@ -20,6 +20,10 @@ int untrusted_needs_help_with_boot = 0;
 
 static void help_boot_proc(uint8_t proc_id, char *filename)
 {
+#ifdef ARCH_UMODE
+	char signature_filename[128];
+#endif
+
 	/* Help with reading the image off of storage. */
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
@@ -31,13 +35,10 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 #ifdef ARCH_UMODE
 	printf("%s [1]\n", __func__);
 	/* Help with reading the signature file needed for secure boot. */
-	/* FIXME: secure boot is implemented for bluetooth only. */
-	if (proc_id != P_BLUETOOTH)
-		return;
-	printf("%s [2]\n", __func__);
+	strcpy(signature_filename, filename);
+	strcat(signature_filename, "_signature");
 
-	fd = file_system_open_file((char *) "bluetooth_signature",
-					    FILE_OPEN_MODE);
+	fd = file_system_open_file(signature_filename, FILE_OPEN_MODE);
 	printf("%s [3]: fd = %d\n", __func__, fd);
 	num_blocks = file_system_get_file_num_blocks(fd);
 	printf("%s [4]: num_blocks = %d\n", __func__, num_blocks);

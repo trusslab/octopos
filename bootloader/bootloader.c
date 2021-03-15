@@ -21,6 +21,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[]);
  * @path: file path in the host file system
  */
 int copy_file_from_boot_partition(char *filename, char *path);
+void bootloader_close_file_system(void);
 void send_measurement_to_tpm(char *path);
 
 #ifdef ARCH_UMODE
@@ -95,6 +96,10 @@ int main(int argc, char *argv[])
 	char *name;
 	sem_t *sem;
 	char path[128];
+#ifdef ARCH_UMODE
+	char signature_filename[128];
+	char signature_filepath[128];
+#endif
 	int ret;
 
 	/* Non-buffering stdout */
@@ -137,19 +142,22 @@ int main(int argc, char *argv[])
 	copy_file_from_boot_partition(name, path);
 
 #ifdef ARCH_UMODE
-	/* Receive the signature file for bluetooth needed for secure boot. */
-	if (!strcmp(name, "bluetooth")) {
-		/* FIXME: the first parameter won't be used. */
-		copy_file_from_boot_partition((char *) "bluetooth_signature",
-				(char *) "./bootloader/bluetooth_signature");
-		ret = secure_boot_check((char *) "./bootloader/bluetooth",
-				(char *) "./bootloader/bluetooth_signature");
-		if (ret) {
-			printf("Error: %s: secure boot failed.\n", __func__);
-			return -1;
-		}
+	strcpy(signature_filename, name);
+	strcat(signature_filename, "_signature");
+	strcpy(signature_filepath, "./bootloader/");
+	strcat(signature_filepath, signature_filename);
+	/* Receive the signature file and check for secure boot. */
+	copy_file_from_boot_partition(signature_filename, signature_filepath);
+	ret = secure_boot_check(path, signature_filepath);
+	if (ret) {
+		printf("Error: %s: secure boot failed.\n", __func__);
+		return -1;
 	}
+
+	printf("%s: passed secure boot.\n", __func__);
 #endif
+	
+	bootloader_close_file_system();
 
 	/* Add exec permission for the copied file */
 	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);

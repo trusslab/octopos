@@ -48,7 +48,8 @@ int init_mailbox(void)
 	fd_out = open(FIFO_STORAGE_OUT, O_WRONLY);
 	fd_intr = open(FIFO_STORAGE_INTR, O_RDONLY);
 
-	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	int ret = pthread_create(&mailbox_thread, NULL,
+				 handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
@@ -70,6 +71,19 @@ void close_mailbox(void)
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	/* no op */
+	filep = fopen("./storage/octopos_partition_0_data", "r");
+	if (!filep) {
+		printf("Error: %s: Couldn't open the boot partition file.\n",
+		       __func__);
+		exit(-1);
+	}
+
+	/* The added 1 is for the signature.
+	 *
+	 * FIXME: assumes signature file is less than one block.
+	 */
+	total_blocks = STORAGE_BOOT_PARTITION_SIZE + 1;
+	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 }
 
 /*
@@ -86,33 +100,28 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int _size;
 	int offset;
-
-	filep = fopen("./storage/octopos_partition_0_data", "r");
-	if (!filep) {
-		printf("Error: %s: Couldn't open the boot partition file.\n", __func__);
-		return -1;
-	}
-
-	total_blocks = STORAGE_BOOT_PARTITION_SIZE;
-	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
+	printf("%s [1]: filename = %s\n", __func__, filename);
+	printf("%s [2]: path = %s\n", __func__, path);
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
-		printf("Error: %s: Couldn't open file %s in octopos file system.\n",
-		       __func__, filename);
+		printf("Error: %s: Couldn't open file %s in octopos file "
+		       "system.\n", __func__, filename);
 		return -1;
 	}
 
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
-		printf("Error: %s: Couldn't open the target file (%s).\n", __func__, path);
+		printf("Error: %s: Couldn't open the target file (%s).\n",
+		       __func__, path);
 		return -1;
 	}
 
 	offset = 0;
 
 	while (1) {
-		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE, offset);
+		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE,
+						   offset);
 		if (_size == 0)
 			break;
 
@@ -130,10 +139,13 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	fclose(copy_filep);
 	file_system_close_file(fd);
 
+	return 0;
+}
+
+void bootloader_close_file_system(void)
+{
 	close_file_system();
 	fclose(filep);
-
-	return 0;
 }
 
 void send_measurement_to_tpm(char *path)
