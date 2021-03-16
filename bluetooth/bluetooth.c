@@ -9,9 +9,13 @@
 #include <octopos/io.h>
 #include <octopos/bluetooth.h>
 #include <octopos/error.h>
+#include <tpm/hash.h>
+#include <tpm/tpm.h>
+#include <tpm/rsa.h>
 
 uint8_t bound = 0;
 uint8_t used = 0;
+uint8_t authenticated = 0;
 
 /* BD_ADDR for a few devices (resources). */
 #define NUM_RESOURCES	2
@@ -28,6 +32,17 @@ int bound_devices[NUM_RESOURCES] = {0, 0};
 /* FIXME: move somewhere else */
 char glucose_monitor_password[32] = "glucose_monitor_password";
 int glucose_monitor_authenticated = 0;
+
+unsigned char admin_public_key[] =
+"-----BEGIN PUBLIC KEY-----\n"\
+"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwWFcfENwpIqWp3spCLTg\n"\
+"XncdEG4eBQQK6YV4cvX//b2ab8rkwo+xmLD0lGqpFrtWHAvtiI5fqh5jPHZwrd54\n"\
+"1bIXcrJOrhhAJGiEW/i/aQB/XQyFWDWt/+wr6SE7J5KZEHZpVxsSeu9yuIWDSYTp\n"\
+"cOk674/leUjIpPpxZkbHVQe0R/Dja1Xi5SRnyeuYX7fSV2mDNltZ3sCuCXyVNgJ1\n"\
+"wtFGZj87NCHw7vbPJxI8hb2ro3REbUUzfeB0A+tizU54MkCot50iqgX0C3TLavC4\n"\
+"UysSb22EZY89zS6eZ174Lru4XYEIpStT6IzurmvLbU2AECkkRNlJBc6e+jMR8z34\n"\
+"cQIDAQAB\n"\
+"-----END PUBLIC KEY-----\n";
 
 /* FIXME: ugly. */
 /* FIXME: duplicate in runtime/runtime.c */
@@ -184,9 +199,10 @@ static void bluetooth_bind_resource(uint8_t *buf)
 	/* am_addr value of 0xFF is invalid */
 	memset(am_addrs, 0xFF, NUM_RESOURCES);
 
-	if (bound || used) {
-		printf("Error: %s: the bind op is invalid if bound (%d) "
-		       "or used (%d) is set.\n", __func__, bound, used);
+	if (bound || used || authenticated) {
+		printf("Error: %s: the bind op is invalid if bound (%d), "
+		       "used (%d), or authenticated (%d) is set.\n", __func__,
+		       bound, used, authenticated);
 		char dummy;
 		BLUETOOTH_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
 		return;
@@ -254,27 +270,30 @@ static void bluetooth_bind_resource(uint8_t *buf)
  */
 static void bluetooth_query_state(uint8_t *buf)
 {
-	uint8_t state[3 + (BD_ADDR_LEN * NUM_RESOURCES)];
-	uint32_t state_size = 2;
+	uint8_t state[4 + (BD_ADDR_LEN * NUM_RESOURCES)];
+	uint32_t state_size = 3;
 
 	state[0] = bound;
 	state[1] = used;
 	used = 1;
+
+	state[2] = authenticated;
+
 	if (bound) {
 		int num_bound_devices = 0;
 		for (int i = 0; i < NUM_RESOURCES; i++) {
 			if (!bound_devices[i])
 				continue;
 
-			memcpy(&state[3 + (num_bound_devices * (BD_ADDR_LEN + 1))],
+			memcpy(&state[4 + (num_bound_devices * (BD_ADDR_LEN + 1))],
 			       devices[i], BD_ADDR_LEN);
 			/* am_addr */
-			state[3 + (num_bound_devices * (BD_ADDR_LEN + 1)) +
+			state[4 + (num_bound_devices * (BD_ADDR_LEN + 1)) +
 			      BD_ADDR_LEN ] = i;
 			num_bound_devices++;
 			state_size += (BD_ADDR_LEN + 1);
 		}
-		state[2] = num_bound_devices;
+		state[3] = num_bound_devices;
 		state_size++;
 	}
 
@@ -295,8 +314,10 @@ static void bluetooth_send_data(uint8_t *buf)
 	struct btpacket *btp = (struct btpacket *) buf_large;
 	uint8_t am_addr;
 
-	if (!bound) {
-		printf("Error: %s: no device is bound.\n", __func__);
+	if (!bound || !authenticated) {
+		printf("Error: %s: the send data op is invalid if bound (%d) "
+		       "or authenticated (%d) is not set.\n", __func__,
+		       bound, authenticated);
 		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
@@ -332,7 +353,144 @@ static void bluetooth_send_data(uint8_t *buf)
 	BLUETOOTH_SET_ONE_RET(0)
 }
 
-static void process_cmd(uint8_t *buf)
+static int check_signature(uint8_t *signature, uint8_t proc_id)
+{
+	int ret;
+	uint8_t tpm_pcr[TPM_EXTEND_HASH_SIZE];
+	uint8_t expected_pcr[TPM_EXTEND_HASH_SIZE];
+
+	/* Retrieve proc's PCR value. */
+	ret = tpm_processor_read_pcr(PROC_TO_PCR(proc_id), tpm_pcr);
+	if (ret) {
+		printf("Error: %s: couldn't read TPM PCR for proc %d.\n",
+		       __func__, proc_id);
+		return ERR_FAULT;
+	}
+
+	/* Decrypt signature to get the expected PCR val. */
+	ret = public_decrypt((unsigned char *) signature, RSA_SIGNATURE_SIZE,
+			     admin_public_key, expected_pcr);
+	if (ret != TPM_EXTEND_HASH_SIZE) {
+		printf("Error: %s: couldn't decrypt the signature (%d).\n",
+		       __func__, ret);
+		return ERR_FAULT;
+	}
+
+	ret = memcmp(tpm_pcr, expected_pcr, TPM_EXTEND_HASH_SIZE);
+	if (ret) {
+		printf("Error: %s: retrieved and expected PCR vals don't "
+		       "match.\n", __func__);
+		return ERR_INVALID;
+	}
+
+	return 0;
+}
+
+/*
+ * Used when resource needs authentication.
+ * Return error if "bound" not set.
+ * Return error if "authenticated" already set.
+ * "authenticated" global variable will be set on success
+ * If global flag "used" not set, set it.
+ * This is irreversible until reset.
+ * May require/receive signature for the TPM measurement (bluetooth service does)
+ *
+ * @proc_id: ID of the requesting processor.
+ */
+static void bluetooth_authenticate(uint8_t *buf, uint8_t proc_id)
+{
+	int ret;
+	uint8_t _buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t signature[RSA_SIGNATURE_SIZE];
+	uint32_t remaining_size = RSA_SIGNATURE_SIZE;
+	uint32_t msg_size = MAILBOX_QUEUE_MSG_SIZE;
+	uint32_t offset = 0;
+	uint8_t _proc_id;
+
+	used = 1;
+
+	/* receive signature */
+	while (remaining_size) {
+		printf("%s [3]: remaining_size = %d\n", __func__, remaining_size);
+		printf("%s [4]: msg_size = %d\n", __func__, msg_size);
+		printf("%s [5]: offset = %d\n", __func__, offset);
+		if (remaining_size < msg_size)
+			msg_size = remaining_size;
+		printf("%s [6]: msg_size = %d\n", __func__, msg_size);
+
+		_proc_id = read_from_bluetooth_cmd_queue_get_owner(_buf);
+		printf("%s [7]: buf[0] = %#x\n", __func__, _buf[0]);
+
+		if (_proc_id != proc_id) {
+			printf("Error: %s: unexpected proc_id for the sender "
+			       "of the message (%d, %d).\n", __func__, proc_id,
+			       _proc_id);
+			BLUETOOTH_SET_ONE_RET(ERR_UNEXPECTED)
+			return;
+		}
+
+		memcpy(signature + offset, _buf, msg_size); 
+
+		if (remaining_size >= msg_size)
+			remaining_size -= msg_size;
+		else
+			remaining_size = 0;
+
+		offset += msg_size;
+	}
+	printf("%s [1]: signature[0] = %#x\n", __func__, signature[0]);
+	printf("%s [2]: signature[RSA_SIGNATURE_SIZE - 1] = %#x\n", __func__,
+	       signature[RSA_SIGNATURE_SIZE - 1]);
+
+	if (!bound) {
+		printf("Error: %s: no bound device(s)\n", __func__);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	if (authenticated) {
+		printf("Error: %s: already authenticated.\n", __func__);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	ret = check_signature(signature, proc_id);
+	if (ret) {
+		printf("Error: %s: authentication failed\n",__func__);
+		BLUETOOTH_SET_ONE_RET(ERR_PERMISSION)
+		return;
+	}			
+
+	authenticated = 1;
+
+	BLUETOOTH_SET_ONE_RET(0)
+}
+
+/*
+ * Return error if "bound" not set.
+ * Return error if "authenticated" not set.
+ * "authenticated" global variable will be unset.
+ * If global flag "used" not set, set it.
+ * This is irreversible until rest.
+ */
+static void bluetooth_deauthenticate(uint8_t *buf)
+{
+	used = 1;
+
+	if (!bound || !authenticated) {
+		printf("Error: %s: the deauthenticate op is invalid if bound "
+		       "(%d) or authenticated (%d) is not set.\n", __func__,
+		       bound, authenticated);
+		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	authenticated = 0;	
+		
+	BLUETOOTH_SET_ONE_RET(0)
+}
+
+static void process_cmd(uint8_t *buf, uint8_t proc_id)
 {
 	switch (buf[0]) {
 	case IO_OP_QUERY_ALL_RESOURCES:
@@ -375,20 +533,7 @@ static void process_cmd(uint8_t *buf)
 		break;
 
 	case IO_OP_AUTHENTICATE:
-		/*
-		 * Used when resource needs authentication.
-		 * Return error if "bound" not set.
-		 * Return error if "authenticated" already set.
-		 * "authenticated" global variable will be set on success
-		 * If global flag "used" not set, set it.
-		 * This is irreversible until reset.
-		 */
-
-		/* No op for Bluetooth */
-		printf("Error: %s: authenticate op not supported by the "
-		       "Bluetooth service\n", __func__);
-		used = 1;
-		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		bluetooth_authenticate(buf, proc_id);
 		break;
 
 	case IO_OP_SEND_DATA:
@@ -413,19 +558,7 @@ static void process_cmd(uint8_t *buf)
 		break;
 
 	case IO_OP_DEAUTHENTICATE:
-		/*
-		 * Return error if "bound" not set.
-		 * Return error if "authenticated" not set.
-		 * "authenticated" global variable will be unset.
-		 * If global flag "used" not set, set it.
-		 * This is irreversible until rest.
-		 */
-
-		/* No op for Bluetooth */
-		printf("Error: %s: deauthenticate op not supported by the "
-		       "Bluetooth service\n", __func__);
-		used = 1;
-		BLUETOOTH_SET_ONE_RET(ERR_INVALID)
+		bluetooth_deauthenticate(buf);
 		break;
 
 	case IO_OP_DESTROY_RESOURCE:
@@ -461,10 +594,11 @@ static void process_cmd(uint8_t *buf)
 static int bluetooth_core(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t proc_id;
 
 	while (1) {
-		read_from_bluetooth_cmd_queue(buf);
-		process_cmd(buf);
+		proc_id = read_from_bluetooth_cmd_queue_get_owner(buf);
+		process_cmd(buf, proc_id);
 		write_to_bluetooth_cmd_queue(buf);
 	}
 

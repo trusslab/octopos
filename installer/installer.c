@@ -559,6 +559,64 @@ static int mark_untrusted_rootfs_partition_as_created(void)
 					 "./storage/octopos_partition_1_create");
 }
 
+static int generate_signature_for_health_client_PCR(void)
+{
+	uint8_t app_pcr[TPM_EXTEND_HASH_SIZE];
+	uint8_t file_hash[TPM_EXTEND_HASH_SIZE];
+	uint8_t temp_hash[TPM_EXTEND_HASH_SIZE];
+	uint8_t *buffers[2];
+	uint32_t buffer_sizes[2];
+	uint8_t zero_pcr[TPM_EXTEND_HASH_SIZE];
+	uint8_t signature[RSA_SIGNATURE_SIZE];
+	uint32_t size;
+	int ret;
+
+	memset(zero_pcr, 0x0, TPM_EXTEND_HASH_SIZE);
+
+	buffer_sizes[0] = TPM_EXTEND_HASH_SIZE;
+	buffer_sizes[1] = TPM_EXTEND_HASH_SIZE;
+	
+	/* App PCR: two hashes are extended to PCR in this case. */
+	hash_file((char *) "./installer/aligned_runtime", file_hash);
+	buffers[0] = zero_pcr;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, temp_hash);
+	hash_file((char *) "applications/health_client/health_client.so",
+		  file_hash);
+	buffers[0] = temp_hash;
+	buffers[1] = file_hash;
+	hash_multiple_buffers(buffers, buffer_sizes, 2, app_pcr);
+
+	/* generate signature */
+	ret = private_encrypt((unsigned char *) app_pcr, TPM_EXTEND_HASH_SIZE,
+			      admin_private_key, (unsigned char *) signature);
+	if (ret != RSA_SIGNATURE_SIZE) {
+		printf("Error: %s: couldn't generate the signature (%d).\n",
+		       __func__, ret);
+		return -1;
+	}
+
+	filep = fopen((char *) "./installer/health_client_signature", "w");
+	if (!filep) {
+		printf("Error: %s: Couldn't open ./installer/health_client_"
+		       "signature (w).\n", __func__);
+		return -1;
+	}
+
+	fseek(filep, 0, SEEK_SET);
+	size = (uint32_t) fwrite(signature, sizeof(uint8_t), RSA_SIGNATURE_SIZE,
+				 filep);
+	if (size != RSA_SIGNATURE_SIZE) {
+		printf("Error: %s: couldn't write the signature.\n", __func__);
+		fclose(filep);
+		return -1;
+	}
+
+	fclose(filep);
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	int ret;
@@ -595,6 +653,13 @@ int main(int argc, char **argv)
 	if (ret) {
 		printf("Error: %s: couldn't mark the untrusted rootfs "
 		       "partition as created.\n", __func__);
+		return ret;
+	}
+
+	ret = generate_signature_for_health_client_PCR();
+	if (ret) {
+		printf("Error: %s: couldn't generate the signature for the "
+		       "health_client measurements.\n", __func__);
 		return ret;
 	}
 

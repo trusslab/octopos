@@ -368,12 +368,15 @@ if (!async_syscall_mode) {
 
 int yield_secure_storage_access(void)
 {
+	int ret;
+
 	if (!has_access_to_secure_storage) {
 		return ERR_INVALID;
 	}
 
-	if (deauthenticate_storage()) {
-		printf("%s: Error: fail to deauthenticate with the storage "
+	ret = deauthenticate_storage();
+	if (ret) {
+		printf("%s: Error: failed to deauthenticate with the storage "
 		       "service\n", __func__);
 		return ERR_FAULT;
 	}

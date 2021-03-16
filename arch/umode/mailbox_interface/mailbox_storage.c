@@ -148,7 +148,8 @@ int init_storage(void)
 	fd_in = open(FIFO_STORAGE_IN, O_RDONLY);
 	fd_intr = open(FIFO_STORAGE_INTR, O_RDONLY);
 
-	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	int ret = pthread_create(&mailbox_thread, NULL,
+				 handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;

@@ -20,6 +20,7 @@
 #include <network/socket.h>
 #include <tpm/tpm.h>
 #include <tpm/hash.h>
+#include <tpm/rsa.h>
 
 /* Must be smaller than each message size minus 1.
  * For secure print, the message is the same as the mailbox size.
@@ -52,6 +53,7 @@ struct app_context {
 	uint8_t glucose_monitor_password[32];
 	uint8_t insulin_pump_password[32];
 	uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
+	uint8_t app_signature[RSA_SIGNATURE_SIZE];
 	uint16_t glucose_measurement_avg;
 	uint64_t last_measurement_time; /* in seconds compared to a ref. time */
 };
@@ -382,7 +384,7 @@ static int perform_remote_attestation(void)
 		return -1;
 	}
 
-	/* Receieve I/O service PCRs */
+	/* Receieve I/O service PCRs and app signature */
 	if (gapi->read_from_socket(sock, context.bluetooth_pcr,
 				   TPM_EXTEND_HASH_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
@@ -413,6 +415,13 @@ static int perform_remote_attestation(void)
 				   TPM_EXTEND_HASH_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:6)\n");
+		return -1;
+	}
+
+	if (gapi->read_from_socket(sock, context.app_signature,
+				   RSA_SIGNATURE_SIZE) < 0) {
+		insecure_printf("Error: couldn't read from socket (remote "
+				"attestation:7)\n");
 		return -1;
 	}
 
@@ -510,9 +519,11 @@ void app_main(struct runtime_api *api)
 	 *	   Upon successful attestation, establish a secure channel.
 	 * Step 3: Receive passwords for both bluetooth devices.
 	 * Step 4: Perform local attestation of the bluetooth service.
-	 *	   Upon successful attestation, authenticate with bluetooth
-	 *	   devices. Upon success authentication, read from
-	 *	   glucose_monitor (sensor) and write to insulin_pump (actuator).
+	 *	   Upon successful attestation, authenticate with the bluetooth
+	 *	   service (for restricted access implemented by the service)
+	 *	   and authenticate with bluetooth devices. Upon success
+	 *	   authentication, read from glucose_monitor (sensor) and write
+	 *	   to insulin_pump (actuator).
 	 * Step 5: Keep track of the usage of the queues (limit and timeout).
 	 *	   Yield secure access when about to expire. For bluetooth,
 	 *	   terminate the sessions with devices. For network, terminate
@@ -545,19 +556,11 @@ void app_main(struct runtime_api *api)
 	/* Request access to the bluetooth service */
 	insecure_printf("Connecting to the bluetooth services now.\n");
 
-	/* FIXME: can't check the PCR until new TPM architecture is ready since
-	 * after a reboot of the bluetooth proc, its PCR won't match the
-	 * expected value.
-	 */
 	/* This means that glucose_monitor will be index 0 in am_addrs and
 	 * insulin_pump will be index 1 */
 	memcpy(bt_device_names, glucose_monitor, BD_ADDR_LEN);	
 	memcpy(bt_device_names + BD_ADDR_LEN, insulin_pump, BD_ADDR_LEN);	
 	
-	/* FIXME: can't check the PCR until new TPM architecture is ready since
-	 * after a reboot of the bluetooth proc, its PCR won't match the
-	 * expected value.
-	 */
 	ret = gapi->request_secure_bluetooth_access(bt_device_names,
 						    num_bt_devices, 200, 100,
 						    bt_am_addrs,
@@ -572,8 +575,6 @@ void app_main(struct runtime_api *api)
 	has_bluetooth = 1;
 	insecure_printf("Connected to the bluetooth service to use the glucose "
 			"monitor and insulin pump.\n");
-
-
 
 	/* Step 1 (including part of Step 0 to request access to storage) */
 	ret = api->set_up_context((void *) &context, sizeof(struct app_context),
@@ -646,13 +647,23 @@ new_measurement:
 	ret = memcmp(measured_bluetooth_pcr, context.bluetooth_pcr,
 		     TPM_EXTEND_HASH_SIZE);
 	if (ret) {
-		insecure_printf("Error: bluetooth services does not pass the "
+		insecure_printf("Error: bluetooth service does not pass the "
 				"local attestation.\n");
 		goto terminate;
 	}
 
 	/* Step 4.2: get a measurement from the glucose monitor */
-	/* Authenticate */
+	/* Authenticate with the bluetooth service (which enforces restricted
+	 * access.
+	 */
+	ret = gapi->authenticate_with_bluetooth_service(context.app_signature);
+	if (ret) {
+		insecure_printf("Error: couldn't authenticate with the "
+				"bluetooth service.\n");
+		goto terminate;
+	}
+
+	/* Authenticate with bluetooth devices */
 	ret = gapi->bluetooth_send_data(bt_am_addrs[0],
 					context.glucose_monitor_password,
 					BTPACKET_FIXED_DATA_SIZE);
