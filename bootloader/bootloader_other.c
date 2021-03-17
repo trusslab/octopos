@@ -79,11 +79,20 @@ static void *handle_mailbox_interrupts(void *data)
 			 * intended for the bootloader.
 			 */
 			num_storage_data_out_interrupts++;
+			//printf("%s [1]: num_storage_data_out_interrupts = %d\n",
+			//       __func__, num_storage_data_out_interrupts);
+			//printf("%s [2]: reading_signature = %d\n", __func__, reading_signature);
 
+			//if (reading_signature)
+			//	return NULL;
 			if (!reading_signature)
 				continue;
 
-			if (!need_repeat && (num_storage_data_out_interrupts ==
+			/* FIXME: no guarantee that this will always work.
+			 * It should work most of the time when the signature
+			 * is delivered in one message only.
+			 */
+			if (!need_repeat && (num_storage_data_out_interrupts >=
 					     total_count)) {
 				return NULL;
 			}

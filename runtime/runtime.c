@@ -1341,7 +1341,7 @@ static int yield_secure_bluetooth_access(void)
 {
 	int ret;
 
-	if (has_secure_bluetooth_access) {
+	if (!has_secure_bluetooth_access) {
 		return ERR_INVALID;
 	}
 
