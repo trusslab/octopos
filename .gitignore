@@ -29,7 +29,7 @@ bootloader/os
 bootloader/runtime1
 bootloader/runtime2
 bootloader/linux
-installer/*signature
+bootloader/*signature
 installer/installer
 installer/copy*
 installer/aligned*

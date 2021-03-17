@@ -1301,9 +1301,6 @@ static int authenticate_with_bluetooth_service(uint8_t *app_signature)
 	uint32_t remaining_size = RSA_SIGNATURE_SIZE;
 	uint32_t msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	uint32_t offset = 0;
-	printf("%s [1]: app_signature[0] = %#x\n", __func__, app_signature[0]);
-	printf("%s [2]: app_signature[RSA_SIGNATURE_SIZE - 1] = %#x\n", __func__,
-	       app_signature[RSA_SIGNATURE_SIZE - 1]);
 
 	BLUETOOTH_SET_ZERO_ARGS(IO_OP_AUTHENTICATE)
 
@@ -1311,15 +1308,10 @@ static int authenticate_with_bluetooth_service(uint8_t *app_signature)
 
 	/* send the signature */
 	while (remaining_size) {
-		printf("%s [3]: remaining_size = %d\n", __func__, remaining_size);
-		printf("%s [4]: msg_size = %d\n", __func__, msg_size);
-		printf("%s [5]: offset = %d\n", __func__, offset);
 		if (remaining_size < msg_size)
 			msg_size = remaining_size;
-		printf("%s [6]: msg_size = %d\n", __func__, msg_size);
 
 		memcpy(buf, app_signature + offset, msg_size); 
-		printf("%s [7]: buf[0] = %#x\n", __func__, buf[0]);
 		runtime_send_msg_on_queue(buf, Q_BLUETOOTH_CMD_IN);
 
 		if (remaining_size >= msg_size)

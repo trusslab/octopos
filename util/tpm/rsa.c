@@ -4,11 +4,6 @@
  */
 #include <stdio.h>
 #include <openssl/pem.h>
-//#include <openssl/ssl.h>
-//#include <openssl/rsa.h>
-//#include <openssl/evp.h>
-//#include <openssl/bio.h>
-//#include <openssl/err.h>
 
 int padding = RSA_PKCS1_PADDING;
  

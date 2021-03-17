@@ -79,12 +79,7 @@ static void *handle_mailbox_interrupts(void *data)
 			 * intended for the bootloader.
 			 */
 			num_storage_data_out_interrupts++;
-			//printf("%s [1]: num_storage_data_out_interrupts = %d\n",
-			//       __func__, num_storage_data_out_interrupts);
-			//printf("%s [2]: reading_signature = %d\n", __func__, reading_signature);
 
-			//if (reading_signature)
-			//	return NULL;
 			if (!reading_signature)
 				continue;
 
@@ -287,11 +282,8 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 	offset = 0;
 repeat:
-	printf("%s [1]\n", __func__);
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
-	printf("%s [2]\n", __func__);
 	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
-	printf("%s [3]: count = %d\n", __func__, count);
 
 	/*
 	 * When the file is very large, which is, for example, the case

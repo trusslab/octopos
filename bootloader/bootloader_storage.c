@@ -100,8 +100,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int _size;
 	int offset;
-	printf("%s [1]: filename = %s\n", __func__, filename);
-	printf("%s [2]: path = %s\n", __func__, path);
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {

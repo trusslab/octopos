@@ -308,7 +308,6 @@ static int request_secure_storage_creation(uint32_t size)
 		secure_storage_created = true;
 		secure_partition_id = ret1;
 	}
-	printf("%s [1]: secure_partition_id = %d\n", __func__, secure_partition_id);
 
 	return (int) ret0;
 }
@@ -790,7 +789,6 @@ int write_context_to_storage(int do_yield)
 
 	memcpy(context_block, &context_tag, CONTEXT_TAG_SIZE);
 	memcpy(&context_block[CONTEXT_TAG_SIZE], context_addr, context_size);
-	printf("%s [1]: writing to context.\n", __func__);
 
 	uint32_t wret = write_to_secure_storage_block(context_block, 0, 0,
 						context_size + CONTEXT_TAG_SIZE);

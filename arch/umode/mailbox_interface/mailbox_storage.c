@@ -68,7 +68,8 @@ static void *handle_mailbox_interrupts(void *data)
 		if (interrupt > 0 && interrupt <= NUM_QUEUES) {
 			sem_post(&interrupts[interrupt]);
 		} else {
-			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
+			printf("Error: interrupt from an invalid queue (%d)\n",
+			       interrupt);
 			exit(-1);
 		}
 	}

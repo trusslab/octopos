@@ -411,15 +411,10 @@ static void bluetooth_authenticate(uint8_t *buf, uint8_t proc_id)
 
 	/* receive signature */
 	while (remaining_size) {
-		printf("%s [3]: remaining_size = %d\n", __func__, remaining_size);
-		printf("%s [4]: msg_size = %d\n", __func__, msg_size);
-		printf("%s [5]: offset = %d\n", __func__, offset);
 		if (remaining_size < msg_size)
 			msg_size = remaining_size;
-		printf("%s [6]: msg_size = %d\n", __func__, msg_size);
 
 		_proc_id = read_from_bluetooth_cmd_queue_get_owner(_buf);
-		printf("%s [7]: buf[0] = %#x\n", __func__, _buf[0]);
 
 		if (_proc_id != proc_id) {
 			printf("Error: %s: unexpected proc_id for the sender "
@@ -438,9 +433,6 @@ static void bluetooth_authenticate(uint8_t *buf, uint8_t proc_id)
 
 		offset += msg_size;
 	}
-	printf("%s [1]: signature[0] = %#x\n", __func__, signature[0]);
-	printf("%s [2]: signature[RSA_SIGNATURE_SIZE - 1] = %#x\n", __func__,
-	       signature[RSA_SIGNATURE_SIZE - 1]);
 
 	if (!bound) {
 		printf("Error: %s: no bound device(s)\n", __func__);

@@ -33,15 +33,12 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	wait_for_storage();
 
 #ifdef ARCH_UMODE
-	printf("%s [1]\n", __func__);
 	/* Help with reading the signature file needed for secure boot. */
 	strcpy(signature_filename, filename);
 	strcat(signature_filename, "_signature");
 
 	fd = file_system_open_file(signature_filename, FILE_OPEN_MODE);
-	printf("%s [3]: fd = %d\n", __func__, fd);
 	num_blocks = file_system_get_file_num_blocks(fd);
-	printf("%s [4]: num_blocks = %d\n", __func__, num_blocks);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
@@ -98,7 +95,6 @@ int reset_proc(uint8_t proc_id)
 	if (proc_id == P_STORAGE) {
 		printf("Error: %s: unexpected proc_id (storage).\n", __func__);
 		return ERR_UNEXPECTED;
-		//close_file_system();
 	}
 
 	ret = pmu_reset_proc(proc_id);

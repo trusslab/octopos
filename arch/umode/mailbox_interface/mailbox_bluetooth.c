@@ -37,18 +37,6 @@ static void *handle_mailbox_interrupts(void *data)
 	}
 }
 
-//void read_from_bluetooth_cmd_queue(uint8_t *buf)
-//{
-//	uint8_t opcode[2];
-//
-//	sem_wait(&interrupts[Q_BLUETOOTH_CMD_IN]);
-//
-//	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-//	opcode[1] = Q_BLUETOOTH_CMD_IN;
-//	write(fd_out, opcode, 2);
-//	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-//}
-//
 /*
  * This API returns the message as well as the proc_id of the sender.
  * To achieve this, before reading the message, it disable queue delegation.
