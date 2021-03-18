@@ -769,7 +769,7 @@ int init_os_mailbox(void)
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
-	#ifndef ARCH_SEC_HW_BOOT
+#ifndef ARCH_SEC_HW_BOOT
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
 

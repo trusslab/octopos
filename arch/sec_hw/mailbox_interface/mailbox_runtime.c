@@ -17,7 +17,9 @@
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox.h"
 #include "arch/octopos_mbox_owner_map.h"
+#ifndef ARCH_SEC_HW_BOOT
 #include "arch/preload_application_map.h"
+#endif
 
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
@@ -48,9 +50,9 @@
 	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_2_INTR
 #endif
 
-extern int		p_runtime;
-extern int		q_runtime;
-extern int		q_os;
+int		p_runtime = 0;
+int		q_runtime = 0;
+int		q_os = 0;
 
 uint8_t 		load_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
 extern bool 	still_running;
@@ -584,6 +586,8 @@ int init_runtime(int runtime_id)
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_sys, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_sys, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
+#ifndef ARCH_SEC_HW_BOOT
+
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
 
@@ -763,6 +767,7 @@ int init_runtime(int runtime_id)
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
+#endif
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	/* Q_RUNTIME semaphores are not used directly because there is
@@ -790,7 +795,9 @@ int init_runtime(int runtime_id)
 	sem_init(&load_app_sem, 0, 0);
 	sem_init(&syscall_wakeup, 0, 0);
 
+#ifndef ARCH_SEC_HW_BOOT
 	preloaded_app_init();
+#endif
 
 	runtime_inited = TRUE;
 

@@ -10,9 +10,7 @@
 #include <os/file_system.h>
 #include <os/syscall.h>
 #include <os/storage.h>
-#ifndef ARCH_SEC_HW
 #include <os/boot.h>
-#endif
 #include <arch/mailbox_os.h>
 #ifndef ARCH_SEC_HW
 #include <arch/pmu.h>
@@ -67,9 +65,7 @@ int main()
 	initialize_file_system(partition_size);
 #endif
 
-#ifndef ARCH_SEC_HW
 	help_boot_procs(1);
-#endif
 
 	initialize_shell();
 	initialize_scheduler();

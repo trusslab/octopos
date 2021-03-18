@@ -9,6 +9,13 @@
 #ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
 #include <semaphore.h>
+#include <arch/mailbox.h>
+#else
+#include <arch/sec_hw.h>
+#include <arch/portab.h>
+#include <arch/srec_errors.h>
+#include <arch/srec.h>
+#include <arch/octopos_mbox.h>
 #endif
 #include <stdint.h>
 #include <unistd.h>
@@ -20,8 +27,9 @@
 #include <os/file_system.h>
 #include <os/storage.h>
 #include <tpm/hash.h>
-#include <arch/mailbox.h>
 
+
+#ifndef ARCH_SEC_HW_BOOT
 int fd_out, fd_in, fd_intr;
 pthread_t mailbox_thread;
 
@@ -226,6 +234,26 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		exit(-1);
 	}
 }
+#else
+
+static srec_info_t srinfo;
+static uint8 sr_buf[SREC_MAX_BYTES];
+static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
+extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
+extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
+
+int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf);
+int get_srec_line(uint8 *line, uint8 *buf);
+
+/* FIXME: import headers */
+int init_runtime(int runtime_id);
+
+#endif
+
+void prepare_bootloader(char *filename, int argc, char *argv[])
+{
+	/* no-op */
+}
 
 /*
  * @filename: the name of the file in the partition
@@ -236,28 +264,71 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
  */
 int copy_file_from_boot_partition(char *filename, char *path)
 {
+#ifndef ARCH_SEC_HW_BOOT
 	FILE *copy_filep;
+#else /* ARCH_SEC_HW_BOOT */
+
+	u8 unpack_buf[1024] = {0};
+	u16 unpack_buf_head = 0;
+	int line_count;
+	void (*laddr)();
+
+	srinfo.sr_data = sr_data_buf;
+
+#ifdef ARCH_SEC_HW_BOOT_STORAGE
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_KEYBOARD)
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_SERIAL_OUT)
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_RUNTIME_1)
+	init_runtime(1);
+#elif defined(ARCH_SEC_HW_BOOT_RUNTIME_2)
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_OS)
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_NETWORK)
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_LINUX)
+	/* no-op */
+#endif
+
+	// FIXME: a better way to wait for OS to load?
+	sleep(10);
+
+#endif /* ARCH_SEC_HW_BOOT */
+
 	uint8_t buf[STORAGE_BLOCK_SIZE];
 	int offset, need_repeat = 0;
 
+/* FIXME: some code is disabled to reduce bootloader binary size */
+#ifndef ARCH_SEC_HW_BOOT
 	init_mailbox();
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error: %s: storage data queue msg size must be equal to storage block size\n", __func__);
 		exit(-1);
 	}
-	
+
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
 		printf("Error: %s: Couldn't open the target file (%s).\n", __func__, path);
 		return -1;
 	}
+#endif /* ARCH_SEC_HW_BOOT */
 
 	int total = 0;
 	offset = 0;
 repeat:
+#ifndef ARCH_SEC_HW_BOOT
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
 	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
+#else
+    /* unpack buffer is full, but still, haven't finish a line */
+    if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
+        SEC_HW_DEBUG_HANG();
+	limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+#endif /* ARCH_SEC_HW_BOOT */
 
 	/*
 	 * When the file is very large, which is, for example, the case
@@ -272,10 +343,58 @@ repeat:
 	total += count;
 
 	for (int i = 0; i < (int) count; i++) {
+#ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
+#else
+		_sem_retrieve_mailbox_message_blocking_buf(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+#endif
 		
+#ifndef ARCH_SEC_HW_BOOT
 		fseek(copy_filep, offset, SEEK_SET);
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
+#else
+        /* copy into unpack buffer */
+        memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
+        unpack_buf_head += STORAGE_BLOCK_SIZE;
+
+        /* load lines until there is no complete line in unpack buffer */
+        while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
+            if (decode_srec_line(sr_buf, &srinfo) != 0)
+                SEC_HW_DEBUG_HANG();
+
+            switch (srinfo.type) {
+                case SREC_TYPE_0:
+                    break;
+                case SREC_TYPE_1:
+                case SREC_TYPE_2:
+                case SREC_TYPE_3:
+                    memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+                    break;
+                case SREC_TYPE_5:
+                    break;
+                case SREC_TYPE_7:
+                case SREC_TYPE_8:
+                case SREC_TYPE_9:
+                    laddr = (void (*)())srinfo.addr;
+
+                    /* jump to start vector of loaded program */
+                    (*laddr)();
+
+                    /* the old program is dead at this point */
+					SEC_HW_DEBUG_HANG();
+                    break;
+            }
+
+            /* after loading the line, remove the contents being loaded */
+            memcpy(&unpack_buf[0],
+                    &unpack_buf[line_count],
+                    unpack_buf_head - line_count);
+
+//            sleep(5);
+            unpack_buf_head -= line_count;
+            memset(&unpack_buf[unpack_buf_head], 0, line_count);
+        }
+#endif /* ARCH_SEC_HW_BOOT */
 
 		offset += STORAGE_BLOCK_SIZE;
 	}
@@ -283,13 +402,16 @@ repeat:
 	if (need_repeat)
 		goto repeat;
 
+#ifndef ARCH_SEC_HW_BOOT
 	fclose(copy_filep);
+#endif /* ARCH_SEC_HW_BOOT */
 
 	return 0;
 }
 
 void send_measurement_to_tpm(char *path)
 {
+#ifndef ARCH_SEC_HW_BOOT
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	char hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
 	int i;
@@ -316,5 +438,6 @@ void send_measurement_to_tpm(char *path)
 		sem_wait(&interrupts[Q_TPM_IN]);
 
 	close_mailbox();
+#endif
 }
 #endif

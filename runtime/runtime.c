@@ -61,9 +61,9 @@ extern unsigned char __data_start;
 extern unsigned char __data_end;
 #endif
 
-int p_runtime = 0;
-int q_runtime = 0;
-int q_os = 0;
+extern int		p_runtime;
+extern int		q_runtime;
+extern int		q_os;
 
 uint8_t **syscall_resp_queue;
 int srq_size;
