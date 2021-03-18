@@ -45,6 +45,7 @@ static void distribute_input(void)
 	}
 }
 
+#if defined(ARCH_SEC_HW) && !defined(ARCH_SEC_HW_BOOT)
 int main()
 {
 	/* Non-buffering stdout */
@@ -81,3 +82,5 @@ int main()
 
 	return 0;
 }
+
+#endif

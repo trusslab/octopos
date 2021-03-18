@@ -130,6 +130,7 @@ bool is_config_locked = false;
 
 #ifdef ARCH_SEC_HW_STORAGE
 uint8_t get_srec_line(uint8_t *line, uint8_t *buf);
+u32 get_boot_image_address(int pid);
 
 typedef struct __attribute__((__packed__)) {
 	u16 partition_id;
@@ -178,9 +179,6 @@ u32 page_map[NUM_PARTITIONS][PAGE_MAP_MAX_VIRT_PAGE] = {0};
 #define PARTITION_HEADER_SECTOR_OFFSET FLASH_PAGE_MAP_SECTOR_OFFSET + FLASH_PAGE_MAP_SECTOR_LENGTH
 #define PARTITION_HEADER_SECTOR_LENGTH NUM_PARTITIONS
 #define PARTITION_DATA_SECTOR_OFFSET PARTITION_HEADER_SECTOR_OFFSET + PARTITION_HEADER_SECTOR_LENGTH
-
-/* boot images store at this sector and beyond */
-#define BOOT_IMAGE_OFFSET 100
 
 #define MIN_PARTITION_SECTOR_SIZE 3
 
@@ -669,19 +667,6 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
 	return size;
 }
 
-/*
- * @pid: processor id
- * Boot image storage starts at BOOT_IMAGE_OFFSET
- */
-static u32 get_boot_image_address(int pid)
-{
-	u32 address = 
-		(BOOT_IMAGE_OFFSET + pid * MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR) *
-		Flash_Config_Table[FCTIndex].SectSize;
-
-	return address;
-}
-
 int load_boot_image_from_storage(int pid, void *ptr)
 {
 	u32 address;
@@ -1074,28 +1059,23 @@ void process_request(uint8_t *buf)
 		uint32_t start_block = arg0;
 		uint32_t num_blocks = arg1;
 #ifdef ARCH_SEC_HW_STORAGE
+		/* FIXME: use proper file read/write. */
 		/* handle special boot image files */
-		if (start_block >= BOOT_IMAGE_BLOCK_OFFSET) {
-			/* FIXME: this is an ad hoc way to get the booting processor id */
-			uint32_t partition_id = start_block - BOOT_IMAGE_BLOCK_OFFSET;
-
-			if (partition_id > NUM_PROCESSORS || runtime_id > NUM_RUNTIME_PROCS) {
-				SEC_HW_DEBUG_HANG();
-				printf("%s: Error: invalid args\n", __func__);
-				STORAGE_SET_ONE_RET(0)
-				return;
-			}
-
-			u32 address = get_boot_image_address(partition_id);
-			u32 message_count = boot_image_sizes[partition_id] / STORAGE_BLOCK_SIZE;
+		if (start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE) {
+			/* FIXME: this is an ad hoc way to get the boot image address, by passing the
+			 * address directly on argument.
+			 */
+			u32 address = start_block;
+			// u32 message_count = boot_image_sizes[partition_id] / STORAGE_BLOCK_SIZE;
 			uint8_t message_buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
 
-			for (u32 message = 0; message < message_count; message++) {
-				partition_read_physical(address + message * STORAGE_BLOCK_SIZE, STORAGE_BLOCK_SIZE, message_buf);
-				write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
-			}
+			// for (u32 message = 0; message < message_count; message++) {
+			partition_read_physical(address, STORAGE_BLOCK_SIZE, message_buf);
+			write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
+			// }
 
-			STORAGE_SET_ONE_RET(0);
+			STORAGE_SET_ONE_RET(STORAGE_BLOCK_SIZE);
+			return;
 		}
 #endif
 		if (start_block + num_blocks > partitions[partition_id].size) {

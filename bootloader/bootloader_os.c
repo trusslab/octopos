@@ -138,18 +138,25 @@ void send_measurement_to_tpm(char *path)
 	close_os_mailbox();
 }
 #else
-void os_request_boot_image_by_line(uint32_t proc_id, uint32_t runtime_id);
+void os_request_boot_image_by_line(char *filename, char *path);
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	int ret = init_os_mailbox();
 	if (ret)
 		SEC_HW_DEBUG_HANG();
+
+	// FIXME: is there a better way to wait for storage boot?
+	sleep(5);
+
+	initialize_storage();
+
+	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 }
 
 int copy_file_from_boot_partition(char *filename, char *path)
 {
-	os_request_boot_image_by_line(P_OS, 0);
+	os_request_boot_image_by_line(filename, path);
 	return 0;
 }
 

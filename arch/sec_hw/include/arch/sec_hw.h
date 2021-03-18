@@ -28,6 +28,8 @@ void cleanup_platform();
 #define false   0
 #define bool    _Bool
 
+#define QSPI_SECTOR_SIZE 128 * 1024
+
 /* image size measured in bytes. it must be a multiple of 512. 
  * its okay to be bigger than actual size (ceiling to the next multiple of 512).
  */
@@ -35,8 +37,11 @@ void cleanup_platform();
 #define STORAGE_IMAGE_SIZE 262656
 #define OS_IMAGE_SIZE 422400
 
+/* boot images store at this sector and beyond */
+#define BOOT_IMAGE_OFFSET 100
+
 /* boot image offset */
-#define BOOT_IMAGE_BLOCK_OFFSET 0xFFFFFF
+// #define BOOT_IMAGE_BLOCK_OFFSET 0xFFFFFF
 
 /* special op code for boot image request */
 #define STORAGE_OP_BOOT_REQ 0xf
