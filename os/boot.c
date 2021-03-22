@@ -39,6 +39,7 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	char bootname[20] = {':'};
 	strcpy(&bootname[1], filename);
 	uint32_t fd = file_system_open_file(bootname, FILE_OPEN_MODE);
+
 #else
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
 #endif
@@ -74,10 +75,12 @@ void help_boot_runtime_proc(uint8_t runtime_proc_id)
 #ifndef ARCH_SEC_HW
 	help_boot_proc(runtime_proc_id, (char *) "runtime");
 #else
-	if (runtime_proc_id == 1)
+	if (runtime_proc_id == P_RUNTIME1)
 		help_boot_proc(runtime_proc_id, (char *) "runtime1");
-	else if (runtime_proc_id == 2)
-		help_boot_proc(runtime_proc_id, (char *) "runtime2");
+	else if (runtime_proc_id == P_RUNTIME2)
+		// FIXME: now we only have runtime 1
+		SEC_HW_DEBUG_HANG();
+//		help_boot_proc(runtime_proc_id, (char *) "runtime2");
 	else
 		SEC_HW_DEBUG_HANG();
 #endif
@@ -90,6 +93,7 @@ static void help_boot_untrusted_proc(void)
 
 void help_boot_procs(int boot_untrusted)
 {
+	sleep(10);
 #ifndef ARCH_SEC_HW
 	help_boot_keyboard_proc();
 	help_boot_serial_out_proc();

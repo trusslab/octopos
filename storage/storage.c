@@ -119,7 +119,7 @@ uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 
 #ifdef ARCH_SEC_HW_STORAGE
 uint32_t boot_image_sizes[NUM_PROCESSORS + 1] = 
-	{0, OS_IMAGE_SIZE, 0, 0, STORAGE_IMAGE_SIZE, 0, 0, 0, 0 ,0 ,0};
+	{0, OS_IMAGE_SIZE, 0, 0, STORAGE_IMAGE_SIZE, 0, 0, RUNTIME1_IMAGE_SIZE, 0 ,0 ,0};
 #endif
 
 bool is_queue_set_bound = false;
@@ -1065,14 +1065,19 @@ void process_request(uint8_t *buf)
 			/* FIXME: this is an ad hoc way to get the boot image address, by passing the
 			 * address directly on argument.
 			 */
+//			volatile u32 reg_tmp1 = octopos_mailbox_get_status_reg(0x43603000);
+//			SEC_HW_DEBUG_HANG();
+			
 			u32 address = start_block;
 			// u32 message_count = boot_image_sizes[partition_id] / STORAGE_BLOCK_SIZE;
 			uint8_t message_buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
 
-			// for (u32 message = 0; message < message_count; message++) {
-			partition_read_physical(address, STORAGE_BLOCK_SIZE, message_buf);
-			write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
-			// }
+			for (u32 blk = 0; blk < num_blocks; blk++) {
+				partition_read_physical(address + blk * STORAGE_BLOCK_SIZE,
+						STORAGE_BLOCK_SIZE, message_buf);
+				write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
+			}
+//			sleep(10);
 
 			STORAGE_SET_ONE_RET(STORAGE_BLOCK_SIZE);
 			return;

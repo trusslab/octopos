@@ -483,7 +483,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 	}
 #endif /* ROLE_OS || ROLE_INSTALLER */
 
-#ifdef ARCH_SEC_HW_BOOT
+#ifdef ARCH_SEC_HW
 	if (!file && *filename == ':') {
 		file = (struct file *) malloc(sizeof(struct file));
 		if (!file)
@@ -512,9 +512,9 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			file->num_blocks = STORAGE_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
 			file->size = STORAGE_IMAGE_SIZE;
 		} else if (!strcmp(file->filename, "runtime1")) {
-			file->start_block = 0;
-			file->num_blocks = 0;
-			file->size = 0;
+			file->start_block = get_boot_image_address(P_RUNTIME1);
+			file->num_blocks = RUNTIME1_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
+			file->size = RUNTIME1_IMAGE_SIZE;
 		} else if (!strcmp(file->filename, "runtime2")) {
 			file->start_block = 0;
 			file->num_blocks = 0;
@@ -667,8 +667,13 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size, u
         /* FIXME: this is a hack to make file system uses
          * address instead of block number.
          */
-		ret = read_from_block(&data[read_size], file->start_block + block_num * STORAGE_BLOCK_SIZE,
-				block_offset, next_read_size);
+		if (file->start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE) {
+			ret = read_from_block(&data[read_size], file->start_block + block_num * STORAGE_BLOCK_SIZE,
+					block_offset, next_read_size);
+		} else {
+			ret = read_from_block(&data[read_size], file->start_block + block_num,
+					block_offset, next_read_size);
+		}
 #else
 		ret = read_from_block(&data[read_size], file->start_block + block_num,
 				block_offset, next_read_size);
@@ -819,23 +824,62 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block, uint32_t
 	}*/
 
 repeat:
+#ifdef ARCH_SEC_HW
+	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL / 16) {
+#else
 	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
+#endif
 		next_num_blocks = num_blocks;
 		num_blocks = 0;
 	} else {
+#ifdef ARCH_SEC_HW
+		next_num_blocks = MAILBOX_MAX_LIMIT_VAL / 16;
+		num_blocks -= MAILBOX_MAX_LIMIT_VAL / 16;
+#else
 		next_num_blocks = MAILBOX_MAX_LIMIT_VAL;
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
+#endif
 	}
 
 	wait_for_storage();
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
+#ifdef ARCH_SEC_HW
+	/* FIXME: several workarounds has been made:
+	 * 1. every message read will take 16 quotas;
+	 * 2. a bug in mailbox hardware, which causes quota (q) can only be 
+	 *    q = 4094 - 16n, where n is number of messages.
+	 *    E.g., if the initial quota is 4080, after a message read,
+	 *    the new quota becomes 4078. The correct quota is 4064=4080-16.
+	 *    To workaround this issue, 
+	 *    a) every delegation must add 14 quotas;
+	 *    b) the reader must yield / eat these 14 quotas left.
+	 */
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
+				      next_num_blocks * 16 + 14, MAILBOX_DEFAULT_TIMEOUT_VAL);
+#else
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      next_num_blocks, MAILBOX_DEFAULT_TIMEOUT_VAL);
+#endif
 
+/* FIXME: similar as in file_system_read_file(), an ad-hoc
+ * solution to pass boot image address 
+ */
+#ifdef ARCH_SEC_HW
+	u32 start_block_or_address = 0;
+	if (file->start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE)
+		start_block_or_address = file->start_block + 
+			(start_block + total_read_blocks) * STORAGE_BLOCK_SIZE;
+	else
+		start_block_or_address = file->start_block + 
+			start_block + total_read_blocks;
+	STORAGE_SET_TWO_ARGS(start_block_or_address, next_num_blocks)
+#else
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + total_read_blocks,
 			     next_num_blocks)
+#endif
+
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
 

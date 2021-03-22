@@ -36,12 +36,10 @@ void cleanup_platform();
 #define MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR 4
 #define STORAGE_IMAGE_SIZE 262656
 #define OS_IMAGE_SIZE 422400
+#define RUNTIME1_IMAGE_SIZE 441344
 
 /* boot images store at this sector and beyond */
 #define BOOT_IMAGE_OFFSET 100
-
-/* boot image offset */
-// #define BOOT_IMAGE_BLOCK_OFFSET 0xFFFFFF
 
 /* special op code for boot image request */
 #define STORAGE_OP_BOOT_REQ 0xf

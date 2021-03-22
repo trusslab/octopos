@@ -236,6 +236,8 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 }
 #else
 
+#define P_PREVIOUS 0xff
+
 static srec_info_t srinfo;
 static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
@@ -327,7 +329,18 @@ repeat:
     /* unpack buffer is full, but still, haven't finish a line */
     if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
         SEC_HW_DEBUG_HANG();
+
+//    if (total == 255) sleep(10);
+    /* wait for change queue access */
+    while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+    octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+
 	limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+	usleep(100); // FIXME no need
+
+	// if (count % 16 != 0)
+	// 	SEC_HW_DEBUG_HANG();
+	count = count / 16;
 #endif /* ARCH_SEC_HW_BOOT */
 
 	/*
@@ -335,7 +348,11 @@ repeat:
 	 * for the untrusted domain kernel, the queue will need to be
 	 * delegated more than once.
 	 */ 
+#ifndef ARCH_SEC_HW_BOOT
 	if (count == MAILBOX_MAX_LIMIT_VAL)
+#else
+	if (count == MAILBOX_MAX_LIMIT_VAL / 16)
+#endif
 		need_repeat = 1;
 	else
 		need_repeat = 0;
@@ -346,7 +363,12 @@ repeat:
 #ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
 #else
+//		volatile u32 reg_tmp1 = octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+//		volatile limit_t count_tmp1 = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 		_sem_retrieve_mailbox_message_blocking_buf(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+//		volatile u32 reg_tmp2 = octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+//		volatile limit_t count_tmp2 = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+//		if (i==254 && total == 255) sleep(10);
 #endif
 		
 #ifndef ARCH_SEC_HW_BOOT
@@ -375,6 +397,8 @@ repeat:
                 case SREC_TYPE_7:
                 case SREC_TYPE_8:
                 case SREC_TYPE_9:
+                	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+
                     laddr = (void (*)())srinfo.addr;
 
                     /* jump to start vector of loaded program */
@@ -398,6 +422,10 @@ repeat:
 
 		offset += STORAGE_BLOCK_SIZE;
 	}
+
+//	if (total == 255) sleep(10);
+	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+//	if (total == 255) sleep(10);
 
 	if (need_repeat)
 		goto repeat;
