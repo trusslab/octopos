@@ -11,6 +11,7 @@
 #include <semaphore.h>
 #include <arch/mailbox.h>
 #else
+#include "xil_io.h"
 #include <arch/sec_hw.h>
 #include <arch/portab.h>
 #include <arch/srec_errors.h>
@@ -398,6 +399,15 @@ repeat:
                 case SREC_TYPE_8:
                 case SREC_TYPE_9:
                 	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+
+//					while(0xdeadbeef != octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])) {
+//						if (!(Xil_In32((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x10)) & 0x00000001)) {
+////							(void) Xil_In32((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x08));
+//							Xil_Out32(((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x2C)), (0x00000001 | 0x00000002));
+//						} else {
+//		                	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+//						}
+//					}
 
                     laddr = (void (*)())srinfo.addr;
 

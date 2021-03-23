@@ -18,6 +18,10 @@
 #include <arch/pmu.h>
 #else
 #include "arch/sec_hw.h"
+#include "arch/octopos_xmbox.h"
+
+extern OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
+extern UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 #endif
 
 int untrusted_needs_help_with_boot = 0;
@@ -52,6 +56,13 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	/* Help with sending measurements to TPM */
 	if (proc_id != P_UNTRUSTED)
 		delegate_tpm_data_in_queue(proc_id);
+#else
+	/* flush storage queue */
+	while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+	OCTOPOS_XMbox_Flush(Mbox_regs[Q_STORAGE_DATA_OUT]);
+//	while (!(Xil_In32((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x10)) & 0x00000001))
+//		(void) Xil_In32((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x08));
+		// Xil_Out32(((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x2C)), (0x00000001 | 0x00000002));
 #endif
 }
 
