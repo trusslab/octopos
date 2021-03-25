@@ -53,11 +53,11 @@ void fs_test(struct runtime_api *api)
 	}
 
 	data = 13;
-//	api->write_to_file(fd1, (uint8_t *) &data, 4, 0);
-//	api->write_to_file(fd1, (uint8_t *) &data, 4, 4);
+	// api->write_to_file(fd1, (uint8_t *) &data, 4, 0);
+	// api->write_to_file(fd1, (uint8_t *) &data, 4, 4);
 	data = 15;
-//	api->write_to_file(fd2, (uint8_t *) &data, 4, 0);
-//	api->write_to_file(fd2, (uint8_t *) &data, 4, 4);
+	// api->write_to_file(fd2, (uint8_t *) &data, 4, 0);
+	// api->write_to_file(fd2, (uint8_t *) &data, 4, 4);
 
 	api->read_from_file(fd1, (uint8_t *) &data, 4, 4);
 	insecure_printf("data (first file) = %d\n", data);
