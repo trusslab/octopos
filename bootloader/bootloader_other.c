@@ -297,7 +297,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #endif
 
 	// FIXME: a better way to wait for OS to load?
-	sleep(10);
+	// sleep(10);
 
 #endif /* ARCH_SEC_HW_BOOT */
 
@@ -337,7 +337,7 @@ repeat:
     octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
 	limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
-	usleep(100); // FIXME no need
+	// usleep(100); // FIXME no need
 
 	// if (count % 16 != 0)
 	// 	SEC_HW_DEBUG_HANG();

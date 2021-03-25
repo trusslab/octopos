@@ -104,7 +104,7 @@ static void help_boot_untrusted_proc(void)
 
 void help_boot_procs(int boot_untrusted)
 {
-	sleep(10);
+	// sleep(10);
 #ifndef ARCH_SEC_HW
 	help_boot_keyboard_proc();
 	help_boot_serial_out_proc();
