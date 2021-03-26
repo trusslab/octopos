@@ -87,7 +87,9 @@ int write_boot_image_to_storage(int pid, void *ptr);
 #define IMAGE_WRITER_MODE
 // #define TARGET_BOOT_PROCESSOR P_OS
 // #define TARGET_BOOT_PROCESSOR P_STORAGE
-#define TARGET_BOOT_PROCESSOR P_RUNTIME1
+// #define TARGET_BOOT_PROCESSOR P_RUNTIME1
+//#define TARGET_BOOT_PROCESSOR P_KEYBOARD
+#define TARGET_BOOT_PROCESSOR P_SERIAL_OUT
 
 #ifndef IMAGE_WRITER_MODE
 uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
@@ -100,6 +102,10 @@ uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #include "arch/bin/os_image.h"
 #elif (TARGET_BOOT_PROCESSOR == P_RUNTIME1)
 #include "arch/bin/runtime1_image.h"
+#elif (TARGET_BOOT_PROCESSOR == P_KEYBOARD)
+#include "arch/bin/keyboard_image.h"
+#elif (TARGET_BOOT_PROCESSOR == P_SERIAL_OUT)
+#include "arch/bin/serialout_image.h"
 #endif
 
 #endif /* IMAGE_WRITER_MODE */

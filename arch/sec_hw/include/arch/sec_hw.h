@@ -37,6 +37,8 @@ void cleanup_platform();
 #define STORAGE_IMAGE_SIZE 262656
 #define OS_IMAGE_SIZE 422400
 #define RUNTIME1_IMAGE_SIZE 441344
+#define KEYBOARD_IMAGE_SIZE 324608
+#define SERIALOUT_IMAGE_SIZE 320512
 
 /* boot images store at this sector and beyond */
 #define BOOT_IMAGE_OFFSET 100

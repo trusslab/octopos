@@ -492,13 +492,13 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		strcpy(file->filename, filename + sizeof(char));
 
 		if (!strcmp(file->filename, "keyboard")) {
-			file->start_block = 0;
-			file->num_blocks = 0;
-			file->size = 0;
+			file->start_block = get_boot_image_address(P_KEYBOARD);
+			file->num_blocks = KEYBOARD_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
+			file->size = KEYBOARD_IMAGE_SIZE;
 		} else if (!strcmp(file->filename, "serial_out")) {
-			file->start_block = 0;
-			file->num_blocks = 0;
-			file->size = 0;
+			file->start_block = get_boot_image_address(P_SERIAL_OUT);
+			file->num_blocks = SERIALOUT_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
+			file->size = SERIALOUT_IMAGE_SIZE;
 		} else if (!strcmp(file->filename, "network")) {
 			file->start_block = 0;
 			file->num_blocks = 0;

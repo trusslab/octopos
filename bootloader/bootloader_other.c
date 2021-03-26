@@ -17,6 +17,8 @@
 #include <arch/srec_errors.h>
 #include <arch/srec.h>
 #include <arch/octopos_mbox.h>
+#include <arch/octopos_xmbox.h>
+#include "xmbox.h"
 #endif
 #include <stdint.h>
 #include <unistd.h>
@@ -250,6 +252,9 @@ int get_srec_line(uint8 *line, uint8 *buf);
 
 /* FIXME: import headers */
 int init_runtime(int runtime_id);
+int init_keyboard(void);
+int init_serial_out(void);
+
 
 #endif
 
@@ -281,9 +286,9 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
 	/* no-op */
 #elif defined(ARCH_SEC_HW_BOOT_KEYBOARD)
-	/* no-op */
+	init_keyboard();
 #elif defined(ARCH_SEC_HW_BOOT_SERIAL_OUT)
-	/* no-op */
+	init_serial_out();
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_1)
 	init_runtime(1);
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_2)
