@@ -120,9 +120,9 @@ int init_keyboard(void)
 		return XST_FAILURE;
 	}
 
-	/* it doesn't matter because we are not using interrupt for booting */
-	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_MAX_COMMAND_SIZE);
-	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+//	/* it doesn't matter because we are not using interrupt for booting */
+//	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_MAX_COMMAND_SIZE);
+//	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
 	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_SERIAL_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
