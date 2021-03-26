@@ -306,7 +306,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 #endif /* ARCH_SEC_HW_BOOT */
 
-	uint8_t buf[STORAGE_BLOCK_SIZE];
+	uint8_t buf[STORAGE_BLOCK_SIZE + 1] = {0};
 	int offset, need_repeat = 0;
 
 /* FIXME: some code is disabled to reduce bootloader binary size */
@@ -372,6 +372,9 @@ repeat:
 //		volatile u32 reg_tmp1 = octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 //		volatile limit_t count_tmp1 = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 		_sem_retrieve_mailbox_message_blocking_buf(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+// #if defined(ARCH_SEC_HW_BOOT_KEYBOARD)
+// 		printf("%s\n", buf);
+// #endif
 //		volatile u32 reg_tmp2 = octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 //		volatile limit_t count_tmp2 = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 //		if (i==254 && total == 255) sleep(10);

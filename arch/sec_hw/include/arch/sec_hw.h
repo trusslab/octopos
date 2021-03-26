@@ -34,8 +34,8 @@ void cleanup_platform();
  * its okay to be bigger than actual size (ceiling to the next multiple of 512).
  */
 #define MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR 4
-#define STORAGE_IMAGE_SIZE 262656
-#define OS_IMAGE_SIZE 422400
+#define STORAGE_IMAGE_SIZE 261632
+#define OS_IMAGE_SIZE 426496
 #define RUNTIME1_IMAGE_SIZE 441344
 #define KEYBOARD_IMAGE_SIZE 324608
 #define SERIALOUT_IMAGE_SIZE 320512

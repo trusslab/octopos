@@ -84,18 +84,18 @@ int load_boot_image_from_storage(int pid, void *ptr);
 int write_boot_image_to_storage(int pid, void *ptr);
 
 /* if set, switch to image writer mode */
-#define IMAGE_WRITER_MODE
+//#define IMAGE_WRITER_MODE
 // #define TARGET_BOOT_PROCESSOR P_OS
 // #define TARGET_BOOT_PROCESSOR P_STORAGE
 // #define TARGET_BOOT_PROCESSOR P_RUNTIME1
 //#define TARGET_BOOT_PROCESSOR P_KEYBOARD
-#define TARGET_BOOT_PROCESSOR P_SERIAL_OUT
+//#define TARGET_BOOT_PROCESSOR P_SERIAL_OUT
 
 #ifndef IMAGE_WRITER_MODE
 uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #else /* IMAGE_WRITER_MODE */
 
-//uint8_t binary_DEBUG_READ_BACK[OS_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
+//uint8_t binary_DEBUG_READ_BACK[KEYBOARD_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #if (TARGET_BOOT_PROCESSOR == P_STORAGE)
 #include "arch/bin/storage_image.h"
 #elif (TARGET_BOOT_PROCESSOR == P_OS)
@@ -287,7 +287,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	write_boot_image_to_storage(TARGET_BOOT_PROCESSOR, binary);
 //	load_boot_image_from_storage(TARGET_BOOT_PROCESSOR, binary_DEBUG_READ_BACK);
 //
-//	for (int i = 0; i < boot_image_sizes[TARGET_BOOT_PROCESSOR]; i++) {
+//	for (int i = 0; i < KEYBOARD_IMAGE_SIZE; i++) {
 //		if (binary[i] != binary_DEBUG_READ_BACK[i])
 //			SEC_HW_DEBUG_HANG();
 //	}
