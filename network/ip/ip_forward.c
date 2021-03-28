@@ -24,6 +24,13 @@ void ip_forward(struct pkbuf *pkb)
 	struct rtentry *rt = pkb->pk_rtdst;
 	struct netdev *indev = pkb->pk_indev;
 	unsigned int dst;
+
+#ifdef ARCH_SEC_HW_NETWORK
+	printf("%s:host doesnt support forward,droping message!\r\n",__func__);
+//	free(pkb->pk_data);
+	free_pkb(pkb);
+	return;
+#endif
 #ifdef CONFIG_TOP1
 	ipdbg("host doesnt support forward!");
 	goto drop_pkb;

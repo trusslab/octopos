@@ -90,14 +90,14 @@ void socket_client(struct runtime_api *api)
 	type = SOCK_STREAM;	/* default TCP stream */
 	sock = NULL;
 	
-	char addr[256] = "10.0.0.2:12345";	
+	char addr[256] = "192.168.1.1:12345";
 	err = _parse_ip_port(addr, &skaddr.dst_addr,
 					&skaddr.dst_port);
 	if (err < 0) {
 		printf("address format is error\n");
 		return;
 	}
-
+	printf("%s: 0x%x , %u \n\r",__func__, skaddr.dst_addr, skaddr.dst_port);
 	/* init socket */
 	sock = api->create_socket(AF_INET, type, 0, &skaddr);
 	if (!sock) {

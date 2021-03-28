@@ -270,6 +270,8 @@ static void *tcp_receive(void *_data)
 	}
 }
 #else /*ARCH_SEC_HW*/
+bool had_network_access;
+#define NETWRORK_RECEIVE_INTR_WORK
 uint8_t net_buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 int tcp_receive()
 {
@@ -281,17 +283,42 @@ int tcp_receive()
 
 //	uint8_t *data;
 //	uint16_t data_size;
+	_Bool result = TRUE;
+	UINTPTR queue_ptr = Mbox_ctrl_regs[Q_NETWORK_DATA_OUT];
+	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
 
 	int bytes_read;
 	if(!has_network_access){
+		had_network_access = has_network_access;
 		return -1;
 	}
+	if(has_network_access & !had_network_access){
+		for(int i =0 ; i<100000; i++){
+		}
+		had_network_access = true;
 
+	}
+//	_SEC_HW_DEBUG_MJ("MJ: %08x: %08x", queue_ptr, octopos_mailbox_get_status_reg(queue_ptr));
 
-	bytes_read = sem_wait_one_time_receive_buf(&interrupts[Q_NETWORK_DATA_OUT], Mbox_regs[Q_NETWORK_DATA_OUT], net_buf);
+#ifdef NETWRORK_RECEIVE_INTR_WORK
+
+	if (!result){
+		while(1);
+	}
+	if (XMbox_IsEmptyHw(Mbox_regs[Q_NETWORK_DATA_OUT]->Config.BaseAddress)){
+//		_SEC_HW_DEBUG_MJ("MJ: just query for emptiness", bytes_read);
+		return XST_NO_DATA;
+	}
+
+	bytes_read = sem_wait_one_time_receive_buf_large(&interrupts[Q_NETWORK_DATA_OUT], Mbox_regs[Q_NETWORK_DATA_OUT], net_buf);
+	_SEC_HW_DEBUG_MJ("MJ: after actual read bytes_read = %d, mbox_stat_reg=%08x", bytes_read,octopos_mailbox_get_status_reg(queue_ptr));
+
 	if (bytes_read == NULL){
 		return -1;
 	}
+
+
+
         MY_NETWORK_GET_ZERO_ARGS_DATA
 	if (!data_size) {
 		printf("%s: Error: bad network data message\n", __func__);
@@ -310,8 +337,12 @@ int tcp_receive()
 
 	/* FIXME: is the call to raw_in() needed? */
 //	raw_in(pkb);
+	_SEC_HW_DEBUG_MJ("MJ: right before tcp_in");
 	tcp_in(pkb);
+	_SEC_HW_DEBUG_MJ("MJ: after tcp_in");
+
 //	free(buf);
+#endif
 
 	return 0;
 }

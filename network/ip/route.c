@@ -70,6 +70,7 @@ void rt_init(void)
 	/* loopback */
 	rt_add(LOCALNET(loop), loop->net_mask, 0, 0, RT_LOCALHOST, loop);
 	/* local host */
+#ifndef ARCH_SEC_HW_NETWORK	
 	rt_add(veth->net_ipaddr, 0xffffffff, 0, 0, RT_LOCALHOST, loop);
 	/* local net */
 	rt_add(LOCALNET(veth), veth->net_mask, 0, 0, RT_NONE, veth);
@@ -78,7 +79,15 @@ void rt_init(void)
 	rt_add(0, 0, tap->dev.net_ipaddr, 0, RT_DEFAULT, veth);
 #else
 	rt_add(0, 0, DEFAULT_GW, 0, RT_DEFAULT, veth);
-#endif
+#endif /*CONFIG_TOP1*/
+
+#else
+	rt_add(xileth->net_ipaddr, 0xffffffff, 0, 0, RT_LOCALHOST, loop);
+	/* local net */
+	rt_add(LOCALNET(xileth), xileth->net_mask, 0, 0, RT_NONE, xileth);
+	rt_add(0, 0, 0x101a8c0, 0, RT_DEFAULT, xileth);
+#endif /*ARCH_SEC_HW_NETWORK*/
+
 	dbg("route table init");
 }
 

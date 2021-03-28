@@ -32,7 +32,7 @@ static int network_set_up_socket(uint32_t saddr, uint32_t sport,
 static int get_network_src_addr(uint32_t *saddr)
 {
 	/* FIXME: hard-coded */
-	*saddr = 0x0100000a;
+	*saddr = 0x0a01a8c0;
 
 	return 0;
 }
@@ -127,10 +127,10 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 
 	/* No more than 200 block reads/writes */
 	/* FIXME: hard-coded */
-	if (count > 200) {
-		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-		return;
-	}
+//	if (count > 1800) {
+//		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
+//		return;
+//	}
 	int ret_in = is_queue_available(Q_NETWORK_DATA_IN);
 	int ret_out = is_queue_available(Q_NETWORK_DATA_OUT);
 	/* Or should we make this blocking? */
@@ -151,9 +151,9 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 	mark_queue_unavailable(Q_NETWORK_DATA_IN);
 	mark_queue_unavailable(Q_NETWORK_DATA_OUT);
 	mailbox_delegate_queue_access(Q_NETWORK_DATA_IN, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
+			MAILBOX_NETWORK_TIMEOUT_VAL);
 	mailbox_delegate_queue_access(Q_NETWORK_DATA_OUT, runtime_proc_id, (limit_t) count,
-			MAILBOX_DEFAULT_TIMEOUT_VAL);
+			MAILBOX_NETWORK_TIMEOUT_VAL);
 	//MJtemp
 	printf("\n\r%s:handled\n\r", __func__);
 	SYSCALL_SET_ONE_RET((uint32_t) 0)

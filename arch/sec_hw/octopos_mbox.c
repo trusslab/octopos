@@ -106,9 +106,12 @@ _Bool octopos_mailbox_attest_owner_fast(UINTPTR base)
 _Bool octopos_mailbox_attest_quota_limit(UINTPTR base, u16 limit)
 {
 	Xil_AssertNonvoid(base != 0);
-
+	u16 tmp;
+	_Bool ret;
 	_SEC_HW_DEBUG("%08x: %08x", base, octopos_mailbox_get_status_reg(base));
-	return limit == (u16) (octopos_mailbox_get_status_reg(base) >> 12 & 0xfff);
+	tmp = (u16) (octopos_mailbox_get_status_reg(base) >> 12 & 0xfff);
+	ret = (limit == tmp);
+	return ret;
 }
 
 _Bool octopos_mailbox_attest_time_limit(UINTPTR base, u16 limit)

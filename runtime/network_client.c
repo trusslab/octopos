@@ -34,6 +34,8 @@
 #include <arch/mailbox_runtime.h> 
 #endif
 
+#include <network/ip.h>
+
 #ifdef UNTRUSTED_DOMAIN
 #define printf printk
 #endif
@@ -59,6 +61,9 @@ static int send_msg_to_network(uint8_t *buf)
 void ip_send_out(struct pkbuf *pkb)
 {
 	int size = pkb->pk_len + sizeof(*pkb);
+	//MJ TEMP
+//	struct ip *iphdr = pkb2ip(pkb);
+//	while(1);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size)
 	send_msg_to_network(buf);
 }

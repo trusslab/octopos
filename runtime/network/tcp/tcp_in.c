@@ -8,6 +8,7 @@
 #include <network/netif.h>
 #include <network/tcp.h>
 #include <network/ip.h>
+#include "arch/sec_hw.h"
 #endif /*ARCH_SEC_HW*/
 
 static char *tcp_control_string(struct tcp *tcphdr)
@@ -82,6 +83,8 @@ static void tcp_recv(struct pkbuf *pkb, struct ip *iphdr, struct tcp *tcphdr)
 	if (sk)
 		free_sock(sk);
 }
+#undef tcpdbg
+#define tcpdbg(fmt,...) _SEC_HW_DEBUG_MJ(fmt, ##__VA_ARGS__)
 
 void tcp_in(struct pkbuf *pkb)
 {
@@ -97,6 +100,7 @@ void tcp_in(struct pkbuf *pkb)
 	if (tcp_chksum(iphdr->ip_src, iphdr->ip_dst,
 		tcplen, (unsigned short *)tcphdr) != 0) {
 		tcpdbg("tcp packet checksum corrupts");
+
 		goto drop_pkb;
 	}
 	return tcp_recv(pkb, iphdr, tcphdr);

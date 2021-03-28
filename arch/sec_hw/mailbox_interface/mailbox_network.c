@@ -17,17 +17,15 @@
 #include "octopos/mailbox.h"
 #include "octopos/error.h"
 
-#include "netif/xadapter.h"
+extern void network_stack_init(void);
 
 extern void platform_enable_interrupts2();
-extern int initialize_network_hardware(struct netif *);
-struct netif *netif;
 
-#undef _SEC_HW_DEBUG
-#undef _SEC_HW_ERROR
+//#undef _SEC_HW_DEBUG
+//#undef _SEC_HW_ERROR
 
-#define _SEC_HW_DEBUG(fmt, ...) printf(fmt"\n\r",##__VA_ARGS__)
-#define _SEC_HW_ERROR(fmt, ...) printf(fmt"\n\r",##__VA_ARGS__)
+//#define _SEC_HW_DEBUG(fmt, ...) printf(fmt"\n\r",##__VA_ARGS__)
+//#define _SEC_HW_ERROR(fmt, ...) printf(fmt"\n\r",##__VA_ARGS__)
 
 XIntc			intc;
 
@@ -127,16 +125,41 @@ static void handle_mailbox_interrupts(void* callback_ref)
 	_SEC_HW_DEBUG("interrupt cleared");
 }
 
-void send_response(uint8_t *buf, uint8_t queue_id)
+
+
+/* FIXME: identical copy form storage.c */
+void send_received_packet(uint8_t *buf, uint8_t queue_id)
 {
-        uint8_t opcode[2];
 
         sem_wait(&interrupts[queue_id]);
 
 	switch(queue_id) {
         case Q_NETWORK_DATA_OUT:
 		OCTOPOS_XMbox_WriteBlocking(&Mbox_network_data_out,
-			       	(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
+			       	(u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+           break; 
+     	
+        case Q_NETWORK_CMD_OUT:
+		OCTOPOS_XMbox_WriteBlocking(&Mbox_network_cmd_out,
+			       	(u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+           break; 
+        default : 
+
+           printf("%s: Error: Invalid queue_id\n", __func__);
+	   return;
+     }
+}
+
+
+void send_response(uint8_t *buf, uint8_t queue_id)
+{
+
+        sem_wait(&interrupts[queue_id]);
+
+	switch(queue_id) {
+        case Q_NETWORK_DATA_OUT:
+		OCTOPOS_XMbox_WriteBlocking(&Mbox_network_data_out,
+			       	(u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
            break; 
      	
         case Q_NETWORK_CMD_OUT:
@@ -183,7 +206,7 @@ void network_event_loop(void)
      		printf("%s:[5] before reading data\n\r", __func__);
             sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
 			OCTOPOS_XMbox_ReadBlocking(&Mbox_network_data_in,
-				       	(u32*) dbuf, MAILBOX_QUEUE_MSG_SIZE);
+				       	(u32*) dbuf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
      		printf("%s:[6] after reading data\n\r", __func__);
             send_packet(dbuf);
      		printf("%s:[6] after sending packet\n\r", __func__);
@@ -388,9 +411,11 @@ int init_network(void)
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
 
-	initialize_network_hardware(netif);
 	printf("net init done\n\r");
 
+	printf("network stack init [0]\n\r");
+	network_stack_init();
+	printf("network stack init [1]\n\r");
 
 	return XST_SUCCESS;
 }

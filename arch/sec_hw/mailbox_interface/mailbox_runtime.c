@@ -370,10 +370,10 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	if (q_runtime == 0 || !runtime_inited) {
 		return;
 	}
-//	ret = tcp_receive();
-//	if(ret == 0) {
-//		_SEC_HW_DEBUG("TCP Packet received");
-//	}
+	ret = tcp_receive();
+	if(ret == 0) {
+		_SEC_HW_DEBUG("TCP Packet received");
+	}
 	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
 
 

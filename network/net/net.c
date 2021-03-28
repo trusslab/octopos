@@ -13,6 +13,14 @@
 #include "arp.h"
 #include "lib.h"
 #include "netcfg.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/ip.h>
+#include <network/arp.h>
+#include <network/lib.h>
+#include <network/netcfg.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 /* referred to eth_trans_type() in linux */
 static struct ether *eth_init(struct netdev *dev, struct pkbuf *pkb)
@@ -38,6 +46,11 @@ static struct ether *eth_init(struct netdev *dev, struct pkbuf *pkb)
 	pkb->pk_pro = _ntohs(ehdr->eth_pro);
 	return ehdr;
 }
+#undef l2dbg
+#define l2dbg(fmt, args...)\
+do {\
+          printf(fmt, ##args);\
+} while (0)
 
 /* L2 protocol parsing */
 void net_in(struct netdev *dev, struct pkbuf *pkb)
@@ -55,13 +68,18 @@ void net_in(struct netdev *dev, struct pkbuf *pkb)
 //		rarp_in(dev, pkb);
 		break;
 	case ETH_P_ARP:
+		//MJ temp
+		printf("%s: arp message recved\n\r",__func__);
 		arp_in(dev, pkb);
 		break;
 	case ETH_P_IP:
+		printf("%s: IP  message recved\n\r",__func__);
 		ip_in(dev, pkb);
 		break;
 	default:
 		l2dbg("drop unkown-type packet");
+		printf("%s:drop unkown-type packet  \n\r",__func__);
+		free(pkb->pk_data);
 		free_pkb(pkb);
 		break;
 	}
@@ -76,4 +94,3 @@ void net_timer(void)
 		ip_timer(1);
 	}
 }
-#endif

@@ -19,7 +19,7 @@ pthread_t net_threads[2];
 sem_t interrupts[NUM_QUEUES + 1];
 
 
-extern void net_stack_init(void);
+extern void network_stack_init(void);
 
 /* FIXME: identical copy form storage.c */
 static void send_response(uint8_t *buf, uint8_t queue_id)
@@ -87,7 +87,7 @@ int net_stack_run(void)
 
 static int initialize_network(void)
 {
-        net_stack_init();
+        network_stack_init();
         return net_stack_run();
 }
 

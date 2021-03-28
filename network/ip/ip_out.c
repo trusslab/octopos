@@ -16,7 +16,9 @@
 #include <network/route.h>
 #include <network/lib.h>
 #endif /*ARCH_SEC_HW_NETWORK*/
+//#undef ipdbg
 
+//#define ipdbg(fmt, ...) printf(fmt"\n\r",##__VA_ARGS__)
 
 void ip_send_dev(struct netdev *dev, struct pkbuf *pkb)
 {

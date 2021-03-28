@@ -104,6 +104,7 @@ free_pkb:
  */
 void arp_in(struct netdev *dev, struct pkbuf *pkb)
 {
+#ifndef ARCH_SEC_HW_NETWORK
 	struct ether *ehdr = (struct ether *)pkb->pk_data;
 	struct arp *ahdr = (struct arp *)ehdr->eth_data;
 
@@ -141,4 +142,9 @@ void arp_in(struct netdev *dev, struct pkbuf *pkb)
 	return;
 err_free_pkb:
 	free_pkb(pkb);
+#else /*ARCH_SEC_HW_NETWORK*/
+	printf("%s: just drop arp packets for now\n\r",__func__);
+	free(pkb->pk_data);
+	free_pkb(pkb);
+#endif/*ARCH_SEC_HW_NETWORK*/	
 }

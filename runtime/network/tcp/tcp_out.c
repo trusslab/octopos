@@ -181,6 +181,7 @@ void tcp_send_syn(struct tcp_sock *tsk, struct tcp_segment *seg)
 	tcpdbg("send SYN(%u) [WIN %d] to "IPFMT":%d",
 			_ntohl(otcp->seq), _ntohs(otcp->window),
 			ipfmt(tsk->sk.sk_daddr), _ntohs(otcp->dst));
+
 	tcp_send_out(tsk, opkb, seg);
 }
 

@@ -163,33 +163,53 @@ void send_packet(uint8_t *buf)
 	NETWORK_GET_ZERO_ARGS_DATA
 	struct pkbuf *pkb = (struct pkbuf *) data;
     dump_packet(pkb);
-//    pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
-//	list_init(&pkb->pk_list);
-//	/* FIXME: add */
-//	//pkb_safe();
-//	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
-//		printf("%s: Error: packet size is not correct.\n", __func__);
-//		return;
-//	}
-//
-//	/* check the IP addresses */
-//	struct ip *iphdr = pkb2ip(pkb);
-//	if ((saddr != iphdr->ip_src) || (daddr != iphdr->ip_dst)) {
-//		printf("%s: Error: invalid src or dst IP addresses.\n", __func__);
-//		return;
-//	}
-//
-//	/* check the port numbers */
-//	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
-//	if ((sport != tcphdr->src) || (dport != tcphdr->dst)) {
-//		printf("%s: Error: invalid src or dst port numbers.\n", __func__);
-//		return;
-//	}
-//
-//	tcp_init_pkb(pkb);
-//
-//	ip_send_out(pkb);
+    pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
+	list_init(&pkb->pk_list);
+	/* FIXME: add */
+	//pkb_safe();
+	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
+		printf("%s: Error: packet size is not correct.\n", __func__);
+		return;
+	}
+
+	/* check the IP addresses */
+	struct ip *iphdr = pkb2ip(pkb);
+	if ((saddr != iphdr->ip_src) || (daddr != iphdr->ip_dst)) {
+		printf("%s: Error: invalid src or dst IP addresses.\n", __func__);
+		return;
+	}
+
+	/* check the port numbers */
+	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
+	if ((sport != tcphdr->src) || (dport != tcphdr->dst)) {
+		printf("%s: Error: invalid src or dst port numbers.\n", __func__);
+		return;
+	}
+	printf("%s: [0]\n\r",__func__);
+	tcp_init_pkb(pkb);
+	printf("%s: [1]\n\r",__func__);
+	ip_send_out(pkb);
+	printf("%s: [2]\n\r",__func__);
+
 }
+
+
+
+void network_stack_init(void)
+{
+        netdev_init();
+//#ifndef ARCH_SEC_HW_NETWORK	
+        arp_cache_init();
+        rt_init();
+    	//MJ FIXME remove the static ARP
+    	unsigned char host_mac_ethernet_address[] = {
+    		0xd0, 0x50, 0x99, 0x5e, 0x71, 0x0b };
+    	arp_insert(xileth,0x0800,
+    			0x101a8c0, host_mac_ethernet_address);
+//#endif
+
+}
+
 
 void process_cmd(uint8_t *buf)
 {
@@ -207,6 +227,9 @@ void process_cmd(uint8_t *buf)
 void tcp_in(struct pkbuf *pkb)
 {
 	/* check the IP addresses */
+	//MJ_TEMP
+	printf("%s: [0] tcp packet recved from computer\n\r");
+	dump_packet(pkb);
 	struct ip *iphdr = pkb2ip(pkb);
 	if ((daddr != iphdr->ip_src) || (saddr != iphdr->ip_dst)) {
 		printf("%s: Error: invalid src or dst IP addresses. Dropping the packet\n", __func__);
@@ -221,8 +244,14 @@ void tcp_in(struct pkbuf *pkb)
 	}
 	
 	int size = pkb->pk_len + sizeof(*pkb);
+	//MJ_TEMP
+	printf("%s: [1] about to send the data to the enclave\n\r",__func__);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
 	send_received_packet(buf, Q_NETWORK_DATA_OUT);
+	printf("%s: [2] data sent to the queue\n\r",__func__);
+	free_pkb(pkb);
+	printf("%s: [3] pkb_freed\n\r",__func__);
+
 }
 
 int main(int argc, char **argv)

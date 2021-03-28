@@ -8,21 +8,37 @@
 #include "lib.h"
 #include "list.h"
 #include "netcfg.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/lib.h>
+#include <network/list.h>
+#include <network/netcfg.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 /* localhost net device list */
 struct list_head net_devices;
 
 extern void loop_init(void);
-extern void veth_init(void);
 extern void loop_exit(void);
+
+
+#ifndef ARCH_SEC_HW_NETWORK
+extern void veth_init(void);
 extern void veth_exit(void);
 extern void veth_poll(void);
+#else /*ARCH_SEC_HW_NETWORK*/
+extern void xileth_init(void);
+extern void xileth_exit(void);
+extern void xileth_poll(void);
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 /* Alloc localhost net devices */
 struct netdev *netdev_alloc(char *devstr, struct netdev_ops *netops)
 {
 	struct netdev *dev;
-	dev = xzalloc(sizeof(*dev));
+	size_t s = sizeof(*dev);
+	dev = xzalloc(s);
 	/* add into localhost net device list */
 	list_add_tail(&dev->net_list, &net_devices);
 	/* set name */
@@ -44,7 +60,11 @@ void netdev_free(struct netdev *dev)
 
 void netdev_interrupt(void)
 {
+#ifndef ARCH_SEC_HW_NETWORK
 	veth_poll();
+#else
+	xileth_poll();
+#endif
 }
 
 /* create veth and lo */
@@ -52,12 +72,20 @@ void netdev_init(void)
 {
 	list_init(&net_devices);
 	loop_init();
+#ifndef ARCH_SEC_HW_NETWORK
 	veth_init();
+#else 
+	xileth_init();
+#endif
 }
 
 void netdev_exit(void)
 {
+#ifndef ARCH_SEC_HW_NETWORK
 	veth_exit();
+#else 
+	xileth_exit();
+#endif
 	loop_exit();
 }
 
@@ -103,4 +131,3 @@ int local_address(unsigned int addr)
 	}
 	return 0;
 }
-#endif

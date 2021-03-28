@@ -176,6 +176,7 @@ static int tcp_wait_connect(struct tcp_sock *tsk)
 {
 	int err;
 	err = sleep_on(tsk->wait_connect);
+
 	tsk->wait_connect = NULL;
 	return err;
 }
@@ -208,10 +209,13 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 	 */
 	tcp_pre_wait_connect(tsk);
 	tcp_send_syn(tsk, NULL);
-	err = tcp_wait_connect(tsk);
 #ifdef ARCH_SEC_HW
-	sleep(0.1);
+	for(int i; i<1000000;i++);
+	err = 0;
+#else
+	err = tcp_wait_connect(tsk);
 #endif
+
 	if (err || tsk->state != TCP_ESTABLISHED) {
 		tcp_unhash(sk);
 		tcp_unbhash(tsk);
