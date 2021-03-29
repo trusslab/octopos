@@ -1039,6 +1039,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			dir_data_ptr += 4;
 			memcpy(&(file->size), &dir_data[dir_data_ptr], 4);
 			dir_data_ptr += 4;
+			file->opened = 0;
 
 			add_file_to_list(file);
 		}
