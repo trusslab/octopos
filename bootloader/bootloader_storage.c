@@ -80,7 +80,8 @@
 #include "sleep.h"
 #include "xstatus.h"
 
-int load_boot_image_from_storage(int pid, void *ptr);
+void storage_request_boot_image_by_line();
+//int load_boot_image_from_storage(int pid, void *ptr);
 int write_boot_image_to_storage(int pid, void *ptr);
 
 /* if set, switch to image writer mode */
@@ -91,9 +92,7 @@ int write_boot_image_to_storage(int pid, void *ptr);
 //#define TARGET_BOOT_PROCESSOR P_KEYBOARD
 //#define TARGET_BOOT_PROCESSOR P_SERIAL_OUT
 
-#ifndef IMAGE_WRITER_MODE
-uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
-#else /* IMAGE_WRITER_MODE */
+#ifdef IMAGE_WRITER_MODE
 
 //uint8_t binary_DEBUG_READ_BACK[KEYBOARD_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #if (TARGET_BOOT_PROCESSOR == P_STORAGE)
@@ -109,8 +108,6 @@ uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #endif
 
 #endif /* IMAGE_WRITER_MODE */
-
-
 #endif /* ARCH_SEC_HW_BOOT */
 
 
@@ -215,6 +212,9 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 #endif
 }
 
+////DEBUG
+//uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
+
 /*
  * @filename: the name of the file in the partition
  * @path: file path in the host file system
@@ -277,10 +277,10 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 	close_file_system();
 	fclose(filep);
-#else
+#else /* ARCH_SEC_HW_BOOT */
 
 #ifndef IMAGE_WRITER_MODE
-	load_boot_image_from_storage(P_STORAGE, binary);
+	////storage_request_boot_image_by_line();
 #else /* IMAGE_WRITER_MODE */
 
 //#define TARGET_BOOT_PROCESSOR P_STORAGE
@@ -295,7 +295,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	SEC_HW_DEBUG_HANG();
 #endif /* IMAGE_WRITER_MODE */
 
-#endif
+#endif /* ARCH_SEC_HW_BOOT */
 
 	return 0;
 }

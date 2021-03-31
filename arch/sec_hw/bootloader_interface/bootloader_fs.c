@@ -15,6 +15,9 @@ static srec_info_t srinfo;
 static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 
+int partition_read_physical(u32 data_address, u32 size, void *ptr);
+void cleanup_qspi_flash();
+
 /*
  * @pid: processor id
  * Boot image storage starts at BOOT_IMAGE_OFFSET
@@ -149,4 +152,88 @@ void os_request_boot_image_by_line(char *filename, char *path)
 	/* if program reaches here, something goes wrong */
 	SEC_HW_DEBUG_HANG();
 	return;
+}
+
+
+void storage_request_boot_image_by_line()
+{
+    u8 unpack_buf[1024] = {0};
+    /* FIXME: storage has direct access to flash, so why not reading more each time? */
+    u8 buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
+    u16 unpack_buf_head = 0;
+    u32 base_address = 0;
+    int line_count;
+    void (*laddr)();
+    int _size;
+    int offset;
+
+    srinfo.sr_data = sr_data_buf;
+
+    offset = 0;
+    base_address = get_boot_image_address(P_STORAGE);
+
+    while (1) {
+        /* unpack buffer is full, but still, haven't finish a line */
+        if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
+            SEC_HW_DEBUG_HANG();
+
+        /* read message from file */
+        _size = partition_read_physical(base_address + offset, STORAGE_BLOCK_SIZE, buf);
+        if (_size == 0)
+            break;
+
+        if (_size < 0 || _size > STORAGE_BLOCK_SIZE) {
+            printf("Error: %s: reading file.\n", __func__);
+            break;
+        }
+
+        /* copy into unpack buffer */
+        memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
+        unpack_buf_head += STORAGE_BLOCK_SIZE;
+
+        /* load lines until there is no complete line in unpack buffer */
+        while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
+            if (decode_srec_line(sr_buf, &srinfo) != 0)
+                SEC_HW_DEBUG_HANG();
+
+            switch (srinfo.type) {
+                case SREC_TYPE_0:
+                    break;
+                case SREC_TYPE_1:
+                case SREC_TYPE_2:
+                case SREC_TYPE_3:
+                    memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+                    break;
+                case SREC_TYPE_5:
+                    break;
+                case SREC_TYPE_7:
+                case SREC_TYPE_8:
+                case SREC_TYPE_9:
+                    laddr = (void (*)())srinfo.addr;
+                    
+                    cleanup_qspi_flash();
+
+                    /* jump to start vector of loaded program */
+                    (*laddr)();
+
+                    /* the old program is dead at this point */
+                    break;
+            }
+
+            /* after loading the line, remove the contents being loaded */
+            memcpy(&unpack_buf[0],
+                    &unpack_buf[line_count],
+                    unpack_buf_head - line_count);
+
+//            sleep(5);
+            unpack_buf_head -= line_count;
+            memset(&unpack_buf[unpack_buf_head], 0, line_count);
+        }
+
+        offset += _size;
+    }
+
+    /* if program reaches here, something goes wrong */
+    SEC_HW_DEBUG_HANG();
+    return;
 }

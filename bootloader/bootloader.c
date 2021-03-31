@@ -149,6 +149,16 @@ void prepare_bootloader(char *filename, int argc, char *argv[]);
 int copy_file_from_boot_partition(char *filename, char *path);
 void send_measurement_to_tpm(char *path);
 
+//DEBUG >>>
+#ifdef ARCH_SEC_HW_BOOT_STORAGE
+
+int load_boot_image_from_storage(int pid, void *ptr);
+
+uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
+
+#endif
+//debug <<<
+
 #ifndef ARCH_SEC_HW_BOOT
 int main(int argc, char *argv[])
 #else
@@ -204,6 +214,18 @@ int main()
 
 	copy_file_from_boot_partition(name, path);
 
+	//debug >>>
+#ifdef ARCH_SEC_HW_BOOT_STORAGE
+	load_boot_image_from_storage(P_STORAGE, binary);
+	cleanup_qspi_flash();
+
+	    flbuf = binary;
+	    load_exec();
+
+	    /* we are in error if load_exec() returns */
+	    SEC_HW_DEBUG_HANG();
+#endif
+
 #ifndef ARCH_SEC_HW_BOOT
 	/* Add exec permission for the copied file */
 	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
@@ -227,18 +249,6 @@ int main()
 		char *const args[] = {name, NULL};
 		execv(path, args);
 	}
-#else /* ARCH_SEC_HW_BOOT */
-
-#if defined(ARCH_SEC_HW_BOOT_STORAGE)
-	cleanup_qspi_flash();
-
-    flbuf = binary;
-    load_exec();
-
-    /* we are in error if load_exec() returns */
-    SEC_HW_DEBUG_HANG();
-#endif
-
 #endif /* ARCH_SEC_HW_BOOT */
 
 	return 0;
