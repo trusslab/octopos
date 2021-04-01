@@ -154,12 +154,14 @@ void os_request_boot_image_by_line(char *filename, char *path)
 	return;
 }
 
+#define STORAGE_BOOT_BLOCK_SIZE 2048
+#define STORAGE_BOOT_UNPACK_BUF_SIZE 8192
 
 void storage_request_boot_image_by_line()
 {
-    u8 unpack_buf[1024] = {0};
+    u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
     /* FIXME: storage has direct access to flash, so why not reading more each time? */
-    u8 buf[STORAGE_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
+    u8 buf[STORAGE_BOOT_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
     u16 unpack_buf_head = 0;
     u32 base_address = 0;
     int line_count;
@@ -174,22 +176,22 @@ void storage_request_boot_image_by_line()
 
     while (1) {
         /* unpack buffer is full, but still, haven't finish a line */
-        if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
+        if (unpack_buf_head > STORAGE_BOOT_UNPACK_BUF_SIZE - STORAGE_BOOT_BLOCK_SIZE)
             SEC_HW_DEBUG_HANG();
 
         /* read message from file */
-        _size = partition_read_physical(base_address + offset, STORAGE_BLOCK_SIZE, buf);
+        _size = partition_read_physical(base_address + offset, STORAGE_BOOT_BLOCK_SIZE, buf);
         if (_size == 0)
             break;
 
-        if (_size < 0 || _size > STORAGE_BLOCK_SIZE) {
+        if (_size < 0 || _size > STORAGE_BOOT_BLOCK_SIZE) {
             printf("Error: %s: reading file.\n", __func__);
             break;
         }
 
         /* copy into unpack buffer */
-        memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
-        unpack_buf_head += STORAGE_BLOCK_SIZE;
+        memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BOOT_BLOCK_SIZE);
+        unpack_buf_head += STORAGE_BOOT_BLOCK_SIZE;
 
         /* load lines until there is no complete line in unpack buffer */
         while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
@@ -210,9 +212,10 @@ void storage_request_boot_image_by_line()
                 case SREC_TYPE_8:
                 case SREC_TYPE_9:
                     laddr = (void (*)())srinfo.addr;
-                    
+
                     cleanup_qspi_flash();
 
+//                    SEC_HW_DEBUG_HANG();
                     /* jump to start vector of loaded program */
                     (*laddr)();
 

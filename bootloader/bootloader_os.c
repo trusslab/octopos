@@ -147,7 +147,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		SEC_HW_DEBUG_HANG();
 
 	// FIXME: is there a better way to wait for storage boot?
-	sleep(1);
+	sleep(2);
 
 	initialize_storage();
 

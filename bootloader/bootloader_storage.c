@@ -84,15 +84,14 @@ void storage_request_boot_image_by_line();
 //int load_boot_image_from_storage(int pid, void *ptr);
 int write_boot_image_to_storage(int pid, void *ptr);
 
-/* if set, switch to image writer mode */
-//#define IMAGE_WRITER_MODE
-// #define TARGET_BOOT_PROCESSOR P_OS
+#ifdef IMAGE_WRITER_MODE
+
+/* select the target processor (for use by installer only */
+ #define TARGET_BOOT_PROCESSOR P_OS
 // #define TARGET_BOOT_PROCESSOR P_STORAGE
 // #define TARGET_BOOT_PROCESSOR P_RUNTIME1
 //#define TARGET_BOOT_PROCESSOR P_KEYBOARD
 //#define TARGET_BOOT_PROCESSOR P_SERIAL_OUT
-
-#ifdef IMAGE_WRITER_MODE
 
 //uint8_t binary_DEBUG_READ_BACK[KEYBOARD_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #if (TARGET_BOOT_PROCESSOR == P_STORAGE)
@@ -280,7 +279,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #else /* ARCH_SEC_HW_BOOT */
 
 #ifndef IMAGE_WRITER_MODE
-	////storage_request_boot_image_by_line();
+	storage_request_boot_image_by_line();
 #else /* IMAGE_WRITER_MODE */
 
 //#define TARGET_BOOT_PROCESSOR P_STORAGE
