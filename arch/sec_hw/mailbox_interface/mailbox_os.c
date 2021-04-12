@@ -379,9 +379,11 @@ void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
 	_SEC_HW_DEBUG("Writing: %08x", new_state);
 	_SEC_HW_DEBUG("Before yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
 
+
 	octopos_mailbox_set_status_reg(queue_ptr, *(u32 *) (&new_state));
 
 	_SEC_HW_DEBUG("After yielding: %08x", octopos_mailbox_get_status_reg(queue_ptr));
+
 }
 
 
@@ -1124,6 +1126,10 @@ int init_os_mailbox(void)
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
+
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
 //	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_IN]);
 //	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_CMD_OUT]);
 //	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_STORAGE_DATA_IN]);
@@ -1154,11 +1160,6 @@ int init_os_mailbox(void)
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_NETWORK_DATA_IN]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_NETWORK_DATA_OUT]);
 
-	Status = XIntc_Start(&intc, XIN_REAL_MODE);
-	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Start failed");
-		return XST_FAILURE;
-	}
 
 	/* Initialize pointers for bookkeeping */
 	Mbox_regs[Q_OS1] = &Mbox_OS1;
@@ -1237,6 +1238,12 @@ int init_os_mailbox(void)
 	XGpio_SetDataDirection(&reset_gpio_0, 1, 0x0);
 	XGpio_SetDataDirection(&reset_gpio_0, 2, 0x0);
 
+
+	Status = XIntc_Start(&intc, XIN_REAL_MODE);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("XIntc_Start failed");
+		return XST_FAILURE;
+	}
 	return XST_SUCCESS;
 }
 

@@ -379,6 +379,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	}
 	case SYSCALL_REQUEST_NETWORK_ACCESS: {
 		handle_request_network_access_syscall(runtime_proc_id, buf);
+
 		break;
 	}
 	case SYSCALL_CLOSE_SOCKET: {

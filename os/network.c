@@ -54,8 +54,6 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 	struct app *app = runtime_proc->app;
-//MJtemp
-	printf("\n\rin %s\n\r", __func__);
 	SYSCALL_GET_FOUR_ARGS
 	uint32_t protocol = arg0;
 	uint32_t requested_port = arg1;
@@ -64,8 +62,6 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 
 	if (protocol != TCP_SOCKET) {
 		SYSCALL_SET_TWO_RETS((uint32_t) 0, (uint32_t) 0)
-		//MJtemp
-		printf("\n\r protocol is wrong %s\n\r", __func__);
 		return;
 	}
 
@@ -100,21 +96,21 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 	app->socket_daddr = daddr;
 	app->socket_dport = dport;
 	app->socket_created = true;
-	//MJtemp
-	printf("\n\r%s: handled\n\r", __func__);
 	SYSCALL_SET_TWO_RETS(saddr, sport)
 }
+
+
+
 
 void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 					   uint8_t *buf)
 {
+
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 		return;
 	}
-//MJtemp
-	printf("\n\rin %s\n\r", __func__);
 
 	struct app *app = runtime_proc->app;
 	if (!app->socket_created) {
@@ -127,42 +123,41 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 
 	/* No more than 200 block reads/writes */
 	/* FIXME: hard-coded */
-//	if (count > 1800) {
+//	if (count > 200) {
 //		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 //		return;
 //	}
 	int ret_in = is_queue_available(Q_NETWORK_DATA_IN);
 	int ret_out = is_queue_available(Q_NETWORK_DATA_OUT);
+
 	/* Or should we make this blocking? */
 	if (!ret_in || !ret_out) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
 		return;
 	}
+
 	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
 	int ret = network_set_up_socket(app->socket_saddr, app->socket_sport,
 					app->socket_daddr, app->socket_dport);
-	printf("\n\r%s: [2.1]\n\r", __func__);
 	if (ret) {
-		printf("\n\r%s: [2.2]\n\r", __func__);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 		return;
 	}
+
 	mark_queue_unavailable(Q_NETWORK_DATA_IN);
 	mark_queue_unavailable(Q_NETWORK_DATA_OUT);
 	mailbox_delegate_queue_access(Q_NETWORK_DATA_IN, runtime_proc_id, (limit_t) count,
 			MAILBOX_NETWORK_TIMEOUT_VAL);
 	mailbox_delegate_queue_access(Q_NETWORK_DATA_OUT, runtime_proc_id, (limit_t) count,
 			MAILBOX_NETWORK_TIMEOUT_VAL);
-	//MJtemp
-	printf("\n\r%s:handled\n\r", __func__);
+
 	SYSCALL_SET_ONE_RET((uint32_t) 0)
 }
 
 void handle_close_socket_syscall(uint8_t runtime_proc_id,
 				 uint8_t *buf)
 {
-	printf("in %s\n", __func__);
 
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
@@ -182,6 +177,5 @@ void handle_close_socket_syscall(uint8_t runtime_proc_id,
 	app->socket_daddr = 0;
 	app->socket_dport = 0;
 
-	printf("\n\r%s:handled\n\r", __func__);
 	SYSCALL_SET_ONE_RET((uint32_t) 0)
 }

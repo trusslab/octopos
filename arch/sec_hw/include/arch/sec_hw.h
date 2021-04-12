@@ -142,9 +142,9 @@ char host_printf_buf[64];
 	do {xil_printf("--INFO: %-20.20s: " fmt "\r\n", __FUNCTION__,	\
 			##__VA_ARGS__);} while (0)
 
-// #define _SEC_HW_DEBUG1(fmt, ...)										\
-// 	do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n",		\
-// 		__FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
+ #define _SEC_HW_DEBUG_MJ(fmt, ...)										\
+ 	do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n",		\
+ 		__FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
 
 // #define _SEC_HW_DEBUG(fmt, ...)										\
 // 	do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n", 	\

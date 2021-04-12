@@ -223,8 +223,8 @@ int init_network(void)
 					*Config_cmd_in, 
 					*Config_Data_out, 
 					*Config_Data_in;
-	init_platform();
 
+	init_platform();
 
 	/* Initialize OCTOPOS_XMbox */
 	Config_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_NETWORK_MBOX_CMD_IN_DEVICE_ID);
@@ -416,6 +416,7 @@ int init_network(void)
 	printf("network stack init [0]\n\r");
 	network_stack_init();
 	printf("network stack init [1]\n\r");
+
 
 	return XST_SUCCESS;
 }

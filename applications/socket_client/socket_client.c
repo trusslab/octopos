@@ -12,6 +12,7 @@
 #include <network/sock.h>
 #include <network/socket.h>
 
+
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
 int num_chars = 0;
@@ -54,14 +55,10 @@ static void send_receive(struct runtime_api *api)
 {
 	char buf[32];
 	int len;
-
 	if (api->connect_socket(sock, &skaddr) < 0) {
 		printf("%s: Error: _connect\n", __func__);
-		//mj_temp
-		while(1);
 		return;
 	}
-
 	insecure_printf("Type your message: ");
 	int ret = api->read_from_shell(buf, &len);
 	if (ret) {
@@ -109,8 +106,9 @@ void socket_client(struct runtime_api *api)
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}
-
 	send_receive(api);
+
+
 
 out:	/* close and out */
 	if (sock) {

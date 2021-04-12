@@ -6,6 +6,7 @@
 #include "netif.h"
 #include "tcp.h"
 #include "ip.h"
+
 #else /*ARCH_SEC_HW*/
 #include <network/lib.h>
 #include <network/netif.h>
@@ -285,8 +286,7 @@ static _inline void tcp_update_window(struct tcp_sock *tsk,
 			(tsk->snd_wl1 == seg->seq && tsk->snd_wl2 <= seg->ack)))
 		__tcp_update_window(tsk, seg);
 }
-#undef tcpdbg
-#define tcpdbg(fmt,...) _SEC_HW_DEBUG_MJ(fmt, ##__VA_ARGS__)
+
 /* Tcp state process method is implemented via RFC 793 #SEGMENT ARRIVE */
 void tcp_process(struct pkbuf *pkb, struct tcp_segment *seg, struct sock *sk)
 {

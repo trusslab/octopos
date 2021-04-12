@@ -25,7 +25,7 @@ struct netif server_netif;
 
 struct netdev *xileth;
 int hardware_ready = 0;
-
+int xil_netif_initialized =0;
 
 static void xileth_dev_exit(struct netdev *dev)
 {
@@ -77,30 +77,37 @@ static struct netdev_ops xileth_ops = {
 static int xileth_recv(struct pkbuf *pkb)
 {
 	int l;
-	struct xemac_s *xemac = (struct xemac_s *)(xil_netif->state);
-	struct pbuf *p;
-	xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
-//	printf("%s: [0] %d\n\r",__func__,pq_qlength(xaxiemacif->recv_q));
-	if (pq_qlength(xaxiemacif->recv_q) == 0)
-		return 0;
-	printf("%s: [1] something on the queue \n\r",__func__);
-	p = (struct pbuf *)pq_dequeue(xaxiemacif->recv_q);
-	l = p->tot_len;
-	pkb->pk_len = l;
-	memcpy(pkb->pk_data, p->payload, l);
-	free(p->payload);
-	free(p);
-	//l = read(tap->fd, pkb->pk_data, pkb->pk_len);
-	if (l <= 0) {
-		devdbg("read net dev");
-		xileth->net_stats.rx_errors++;
-	} else {
-		devdbg("read net dev size: %d\n", l);
-		xileth->net_stats.rx_packets++;
-		xileth->net_stats.rx_bytes += l;
+	if(xil_netif_initialized == 1){
+		struct xemac_s *xemac = (struct xemac_s *)(xil_netif->state);
+		struct pbuf *p;
+	//	printf("%s: xemac=%p\r\n",xemac);
+		xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
+
+//		printf("%s: [0] %d\n\r",__func__,pq_qlength(xaxiemacif->recv_q));
+		if (pq_qlength(xaxiemacif->recv_q) == 0)
+			return 0;
+//		printf("%s: [1] something on the queue \n\r",__func__);
+		p = (struct pbuf *)pq_dequeue(xaxiemacif->recv_q);
+		l = p->tot_len;
 		pkb->pk_len = l;
+		memcpy(pkb->pk_data, p->payload, l);
+		free(p->payload);
+		free(p);
+		//l = read(tap->fd, pkb->pk_data, pkb->pk_len);
+		if (l <= 0) {
+			devdbg("read net dev");
+			xileth->net_stats.rx_errors++;
+		} else {
+			devdbg("read net dev size: %d\n", l);
+			xileth->net_stats.rx_packets++;
+			xileth->net_stats.rx_bytes += l;
+			pkb->pk_len = l;
+		}
+		return l;
+	}else{
+		return 0;
 	}
-	return l;
+
 }
 
 static void xileth_rx(void)
@@ -124,6 +131,7 @@ void xileth_init(void)
 	initialize_network_hardware(xil_netif);
 	hardware_ready = 1;
 	xileth_dev_init(xileth);
+	xil_netif_initialized = 1;
 
 }
 

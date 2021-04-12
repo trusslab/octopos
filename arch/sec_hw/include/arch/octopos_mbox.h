@@ -25,6 +25,7 @@
 #define OCTOPOS_OS_Q_NETWORK_DATA_OUT_BASEADDR 0x44A10000
 #define OCTOPOS_OS_Q_NETWORK_IN_2_BASEADDR 0x44A20000
 #define OCTOPOS_OS_Q_NETWORK_OUT_2_BASEADDR 0x44A30000
+#define OCTOPOS_OS_Q_NETWORK_ARBITER_BASEADDR 0x44A40000
 /* mailbox ctrl register addresses mapped to Microblaze 0 and 1 */
 #define OCTOPOS_SERIAL_MAILBOX_1WRI_0_BASEADDR 0x44A00000
 
@@ -42,6 +43,7 @@
 #define OCTOPOS_ENCLAVE_Q_NETWORK_DATA_OUT_BASEADDR 0x44A60000
 #define OCTOPOS_ENCLAVE_Q_NETWORK_IN_2_BASEADDR 0x44A70000
 #define OCTOPOS_ENCLAVE_Q_NETWORK_OUT_2_BASEADDR 0x44A80000
+#define OCTOPOS_ENCLAVE_Q_NETWORK_ARBITER_BASEADDR 0x44A90000
 
 /* mailbox ctrl register addresses mapped to Microblaze 4 */
 #define OCTOPOS_STORAGE_Q_STORAGE_DATA_IN_BASEADDR 0x43605000
@@ -56,6 +58,9 @@
 #define OCTOPOS_NETWORK_Q_NETWORK_IN_2_BASEADDR 0x44A10000
 #define OCTOPOS_NETWORK_Q_NETWORK_OUT_2_BASEADDR 0x43605000
 
+
+/* mailbox ctrl register addresses mapped to A53 */
+#define OCTOPOS_A53_Q_NETWORK_ARBITER_BASEADDR 0x00A0060000
 /***************************************************************/
 /* Mailbox data access parameters                              */
 /***************************************************************/
