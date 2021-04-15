@@ -369,9 +369,12 @@ repeat:
 #ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
 #else
+
 //		volatile u32 reg_tmp1 = octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 //		volatile limit_t count_tmp1 = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+
 		_sem_retrieve_mailbox_message_blocking_buf(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+
 // #if defined(ARCH_SEC_HW_BOOT_KEYBOARD)
 // 		printf("%s\n", buf);
 // #endif
@@ -384,6 +387,7 @@ repeat:
 		fseek(copy_filep, offset, SEEK_SET);
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
 #else
+
         /* copy into unpack buffer */
         memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
         unpack_buf_head += STORAGE_BLOCK_SIZE;
@@ -406,6 +410,7 @@ repeat:
                 case SREC_TYPE_7:
                 case SREC_TYPE_8:
                 case SREC_TYPE_9:
+
                 	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
 
 //					while(0xdeadbeef != octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])) {

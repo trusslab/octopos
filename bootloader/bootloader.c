@@ -19,6 +19,7 @@
 #include <arch/sec_hw.h>
 #include <arch/portab.h>
 #include <arch/srec_errors.h>
+#include <arch/mem_layout.h>
 #include <arch/srec.h>
 
 void init_platform();
@@ -159,6 +160,11 @@ void send_measurement_to_tpm(char *path);
 //#endif
 //debug <<<
 
+// debug
+#ifdef ARCH_SEC_HW_BOOT_STORAGE
+int bss_nop_counter = 0;
+#endif
+
 #ifndef ARCH_SEC_HW_BOOT
 int main(int argc, char *argv[])
 #else
@@ -177,6 +183,23 @@ int main()
 
 	char *name = argv[1];
 #else /* ARCH_SEC_HW_BOOT */
+
+// debug
+//#ifdef ARCH_SEC_HW_BOOT_STORAGE
+//    sleep(10);
+//#endif
+//#ifndef ARCH_SEC_HW_BOOT_STORAGE
+    /* FIXME: zeroing DDR memory is not necessary for the first boot */
+    memset((void*) DDR_BASE_ADDRESS, 0, DDR_RANGE);
+//#endif
+
+//// debug
+//#ifdef ARCH_SEC_HW_BOOT_STORAGE
+//////	for (bss_nop_counter = 0; bss_nop_counter < 100000000; bss_nop_counter++)
+//////		asm("nop");
+//////    memset((void*) 0x60000000, 0, 0x1ffffff);
+//    sleep(10);
+//#endif
 
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
 	char *name = ":storage";

@@ -22,6 +22,8 @@
 
 extern OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
 extern UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
+
+u32 octopos_mailbox_get_status_reg(UINTPTR base);
 #endif
 
 int untrusted_needs_help_with_boot = 0;
@@ -114,9 +116,9 @@ void help_boot_procs(int boot_untrusted)
 	if (boot_untrusted)
 		help_boot_untrusted_proc();
 #else
-//	help_boot_keyboard_proc();
-//	help_boot_serial_out_proc();
-//	help_boot_runtime_proc(P_RUNTIME1);
+	help_boot_serial_out_proc();
+	help_boot_keyboard_proc();
+	help_boot_runtime_proc(P_RUNTIME1);
 #endif
 }
 

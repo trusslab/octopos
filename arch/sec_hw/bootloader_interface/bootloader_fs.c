@@ -159,6 +159,13 @@ void os_request_boot_image_by_line(char *filename, char *path)
 
 void storage_request_boot_image_by_line()
 {
+//	memset((void*) 0x600f0000, 0, STORAGE_BOOT_BLOCK_SIZE + 48);
+//	u8* buf = (void*) 0x600f0000;
+//	// write and readback test
+//	*buf = 0xb0;
+//	volatile u8 buf_readback = *buf;
+//	SEC_HW_DEBUG_HANG();
+
     u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
     /* FIXME: storage has direct access to flash, so why not reading more each time? */
     u8 buf[STORAGE_BOOT_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));

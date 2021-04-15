@@ -35,9 +35,9 @@ void cleanup_platform();
  */
 #define MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR 4
 #define STORAGE_IMAGE_SIZE 273408
-#define OS_IMAGE_SIZE 442368
+#define OS_IMAGE_SIZE 444928
 #define RUNTIME1_IMAGE_SIZE 460288
-#define KEYBOARD_IMAGE_SIZE 324608
+#define KEYBOARD_IMAGE_SIZE 325120
 #define SERIALOUT_IMAGE_SIZE 320512
 
 /* boot images store at this sector and beyond */
