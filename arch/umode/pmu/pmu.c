@@ -310,7 +310,7 @@ static int start_health_server_proc(void)
 static int start_display_proc(void)
 {
 	char *const args[] = {(char*) "display server", NULL};
-	char path[] = "./display/displayTest";
+	char path[] = "./display/display";
 	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
 }
 
@@ -668,6 +668,10 @@ static void *proc_reboot_handler(void *data)
 			sprintf(proc_name, "Health Server");
 			if (do_restart)
 				health_server_pid = start_health_server_proc();
+		} else if (pid == display_server_pid) {
+			sprintf(proc_name, "Display Server");
+			if (do_restart)
+				display_server_pid = start_display_proc();
 		} else {
 			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 			continue;
