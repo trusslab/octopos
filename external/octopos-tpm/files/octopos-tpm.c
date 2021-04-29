@@ -16,6 +16,9 @@
 
 #define MAILBOX_QUEUE_MSG_SIZE	64
 
+#define SHORT_BUFFER		0
+#define LARGE_BUFFER		1
+
 /******** dummy implementations for now *********/
 //#define	P_OS			1
 //#define	P_KEYBOARD		2
@@ -113,24 +116,25 @@ static ssize_t otpm_dev_read(struct file *filp, char __user *buf, size_t size,
 static ssize_t otpm_dev_write(struct file *filp, const char __user *buf,
 			      size_t size, loff_t *offp)
 {
-	uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE];
+	uint8_t resp_buf[MAILBOX_QUEUE_MSG_SIZE + 1];
 	int ret;
 
 	if (*offp != 0)
 		return 0;
  
-	if (size != MAILBOX_QUEUE_MSG_SIZE)
+	if (size != (MAILBOX_QUEUE_MSG_SIZE + 1))
 		return 0;
 
-	memset(resp_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+	memset(resp_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE + 1);
 
 	ret = copy_from_user(resp_buf, buf, size);
 	
 	*offp += (size - ret);
 	
-	send_tpm_response(resp_buf, current_proc);
+	send_tpm_response(resp_buf + 1, current_proc);
 
-	up(&mutex);
+	if (resp_buf[0] == SHORT_BUFFER)
+		up(&mutex);
 	
 	return (size - ret);
 }
