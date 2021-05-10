@@ -29,7 +29,7 @@ int fd_keyboard, fd_serial_out, fd_untrusted_in;
 pid_t mailbox_pid, tpm_server_pid, tpm2_abrmd_pid, os_pid,
       keyboard_pid, serial_out_pid, runtime1_pid, runtime2_pid, storage_pid,
       network_pid, bluetooth_pid, untrusted_pid, socket_server_pid,
-      attest_server_pid, bank_server_pid, health_server_pid, display_server_pid;
+      attest_server_pid, bank_server_pid, health_server_pid, display_pid;
 
 struct termios orig;
 
@@ -328,7 +328,7 @@ static void start_all_procs(void)
 	network_pid = start_network_proc();
 	bluetooth_pid = start_bluetooth_proc();
 	untrusted_pid = start_untrusted_proc();
-	display_server_pid = start_display_proc();
+	display_pid = start_display_proc();
 	/* These servers are not part of OctopOS.
 	 * We start them here since they're useful for testing.
 	 */
@@ -404,7 +404,7 @@ static void halt_all_procs(void)
 	kill(bank_server_pid, SIGKILL);
 	kill(attest_server_pid, SIGKILL);
 	kill(socket_server_pid, SIGKILL);
-	kill(display_server_pid, SIGKILL);
+	kill(display_pid, SIGKILL);
 
 	halt_proc(P_BLUETOOTH);
 
@@ -668,10 +668,10 @@ static void *proc_reboot_handler(void *data)
 			sprintf(proc_name, "Health Server");
 			if (do_restart)
 				health_server_pid = start_health_server_proc();
-		} else if (pid == display_server_pid) {
+		} else if (pid == display_pid) {
 			sprintf(proc_name, "Display Server");
 			if (do_restart)
-				display_server_pid = start_display_proc();
+				display_pid = start_display_proc();
 		} else {
 			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 			continue;

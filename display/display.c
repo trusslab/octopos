@@ -2,10 +2,14 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>	
-
 #include <stdio.h>
 #include <stdlib.h>	
 #include <unistd.h>	
+#include <string.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <arch/mailbox_display.h>
 // #include <MagickWand/MagickWand.h>
 
 #include "png.h"
@@ -58,8 +62,16 @@
 
 int main(int argc, char **argv)
 {
-		int status = system("display /home/pravred/trusslab/octopos/display/peter.png");
-		printf("Status: %i\n", status);
+
+
+    int ret = init_display();
+	if (ret)
+		return ret;
+
+    // display server code goes here
+
+    close_display();
+
         // int win_b_color;
         // int win_w_color;
         // Window window;
@@ -103,6 +115,8 @@ int main(int argc, char **argv)
                 // else if (event.type == KeyPress)
                     // exit = true;
         // }
+
+// int status = system("display /home/pravred/trusslab/octopos/display/peter.png");
 
         return 0;
 }

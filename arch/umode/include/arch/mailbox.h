@@ -28,5 +28,8 @@
 #define FIFO_UNTRUSTED_OUT	"/tmp/octopos_mailbox_untrusted_out"
 #define FIFO_UNTRUSTED_IN	"/tmp/octopos_mailbox_untrusted_in"
 #define FIFO_UNTRUSTED_INTR	"/tmp/octopos_mailbox_untrusted_intr"
+#define FIFO_DISPLAY_OUT    "/tmp/octopos_display_out"
+#define FIFO_DISPLAY_IN     "/tmp/octopos_display_in"
+#define FIFO_DISPLAY_INTR   "/tmp/octopos_display_intr"
 
 #endif

@@ -24,11 +24,12 @@
 #define	P_RUNTIME1		7
 #define	P_RUNTIME2		8
 #define P_UNTRUSTED		9
-#define NUM_PROCESSORS		9
-#define ALL_PROCESSORS		10
+#define P_DISPLAY		10
+#define NUM_PROCESSORS		10
+#define ALL_PROCESSORS		11
 /* FIXME: just used for using the TPM API in PMU. */
-#define P_PMU			10
-#define INVALID_PROCESSOR	11
+#define P_PMU			11
+#define INVALID_PROCESSOR	12
 
 #define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */
 
@@ -53,7 +54,8 @@
 #define	Q_RUNTIME2		18
 #define	Q_OSU			19
 #define	Q_UNTRUSTED		20
-#define NUM_QUEUES		20
+#define Q_DISPLAY		21
+#define NUM_QUEUES		21
 
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64
