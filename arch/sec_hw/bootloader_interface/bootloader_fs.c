@@ -24,9 +24,51 @@ void cleanup_qspi_flash();
  */
 u32 get_boot_image_address(int pid)
 {
-    u32 address = 
-        (BOOT_IMAGE_OFFSET + pid * MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR) *
-        QSPI_SECTOR_SIZE;
+    u32 address;
+
+    if (pid <= P_UNTRUSTED) {
+        address = 
+            (BOOT_IMAGE_OFFSET + pid * MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR) *
+            QSPI_SECTOR_SIZE;
+    } else {
+        address = 
+            (
+                BOOT_IMAGE_OFFSET +
+                UNTRUSTED_IMAGE_SIZE_IN_SECTOR + 
+                (pid - 1) * MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR
+            ) * QSPI_SECTOR_SIZE;
+    }
+
+    return address;
+}
+
+/*
+ * @pid: processor id
+ * in case of untrusted domain (i.e., petalinux kernel), 
+ * pid = 100 + image index
+ */
+u32 get_boot_image_write_address(int pid)
+{
+    u32 address;
+
+    if (pid <= NUM_PROCESSORS) {
+        address = get_boot_image_address(pid);
+    } else if (pid >= P_UNTRUSTED_BOOT_P0) {
+        switch(pid) {
+            case P_UNTRUSTED_BOOT_P0:
+                address = get_boot_image_address(P_UNTRUSTED) + 0;
+                break;
+
+            case P_UNTRUSTED_BOOT_P1:
+                address = get_boot_image_address(P_UNTRUSTED) + UNTRUSTED_KERNEL_P0_SIZE;
+                break;
+
+            default:
+                SEC_HW_DEBUG_HANG();
+        }
+    } else {
+        SEC_HW_DEBUG_HANG();
+    }
 
     return address;
 }

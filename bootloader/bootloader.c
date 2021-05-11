@@ -38,7 +38,7 @@ static uint8 flash_get_srec_line (uint8 *buf);
 extern void init_stdout();
 
 extern int srec_line;
-extern uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
+// extern uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 
 extern void outbyte(char c);
 

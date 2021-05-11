@@ -119,7 +119,7 @@ uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 
 #ifdef ARCH_SEC_HW_STORAGE
 uint32_t boot_image_sizes[NUM_PROCESSORS + 1] = 
-	{0, OS_IMAGE_SIZE, KEYBOARD_IMAGE_SIZE, SERIALOUT_IMAGE_SIZE, STORAGE_IMAGE_SIZE, 0, 0, RUNTIME1_IMAGE_SIZE, 0 ,0 ,0};
+	{0, OS_IMAGE_SIZE, KEYBOARD_IMAGE_SIZE, SERIALOUT_IMAGE_SIZE, STORAGE_IMAGE_SIZE, 0, 0, RUNTIME1_IMAGE_SIZE, 0 ,UNTRUSTED_KERNEL_SIZE ,0};
 #endif
 
 bool is_queue_set_bound = false;
@@ -131,6 +131,7 @@ bool is_config_locked = false;
 #ifdef ARCH_SEC_HW_STORAGE
 uint8_t get_srec_line(uint8_t *line, uint8_t *buf);
 u32 get_boot_image_address(int pid);
+u32 get_boot_image_write_address(int pid);
 
 typedef struct __attribute__((__packed__)) {
 	u16 partition_id;
@@ -644,10 +645,10 @@ int partition_write_physical(u32 data_address, u32 size, void *ptr)
 	sector_count = size / Flash_Config_Table[FCTIndex].SectSize +
 				(size % Flash_Config_Table[FCTIndex].SectSize != 0);
 
-	if (sector_count > MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR) {
-		SEC_HW_DEBUG_HANG();
-		return ERR_INVALID;
-	}
+	// if (sector_count > MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR) {
+	// 	SEC_HW_DEBUG_HANG();
+	// 	return ERR_INVALID;
+	// }
 
 	/* we already align data_address with sector start address.
 	 * erase size doesn't matter.
@@ -686,14 +687,23 @@ int write_boot_image_to_storage(int pid, void *ptr)
 {
 	u32 address;
 
-	if (pid >= NUM_PROCESSORS) {
-		return ERR_INVALID;
-	}
+	address = get_boot_image_write_address(pid);
 
-	address = get_boot_image_address(pid);
+    switch(pid) {
+        case P_UNTRUSTED_BOOT_P0:
+            partition_write_physical(address, UNTRUSTED_KERNEL_P0_SIZE, ptr);
+            break;
 
-	partition_write_physical(address, boot_image_sizes[pid], ptr);
+        case P_UNTRUSTED_BOOT_P1:
+            partition_write_physical(address, UNTRUSTED_KERNEL_P1_SIZE, ptr);
+            break;
 
+        default:
+            partition_write_physical(address, boot_image_sizes[pid], ptr);
+            break;
+    }
+
+    SEC_HW_DEBUG_HANG();
 	return 0;
 }
 
@@ -1075,6 +1085,11 @@ void process_request(uint8_t *buf)
 			for (u32 blk = 0; blk < num_blocks; blk++) {
 				partition_read_physical(address + blk * STORAGE_BLOCK_SIZE,
 						STORAGE_BLOCK_SIZE, message_buf);
+				// // DEBUG >>>
+				// u32 DBG_untrusted_addr = (BOOT_IMAGE_OFFSET + 9 * 4) * 128 * 1024;
+				// if (address >= DBG_untrusted_addr && blk >= 2)
+				// 	SEC_HW_DEBUG_HANG();
+				// // DEBUG <<<
 //				SEC_HW_DEBUG_HANG();
 				write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
 			}

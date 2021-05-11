@@ -34,11 +34,18 @@ void cleanup_platform();
  * its okay to be bigger than actual size (ceiling to the next multiple of 512).
  */
 #define MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR 4
+#define UNTRUSTED_IMAGE_SIZE_IN_SECTOR 140
 #define STORAGE_IMAGE_SIZE 273408
-#define OS_IMAGE_SIZE 444928
+#define OS_IMAGE_SIZE 445440
 #define RUNTIME1_IMAGE_SIZE 460288
 #define KEYBOARD_IMAGE_SIZE 325120
 #define SERIALOUT_IMAGE_SIZE 320512
+#define UNTRUSTED_KERNEL_SIZE 18057216
+
+#define P_UNTRUSTED_BOOT_P0 100
+#define P_UNTRUSTED_BOOT_P1 101
+#define UNTRUSTED_KERNEL_P0_SIZE 13107200
+#define UNTRUSTED_KERNEL_P1_SIZE 4950016
 
 /* boot images store at this sector and beyond */
 #define BOOT_IMAGE_OFFSET 100

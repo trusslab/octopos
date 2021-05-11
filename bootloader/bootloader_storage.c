@@ -92,6 +92,8 @@ int write_boot_image_to_storage(int pid, void *ptr);
 // #define TARGET_BOOT_PROCESSOR P_RUNTIME1
 //#define TARGET_BOOT_PROCESSOR P_KEYBOARD
 //#define TARGET_BOOT_PROCESSOR P_SERIAL_OUT
+//#define TARGET_BOOT_PROCESSOR P_UNTRUSTED_BOOT_P0
+//#define TARGET_BOOT_PROCESSOR P_UNTRUSTED_BOOT_P1
 
 //uint8_t binary_DEBUG_READ_BACK[KEYBOARD_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #if (TARGET_BOOT_PROCESSOR == P_STORAGE)
@@ -104,6 +106,10 @@ int write_boot_image_to_storage(int pid, void *ptr);
 #include "arch/bin/keyboard_image.h"
 #elif (TARGET_BOOT_PROCESSOR == P_SERIAL_OUT)
 #include "arch/bin/serialout_image.h"
+#elif (TARGET_BOOT_PROCESSOR == P_UNTRUSTED_BOOT_P0)
+#include "arch/bin/image.bin.0.h"
+#elif (TARGET_BOOT_PROCESSOR == P_UNTRUSTED_BOOT_P1)
+#include "arch/bin/image.bin.1.h"
 #endif
 
 #endif /* IMAGE_WRITER_MODE */

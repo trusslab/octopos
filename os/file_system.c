@@ -520,9 +520,9 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 			file->num_blocks = 0;
 			file->size = 0;
 		} else if (!strcmp(file->filename, "linux")) {
-			file->start_block = 0;
-			file->num_blocks = 0;
-			file->size = 0;
+			file->start_block = get_boot_image_address(P_UNTRUSTED);
+			file->num_blocks = UNTRUSTED_KERNEL_SIZE / STORAGE_BLOCK_SIZE;
+			file->size = UNTRUSTED_KERNEL_SIZE;
 		} else {
 			printf("Error: %s: unknown binary (%s)\r\n",
 				__func__, 
@@ -882,6 +882,24 @@ repeat:
 
 	buf[0] = STORAGE_OP_READ;
 	send_msg_to_storage_no_response(buf);
+
+// ////// DEBUG >>>
+// 	u8 DBG_buf[64];
+// 	read_from_storage_data_queue(DBG_buf);
+// 	for (int ii = 0; ii < 64; ii++) {
+// 		if (ii % 32 == 0)
+// 			printf("\r\n");
+// 		printf("%02x", DBG_buf[ii]);
+// 	}
+// 	printf("\r\n");
+// 	read_from_storage_data_queue(DBG_buf);
+// 	for (int ii = 0; ii < 64; ii++) {
+// 		if (ii % 32 == 0)
+// 			printf("\r\n");
+// 		printf("%02x", DBG_buf[ii]);
+// 	}
+// 	printf("\r\n");
+// ////// DEBUG <<<
 
 	if (num_blocks) {
 		get_response_from_storage(buf);
