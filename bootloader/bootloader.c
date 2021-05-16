@@ -25,6 +25,13 @@
 #include <arch/mem_layout.h>
 #include <arch/srec.h>
 
+/* Need to make sure msgs are big enough so that we don't overflow
+ * when processing incoming msgs and preparing outgoing ones.
+ */
+#if MAILBOX_QUEUE_MSG_SIZE < 64
+#error MAILBOX_QUEUE_MSG_SIZE is too small.
+#endif
+
 void init_platform();
 void cleanup_platform();
 void cleanup_qspi_flash();
@@ -109,10 +116,6 @@ static uint8 flash_get_srec_line (uint8 *buf)
             return LD_SREC_LINE_ERROR;
     }
 }
-#endif
-
-#if MAILBOX_QUEUE_MSG_SIZE < 64
-#error MAILBOX_QUEUE_MSG_SIZE is too small.
 #endif
 
 void prepare_bootloader(char *filename, int argc, char *argv[]);
@@ -278,7 +281,7 @@ int main(int argc, char *argv[])
     printf("%s: passed secure boot.\n", __func__);
     
     bootloader_close_file_system();
-    
+
 	/* Add exec permission for the copied file */
 	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
 

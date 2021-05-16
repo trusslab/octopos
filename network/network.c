@@ -18,6 +18,13 @@
 #include <network/tcp.h>
 #include <arch/mailbox.h>
 
+/* Need to make sure msgs are big enough so that we don't overflow
+ * when processing incoming msgs and preparing outgoing ones.
+ */
+#if MAILBOX_QUEUE_MSG_SIZE < 64
+#error MAILBOX_QUEUE_MSG_SIZE is too small.
+#endif
+
 #define NETWORK_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
 

@@ -5,9 +5,15 @@
 #include <octopos/mailbox.h>
 #include <arch/mailbox_serial_out.h>
 #include <arch/defines.h>
-#include <tpm/tpm.h>
 #ifdef ARCH_SEC_HW
 #include <sleep.h>
+#endif
+
+/* Need to make sure msgs are big enough so that we don't overflow
+ * when processing incoming msgs and preparing outgoing ones.
+ */
+#if MAILBOX_QUEUE_MSG_SIZE < 64
+#error MAILBOX_QUEUE_MSG_SIZE is too small.
 #endif
 
 static int serial_out_core(void)

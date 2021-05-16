@@ -127,6 +127,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	return 0;
 }
 
-#endif
+#endif /* ARCH_SEC_HW_BOOT */
 
 #endif

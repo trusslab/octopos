@@ -29,17 +29,17 @@
 #define SYSCALL_READ_FROM_FILE			9
 #define SYSCALL_WRITE_FILE_BLOCKS		10
 #define SYSCALL_READ_FILE_BLOCKS		11
-#define SYSCALL_CLOSE_FILE			12
-#define SYSCALL_REMOVE_FILE			13
-#define SYSCALL_REQUEST_SECURE_STORAGE_CREATION	14
-#define SYSCALL_REQUEST_SECURE_STORAGE_ACCESS	15
-#define SYSCALL_DELETE_SECURE_STORAGE		16
+#define SYSCALL_GET_FILE_SIZE			12
+#define SYSCALL_CLOSE_FILE			13
+#define SYSCALL_REMOVE_FILE			14
+#define SYSCALL_REQUEST_SECURE_STORAGE_CREATION	15
+#define SYSCALL_REQUEST_SECURE_STORAGE_ACCESS	16
 #define SYSCALL_REQUEST_SECURE_IPC		17
 #define SYSCALL_ALLOCATE_SOCKET			18
 #define SYSCALL_REQUEST_NETWORK_ACCESS		19
 #define SYSCALL_CLOSE_SOCKET			20
-#define SYSCALL_DEBUG_OUTPUTS			21
-#define SYSCALL_REQUEST_TPM_ACCESS		22
+#define SYSCALL_REQUEST_BLUETOOTH_ACCESS	21
+#define SYSCALL_DEBUG_OUTPUTS			22
 #define NUM_SYSCALLS				23
 
 /* FIXME: move somewhere else */
@@ -132,6 +132,25 @@
 	buf[10] = size;								\
 	memcpy(&buf[11], (uint8_t *) data, size);				\
 
+#define SYSCALL_SET_THREE_ARGS_DATA(syscall_nr, arg0, arg1, arg2, data, size)	\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
+	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 15;				\
+	if (max_size >= 256) {							\
+		printf("Error (%s): max_size not supported\n", __func__);	\
+		return ERR_INVALID;						\
+	}									\
+	if (size > max_size) {							\
+		printf("Error (%s): size not supported\n", __func__);		\
+		return ERR_INVALID;						\
+	}									\
+	SERIALIZE_16(syscall_nr, &buf[0])					\
+	SERIALIZE_32(arg0, &buf[2])						\
+	SERIALIZE_32(arg1, &buf[6])						\
+	SERIALIZE_32(arg2, &buf[10])						\
+	buf[14] = size;								\
+	memcpy(&buf[15], (uint8_t *) data, size);				\
+
 #define SYSCALL_SET_ONE_RET(ret0)			\
 	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
 	SERIALIZE_32(ret0, &buf[1])			\
@@ -189,14 +208,14 @@
 /* FIXME: are we sure data is big enough for the memcpy here? */
 #define SYSCALL_GET_ONE_RET_DATA(data)						\
 	uint32_t ret0;								\
-	uint8_t _size, max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
+	uint8_t _size, _max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
 	ret0 = *((uint32_t *) &buf[1]);						\
-	if (max_size >= 256) {							\
+	if (_max_size >= 256) {							\
 		printf("Error (%s): max_size not supported\n", __func__);	\
 		return ERR_INVALID;						\
 	}									\
 	_size = buf[5];								\
-	if (_size > max_size) {							\
+	if (_size > _max_size) {							\
 		printf("Error (%s): size not supported\n", __func__);		\
 		return ERR_INVALID;						\
 	}									\

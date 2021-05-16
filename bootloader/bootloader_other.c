@@ -472,4 +472,4 @@ void send_measurement_to_tpm(char *path)
 }
 #endif /* ARCH_SEC_HW_BOOT */
 
-#endif  /* !defined(ARCH_SEC_HW_BOOT) || defined(ARCH_SEC_HW_BOOT_OTHER) */
+#endif 

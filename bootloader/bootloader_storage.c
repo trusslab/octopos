@@ -63,12 +63,12 @@
 #include <semaphore.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <tpm/tpm.h>
 #endif
 #include <stdint.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
-#include <octopos/tpm.h>
 #include <os/file_system.h>
 #include <tpm/hash.h>
 #ifndef ARCH_SEC_HW_BOOT
@@ -95,6 +95,7 @@ int write_boot_image_to_storage(int pid, void *ptr);
 //#define TARGET_BOOT_PROCESSOR P_UNTRUSTED_BOOT_P0
 //#define TARGET_BOOT_PROCESSOR P_UNTRUSTED_BOOT_P1
 
+/* debug code needed for future storage development */
 //uint8_t binary_DEBUG_READ_BACK[KEYBOARD_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 #if (TARGET_BOOT_PROCESSOR == P_STORAGE)
 #include "arch/bin/storage_image.h"
@@ -132,56 +133,21 @@ sem_t availables[NUM_QUEUES + 1];
 static void *handle_mailbox_interrupts(void *data)
 {
 	uint8_t interrupt;
-	int num_tpm_in = 0;
 
-	while (1) {
+	while (1)
 		read(fd_intr, &interrupt, 1);
-
-		/* FIXME: check the TPM interrupt logic */
-		if (interrupt == Q_TPM_IN) {
-			sem_post(&interrupts[Q_TPM_IN]);
-			/* Block interrupts until the program is loaded.
-			 * Otherwise, we might receive some interrupts not
-			 * intended for the bootloader.
-			 */
-			num_tpm_in++;
-			if (num_tpm_in == TPM_EXTEND_HASH_NUM_MAILBOX_MSGS) 
-				return NULL;
-		} else if ((interrupt - NUM_QUEUES) == Q_TPM_IN) {
-			sem_post(&availables[Q_TPM_IN]);
-		} else {
-			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
-			exit(-1);
-		}
-	}
-}
-
-/* FIXME: copied from bootloader_other.c */
-static void send_message_to_tpm(uint8_t* buf)
-{
-	uint8_t opcode[2];
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = Q_TPM_IN;
-	write(fd_out, opcode, 2);
-	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 int init_mailbox(void)
 {
-	/* set the initial value of this one to 0 so that we can use it
-	 * to wait for the TPM to read the message.
-	 */
-	sem_init(&interrupts[Q_TPM_IN], 0, 0);
-	sem_init(&availables[Q_TPM_IN], 0, 0);
-
 	mkfifo(FIFO_STORAGE_OUT, 0666);
 	mkfifo(FIFO_STORAGE_INTR, 0666);
 
 	fd_out = open(FIFO_STORAGE_OUT, O_WRONLY);
 	fd_intr = open(FIFO_STORAGE_INTR, O_RDONLY);
 
-	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	int ret = pthread_create(&mailbox_thread, NULL, 
+				handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
@@ -204,7 +170,19 @@ void close_mailbox(void)
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 #ifndef ARCH_SEC_HW_BOOT
-	/* no op */
+	filep = fopen("./storage/octopos_partition_0_data", "r");
+	if (!filep) {
+		printf("Error: %s: Couldn't open the boot partition file.\n",
+		       __func__);
+		exit(-1);
+	}
+
+	/* The added 1 is for the signature.
+	 *
+	 * FIXME: assumes signature file is less than one block.
+	 */
+	total_blocks = STORAGE_BOOT_PARTITION_SIZE + 1;
+	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 #else
 	int Status;
 
@@ -216,9 +194,6 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 
 #endif
 }
-
-////DEBUG
-//uint8_t binary[STORAGE_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
 
 /*
  * @filename: the name of the file in the partition
@@ -236,33 +211,25 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	int _size;
 	int offset;
 
-	filep = fopen("./storage/octopos_partition_0_data", "r");
-	if (!filep) {
-		printf("Error: %s: Couldn't open the boot partition file.\n", __func__);
-		return -1;
-	}
-
-	total_blocks = STORAGE_BOOT_PARTITION_SIZE;
-
-	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
-
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
-		printf("Error: %s: Couldn't open file %s in octopos file system.\n",
-		       __func__, filename);
+		printf("Error: %s: Couldn't open file %s in octopos file "
+		       "system.\n", __func__, filename);
 		return -1;
 	}
 
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
-		printf("Error: %s: Couldn't open the target file (%s).\n", __func__, path);
+		printf("Error: %s: Couldn't open the target file (%s).\n",
+		       __func__, path);
 		return -1;
 	}
 
 	offset = 0;
 
 	while (1) {
-		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE, offset);
+		_size = file_system_read_from_file(fd, buf, STORAGE_BLOCK_SIZE,
+						   offset);
 		if (_size == 0)
 			break;
 
@@ -288,8 +255,8 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	storage_request_boot_image_by_line();
 #else /* IMAGE_WRITER_MODE */
 
-//#define TARGET_BOOT_PROCESSOR P_STORAGE
 	write_boot_image_to_storage(TARGET_BOOT_PROCESSOR, binary);
+	/* debug code needed for future storage development */
 //	load_boot_image_from_storage(TARGET_BOOT_PROCESSOR, binary_DEBUG_READ_BACK);
 //
 //	for (int i = 0; i < KEYBOARD_IMAGE_SIZE; i++) {
@@ -305,38 +272,24 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	return 0;
 }
 
+#ifndef ARCH_SEC_HW_BOOT
+void bootloader_close_file_system(void)
+{
+	close_file_system();
+	fclose(filep);
+
+	return 0;
+}
+#endif /* ARCH_SEC_HW_BOOT */
 
 #ifndef ARCH_SEC_HW_BOOT
 void send_measurement_to_tpm(char *path)
 {
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	char hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
-	int i;
-
-	init_mailbox();
-
-	/* Wait for the TPM mailbox */
-	sem_wait(&availables[Q_TPM_IN]);
-
-	hash_file(path, hash_buf);
-	buf[0] = TPM_OP_EXTEND;
-
-	/* Note that we assume that two messages are needed to send the hash.
-	 * See include/tpm/hash.h
-	 */
-	memcpy(buf + 1, hash_buf, MAILBOX_QUEUE_MSG_SIZE - 1);
-	send_message_to_tpm(buf);
-	memcpy(buf, hash_buf + MAILBOX_QUEUE_MSG_SIZE - 1,
-	       TPM_EXTEND_HASH_SIZE - MAILBOX_QUEUE_MSG_SIZE + 1);
-	send_message_to_tpm(buf);
-
-	/* Wait for TPM to read the messages */
-	for (i = 0; i < TPM_EXTEND_HASH_NUM_MAILBOX_MSGS; i++)
-		sem_wait(&interrupts[Q_TPM_IN]);
-
+	enforce_running_process(P_STORAGE);
+	tpm_measure_service(path);
+	cancel_running_process();
 	close_mailbox();
 }
-#endif
-
+#endif /* ARCH_SEC_HW_BOOT */
 
 #endif

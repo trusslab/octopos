@@ -13,9 +13,17 @@
 #include <os/boot.h>
 #include <arch/mailbox_os.h>
 #ifndef ARCH_SEC_HW
+#include <tpm/tpm.h>
 #include <arch/pmu.h>
 #endif
 #include <arch/defines.h>
+
+/* Need to make sure msgs are big enough so that we don't overflow
+ * when processing incoming msgs and preparing outgoing ones.
+ */
+#if MAILBOX_QUEUE_MSG_SIZE < 64
+#error MAILBOX_QUEUE_MSG_SIZE is too small.
+#endif
 
 static void distribute_input(void)
 {
@@ -51,11 +59,11 @@ int main()
 	printf("%s: OS init\r\n", __func__);
 
 	int ret = init_os_mailbox();
-	printf("[0]%d\r\n", ret);
 	if (ret)
 		return ret;
 
 #ifndef ARCH_SEC_HW
+	enforce_running_process(P_OS);
 	connect_to_pmu();
 #endif
 

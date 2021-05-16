@@ -9,10 +9,10 @@
 #include <unistd.h>
 #include <octopos/mailbox.h>
 #include <octopos/runtime.h>
+#include <octopos/error.h>
 #include <os/file_system.h>
 #include <os/storage.h>
 #include <os/scheduler.h>
-#include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 #ifndef ARCH_SEC_HW
 #include <arch/pmu.h>
@@ -28,17 +28,12 @@ u32 octopos_mailbox_get_status_reg(UINTPTR base);
 
 int untrusted_needs_help_with_boot = 0;
 
-void delegate_tpm_data_in_queue(uint8_t proc_id)
-{
-	wait_for_queue_availability(Q_TPM_IN);
-	mark_queue_unavailable(Q_TPM_IN);
-	mailbox_delegate_queue_access(Q_TPM_IN, proc_id,
-				      TPM_EXTEND_HASH_NUM_MAILBOX_MSGS,
-				      MAILBOX_DEFAULT_TIMEOUT_VAL);
-}
-
 static void help_boot_proc(uint8_t proc_id, char *filename)
 {
+#ifdef ARCH_UMODE
+	char signature_filename[128];
+#endif
+
 	/* Help with reading the image off of storage */
 #ifdef ARCH_SEC_HW
 	/* ad hoc solution for loading boot image as file */
@@ -49,22 +44,31 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 #else
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
 #endif
+
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
 	file_system_close_file(fd);
+	wait_for_storage();
 
-#ifndef ARCH_SEC_HW
-	/* Help with sending measurements to TPM */
-	if (proc_id != P_UNTRUSTED)
-		delegate_tpm_data_in_queue(proc_id);
-#else
+#ifdef ARCH_SEC_HW
+	// FIXME: Why do we need this wait and flush?
 	/* flush storage queue */
 	while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
 	OCTOPOS_XMbox_Flush(Mbox_regs[Q_STORAGE_DATA_OUT]);
-//	while (!(Xil_In32((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x10)) & 0x00000001))
-//		(void) Xil_In32((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x08));
-		// Xil_Out32(((Mbox_regs[Q_STORAGE_DATA_OUT]) + (0x2C)), (0x00000001 | 0x00000002));
+#endif
+
+#ifdef ARCH_UMODE
+	/* Help with reading the signature file needed for secure boot. */
+	strcpy(signature_filename, filename);
+	strcat(signature_filename, "_signature");
+
+	fd = file_system_open_file(signature_filename, FILE_OPEN_MODE);
+	num_blocks = file_system_get_file_num_blocks(fd);
+	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
+	file_system_read_file_blocks_late();
+	file_system_close_file(fd);
+	wait_for_storage();
 #endif
 }
 
@@ -81,6 +85,11 @@ static void help_boot_serial_out_proc(void)
 static void help_boot_network_proc(void)
 {
 	help_boot_proc(P_NETWORK, (char *) "network");
+}
+
+static void help_boot_bluetooth_proc(void)
+{
+	help_boot_proc(P_BLUETOOTH, (char *) "bluetooth");
 }
 
 void help_boot_runtime_proc(uint8_t runtime_proc_id)
@@ -106,11 +115,11 @@ static void help_boot_untrusted_proc(void)
 
 void help_boot_procs(int boot_untrusted)
 {
-	// sleep(10);
 #ifndef ARCH_SEC_HW
 	help_boot_keyboard_proc();
 	help_boot_serial_out_proc();
 	help_boot_network_proc();
+	help_boot_bluetooth_proc();
 	help_boot_runtime_proc(P_RUNTIME1);
 	help_boot_runtime_proc(P_RUNTIME2);
 	if (boot_untrusted)
@@ -129,8 +138,10 @@ int reset_proc(uint8_t proc_id)
 #ifndef ARCH_SEC_HW
 	int ret;
 
-	if (proc_id == P_STORAGE)
-		close_file_system();
+	if (proc_id == P_STORAGE) {
+		printf("Error: %s: unexpected proc_id (storage).\n", __func__);
+		return ERR_UNEXPECTED;
+	}
 
 	ret = pmu_reset_proc(proc_id);
 	if (ret)
@@ -152,9 +163,14 @@ int reset_proc(uint8_t proc_id)
 		while (!is_queue_available(Q_STORAGE_DATA_OUT));
 	} else if (proc_id == P_NETWORK) {
 		help_boot_network_proc();
-	} else if (proc_id == P_STORAGE) {
-		uint32_t partition_size = initialize_storage();
-		initialize_file_system(partition_size);
+	} else if (proc_id == P_BLUETOOTH) {
+		help_boot_bluetooth_proc();
+		/* Making sure bluetooth boots completely before we return
+		 * to the syscall handler, which will send a bind command to it.
+		 * If this command is received by its bootloader, it will
+		 * confuse it.
+		 */
+		while (!is_queue_available(Q_STORAGE_DATA_OUT));
 	} else if (proc_id == P_UNTRUSTED) {
 		if (!untrusted_needs_help_with_boot) {
 			untrusted_needs_help_with_boot = 1;
@@ -166,6 +182,17 @@ int reset_proc(uint8_t proc_id)
 	}
 #endif
 	return 0;
+}
+
+int reset_proc_simple(uint8_t proc_id)
+{
+	int ret;
+
+#ifndef ARCH_SEC_HW
+	ret = pmu_reset_proc(proc_id);
+#endif
+	
+	return ret;	
 }
 
 int reboot_system(void)
