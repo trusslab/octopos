@@ -1059,7 +1059,9 @@ static void storage_query_state(uint8_t *buf)
  */
 static void storage_send_data(uint8_t *buf)
 {
+#ifndef ARCH_SEC_HW_STORAGE
 	FILE *filep;
+#endif
 	uint8_t partition_id;
 	uint32_t start_block, num_blocks, seek_off, size, i;
 	uint8_t data_buf[STORAGE_BLOCK_SIZE];
@@ -1090,6 +1092,7 @@ static void storage_send_data(uint8_t *buf)
 		return;
 	}
 
+#ifndef ARCH_SEC_HW_STORAGE
 	filep = fop_open(partitions[partition_id].data_name, "r+");
 	if (!filep) {
 		printf("Error: %s: couldn't open %s for write\n", __func__,
@@ -1097,6 +1100,7 @@ static void storage_send_data(uint8_t *buf)
 		STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 		return;
 	}
+#endif
 
 	STORAGE_GET_TWO_ARGS
 	start_block = arg0;
@@ -1105,22 +1109,34 @@ static void storage_send_data(uint8_t *buf)
 	if (start_block + num_blocks > partitions[partition_id].size) {
 		printf("Error: %s: invalid args\n", __func__);
 		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+#ifndef ARCH_SEC_HW_STORAGE
 		fop_close(filep);
+#endif
 		return;
 	}
 
+#ifndef ARCH_SEC_HW_STORAGE
 	seek_off = start_block * STORAGE_BLOCK_SIZE;
 	fop_seek(filep, seek_off, SEEK_SET);
+#endif
 	size = 0;
 
 	for (i = 0; i < num_blocks; i++) {
 		read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
+#ifndef ARCH_SEC_HW_STORAGE
 		size += (uint32_t) fop_write(data_buf, sizeof(uint8_t),
 					     STORAGE_BLOCK_SIZE, filep);
+#else
+		size += partition_write(partition_id,
+								start_block + i,
+								data_buf);
+#endif
 	}
 
 	STORAGE_SET_TWO_RETS(0, size)
+#ifndef ARCH_SEC_HW_STORAGE
 	fop_close(filep);
+#endif
 }
 
 /*
@@ -1133,7 +1149,9 @@ static void storage_send_data(uint8_t *buf)
  */
 static void storage_receive_data(uint8_t *buf)
 {
+#ifndef ARCH_SEC_HW_STORAGE
 	FILE *filep;
+#endif
 	uint8_t partition_id;
 	uint32_t start_block, num_blocks, seek_off, size, i;
 	uint8_t data_buf[STORAGE_BLOCK_SIZE];
@@ -1164,6 +1182,7 @@ static void storage_receive_data(uint8_t *buf)
 		return;
 	}
 
+#ifndef ARCH_SEC_HW_STORAGE
 	filep = fop_open(partitions[partition_id].data_name, "r");
 	if (!filep) {
 		printf("Error: %s: couldn't open %s for read\n", __func__,
@@ -1171,30 +1190,66 @@ static void storage_receive_data(uint8_t *buf)
 		STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 		return;
 	}
+#endif
 
 	STORAGE_GET_TWO_ARGS
 	start_block = arg0;
 	num_blocks = arg1;
-	
+
+#ifdef ARCH_SEC_HW_STORAGE
+	/* FIXME: use proper file read/write. */
+	/* handle special boot image files */
+	if (start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE) {
+		/* FIXME: this is an ad hoc way to get the boot image address, by passing the
+		 * address directly on argument.
+		 */
+		u32 address = start_block;
+		uint8_t message_buf[STORAGE_BLOCK_SIZE + 48] 
+			__attribute__ ((aligned(64)));
+
+		for (u32 blk = 0; blk < num_blocks; blk++) {
+			partition_read_physical(address + 
+					blk * STORAGE_BLOCK_SIZE,
+					STORAGE_BLOCK_SIZE, message_buf);
+			write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
+		}
+
+		STORAGE_SET_ONE_RET(STORAGE_BLOCK_SIZE);
+		return;
+	}
+#endif
+
 	if (start_block + num_blocks > partitions[partition_id].size) {
 		printf("Error: %s: invalid args\n", __func__);
 		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+#ifndef ARCH_SEC_HW_STORAGE
 		fop_close(filep);
+#endif
 		return;
 	}
 	
+#ifndef ARCH_SEC_HW_STORAGE
 	seek_off = start_block * STORAGE_BLOCK_SIZE;
 	fop_seek(filep, seek_off, SEEK_SET);
+#endif
 	size = 0;
 	
 	for (i = 0; i < num_blocks; i++) {
+#ifndef ARCH_SEC_HW_STORAGE
 		size += (uint32_t) fop_read(data_buf, sizeof(uint8_t),
 					    STORAGE_BLOCK_SIZE, filep);
+#else
+		size += partition_read(partition_id, 
+								start_block + i,
+								data_buf);
+#endif
 		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 	}
 
 	STORAGE_SET_TWO_RETS(0, size)
+#ifndef ARCH_SEC_HW_STORAGE
 	fop_close(filep);
+#endif
 }
 
 /* 
@@ -1211,7 +1266,9 @@ static void storage_receive_data(uint8_t *buf)
  */
 static void storage_create_resource(uint8_t *buf)
 {
+#ifndef ARCH_SEC_HW_STORAGE
 	FILE *filep, *filep2;
+#endif
 	uint32_t partition_id, tag, size;
 	int ret;
 
@@ -1244,6 +1301,7 @@ static void storage_create_resource(uint8_t *buf)
 		return;
 	}
 
+#ifndef ARCH_SEC_HW_STORAGE
 	filep = fop_open(partitions[partition_id].create_name, "w");
 	if (!filep) {
 		printf("Error: %s: Couldn't open %s.\n", __func__,
@@ -1256,13 +1314,25 @@ static void storage_create_resource(uint8_t *buf)
 	tag = 1;
 	size = (uint32_t) fop_write(&tag, sizeof(uint8_t), 4, filep);
 	fop_close(filep);
+#else
+		uint8_t tag[4] __attribute__ ((aligned(64)));
+		tag[0] = 1;
+		uint32_t size = partition_write_header(partition_id,
+											create_header_offset,
+											4, tag);
+#endif
 	if (size != 4) {
 		STORAGE_SET_ONE_RET(ERR_FAULT)
 		if (size > 0) { /* partial write */
 			/* wipe the file */
+#ifndef ARCH_SEC_HW_STORAGE
 			filep2 = fop_open(partitions[partition_id].create_name,
 					  "w");
 			fop_close(filep2);
+#else
+				/* FIXME: implement */
+//				partition_erase(partition_id, ERASE_HEADER);
+#endif
 		}
 		return;
 	}
@@ -1280,7 +1350,9 @@ static void storage_create_resource(uint8_t *buf)
  */
 static void storage_query_all_resources(uint8_t *buf)
 {
+#ifndef ARCH_SEC_HW_STORAGE
 	FILE *filep;
+#endif
 	uint32_t size;
 	uint32_t num_partitions;
 	uint8_t partition_id;
@@ -1325,6 +1397,7 @@ static void storage_query_all_resources(uint8_t *buf)
 		data[4] = partitions[partition_id].is_created;
 
 		if (data[4]) {
+#ifndef ARCH_SEC_HW_STORAGE
 			filep = fop_open(partitions[partition_id].keys_name,
 					 "r");
 			if (!filep) {
@@ -1339,7 +1412,12 @@ static void storage_query_all_resources(uint8_t *buf)
 			size = (uint32_t) fop_read(key, sizeof(uint8_t),
 						   STORAGE_KEY_SIZE, filep);
 			fop_close(filep);
+#endif
 
+#ifdef ARCH_SEC_HW_STORAGE
+			uint32_t size = partition_read_header(i, 
+					 lock_header_offset, STORAGE_KEY_SIZE, tag);
+#endif
 			if (size != STORAGE_KEY_SIZE) {
 				printf("Error: %s: corrupted key data.\n",
 				       __func__);
