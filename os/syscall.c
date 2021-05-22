@@ -13,7 +13,9 @@
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
+#include <octopos/io.h>
 #include <octopos/storage.h>
+#include <octopos/bluetooth.h>
 #include <octopos/error.h>
 #include <os/scheduler.h>
 #include <os/ipc.h>
@@ -79,8 +81,32 @@
 	}							\
 	data = &buf[11];					\
 
+#define SYSCALL_GET_THREE_ARGS_DATA				\
+	uint32_t arg0, arg1, arg2;				\
+	uint8_t data_size, *data;				\
+	DESERIALIZE_32(&arg0, &buf[2]);				\
+	DESERIALIZE_32(&arg1, &buf[6]);				\
+	DESERIALIZE_32(&arg2, &buf[10]);			\
+	uint8_t _max_size = MAILBOX_QUEUE_MSG_SIZE - 15;	\
+	if (_max_size >= 256) {					\
+		printf("Error: max_size not supported\n");	\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
+	}							\
+	data_size = buf[14];					\
+	if (data_size > _max_size) {				\
+		printf("Error: size not supported\n");		\
+		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+		break;						\
+	}							\
+	data = &buf[15];					\
+
+/* FIXME: add reset logic for other I/O servers as well. */
+bool bluetooth_proc_need_reset = false;
+
 /* response for async syscalls */
-void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, int size)
+void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line,
+				      int size)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	SYSCALL_SET_ONE_RET_DATA(0, line, size)
@@ -88,7 +114,27 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line, in
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
-static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_response, int *late_processing)
+/* FIXME: move somewhere else */
+static uint32_t send_bind_cmd_to_bluetooth(uint8_t *device_names,
+					   uint32_t num_devices,
+					   uint8_t *resp_data)
+{
+	BLUETOOTH_SET_ONE_ARG_DATA(IO_OP_BIND_RESOURCE, num_devices,
+				   device_names, num_devices * BD_ADDR_LEN)
+
+	send_cmd_to_bluetooth(buf);
+
+	BLUETOOTH_GET_ONE_RET_DATA
+	if (((uint32_t) _size) != num_devices)
+		return ERR_INVALID;
+
+	memcpy(resp_data, data, _size); 
+
+	return ret0;
+}
+
+static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
+			   bool *no_response, int *late_processing)
 {
 	uint16_t syscall_nr;
 
@@ -101,11 +147,13 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 	switch (syscall_nr) {
 	case SYSCALL_REQUEST_SECURE_SERIAL_OUT: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
+		SYSCALL_GET_TWO_ARGS
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
 
-		/* No more than 200 characters */
-		if (count > 200) {
+		/* FIXME: arbitrary thresholds */
+		/* No more than 1000 characters; no more than 100 seconds */
+		if (limit > 1000 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -123,18 +171,21 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
-		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id, (limit_t) count,
-				MAILBOX_DEFAULT_TIMEOUT_VAL);
+		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id,
+					      (limit_t) limit,
+					      (timeout_t) timeout);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_KEYBOARD: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t count = arg0;
+		SYSCALL_GET_TWO_ARGS
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
 
-		/* No more than 100 characters */
-		if (count > 100) {
+		/* FIXME: arbitrary thresholds */
+		/* No more than 100 characters; no more than 100 seconds. */
+		if (limit > 100 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -148,8 +199,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
-		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id, (limit_t) count,
-				MAILBOX_DEFAULT_TIMEOUT_VAL);
+		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id,
+					      (limit_t) limit,
+					      (timeout_t) timeout);
 
 		SYSCALL_SET_ONE_RET(0)
 		break;
@@ -205,16 +257,20 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		}
 
 		if (runtime_proc->app->output_dst)
-			ret = ipc_send_data(runtime_proc->app, data, (int) data_size);
+			ret = ipc_send_data(runtime_proc->app, data,
+					    (int) data_size);
 		else
-			ret = app_write_to_shell(runtime_proc->app, data, data_size);
+			ret = app_write_to_shell(runtime_proc->app, data,
+						 data_size);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
 	case SYSCALL_READ_FROM_SHELL: {
 		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc || !runtime_proc->app) {
-			//FIXME: return Error
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0);
+			break;
 		}
 
 		if (runtime_proc->app->input_src) {
@@ -227,6 +283,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			} else {
 				char dummy;
 				SYSCALL_SET_ONE_RET_DATA(ret, &dummy, 0);
+				break;
 			}
 		}
 		break;
@@ -249,7 +306,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_WRITE_TO_FILE: {
 		uint32_t ret;
 		SYSCALL_GET_TWO_ARGS_DATA
-		ret = (uint32_t) file_system_write_to_file(arg0, data, (int) data_size, (int) arg1);
+		ret = (uint32_t) file_system_write_to_file(arg0, data,
+							   (int) data_size,
+							   (int) arg1);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
@@ -259,15 +318,19 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
 		SYSCALL_GET_THREE_ARGS
 		int size = (int) arg1;
-		/* FIXME: the size info should only be in the corresponding de/marshalling macro. */
+		/* FIXME: the size info should only be in the corresponding
+		 * de/marshalling macro.
+		 */
 		if (size > (MAILBOX_QUEUE_MSG_SIZE - 5)) {
 			printf("Error: read size too big. Will truncate\n");
 			size = MAILBOX_QUEUE_MSG_SIZE - 5;
 		}
-		fs_ret = file_system_read_from_file(arg0, ret_buf, size, (int) arg2);
+		fs_ret = file_system_read_from_file(arg0, ret_buf, size,
+						    (int) arg2);
 		/* safety check */
 		if (fs_ret > size) {
-			printf("Error: unexpected return from file_system_read_from_file\n");
+			printf("Error: unexpected return from "
+			       "file_system_read_from_file\n");
 			fs_ret = size;
 		}
 		ret = (uint32_t) fs_ret;
@@ -277,7 +340,9 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_WRITE_FILE_BLOCKS: {
 		uint32_t ret;
 		SYSCALL_GET_THREE_ARGS
-		ret = (uint32_t) file_system_write_file_blocks(arg0, (int) arg1, (int) arg2, runtime_proc_id);
+		ret = (uint32_t) file_system_write_file_blocks(arg0, (int) arg1,
+							       (int) arg2,
+							       runtime_proc_id);
 		if (ret)
 			*late_processing = SYSCALL_WRITE_FILE_BLOCKS;
 		SYSCALL_SET_ONE_RET(ret)
@@ -286,9 +351,18 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 	case SYSCALL_READ_FILE_BLOCKS: {
 		uint32_t ret;
 		SYSCALL_GET_THREE_ARGS
-		ret = (uint32_t) file_system_read_file_blocks(arg0, (int) arg1, (int) arg2, runtime_proc_id);
+		ret = (uint32_t) file_system_read_file_blocks(arg0, (int) arg1,
+							      (int) arg2,
+							      runtime_proc_id);
 		if (ret)
 			*late_processing = SYSCALL_READ_FILE_BLOCKS;
+		SYSCALL_SET_ONE_RET(ret)
+		break;
+	}
+	case SYSCALL_GET_FILE_SIZE: {
+		uint32_t ret;
+		SYSCALL_GET_ONE_ARG
+		ret = file_system_get_file_size(arg0);
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
@@ -315,26 +389,27 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_CREATION: {
-		handle_request_secure_storage_creation_syscall(runtime_proc_id, buf);
+		handle_request_secure_storage_creation_syscall(runtime_proc_id,
+							       buf);
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_STORAGE_ACCESS: {
-		handle_request_secure_storage_access_syscall(runtime_proc_id, buf);
-		break;
-	}
-	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
-	case SYSCALL_DELETE_SECURE_STORAGE: {
-		handle_delete_secure_storage_syscall(runtime_proc_id, buf);
+		handle_request_secure_storage_access_syscall(runtime_proc_id,
+							     buf);
 		break;
 	}
 	case SYSCALL_REQUEST_SECURE_IPC: {
-		SYSCALL_GET_TWO_ARGS
+		SYSCALL_GET_THREE_ARGS
 		uint8_t target_runtime_queue_id = arg0;
-		uint32_t count = arg1;
+		uint32_t limit = arg1;
+		uint32_t timeout = arg2;
 		uint32_t runtime_queue_id = 0;
 
-		/* No more than 200 block reads/writes */
-		if (count > 200) {
+		/* FIXME: arbitrary thresholds. */
+		/* No more than 200 block reads/writes;
+		 * no more than 100 seconds
+		 */
+		if (limit > 200 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
@@ -358,7 +433,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 			break;
 		}
 
-		int ret = set_up_secure_ipc(target_runtime_queue_id, runtime_queue_id, runtime_proc_id, count, no_response);
+		int ret = set_up_secure_ipc(target_runtime_queue_id,
+					    runtime_queue_id, runtime_proc_id,
+					    (limit_t) limit, (timeout_t) timeout,
+					    no_response);
 		if (ret) {
 			SYSCALL_SET_ONE_RET((uint32_t) ret)
 			break;
@@ -385,6 +463,88 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		handle_close_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
+
+	case SYSCALL_REQUEST_BLUETOOTH_ACCESS: {
+		SYSCALL_GET_THREE_ARGS_DATA
+		uint32_t limit = arg0;
+		uint32_t timeout = arg1;
+		uint32_t num_devices = arg2;
+		uint8_t *device_names = data;
+		uint8_t *resp_data = NULL;
+
+		if (data_size != (num_devices * BD_ADDR_LEN)) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
+			break;
+		}
+
+		/* FIXME: add access control here. Do we allow the requesting
+		 * app to have access to this resource?
+		 */
+
+		/* FIXME: arbitrary thresholds. */
+		if (limit > 200 || timeout > 100) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
+			break;
+		}
+
+		/* Reset bluetooth proc if needed */
+		if (bluetooth_proc_need_reset)
+			reset_proc(P_BLUETOOTH);
+
+		bluetooth_proc_need_reset = true;
+
+		resp_data = (uint8_t *) malloc(num_devices * sizeof(uint8_t));
+		if (!resp_data) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_MEMORY, &dummy, 0)
+			break;
+		}
+
+		/* Send msg to the bluetooth service to bind the resource */
+		uint32_t ret = send_bind_cmd_to_bluetooth(device_names,
+							  num_devices,
+							  resp_data);
+		if (ret) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA(ret, &dummy, 0)
+			break;
+		}
+
+		int iret1 = is_queue_available(Q_BLUETOOTH_DATA_IN);
+		int iret2 = is_queue_available(Q_BLUETOOTH_DATA_OUT);
+		int iret3 = is_queue_available(Q_BLUETOOTH_CMD_IN);
+		int iret4 = is_queue_available(Q_BLUETOOTH_CMD_OUT);
+		/* Or should we make this blocking? */
+		if (!iret1 || !iret2 || !iret3 || !iret4) {
+			char dummy;
+			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_AVAILABLE, &dummy, 0)
+			break;
+		}
+
+		mark_queue_unavailable(Q_BLUETOOTH_DATA_IN);
+		mark_queue_unavailable(Q_BLUETOOTH_DATA_OUT);
+		mark_queue_unavailable(Q_BLUETOOTH_CMD_IN);
+		mark_queue_unavailable(Q_BLUETOOTH_CMD_OUT);
+
+		mailbox_delegate_queue_access(Q_BLUETOOTH_DATA_IN,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_DATA_OUT,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_CMD_IN,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+		mailbox_delegate_queue_access(Q_BLUETOOTH_CMD_OUT,
+					      runtime_proc_id, (limit_t) limit,
+					      (timeout_t) timeout);
+
+		SYSCALL_SET_ONE_RET_DATA(0, resp_data, num_devices)
+		free(resp_data);
+		break;
+	}
 #endif
 	case SYSCALL_DEBUG_OUTPUTS: {
 		SYSCALL_GET_ZERO_ARGS_DATA
@@ -394,38 +554,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf, bool *no_respo
 		printf("RUNTIME%d: %s\r\n", runtime_proc_id, data);
 #endif
 		*no_response = true;
-		break;
-	}
-	case SYSCALL_REQUEST_TPM_ACCESS: {
-		SYSCALL_GET_ONE_ARG
-		uint32_t limit = arg0;
-
-		/* FIXME: why 100? */
-		if (limit > 100) {
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
-			break;
-		}
-
-		int ret1 = is_queue_available(Q_TPM_IN);
-		int ret2 = is_queue_available(Q_TPM_OUT);
-		/* Or should we make this blocking? */
-		if (!ret1 || !ret2)
-		{
-			SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
-			break;
-		}
-
-		mark_queue_unavailable(Q_TPM_IN);
-		mark_queue_unavailable(Q_TPM_OUT);
-
-		mailbox_delegate_queue_access(Q_TPM_IN, runtime_proc_id,
-					      (limit_t) limit,
-					      MAILBOX_DEFAULT_TIMEOUT_VAL);
-		mailbox_delegate_queue_access(Q_TPM_OUT, runtime_proc_id,
-					      (limit_t) limit,
-					      MAILBOX_DEFAULT_TIMEOUT_VAL);
-
-		SYSCALL_SET_ONE_RET(0)
 		break;
 	}
 
@@ -468,11 +596,6 @@ static void handle_untrusted_syscall(uint8_t *buf)
 		handle_request_secure_storage_access_syscall(P_UNTRUSTED, buf);
 		break;
 	}
-	/* FIXME: we also to need to deal with cases that the app does not properly call the delete */
-	case SYSCALL_DELETE_SECURE_STORAGE: {
-		handle_delete_secure_storage_syscall(P_UNTRUSTED, buf);
-		break;
-	}
 #ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		handle_allocate_socket_syscall(P_UNTRUSTED, buf);
@@ -500,7 +623,8 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 		bool no_response = false;
 		int late_processing = NUM_SYSCALLS;
 
-		handle_syscall(runtime_proc_id, buf, &no_response, &late_processing);
+		handle_syscall(runtime_proc_id, buf, &no_response,
+			       &late_processing);
 
 		/* send response */
 		if (!no_response) {
@@ -513,7 +637,7 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 			file_system_read_file_blocks_late();
 #ifndef ARCH_SEC_HW
 		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
-			late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
+			 late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
 			reset_proc(runtime_proc_id);
 #endif
 	} else if (runtime_proc_id == P_UNTRUSTED) {

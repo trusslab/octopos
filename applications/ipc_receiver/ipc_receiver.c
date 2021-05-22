@@ -64,7 +64,7 @@ void ipc_receiver(struct runtime_api *api)
 	insecure_printf("%c", own_qid);
 
 	/* secure IPC */
-	ret = api->request_secure_ipc(target_qid, 200);
+	ret = api->request_secure_ipc(target_qid, 200, 100, NULL);
 	if (ret) {
 		printf("Couldn't establish secure IPC (ret = %d)\n", ret);
 		return;

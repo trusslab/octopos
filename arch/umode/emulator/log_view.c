@@ -23,7 +23,7 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	opt = getopt(argc, argv, "mtokl12snupv");
+	opt = getopt(argc, argv, "mtokl12snbupv");
 	switch (opt) {
 	case 'm':
 		mkfifo(FIFO_MAILBOX_LOG, 0666);
@@ -69,6 +69,11 @@ int main(int argc, char **argv)
 		mkfifo(FIFO_NETWORK_LOG, 0666);
 		fd_log = open(FIFO_NETWORK_LOG, O_RDONLY);
 		printf("Network processor logs:\n");
+		break;
+	case 'b': 
+		mkfifo(FIFO_BLUETOOTH_LOG, 0666);
+		fd_log = open(FIFO_BLUETOOTH_LOG, O_RDONLY);
+		printf("Bluetooth processor logs:\n");
 		break;
 	case 'u': 
 		mkfifo(FIFO_UNTRUSTED_LOG, 0666);
@@ -129,6 +134,9 @@ int main(int argc, char **argv)
 		break;
 	case 'n': 
 		remove(FIFO_NETWORK_LOG);
+		break;
+	case 'b': 
+		remove(FIFO_BLUETOOTH_LOG);
 		break;
 	case 'u': 
 		remove(FIFO_UNTRUSTED_LOG);

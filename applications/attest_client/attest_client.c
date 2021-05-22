@@ -11,11 +11,12 @@
 #include <octopos/storage.h>
 #include <network/sock.h>
 #include <network/socket.h>
+#include <tpm/tpm.h>
 
-#define ID_LENGTH 16
-#define NONCE_LENGTH 16
-#define MSG_LENGTH (1 + ID_LENGTH + 2 + NONCE_LENGTH)
-#define MAX_PACK_SIZE 256
+#define ID_LENGTH	16
+#define NONCE_LENGTH	16
+#define MSG_LENGTH	(1 + ID_LENGTH + 2 + NONCE_LENGTH)
+#define MAX_PACK_SIZE	256
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[256];
@@ -71,8 +72,13 @@ void send_large_packet(struct runtime_api *api, uint8_t* data, size_t size)
 
 static void send_receive(struct runtime_api *api)
 {
+	int rc = 0;
 	char buf[MSG_LENGTH];
 	int len;
+	uint8_t *signature = NULL;
+	uint8_t *quote = NULL;
+	uint8_t *packet = NULL;
+	size_t sig_size, quote_size;
 
 	if (api->connect_socket(sock, &skaddr) < 0) {
 		printf("%s: Error: _connect\n", __func__);
@@ -81,25 +87,24 @@ static void send_receive(struct runtime_api *api)
 
 	if ((len = api->read_from_socket(sock, buf, 512)) > 0) {
 		char uuid[ID_LENGTH];
-		char slot[3] = { 0 };
+		char pcr[3] = { 0 };
 		char nonce[NONCE_LENGTH];
-		uint8_t *signature;
-		uint8_t *quote;
-		uint8_t *packet;
-		uint32_t sig_size, quote_size;
 		
 		memcpy(uuid, buf + 1, ID_LENGTH);
-		memcpy(slot, buf + 1 + ID_LENGTH, 2);
+		memcpy(pcr, buf + 1 + ID_LENGTH, 2);
 		memcpy(nonce, buf + 1 + ID_LENGTH + 2, NONCE_LENGTH);
 
-		int pcr_slot = atoi(slot);
-		api->request_tpm_attestation_report(pcr_slot, nonce,
-						    NONCE_LENGTH, &signature,
-						    &sig_size, &quote,
-						    &quote_size);
+		int pcr_selected = atoi(pcr);
+		uint32_t pcr_list[] = { (uint32_t) pcr_selected };
+		rc = api->request_tpm_attestation_report(pcr_list, 1, nonce,
+						    &signature, &sig_size,
+						    &quote, &quote_size);
+		if (rc != 0) {
+			goto out_attest;
+		}
 
 		packet = (uint8_t *) malloc(sig_size + quote_size + 1);
-		if (!packet) { 
+		if (!packet) {
 			printf("Error: %s: couldn't allocate memory for "
 			       "packet.\n", __func__);
 			return;
@@ -107,12 +112,12 @@ static void send_receive(struct runtime_api *api)
 		
 		packet[0] = (uint8_t) sig_size;
 		memcpy(packet + 1, signature, sig_size);
-
 		memcpy(packet + 1 + sig_size, quote, quote_size);
 
 		send_large_packet(api, packet, 1 + sig_size + quote_size);
-		
+
 		free(packet);
+out_attest:
 		free(quote);
 		free(signature);
 	}
@@ -142,7 +147,7 @@ void app_main(struct runtime_api *api)
 		goto out;
 	}
 
-	if (api->request_network_access(200)) {
+	if (api->request_network_access(200, 100, NULL, NULL, NULL)) {
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}

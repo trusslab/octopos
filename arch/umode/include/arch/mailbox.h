@@ -7,8 +7,6 @@
 #define FIFO_KEYBOARD_OUT	"/tmp/octopos_mailbox_keyboard_out"
 #define FIFO_KEYBOARD_IN	"/tmp/octopos_mailbox_keyboard_in"
 #define FIFO_KEYBOARD_INTR	"/tmp/octopos_mailbox_keyboard_intr"
-#define FIFO_SENSOR		"/tmp/octopos_mailbox_sensor"
-#define FIFO_SENSOR_INTR	"/tmp/octopos_mailbox_sensor_intr"
 #define FIFO_SERIAL_OUT_OUT	"/tmp/octopos_mailbox_serial_out_out"
 #define FIFO_SERIAL_OUT_IN	"/tmp/octopos_mailbox_serial_out_in"
 #define FIFO_SERIAL_OUT_INTR	"/tmp/octopos_mailbox_serial_out_intr"
@@ -18,6 +16,9 @@
 #define FIFO_NETWORK_OUT	"/tmp/octopos_mailbox_network_out"
 #define FIFO_NETWORK_IN		"/tmp/octopos_mailbox_network_in"
 #define FIFO_NETWORK_INTR	"/tmp/octopos_mailbox_network_intr"
+#define FIFO_BLUETOOTH_OUT	"/tmp/octopos_mailbox_bluetooth_out"
+#define FIFO_BLUETOOTH_IN	"/tmp/octopos_mailbox_bluetooth_in"
+#define FIFO_BLUETOOTH_INTR	"/tmp/octopos_mailbox_bluetooth_intr"
 #define FIFO_RUNTIME1_OUT	"/tmp/octopos_mailbox_runtime1_out"
 #define FIFO_RUNTIME1_IN	"/tmp/octopos_mailbox_runtime1_in"
 #define FIFO_RUNTIME1_INTR	"/tmp/octopos_mailbox_runtime1_intr"
@@ -27,8 +28,5 @@
 #define FIFO_UNTRUSTED_OUT	"/tmp/octopos_mailbox_untrusted_out"
 #define FIFO_UNTRUSTED_IN	"/tmp/octopos_mailbox_untrusted_in"
 #define FIFO_UNTRUSTED_INTR	"/tmp/octopos_mailbox_untrusted_intr"
-#define FIFO_TPM_OUT		"/tmp/octopos_mailbox_tpm_out"
-#define FIFO_TPM_IN		"/tmp/octopos_mailbox_tpm_in"
-#define FIFO_TPM_INTR		"/tmp/octopos_mailbox_tpm_intr"
 
 #endif

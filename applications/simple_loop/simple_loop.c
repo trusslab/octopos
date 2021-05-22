@@ -37,20 +37,8 @@ void simple_loop(struct runtime_api *api)
 #endif
 {
 	/* For context switch */
-	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
-	
-	if (api->get_runtime_proc_id() == 7) {
-		/* generate a key */
-		for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-			secure_storage_key[i] = i + 1;
-	} else {
-		/* generate a key */
-		for (int i = 0; i < STORAGE_KEY_SIZE; i++)
-			secure_storage_key[i] = i;
-	}
-
-	api->set_up_secure_storage_key(secure_storage_key);
-	api->set_up_context((void *) &gcounter, 4);	
+	api->set_up_context((void *) &gcounter, 4, 1, NULL, 100, 200, 6, NULL,
+			    NULL, NULL);	
 
 	while (1) {
 		insecure_printf("gcounter = %d\n", gcounter);

@@ -15,3 +15,4 @@ cp untrusted/octopos_net.c arch/umode/untrusted_linux/drivers/net/octopos_net.c
 cp untrusted/octopos_net.h arch/umode/untrusted_linux/include/net/octopos_net.h
 cp arch/umode/include/arch/syscall.h arch/umode/untrusted_linux/include/octopos/syscall_umode.h
 cp arch/umode/include/arch/mailbox.h arch/umode/untrusted_linux/include/octopos/mailbox_umode.h
+cp include/octopos/io.h arch/umode/untrusted_linux/include/octopos/io.h

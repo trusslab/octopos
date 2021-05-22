@@ -57,6 +57,15 @@ bool untrusted_in_foreground = false;
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
 #define output_printf(fmt, args...) {memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE); sprintf(output_buf, fmt, ##args); send_output((uint8_t *) output_buf);}
 
+#define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE
+static char line[MAX_LINE_SIZE];
+static int num_chars = 0;
+
+static char repeat_cmd[MAX_LINE_SIZE];
+static int repeat_num = 0;
+static bool repeat_cmd_exists = false;
+static int repeat_cmd_counter = 0;
+
 /*
  * Handle commands separatly
  * input: return value from previous command (useful for pipe file descriptor)
@@ -183,11 +192,47 @@ static void process_input_line(char *line)
 		bg = 1;
 		/* 'next' points to '&' */
 		*next = '\0';
+		goto run;
 	}
 
+	/* see if it's a repeat command (cmd # n) */
+	next = strchr(cmd, '#');
+	if (next != NULL) {
+		/* 'next' points to '#' */
+		*next = '\0';
+		if (repeat_cmd_exists) {
+			printf("Error: cannot support more than one repeat "
+			       "cmd.\n");
+		} else { 
+			memcpy(repeat_cmd, cmd, MAX_LINE_SIZE);
+			repeat_num = atoi(next + 1);
+			repeat_cmd_exists = true;
+			repeat_cmd_counter = 0;
+		}
+	}
+
+run:
 	input = run(cmd, input, first, 1, 0, bg);
 	cleanup(n);
 	n = 0;
+}
+
+void check_and_run_repeat_cmd(void)
+{
+	char cmd_backup[MAX_LINE_SIZE];
+	if (!repeat_cmd_exists)
+		return;
+
+	repeat_cmd_counter++;
+
+	if (repeat_cmd_counter != repeat_num)
+		return;
+
+	repeat_cmd_counter = 0;
+	printf("Repeat run of %s\n", repeat_cmd);
+	memcpy(cmd_backup, repeat_cmd, MAX_LINE_SIZE);
+	run(repeat_cmd, 0, 0, 1, 0, 0);
+	memcpy(repeat_cmd, cmd_backup, MAX_LINE_SIZE);
 }
 
 static void process_app_input(struct app *app, uint8_t *line, int num_chars)
@@ -200,10 +245,6 @@ static void process_app_input(struct app *app, uint8_t *line, int num_chars)
 
 	shell_status = SHELL_STATE_RUNNING_APP;
 }
-
-#define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE
-static char line[MAX_LINE_SIZE];
-static int num_chars = 0;
 
 void shell_process_input(char buf)
 {
@@ -228,6 +269,8 @@ void shell_process_input(char buf)
 			memset(line, 0, MAX_LINE_SIZE);
 		}
 		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT) {
+			/* Don't send the \n or \r to the app. */
+			num_chars--;
 			process_app_input(foreground_app, (uint8_t *) line, num_chars);
 			memset(line, 0, MAX_LINE_SIZE);
 		}
@@ -268,7 +311,8 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		output_printf("octopos$> ");
 	}
 #ifdef ARCH_SEC_HW
-	// FIXME: merge into mainline api
+	/* FIXME: merge into mainline api */
+	/* FIXME: consolidate with umode's use of reset_proc in syscall.c */
 	request_pmu_to_reset(runtime_proc_id);
 #endif
 

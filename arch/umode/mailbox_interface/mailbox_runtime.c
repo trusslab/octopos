@@ -19,7 +19,6 @@
 #include <octopos/storage.h>
 #include <octopos/error.h>
 #include <tpm/tpm.h>
-#include <tpm/hash.h>
 #include <arch/mailbox.h>
 
 /* FIXME: also repeated in runtime.c */
@@ -58,7 +57,7 @@ bool has_ctx_thread = false;
 int write_syscall_response(uint8_t *buf);
 void *store_context(void *data);
 void *run_app(void *data);
-int send_app_measurement_to_tpm(char *hash_buf);
+void timer_tick(void);
 
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
@@ -86,13 +85,14 @@ static mailbox_state_reg_t mailbox_read_state_register(uint8_t queue_id)
 	return state;
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
+				timeout_t timeout)
 {
 	mailbox_state_reg_t state;
 
 	state = mailbox_read_state_register(queue_id);
 
-	return (state.limit == count);
+	return ((state.limit == limit) && (state.timeout == timeout));
 }
 
 int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
@@ -143,12 +143,14 @@ void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id)
 
 void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
 {
-	return _runtime_recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	return _runtime_recv_msg_from_queue(buf, queue_id,
+					    MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id)
 {
-	return _runtime_send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	return _runtime_send_msg_on_queue(buf, queue_id,
+					  MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void is_ownership_change(int *is_change)
@@ -173,6 +175,19 @@ void wait_on_queue(uint8_t queue_id)
 	sem_wait(&interrupts[queue_id]);
 }
 
+int schedule_func_execution_arch(void *(*func)(void *), void *data)
+{
+	pthread_t worker_thread;
+
+	int ret = pthread_create(&worker_thread, NULL, (pfunc_t) func, data);
+	if (ret) {
+		printf("Error: couldn't launch worker thread\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 void wait_for_app_load(void)
 {
 	sem_wait(&load_app_sem);
@@ -180,14 +195,11 @@ void wait_for_app_load(void)
 
 typedef void (*app_main_proc)(struct runtime_api *);
 
-void load_application_arch(char *msg, struct runtime_api *api)
+void load_application_arch(char *path, struct runtime_api *api)
 {
 	void *app;
-	char path[2 * MAILBOX_QUEUE_MSG_SIZE] = "./applications/bin/";
 	app_main_proc app_main;
 
-	strcat(path, msg);
-	strcat(path, ".so");
 	printf("opening %s\n", path);
 
 	app = dlopen(path, RTLD_LAZY);
@@ -202,12 +214,22 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		return;
 	}
 
-	char hash_buf[TPM_EXTEND_HASH_SIZE] = {0};
-	hash_file(path, hash_buf);
-
-	send_app_measurement_to_tpm(hash_buf);
+	tpm_measure_service(path);
 
 	(*app_main)(api);
+}
+
+/*
+ * Can be called in the app thread or in interrupt context.
+ */
+void terminate_app_thread_arch(void)
+{
+	if (pthread_self() == app_thread) {
+		pthread_exit(NULL);
+	} else {
+		pthread_cancel(app_thread);
+		pthread_join(app_thread, NULL);
+	}
 }
 
 void runtime_core(void)
@@ -218,7 +240,9 @@ void runtime_core(void)
 	/* interrupt handling loop */
 	while (keep_polling) {
 		read(fd_intr, &interrupt, 1);
-		if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
+		if (interrupt == 0) {
+			timer_tick();
+		} else if (interrupt < 1 || interrupt > (2 * NUM_QUEUES)) {
 			printf("Error: invalid interrupt (%d)\n", interrupt);
 			exit(-1);
 		} else if (interrupt > NUM_QUEUES) {
@@ -248,7 +272,6 @@ void runtime_core(void)
 				memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
 				sem_post(&load_app_sem);
 			} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
-				//TODO
 				pthread_cancel(app_thread);
 				pthread_join(app_thread, NULL);
 				int ret = pthread_create(&ctx_thread, NULL, store_context, NULL);

@@ -1,7 +1,7 @@
 #ifndef _OCTOPOS_MAILBOX_H_
 #define _OCTOPOS_MAILBOX_H_
 
-#ifndef UNTRUSTED_DOMAIN
+#if !defined(UNTRUSTED_DOMAIN) && !defined(APPLICATION)
 #include <arch/defines.h>
 #endif
 
@@ -20,14 +20,15 @@
 #define	P_SERIAL_OUT		3
 #define	P_STORAGE		4
 #define	P_NETWORK		5
-#define	P_SENSOR		6
+#define	P_BLUETOOTH		6
 #define	P_RUNTIME1		7
 #define	P_RUNTIME2		8
 #define P_UNTRUSTED		9
-#define P_TPM			10
-#define NUM_PROCESSORS		10
-#define ALL_PROCESSORS		11
-#define INVALID_PROCESSOR	12
+#define NUM_PROCESSORS		9
+#define ALL_PROCESSORS		10
+/* FIXME: just used for using the TPM API in PMU. */
+#define P_PMU			10
+#define INVALID_PROCESSOR	11
 
 #define NUM_RUNTIME_PROCS	3 /* includes the untrusted domain */
 
@@ -44,14 +45,15 @@
 #define	Q_NETWORK_DATA_OUT	10
 #define	Q_NETWORK_CMD_IN	11
 #define	Q_NETWORK_CMD_OUT	12
-#define Q_SENSOR		13
-#define	Q_RUNTIME1		14
-#define	Q_RUNTIME2		15
-#define	Q_OSU			16
-#define	Q_UNTRUSTED		17
-#define Q_TPM_IN		18
-#define Q_TPM_OUT		19
-#define NUM_QUEUES		19
+#define Q_BLUETOOTH_DATA_IN	13
+#define Q_BLUETOOTH_DATA_OUT	14
+#define Q_BLUETOOTH_CMD_IN	15
+#define Q_BLUETOOTH_CMD_OUT	16
+#define	Q_RUNTIME1		17
+#define	Q_RUNTIME2		18
+#define	Q_OSU			19
+#define	Q_UNTRUSTED		20
+#define NUM_QUEUES		20
 
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64
@@ -96,7 +98,8 @@ typedef uint32_t timeout_t;
 /* FIXME: move somewhere else */
 #ifdef UNTRUSTED_DOMAIN
 void mailbox_yield_to_previous_owner(uint8_t queue_id);
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t count);
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
+				timeout_t timeout);
 void reset_queue_sync(uint8_t queue_id, int init_val);
 limit_t get_queue_limit(uint8_t queue_id);
 timeout_t get_queue_timeout(uint8_t queue_id);

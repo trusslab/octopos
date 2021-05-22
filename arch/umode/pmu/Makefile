@@ -1,5 +1,5 @@
 umode:
-	g++ -Wall -Werror -I ../../../include/ -I ../include/ pmu.c -o pmu -lpthread
+	g++ -Wall -Werror -I ../../../include/ -I ../include/ pmu.c ../../../util/tpm/hash.c ../../../util/tpm/tpm.c -o pmu -lpthread -ltss2-esys -ltss2-rc -ltss2-fapi -lcrypto
 
 clean:
 	rm pmu

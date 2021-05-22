@@ -45,7 +45,7 @@ int check_slot(char* slot)
 	}
 	
 	int tmp = atoi(slot);
-	if (tmp <0 || tmp > 23) {
+	if (tmp < 0 || tmp > 40) {
 		fprintf(stderr, "Error: Slot %d out of range.\n", tmp);
 		return -1;
 	}
@@ -171,7 +171,7 @@ int main(int argc, char *argv[])
 		error("ERROR on accept");
 	
 	char msg[MSG_LENGTH];
-	char pcr_slot[3] = "15";
+	char pcr_slot[3] = "32";
 	uint8_t nonce[NONCE_LENGTH];
 	while (true) {
 		int ret = check_slot(pcr_slot);

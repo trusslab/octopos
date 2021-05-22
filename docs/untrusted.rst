@@ -25,6 +25,7 @@ Here's a list of shared files for Linux (UML mode used in OctopOS umode):
   - octopos/runtime/network_client.c -> untrusted_linux/drivers/net/network_client.c
   - octopos/arch/umode/include/arch/syscall.h -> untrusted_linux/include/octopos/syscall_umode.h
   - octopos/arch/umode/include/arch/mailbox.h -> untrusted_linux/include/octopos/mailbox_umode.h
+  - octopos/include/octopos/io.h -> untrusted_linux/include/octopos/io.h
 
 In addition, here's where the files under untrusted/ map to in the Linux source tree:
 

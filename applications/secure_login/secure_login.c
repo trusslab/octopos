@@ -13,6 +13,8 @@
 
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
+#define APPLICATION
+#include <octopos/mailbox.h>
 
 /* FIXME: how does the app know the size of the buf? */
 #ifndef ARCH_SEC_HW
@@ -46,13 +48,13 @@ void secure_login(struct runtime_api *api)
 
 	insecure_printf("Switching to secure mode now.\n");
 
-	ret = api->request_secure_keyboard(100);
+	ret = api->request_secure_keyboard(100, 100, NULL, NULL);
 	if (ret) {
 		printf("Error: could not get secure access to keyboard\n");
 		insecure_printf("Failed to switch.\n");
 		return;
 	}
-	ret = api->request_secure_serial_out(200);
+	ret = api->request_secure_serial_out(200, 100, NULL, NULL);
 	if (ret) {
 		api->yield_secure_keyboard();
 		printf("Error: could not get secure access to serial_out\n");
@@ -60,7 +62,8 @@ void secure_login(struct runtime_api *api)
 		return;
 	}
 	
-	uint32_t fd = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
+	uint32_t fd = api->open_file((char *) "test_file_1.txt",
+				     FILE_OPEN_CREATE_MODE);
 	if (fd == 0)
 		secure_printf("Couldn't open file (fd = %d)\n", fd);
 	api->read_from_file(fd, (uint8_t *) &secret, 4, 0);
@@ -96,21 +99,20 @@ void secure_login(struct runtime_api *api)
 	api->close_file(fd);
 	
 	insecure_printf("Now testing secure storage\n");
-	uint8_t secure_storage_key[STORAGE_KEY_SIZE];
-	/* generate a key */
-	for (i = 0; i < STORAGE_KEY_SIZE; i++)
-		secure_storage_key[i] = i;
-	api->set_up_secure_storage_key(secure_storage_key);
-	ret = api->request_secure_storage_access(200, 100);
+	ret = api->request_secure_storage_access(100, 200,
+						 MAILBOX_DEFAULT_TIMEOUT_VAL,
+						 NULL, NULL, NULL);
 	if (ret) {
 		printf("Error: could not get secure access to storage.\n");
-		insecure_printf("Error: could not get secure access to storage.\n");
+		insecure_printf("Error: could not get secure access to "
+				"storage.\n");
 		return;
 	}
 
 	api->write_to_secure_storage_block((uint8_t *) line, 0, 0, size);
 	memset(line, 0x0, 1024);
 	api->read_from_secure_storage_block((uint8_t *) line, 0, 0, size);
-	insecure_printf("secret (from secure storage): %s (size = %d)\n", line, size);
+	insecure_printf("secret (from secure storage): %s (size = %d)\n", line,
+			size);
 	api->delete_and_yield_secure_storage();
 }
