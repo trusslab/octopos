@@ -8,12 +8,12 @@
 #include <pthread.h>
 #ifndef ARCH_SEC_HW_STORAGE
 #include <semaphore.h>
-#include <tpm/hash.h>
 #include <tpm/tpm.h>
 #else
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
 #endif
+#include <tpm/hash.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
@@ -136,7 +136,7 @@ struct partition partitions[NUM_PARTITIONS];
  * Partition 0 is the boot partition.
  * Partition 1 is the root fs partition for the untrusted domain.
  */
-/* FIXME: (Zephyr) for now, partition size must be power of 2 */
+/* FIXME: for SEC_HW, partition size must be power of 2 */
 uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 128, 128, 128, 128};
 
@@ -144,7 +144,7 @@ uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 uint32_t boot_image_sizes[NUM_PROCESSORS + 1] = 
 	{0, OS_IMAGE_SIZE, KEYBOARD_IMAGE_SIZE, SERIALOUT_IMAGE_SIZE, 
 		STORAGE_IMAGE_SIZE, 0, 0, RUNTIME1_IMAGE_SIZE, 0,
-		UNTRUSTED_KERNEL_SIZE ,0};
+		UNTRUSTED_KERNEL_SIZE};
 #endif
 
 uint8_t bound_partition = 0xFF; /* 0xFF is an invalid partition number. */
@@ -535,7 +535,6 @@ static int partition_read(int partition_id, int page_id, void *ptr)
 
 static int partition_write_header(int partition_id, u32 offset, u32 length, void *ptr)
 {
-//	SEC_HW_DEBUG_HANG();
 	u32 header_address, status;
 
 	if (partition_id >= NUM_PARTITIONS)
@@ -546,6 +545,10 @@ static int partition_write_header(int partition_id, u32 offset, u32 length, void
 
 	if (offset + length > Flash_Config_Table[FCTIndex].SectSize)
 		return ERR_INVALID;
+
+	// FIXME: dup buf is no longer needed
+	uint8_t dup_buf[length + 5];
+	memcpy(dup_buf, ptr, length);
 
 	header_address = get_partition_header_address(partition_id);
 
@@ -721,7 +724,6 @@ void initialize_storage_space(void)
 	FILE *filep, *filep2;
 	struct partition *partition;
 	int suffix, i;
-	uint32_t tag, size, j;
 
 #ifdef ARCH_SEC_HW
 	uint8_t tag[4 + 48] __attribute__ ((aligned(64)));
@@ -729,6 +731,8 @@ void initialize_storage_space(void)
 	/* OctopOS block size must be smaller than a physical page size */
 	if (STORAGE_BLOCK_SIZE > Flash_Config_Table[FCTIndex].PageSize)
 		SEC_HW_DEBUG_HANG();
+#else
+	uint32_t tag, size, j;
 #endif
 
 #ifdef ARCH_UMODE
@@ -811,7 +815,6 @@ void initialize_storage_space(void)
 			// FIXME discuss with Ardalan if erase is needed.
 			// all unmapped pages won't be accessible.
 //			partition_erase(i, ERASE_ALL);
-			partition->is_locked = false;
 			continue;
 		}
 #endif
@@ -1268,8 +1271,11 @@ static void storage_create_resource(uint8_t *buf)
 {
 #ifndef ARCH_SEC_HW_STORAGE
 	FILE *filep, *filep2;
-#endif
 	uint32_t partition_id, tag, size;
+#else
+	uint8_t tag[4] __attribute__ ((aligned(64)));
+	uint32_t partition_id, size;
+#endif
 	int ret;
 
 	if (bound) {
@@ -1315,11 +1321,10 @@ static void storage_create_resource(uint8_t *buf)
 	size = (uint32_t) fop_write(&tag, sizeof(uint8_t), 4, filep);
 	fop_close(filep);
 #else
-		uint8_t tag[4] __attribute__ ((aligned(64)));
 		tag[0] = 1;
-		uint32_t size = partition_write_header(partition_id,
-											create_header_offset,
-											4, tag);
+		size = partition_write_header(partition_id,
+									create_header_offset,
+									4, tag);
 #endif
 	if (size != 4) {
 		STORAGE_SET_ONE_RET(ERR_FAULT)
@@ -1352,6 +1357,8 @@ static void storage_query_all_resources(uint8_t *buf)
 {
 #ifndef ARCH_SEC_HW_STORAGE
 	FILE *filep;
+#else
+	uint8_t tag[4] __attribute__ ((aligned(64)));
 #endif
 	uint32_t size;
 	uint32_t num_partitions;
@@ -1415,7 +1422,7 @@ static void storage_query_all_resources(uint8_t *buf)
 #endif
 
 #ifdef ARCH_SEC_HW_STORAGE
-			uint32_t size = partition_read_header(i, 
+			size = partition_read_header(partition_id,
 					 lock_header_offset, STORAGE_KEY_SIZE, tag);
 #endif
 			if (size != STORAGE_KEY_SIZE) {
@@ -1489,7 +1496,7 @@ static void storage_authenticate(uint8_t *buf, uint8_t proc_id)
 	}			
 
 	authenticated = 1;
-
+	
 	STORAGE_SET_ONE_RET(0)
 }
 
@@ -1568,9 +1575,12 @@ static void storage_destroy_resource(uint8_t *buf)
 		printf("Error: %s: couldn't remove partition key\n", __func__);
 
 	partitions[partition_id].is_created = 0;
+
+#ifndef ARCH_SEC_HW
 	/* wipe the create file of the partition */
 	filep = fop_open(partitions[partition_id].create_name, "w");
 	fop_close(filep);
+#endif
 
 	STORAGE_SET_ONE_RET(0)
 }
@@ -1633,7 +1643,7 @@ int main(int argc, char **argv)
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: storage init\n", __func__);
 
-#ifdef ARCH_SEC_HW_STORAGE
+#ifndef ARCH_SEC_HW
 	enforce_running_process(P_STORAGE);
 #endif
 

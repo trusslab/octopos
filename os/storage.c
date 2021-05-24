@@ -375,6 +375,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 
+#ifndef ARCH_SEC_HW
 	ret = tpm_processor_read_pcr(PROC_TO_PCR(runtime_proc_id), app_key);
 	if (ret) {
 		printf("Error: %s: couldn't read TPM PCR for runtime proc %d.\n",
@@ -382,6 +383,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
 		return;
 	}
+#endif
 
 	/* The partition might have been created in previous runs. Therefore,
 	 * let's check the query data we received from the storage service too.

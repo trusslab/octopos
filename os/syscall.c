@@ -151,12 +151,14 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
 
+#ifndef ARCH_SEC_HW
 		/* FIXME: arbitrary thresholds */
 		/* No more than 1000 characters; no more than 100 seconds */
 		if (limit > 1000 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
+#endif
 
 		int ret = is_queue_available(Q_SERIAL_OUT);
 		/* Or should we make this blocking? */
@@ -183,12 +185,14 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
 
+#ifndef ARCH_SEC_HW
 		/* FIXME: arbitrary thresholds */
 		/* No more than 100 characters; no more than 100 seconds. */
 		if (limit > 100 || timeout > 100) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
+#endif
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */
@@ -405,6 +409,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		uint32_t timeout = arg2;
 		uint32_t runtime_queue_id = 0;
 
+#ifndef ARCH_SEC_HW
 		/* FIXME: arbitrary thresholds. */
 		/* No more than 200 block reads/writes;
 		 * no more than 100 seconds
@@ -413,6 +418,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			break;
 		}
+#endif
 
 		if (!is_valid_runtime_queue_id(target_runtime_queue_id)) {
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -482,13 +488,15 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		 * app to have access to this resource?
 		 */
 
+#ifndef ARCH_SEC_HW
 		/* FIXME: arbitrary thresholds. */
 		if (limit > 200 || timeout > 100) {
 			char dummy;
 			SYSCALL_SET_ONE_RET_DATA((uint32_t) ERR_INVALID, &dummy, 0)
 			break;
 		}
-
+#endif
+		
 		/* Reset bluetooth proc if needed */
 		if (bluetooth_proc_need_reset)
 			reset_proc(P_BLUETOOTH);

@@ -50,9 +50,15 @@
 	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_2_INTR
 #endif
 
+#ifdef ARCH_SEC_HW_BOOT
 int		p_runtime = 0;
 int		q_runtime = 0;
 int		q_os = 0;
+#else
+extern int		p_runtime;
+extern int		q_runtime;
+extern int		q_os;
+#endif
 
 uint8_t 		load_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
 extern bool 	still_running;
@@ -106,10 +112,13 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 	usleep(100);
 	octopos_mailbox_deduct_and_set_owner(queue_ptr, P_PREVIOUS);
 
-	_SEC_HW_DEBUG("After yield: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_DEBUG("After yield: queue%d:%08x",
+			queue_id,
+			octopos_mailbox_get_status_reg(queue_ptr));
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count,
+		timeout_t timeout)
 {
 	_SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
 
@@ -118,7 +127,10 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
 	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
-	result &= octopos_mailbox_attest_quota_limit(queue_ptr, count * factor);
+	result &= octopos_mailbox_attest_quota_limit(queue_ptr,
+			count * factor);
+
+	/* FIXME: implement timeout attestation */
 
 	return result;
 }

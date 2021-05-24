@@ -277,9 +277,11 @@ static void queue_expired(uint8_t queue_id)
 		 queue_id == Q_STORAGE_DATA_IN ||
 		 queue_id == Q_STORAGE_DATA_OUT)
 		reset_storage_queues_trackers();
+#ifndef ARCH_SEC_HW
 	else if (queue_id == Q_NETWORK_DATA_IN ||
 		 queue_id == Q_NETWORK_DATA_OUT)
 		reset_network_queues_tracker();
+#endif
 	else if (queue_id == Q_BLUETOOTH_CMD_IN ||
 		 queue_id == Q_BLUETOOTH_CMD_OUT ||
 		 queue_id == Q_BLUETOOTH_DATA_IN ||
@@ -455,6 +457,7 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 
 int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 {
+#ifndef ARCH_SEC_HW
 	uint8_t pcr_val[TPM_EXTEND_HASH_SIZE];
 	int ret;
 
@@ -470,7 +473,7 @@ int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 		       __func__);
 		return ERR_UNEXPECTED;
 	}
-
+#endif
 	return 0;
 }
 
@@ -929,10 +932,12 @@ static void terminate_app(void)
 {
 	still_running = false;
 	inform_os_of_termination();
-
+#ifndef ARCH_SEC_HW
 	terminate_app_thread_arch();
+#endif
 }
 
+#ifndef ARCH_SEC_HW
 /*
  * func() should terminate on its own. We don't cancel it anywhere.
  */
@@ -940,19 +945,30 @@ static int schedule_func_execution(void *(*func)(void *), void *data)
 {
 	return schedule_func_execution_arch(func, data);
 }
+#endif
 
 /* FIXME: use libsodim for cryptographically-secure randomness. */
 static uint32_t get_random_uint(void)
 {
+#ifndef ARCH_SEC_HW
 	srand(time(NULL));
 
 	return (uint32_t) rand();	
+#else
+	/* FIXME: sec_hw libc doesn't have time() */
+	return 0;
+#endif
 }
 
 /* Return time in seconds since some fixed time in the past */
 static uint64_t get_time(void)
 {
+#ifndef ARCH_SEC_HW
 	return (uint64_t) time(NULL);
+#else
+	/* FIXME: sec_hw libc doesn't have time() */
+	return 0;
+#endif
 }
 
 extern bool has_network_access;
@@ -1457,8 +1473,6 @@ int bluetooth_recv_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 	return 0;
 }
 
-#endif
-
 static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_size, 
 					  char* nonce, uint8_t **signature,
 					  size_t *sig_size, uint8_t **quote,
@@ -1482,6 +1496,7 @@ int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 	tpm_processor_read_pcr(PROC_TO_PCR(proc_id), pcr_val);
 	return 0;
 }
+#endif
 
 static void load_application(char *msg)
 {
@@ -1526,11 +1541,15 @@ static void load_application(char *msg)
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
+#ifdef ARCH_UMODE
 		.request_tpm_attestation_report = request_tpm_attestation_report,
+#endif
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
 		.terminate_app = terminate_app,
+#ifdef ARCH_UMODE
 		.schedule_func_execution = schedule_func_execution,
+#endif
 		.get_random_uint = get_random_uint,
 		.get_time = get_time,
 #ifdef ARCH_UMODE
@@ -1739,9 +1758,9 @@ int main()
 		printf("Error: %s: couldn't initialize the runtime\n", __func__);
 		return -1;
 	}
+#ifndef ARCH_SEC_HW
 	enforce_running_process(p_runtime);
-
-	enforce_running_process(p_runtime);
+#endif
 
 	/* initialize syscall response queue */
 	/* FIXME: release memory on exit */

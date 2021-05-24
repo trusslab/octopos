@@ -1008,7 +1008,6 @@ int init_os_mailbox(void)
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_CMD_IN], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, 0);
-	sem_init(&interrupts[Q_SENSOR], 0, 0);
 	sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE);
 	sem_init(&interrupts[Q_UNTRUSTED], 0, MAILBOX_QUEUE_SIZE);
@@ -1019,7 +1018,6 @@ int init_os_mailbox(void)
 	sem_init(&availables[Q_STORAGE_DATA_OUT], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_IN], 0, 1);
 	sem_init(&availables[Q_STORAGE_CMD_OUT], 0, 1);
-	sem_init(&availables[Q_SENSOR], 0, 1);
 	sem_init(&availables[Q_RUNTIME1], 0, 1);
 	sem_init(&availables[Q_RUNTIME2], 0, 1);
 
