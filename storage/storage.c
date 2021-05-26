@@ -819,6 +819,12 @@ void initialize_storage_space(void)
 		}
 #endif
 	}
+
+/* FIXME: installer should set boot partition is_created flag */
+#ifdef ARCH_SEC_HW
+	partitions[0].is_created = true;
+#endif
+
 }
 
 static int set_partition_key(uint8_t *data, int partition_id)
@@ -1496,7 +1502,7 @@ static void storage_authenticate(uint8_t *buf, uint8_t proc_id)
 	}			
 
 	authenticated = 1;
-	
+
 	STORAGE_SET_ONE_RET(0)
 }
 

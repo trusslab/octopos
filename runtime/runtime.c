@@ -1573,6 +1573,7 @@ static void load_application(char *msg)
 #endif
 	};
 
+#ifndef ARCH_SEC_HW
 	/* Retrieve app from FS */
 	uint32_t fd = open_file(msg, FILE_OPEN_MODE);
 	if (!fd) {
@@ -1635,6 +1636,9 @@ static void load_application(char *msg)
 
 	/* Finally, run the app. */
 	load_application_arch(path, &api);
+#else
+	load_application_arch(msg, &api);
+#endif
 
 	return;
 }

@@ -807,9 +807,9 @@ int initialize_qspi_flash()
 //
 	//debug >>>
 	// FIXME This is for debug only.
-	 for (int i=0; i < 22; i++) {
-	 	FlashErase(i * 1024 * 128, 1024, CmdBfr);
-	 }
+	 // for (int i=0; i < 22; i++) {
+	 // 	FlashErase(i * 1024 * 128, 1024, CmdBfr);
+	 // }
 
 ////	uint8_t bufw[512 + 5] __attribute__ ((aligned(64)));
 //	memset(WriteBuffer, 0xD3, 512);
