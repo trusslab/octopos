@@ -108,8 +108,8 @@ static int query_storage_partitions(void)
 
 	ret = query_number_partitions();
 	if (ret) {
-		printf("Error: %s: couldn't query the number of partitions\n",
-		       __func__);
+		printf("Error: %s: couldn't query the number of partitions (%d)\n",
+		       __func__, ret);
 		return ret;
 	}
 

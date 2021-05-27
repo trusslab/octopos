@@ -998,6 +998,9 @@ static void storage_bind_resource(uint8_t *buf)
 {
 	uint32_t partition_id;
 
+	STORAGE_GET_ONE_ARG
+	partition_id = arg0;
+
 	if (bound || used || authenticated) {
 		printf("Error: %s: the bind op is invalid if bound (%d), "
 		       "used (%d), or authenticated (%d) is set.\n", __func__,
@@ -1005,9 +1008,6 @@ static void storage_bind_resource(uint8_t *buf)
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
-
-	STORAGE_GET_ONE_ARG
-	partition_id = arg0;
 
 	if (partition_id >= NUM_PARTITIONS) {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
@@ -1223,7 +1223,7 @@ static void storage_receive_data(uint8_t *buf)
 			write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
 		}
 
-		STORAGE_SET_ONE_RET(STORAGE_BLOCK_SIZE);
+		STORAGE_SET_TWO_RETS(0, STORAGE_BLOCK_SIZE);
 		return;
 	}
 #endif
@@ -1370,6 +1370,8 @@ static void storage_query_all_resources(uint8_t *buf)
 	uint32_t num_partitions;
 	uint8_t partition_id;
 
+/* FIXME: sec_hw doesn't support storage domain reboot. */
+#ifndef ARCH_SEC_HW_STORAGE
 	if (bound) {
 		printf("Error: %s: the query_all_resources op cannot be used "
 		       "when some partition is bound\n", __func__);
@@ -1377,6 +1379,15 @@ static void storage_query_all_resources(uint8_t *buf)
 		STORAGE_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
 		return;
 	}
+#else
+	if (bound) {
+		/* if bound, simulate a reset */
+		used = 0;
+		bound = 0;
+		authenticated = 0;
+		bound_partition = 0xFF;
+	}
+#endif
 
 	STORAGE_GET_TWO_ARGS
 
