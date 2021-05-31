@@ -60,17 +60,27 @@
 // }
 
 
+void display_event_loop()
+{
+    while (1) {
+        
+    }
+}
+
 int main(int argc, char **argv)
 {
 
+    display_event_loop();
 
-    int ret = init_display();
-	if (ret)
-		return ret;
+    // printf("display/display.c testing\n");
+
+    // int ret = init_display();
+	// if (ret)
+	// 	return ret;
 
     // display server code goes here
 
-    close_display();
+    // close_display();
 
         // int win_b_color;
         // int win_w_color;

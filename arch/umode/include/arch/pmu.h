@@ -34,6 +34,7 @@
 #define FIFO_UNTRUSTED_LOG	"/tmp/octopos_untrusted_log"
 #define FIFO_PMU_LOG		"/tmp/octopos_pmu_log"
 #define FIFO_APP_SERVERS_LOG	"/tmp/octopos_app_servers_log"
+#define FIFO_DISPLAY_LOG    "/tmp/octopos_display_log"
 
 int pmu_shutdown(void);
 int pmu_reboot(void);

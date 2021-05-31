@@ -47,7 +47,7 @@ void put_int_on_display_queue(uint8_t value)
 /* Initializes the display and its mailbox */
 int init_display(void)
 {
-	printf("initing display mailbox\n");
+	printf("initializing display mailbox\n");
 	fd_out = open(FIFO_DISPLAY_OUT, O_WRONLY);
 	fd_intr = open(FIFO_DISPLAY_INTR, O_RDONLY);
 
@@ -59,6 +59,7 @@ int init_display(void)
 		return -1;
 	}
 
+	printf("Done initializing mailbox\n");
 	return 0;
 }
 

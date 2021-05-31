@@ -22,7 +22,7 @@ int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
 int fd_mailbox_log, fd_tpm_log, fd_os_log, fd_keyboard_log,
     fd_serial_out_log, fd_runtime1_log, fd_runtime2_log, fd_storage_log,
     fd_network_log, fd_bluetooth_log, fd_untrusted_log, fd_pmu_log,
-    fd_app_servers_log;
+    fd_app_servers_log, fd_display_log;
 
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
@@ -311,7 +311,8 @@ static int start_display_proc(void)
 {
 	char *const args[] = {(char*) "display server", NULL};
 	char path[] = "./display/display";
-	return start_proc(path, args, fd_app_servers_log, 0, 0, 0);
+	printf("Starting display proc\n");
+	return start_proc(path, args, fd_display_log, 0, 0, 0);
 }
 
 static void start_all_procs(void)
@@ -329,6 +330,7 @@ static void start_all_procs(void)
 	bluetooth_pid = start_bluetooth_proc();
 	untrusted_pid = start_untrusted_proc();
 	display_pid = start_display_proc();
+	printf("display_pid %d\n", display_pid);
 	/* These servers are not part of OctopOS.
 	 * We start them here since they're useful for testing.
 	 */
@@ -432,7 +434,7 @@ static void *proc_reboot_handler(void *data)
 {
 	char proc_name[64];
 	int wstatus, ret = 0;
-	int reboot_exception = 0;
+	// int reboot_exception = 0;
 
 	while (do_restart || do_reset_queues || num_running_procs) {
 		pid_t pid = wait(&wstatus);
@@ -441,15 +443,15 @@ static void *proc_reboot_handler(void *data)
 		num_running_procs--;
 		if (pid == mailbox_pid) {
 			sprintf(proc_name, "Mailbox");
-			reboot_exception = 1;
+			// reboot_exception = 1;
 			sem_post(&reset_done[0]);
 		} else if (pid == tpm_server_pid) {
 			sprintf(proc_name, "TPM_server");
-			reboot_exception = 1;
+			// reboot_exception = 1;
 			sem_post(&reset_done[NUM_PROCESSORS + 1]);
 		} else if (pid == tpm2_abrmd_pid) {
 			sprintf(proc_name, "TPM_abrmd");
-			reboot_exception = 1;
+			// reboot_exception = 1;
 			sem_post(&reset_done[NUM_PROCESSORS + 1]);
 		} else if (pid == os_pid) {
 			sprintf(proc_name, "OS processor");
@@ -652,6 +654,15 @@ static void *proc_reboot_handler(void *data)
 				untrusted_pid = start_untrusted_proc();
 
 			sem_post(&reset_done[P_UNTRUSTED]);
+		} else if (pid == display_pid){
+			sprintf(proc_name, "Display Server");
+
+			if (do_reset_queues)
+				mailbox_reset_queue(Q_DISPLAY);
+
+			if (do_restart)
+				display_pid = start_display_proc();
+			sem_post(&reset_done[P_DISPLAY]);
 		} else if (pid == socket_server_pid) {
 			sprintf(proc_name, "Socket Server");
 			if (do_restart)
@@ -668,22 +679,20 @@ static void *proc_reboot_handler(void *data)
 			sprintf(proc_name, "Health Server");
 			if (do_restart)
 				health_server_pid = start_health_server_proc();
-		} else if (pid == display_pid) {
-			sprintf(proc_name, "Display Server");
-			if (do_restart)
-				display_pid = start_display_proc();
 		} else {
 			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
 			continue;
 		}
 
 print:
-		printf("%s terminated (%d)%s%s%s\n", proc_name, wstatus,
-		       (do_restart && !reboot_exception) ? " and restarted" : "",
-		       do_reset_queues && !reboot_exception ?
-		       " -- queues reset" : "",
-		       do_reset_queues && ret && !reboot_exception ?
-		       ", but unsuccessfully" : "");
+
+		{};
+		// printf("%s terminated (%d)%s%s%s\n", proc_name, wstatus,
+		//        (do_restart && !reboot_exception) ? " and restarted" : "",
+		//        do_reset_queues && !reboot_exception ?
+		//        " -- queues reset" : "",
+		//        do_reset_queues && ret && !reboot_exception ?
+		//        ", but unsuccessfully" : "");
 	}
 	
 	return NULL;
@@ -738,6 +747,7 @@ int main(int argc, char **argv)
 	mkfifo(FIFO_UNTRUSTED_LOG, 0666);
 	mkfifo(FIFO_PMU_LOG, 0666);
 	mkfifo(FIFO_APP_SERVERS_LOG, 0666);
+	mkfifo(FIFO_DISPLAY_LOG, 0666);
 
 	fd_pmu_to_os = open(FIFO_PMU_TO_OS, O_RDWR);
 	fd_pmu_from_os = open(FIFO_PMU_FROM_OS, O_RDWR);
@@ -757,6 +767,7 @@ int main(int argc, char **argv)
 	fd_untrusted_log = open(FIFO_UNTRUSTED_LOG, O_RDWR);
 	fd_pmu_log = open(FIFO_PMU_LOG, O_RDWR);
 	fd_app_servers_log = open(FIFO_APP_SERVERS_LOG, O_RDWR);
+	fd_display_log = open(FIFO_DISPLAY_LOG, O_RDWR);
 
 	dup2(fd_pmu_log, 1);
 	printf("%s: PMU init\n", __func__);
@@ -995,6 +1006,7 @@ err_close:
 	close(fd_os_log);
 	close(fd_tpm_log);
 	close(fd_mailbox_log);
+	close(fd_display_log);
 
 	close(fd_pmu_from_mailbox);
 	close(fd_pmu_to_mailbox);
@@ -1014,6 +1026,7 @@ err_close:
 	remove(FIFO_OS_LOG);
 	remove(FIFO_TPM_LOG);
 	remove(FIFO_MAILBOX_LOG);
+	remove(FIFO_DISPLAY_LOG);
 	
 	remove(FIFO_PMU_FROM_MAILBOX);
 	remove(FIFO_PMU_TO_MAILBOX);

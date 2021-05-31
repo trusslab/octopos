@@ -23,7 +23,7 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	opt = getopt(argc, argv, "mtokl12snbupv");
+	opt = getopt(argc, argv, "mtokl12snbupvd");
 	switch (opt) {
 	case 'm':
 		mkfifo(FIFO_MAILBOX_LOG, 0666);
@@ -90,6 +90,11 @@ int main(int argc, char **argv)
 		fd_log = open(FIFO_APP_SERVERS_LOG, O_RDONLY);
 		printf("Socket server logs:\n");
 		break;
+	case 'd': 
+		mkfifo(FIFO_DISPLAY_LOG, 0666);
+		fd_log = open(FIFO_DISPLAY_LOG, O_RDONLY);
+		printf("Display logs:\n");
+		break;
 	default:
 		printf("Error: %s: Command not supported\n", __func__);
 		exit(-1);
@@ -146,6 +151,9 @@ int main(int argc, char **argv)
 		break;
 	case 'v': 
 		remove(FIFO_APP_SERVERS_LOG);
+		break;
+	case 'd': 
+		remove(FIFO_DISPLAY_LOG);
 		break;
 	default:
 		printf("Error: %s: Command not supported\n", __func__);
