@@ -108,7 +108,7 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected);
 /* Top-level TPM API exposed for calling */
 int enforce_running_process(uint8_t processor);
 int cancel_running_process();
-int tpm_measure_service(uint8_t *hash_value);
+int tpm_measure_service(uint8_t *hash_value, uint8_t *buf);
 int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value);
 int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	       size_t pcr_list_size, uint8_t **signature,

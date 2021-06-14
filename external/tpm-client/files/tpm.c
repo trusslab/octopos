@@ -214,10 +214,9 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected)
  */
 int enforce_running_process(uint8_t processor)
 {
-	if (processor == 0 || processor >= INVALID_PROCESSOR) {
-		fprintf(stderr, "Invalid processor.\n");
+	if (processor == 0 || processor >= INVALID_PROCESSOR)
 		return -1;
-	}
+
 	running_processor = processor;
 	return 0;
 }
@@ -228,7 +227,7 @@ int cancel_running_process()
 	return 0;
 }
 
-int tpm_measure_service(uint8_t *hash_value)
+int tpm_measure_service(uint8_t *hash_value, uint8_t *buf)
 {
 	int rc = 0;
 	FAPI_CONTEXT *context = NULL;
@@ -242,7 +241,7 @@ int tpm_measure_service(uint8_t *hash_value)
 	rc = tpm_extend(context, PROC_TO_PCR(running_processor), hash_value);
 	return_if_error_label(rc, out_measure_service);
 	
-	rc = tpm_read(context, PROC_TO_PCR(running_processor), NULL, NULL, 1);
+	rc = tpm_read(context, PROC_TO_PCR(running_processor), buf, NULL, 1);
 	return_if_error_label(rc, out_measure_service);
 
 out_measure_service:
@@ -294,7 +293,7 @@ int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size)
 {
 	int rc = 0;
-        size_t pcr_index = 0;
+    size_t pcr_index = 0;
 	FAPI_CONTEXT *context = NULL;
 
 	rc = tpm_initialize(&context);

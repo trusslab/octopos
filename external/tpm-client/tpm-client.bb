@@ -20,4 +20,5 @@ do_compile() {
 do_install() {
 	     install -d ${D}${bindir}
 	     install -m 0755 tpm-client ${D}${bindir}
+		 install -m 0755 ${S}/tpm_env.sh ${D}${bindir}
 }
