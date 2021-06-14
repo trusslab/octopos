@@ -3,12 +3,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdint.h>
 #include <tss2/tss2_fapi.h>
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_rc.h>
+#include <time.h>
 
 /* FIX: duplicate define */
 #define INVALID_PROCESSOR	11
@@ -52,6 +54,11 @@
 #define LOCALITY_UNTRUSTED	(LOCALITY_BASE + 0x08)
 #define LOCALITY_PMU		(LOCALITY_BASE + 0x09)
 #define PROC_LOCALITY(proc)	(LOCALITY_BASE + (proc - 1))
+
+#define OP_MEASURE		0x01
+#define OP_READ			0x02
+#define OP_ATTEST		0x03
+#define OP_RESET		0x04
 
 /* Copied macro from TPM2-TSS */
 #define SAFE_FREE(S) if((S) != NULL) {free((void*) (S)); (S)=NULL;}

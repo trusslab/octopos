@@ -18,8 +18,8 @@ abrmd:
 	sudo ldconfig && sudo pkill -HUP dbus-daemon && sudo systemctl daemon-reload
 
 emu:
-	make -j$(nproc) -C ./ibmtpm/src
-	mv ./ibmtpm/src/tpm_server ./ibmtpm/tpm_server
+	make -j$(nproc) -C ./ibmtpm/files
+	mv ./ibmtpm/files/tpm_server ./ibmtpm/tpm_server
 
 clean:
 	make clean -C ./tpm2-tss

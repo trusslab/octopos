@@ -171,7 +171,7 @@ int main(int argc, char *argv[])
 		error("ERROR on accept");
 	
 	char msg[MSG_LENGTH];
-	char pcr_slot[3] = "32";
+	char pcr_slot[3] = "30";
 	uint8_t nonce[NONCE_LENGTH];
 	while (true) {
 		int ret = check_slot(pcr_slot);

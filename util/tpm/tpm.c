@@ -1,9 +1,29 @@
 #include <tpm/tpm.h>
 #include <tpm/hash.h>
+#include <tpm/queue.h>
 
 static uint8_t running_processor = 0;
 
-/* Hash support function:
+/* Driver support functions:
+ *   write_to_driver
+ */
+int write_to_driver(uint8_t *in_buf, uint8_t **out_buf, size_t *out_size)
+{
+	int rc = 0;
+	struct queue_list *in_queues;
+	struct queue_list *out_queues;
+	open_queue(&in_queues, &out_queues);
+	enqueue(in_queues, in_buf, running_processor);
+	while (1) {
+		rc = dequeue(out_queues, out_buf, out_size, running_processor);
+		if (rc != E_EMPTY_QUEUE) {
+			return rc;
+		}
+		sleep(2);
+	}
+}
+
+/* Hash support functions:
  *   print_digest
  *   hash_to_byte_structure
  *   prepare_extend
@@ -230,11 +250,13 @@ int cancel_running_process()
 int tpm_measure_service(char* path)
 {
 	int rc = 0;
-	FAPI_CONTEXT *context = NULL;
 	uint8_t hash_value[TPM_EXTEND_HASH_SIZE] = {0};
 
 	rc = hash_file(path, hash_value);
-	return_if_error_label(rc, out_measure_service);
+	return_if_error_no_msg(rc);
+
+#ifdef ARCH_UMODE
+	FAPI_CONTEXT *context = NULL;
 
 	rc = tpm_initialize(&context);
 	return_if_error_label(rc, out_measure_service);
@@ -251,12 +273,24 @@ int tpm_measure_service(char* path)
 out_measure_service:
 	tpm_finalize(&context);
 	return rc;
+#else
+	uint8_t in_buf[BUFFER_SIZE] = { 0 };
+	uint8_t *out_buf;
+	size_t size;
+	in_buf[0] = OP_MEASURE;
+	memcpy(in_buf + 1, hash_value, TPM_EXTEND_HASH_SIZE);
+	rc = write_to_driver(in_buf, &out_buf, &size);
+	free(out_buf);
+	return rc;
+#endif
 }
 
 int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value)
 {
 	int rc = 0;
-	FAPI_CONTEXT *context = NULL;
+
+#ifdef ARCH_UMODE
+        FAPI_CONTEXT *context = NULL;
 
 	rc = tpm_initialize(&context);
 	return_if_error_no_msg(rc);
@@ -270,6 +304,17 @@ int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value)
 out_processor_read_pcr:	
 	tpm_finalize(&context);
 	return rc;
+#else
+        uint8_t in_buf[BUFFER_SIZE] = { 0 };
+	uint8_t *out_buf;
+	size_t size;
+        in_buf[0] = OP_READ;
+	in_buf[1] = (uint8_t) (pcr_index & 0xFF);
+        rc = write_to_driver(in_buf, &out_buf, &size);
+	memcpy(pcr_value, out_buf, TPM_EXTEND_HASH_SIZE);
+	free(out_buf);
+        return rc;
+#endif
 }
 
 int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
@@ -277,7 +322,9 @@ int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	       size_t *signature_size, char** quote_info)
 {
 	int rc = 0;
-	FAPI_CONTEXT *context = NULL;
+
+#ifdef ARCH_UMODE
+        FAPI_CONTEXT *context = NULL;
 	char *pcr_event_log = NULL;
 
 	rc = tpm_initialize(&context);
@@ -292,12 +339,36 @@ int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	
 	tpm_finalize(&context);
 	return rc;
+#else
+        uint8_t in_buf[BUFFER_SIZE] = { 0 };
+	uint8_t *out_buf;
+	size_t size;
+        in_buf[0] = OP_ATTEST;
+        memcpy(in_buf + 1, nonce, TPM_AT_NONCE_LENGTH);
+	in_buf[1 + TPM_AT_NONCE_LENGTH] = (uint8_t) (pcr_list_size & 0XFF);
+        for (size_t i = 0; i < pcr_list_size; i++) {
+		in_buf[2 + TPM_AT_NONCE_LENGTH + i] = (uint8_t) (pcr_list[i] & 0xFF);
+        }
+        rc = write_to_driver(in_buf, &out_buf, &size);
+	*signature_size = (out_buf[2] << 8) + out_buf[3];
+	*signature = (uint8_t *) malloc(*signature_size * sizeof(uint8_t));
+	memcpy(*signature, out_buf + 4, *signature_size);
+	
+	size_t quote_info_size = (out_buf[4 + *signature_size] << 8) + out_buf[5 + *signature_size];
+	*quote_info = (char *) malloc(quote_info_size * sizeof(char));
+	memcpy(quote_info, out_buf + 6 + *signature_size, quote_info_size);
+
+	free(out_buf);
+        return rc;
+#endif
 }
 
 int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size)
 {
 	int rc = 0;
-	size_t pcr_index = 0;
+
+#ifdef ARCH_UMODE
+        size_t pcr_index = 0;
 	FAPI_CONTEXT *context = NULL;
 
 	rc = tpm_initialize(&context);
@@ -312,5 +383,17 @@ int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size)
 	}
 	
 	tpm_finalize(&context);
-	return rc; 
+	return rc;
+#else
+        uint8_t in_buf[BUFFER_SIZE] = { 0 };
+	uint8_t *out_buf;
+	size_t size;
+        in_buf[0] = OP_RESET;
+        in_buf[1] = (uint8_t) (pcr_list_size & 0XFF);
+        for (size_t i = 0; i < pcr_list_size; i++) {
+		in_buf[2 + i] = (uint8_t)(pcr_list[i] & 0xFF);
+        }
+        rc = write_to_driver(in_buf, &out_buf, &size);
+        return rc;
+#endif
 }

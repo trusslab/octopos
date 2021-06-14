@@ -15,6 +15,7 @@
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
 #include <tpm/tpm.h>
+#include <tpm/queue.h>
 #include <arch/pmu.h>
 
 int fd_pmu_to_os, fd_pmu_from_os, fd_pmu_to_mailbox, fd_pmu_from_mailbox;
