@@ -22,8 +22,13 @@
 #include "lwip/inet.h"
 
 //extern int initialize_network_hardware(struct netif *);
-struct netif *xil_netif;
-struct netif server_netif;
+//struct netif *xil_netif;
+//struct netif server_netif;
+struct xemac_s *xil_xemac;
+struct xemac_s server_xemac;
+u8_t mac_hwaddr[6];
+u8_t mac_hwaddr_len = 6U;
+
 
 struct netdev *xileth;
 int hardware_ready = 0;
@@ -33,35 +38,6 @@ int xil_netif_initialized =0;
 #define DEFAULT_IP_MASK_HEX		0x00ffffff // "255.255.255.0"
 
 
-#ifdef MJMJ
-#define DEFAULT_IP_ADDRESS	"192.168.1.10"
-#define DEFAULT_IP_MASK		"255.255.255.0"
-#define DEFAULT_GW_ADDRESS	"192.168.1.1"
-
-
-
-static void assign_default_ip(ip_addr_t *ip, ip_addr_t *mask, ip_addr_t *gw)
-{
-	int err;
-
-	xil_printf("Configuring default IP %s \r\n", DEFAULT_IP_ADDRESS);
-
-	err = inet_aton(DEFAULT_IP_ADDRESS, ip);
-	printf("ip = %x\r\n", ip->addr);
-	if (!err)
-		xil_printf("Invalid default IP address: %d\r\n", err);
-
-	err = inet_aton(DEFAULT_IP_MASK, mask);
-	printf("mask = %x\r\n", mask->addr);
-	if (!err)
-		xil_printf("Invalid default IP MASK: %d\r\n", err);
-
-	err = inet_aton(DEFAULT_GW_ADDRESS, gw);
-	printf("gw = %x\r\n", gw->addr);
-	if (!err)
-		xil_printf("Invalid default gateway address: %d\r\n", err);
-}
-#endif
 
 err_t
 ethernet_input(struct pbuf *p, struct netif *netif)
@@ -80,9 +56,11 @@ xemac_add(struct netif *netif,
 {
 	int i;
 	/* set mac address */
-	netif->hwaddr_len = 6;
-	for (i = 0; i < 6; i++)
+	for (i = 0; i < 6; i++){
 		netif->hwaddr[i] = mac_ethernet_address[i];
+		mac_hwaddr[i] = mac_ethernet_address[i];
+
+	}
 
     netif->mtu = 0;
 	netif->flags = 0;
@@ -93,12 +71,15 @@ xemac_add(struct netif *netif,
 	if (xaxiemacif_init(netif) != ERR_OK) {
 	  return NULL;
 	}
+
 	return netif;
 }
 
 
 
-int initialize_network_hardware(struct netif *netif)
+extern err_t octopos_xemac_init(struct xemac_s *xemac, unsigned char * mac_addr,  unsigned  mac_baseaddr);
+
+int initialize_network_hardware(struct xemac_s *xemac)
 {
 
 
@@ -106,23 +87,22 @@ int initialize_network_hardware(struct netif *netif)
 	printf("%s: mj[0]\r\n",__func__);
 	unsigned char mac_ethernet_address[] = {
 		0x00, 0x0a, 0x35, 0x00, 0x01, 0x02 };
-	if (!xemac_add(netif, NULL, NULL, NULL, mac_ethernet_address,
+	int i;
+	/* set mac address */
+	for (i = 0; i < 6; i++){
+		mac_hwaddr[i] = mac_ethernet_address[i];
+
+	}
+	if (octopos_xemac_init(xemac, mac_ethernet_address,
 				PLATFORM_EMAC_BASEADDR)) {
 		xil_printf("Error adding N/W interface\r\n");
 		return -1;
 	}
-	printf("%s: mj[1]\r\n",__func__);
-//	netif_set_default(netif);
-//	netif_set_up(netif);
-//	printf("%s: mj[2]\r\n",__func__);
-//	assign_default_ip(&(netif->ip_addr), &(netif->netmask), &(netif->gw));
-//	print_ip_settings(&(netif->ip_addr), &(netif->netmask), &(netif->gw));
-	xil_printf("\r\n");
+
 
 	printf("%s: success\r\n",__func__);
 	return 0;
 }
-
 
 static void xileth_dev_exit(struct netdev *dev)
 {
@@ -133,10 +113,10 @@ static int xileth_dev_init(struct netdev *dev)
 	/* init tap: out network nic */
 	/* init xileth: information for our netstack */
 	if(hardware_ready){
-		dev->net_mtu = xil_netif->mtu;
+		dev->net_mtu = 1500 - 14;
 		dev->net_ipaddr = DEFAULT_IP_ADDRESS_HEX;
 		dev->net_mask = DEFAULT_IP_MASK_HEX;
-		hwacpy(dev->net_hwaddr, xil_netif->hwaddr);
+		hwacpy(dev->net_hwaddr, mac_hwaddr);
 		dbg("%s ip address: " IPFMT, dev->net_name, ipfmt(dev->net_ipaddr));
 		dbg("%s hw address: " MACFMT, dev->net_name, macfmt(dev->net_hwaddr));
 	/* net stats have been zero */
@@ -147,7 +127,8 @@ static int xileth_dev_init(struct netdev *dev)
 static int xileth_xmit(struct netdev *dev, struct pkbuf *pkb)
 {
 	int l;
-	struct xemac_s *xemac = (struct xemac_s *)(xil_netif->state);
+//	struct xemac_s *xemac = (struct xemac_s *)(xil_netif->state);
+	struct xemac_s *xemac = xil_xemac;
 	printf("%s: mj[0]\r\n",__func__);
 	xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
 	XLlFifo *llfifo = &xaxiemacif->axififo;
@@ -176,7 +157,8 @@ static int xileth_recv(struct pkbuf *pkb)
 {
 	int l;
 	if(xil_netif_initialized == 1){
-		struct xemac_s *xemac = (struct xemac_s *)(xil_netif->state);
+		////struct xemac_s *xemac = (struct xemac_s *)(xil_netif->state);
+		struct xemac_s *xemac = xil_xemac;
 		struct pbuf *p;
 	//	printf("%s: xemac=%p\r\n",xemac);
 		xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
@@ -224,9 +206,11 @@ void xileth_poll(void)
 
 void xileth_init(void)
 {
-	xil_netif = &server_netif;
+	//xil_netif = &server_netif;
+	xil_xemac = &server_xemac;
 	xileth = netdev_alloc("xileth", &xileth_ops);
-	initialize_network_hardware(xil_netif);
+	//initialize_network_hardware(xil_netif);
+	initialize_network_hardware(xil_xemac);
 	hardware_ready = 1;
 	xileth_dev_init(xileth);
 	xil_netif_initialized = 1;
