@@ -11,6 +11,7 @@
 #include <network/list.h>
 #include <network/netcfg.h>
 #include <network/arp.h>
+#include "arch/ethernet_hw_params.h"
 
 //#include "tap.h"
 
@@ -18,14 +19,110 @@
 #include "netif/xaxiemacif.h"
 #include "xllfifo_hw.h"
 #include "xllfifo.h"
+#include "lwip/inet.h"
 
-extern int initialize_network_hardware(struct netif *);
+//extern int initialize_network_hardware(struct netif *);
 struct netif *xil_netif;
 struct netif server_netif;
 
 struct netdev *xileth;
 int hardware_ready = 0;
 int xil_netif_initialized =0;
+
+#define DEFAULT_IP_ADDRESS_HEX	0x0a01a8c0 // "192.168.1.10"
+#define DEFAULT_IP_MASK_HEX		0x00ffffff // "255.255.255.0"
+
+
+#ifdef MJMJ
+#define DEFAULT_IP_ADDRESS	"192.168.1.10"
+#define DEFAULT_IP_MASK		"255.255.255.0"
+#define DEFAULT_GW_ADDRESS	"192.168.1.1"
+
+
+
+static void assign_default_ip(ip_addr_t *ip, ip_addr_t *mask, ip_addr_t *gw)
+{
+	int err;
+
+	xil_printf("Configuring default IP %s \r\n", DEFAULT_IP_ADDRESS);
+
+	err = inet_aton(DEFAULT_IP_ADDRESS, ip);
+	printf("ip = %x\r\n", ip->addr);
+	if (!err)
+		xil_printf("Invalid default IP address: %d\r\n", err);
+
+	err = inet_aton(DEFAULT_IP_MASK, mask);
+	printf("mask = %x\r\n", mask->addr);
+	if (!err)
+		xil_printf("Invalid default IP MASK: %d\r\n", err);
+
+	err = inet_aton(DEFAULT_GW_ADDRESS, gw);
+	printf("gw = %x\r\n", gw->addr);
+	if (!err)
+		xil_printf("Invalid default gateway address: %d\r\n", err);
+}
+#endif
+
+err_t
+ethernet_input(struct pbuf *p, struct netif *netif)
+{
+	  return ERR_OK;
+}
+
+/*
+ * xemac_add: this is a function to add xaxiemacif interface
+ */
+struct netif *
+xemac_add(struct netif *netif,
+	ip_addr_t *ipaddr, ip_addr_t *netmask, ip_addr_t *gw,
+	unsigned char *mac_ethernet_address,
+	unsigned mac_baseaddr)
+{
+	int i;
+	/* set mac address */
+	netif->hwaddr_len = 6;
+	for (i = 0; i < 6; i++)
+		netif->hwaddr[i] = mac_ethernet_address[i];
+
+    netif->mtu = 0;
+	netif->flags = 0;
+	/* remember netif specific state information data */
+	netif->state = (void*)(UINTPTR)mac_baseaddr;
+	netif->num = 1;
+	netif->input = ethernet_input;
+	if (xaxiemacif_init(netif) != ERR_OK) {
+	  return NULL;
+	}
+	return netif;
+}
+
+
+
+int initialize_network_hardware(struct netif *netif)
+{
+
+
+	/* the mac address of the board. this should be unique per board */
+	printf("%s: mj[0]\r\n",__func__);
+	unsigned char mac_ethernet_address[] = {
+		0x00, 0x0a, 0x35, 0x00, 0x01, 0x02 };
+	if (!xemac_add(netif, NULL, NULL, NULL, mac_ethernet_address,
+				PLATFORM_EMAC_BASEADDR)) {
+		xil_printf("Error adding N/W interface\r\n");
+		return -1;
+	}
+	printf("%s: mj[1]\r\n",__func__);
+//	netif_set_default(netif);
+//	netif_set_up(netif);
+//	printf("%s: mj[2]\r\n",__func__);
+//	assign_default_ip(&(netif->ip_addr), &(netif->netmask), &(netif->gw));
+//	print_ip_settings(&(netif->ip_addr), &(netif->netmask), &(netif->gw));
+	xil_printf("\r\n");
+
+	printf("%s: success\r\n",__func__);
+	return 0;
+}
+
 
 static void xileth_dev_exit(struct netdev *dev)
 {
@@ -37,8 +134,8 @@ static int xileth_dev_init(struct netdev *dev)
 	/* init xileth: information for our netstack */
 	if(hardware_ready){
 		dev->net_mtu = xil_netif->mtu;
-		dev->net_ipaddr = xil_netif->ip_addr.addr;
-		dev->net_mask = xil_netif->netmask.addr;
+		dev->net_ipaddr = DEFAULT_IP_ADDRESS_HEX;
+		dev->net_mask = DEFAULT_IP_MASK_HEX;
 		hwacpy(dev->net_hwaddr, xil_netif->hwaddr);
 		dbg("%s ip address: " IPFMT, dev->net_name, ipfmt(dev->net_ipaddr));
 		dbg("%s hw address: " MACFMT, dev->net_name, macfmt(dev->net_hwaddr));
@@ -51,6 +148,7 @@ static int xileth_xmit(struct netdev *dev, struct pkbuf *pkb)
 {
 	int l;
 	struct xemac_s *xemac = (struct xemac_s *)(xil_netif->state);
+	printf("%s: mj[0]\r\n",__func__);
 	xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
 	XLlFifo *llfifo = &xaxiemacif->axififo;
 	//l = write(tap->fd, pkb->pk_data, pkb->pk_len);
