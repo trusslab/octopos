@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 /* octopos network client */
 #ifndef CONFIG_UML /* Linux UML */
 #include <arch/defines.h>
@@ -272,3 +273,4 @@ void syscall_close_socket(void)
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_CLOSE_SOCKET)
 	issue_syscall(buf);
 }
+#endif
