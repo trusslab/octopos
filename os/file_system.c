@@ -286,18 +286,35 @@ static int update_file_in_directory(struct file *file)
 	if ((dir_data_off + filename_size + 15) > DIR_DATA_SIZE)
 		return ERR_MEMORY;
 
+#ifdef ARCH_SEC_HW
 	memcpy(&dir_data[dir_data_off], &filename_size, 2);
+#else
+	*((uint16_t *) &dir_data[dir_data_off]) = filename_size;
+#endif
 	dir_data_off += 2;
 
 	strcpy((char *) &dir_data[dir_data_off], file->filename);
 	dir_data_off += (filename_size + 1);
 
+#ifdef ARCH_SEC_HW
 	memcpy(&dir_data[dir_data_off], &(file->start_block), 4);
+#else
+	*((uint32_t *) &dir_data[dir_data_off]) = file->start_block;
+#endif
 
 	dir_data_off += 4;
+#ifdef ARCH_SEC_HW
 	memcpy(&dir_data[dir_data_off], &(file->num_blocks), 4);
+#else
+	*((uint32_t *) &dir_data[dir_data_off]) = file->num_blocks;
+#endif
+	
 	dir_data_off += 4;
+#ifdef ARCH_SEC_HW
 	memcpy(&dir_data[dir_data_off], &(file->size), 4);
+#else
+	*((uint32_t *) &dir_data[dir_data_off]) = file->size;
+#endif
 
 	return 0;
 }
@@ -1115,8 +1132,12 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
 		/* retrieve file info */
+#ifdef ARCH_SEC_HW
 		uint16_t num_files;
 		memcpy(&num_files, &dir_data[4], 2);
+#else
+		uint16_t num_files = *((uint16_t *) &dir_data[4]);
+#endif
 		dir_data_ptr = 6;
 
 		for (int i = 0; i < num_files; i++) {

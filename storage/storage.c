@@ -136,10 +136,15 @@ struct partition partitions[NUM_PARTITIONS];
  * Partition 0 is the boot partition.
  * Partition 1 is the root fs partition for the untrusted domain.
  */
+#ifdef ARCH_SEC_HW
 /* FIXME: for SEC_HW, partition size must be power of 2 */
 uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 128, 128, 128, 128};
-
+#else
+uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
+	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100, 100};
+#endif
+	
 #ifdef ARCH_SEC_HW_STORAGE
 uint32_t boot_image_sizes[NUM_PROCESSORS + 1] = 
 	{0, OS_IMAGE_SIZE, KEYBOARD_IMAGE_SIZE, SERIALOUT_IMAGE_SIZE, 
@@ -1000,9 +1005,6 @@ static void storage_bind_resource(uint8_t *buf)
 {
 	uint32_t partition_id;
 
-	STORAGE_GET_ONE_ARG
-	partition_id = arg0;
-
 	if (bound || used || authenticated) {
 		printf("Error: %s: the bind op is invalid if bound (%d), "
 		       "used (%d), or authenticated (%d) is set.\n", __func__,
@@ -1010,6 +1012,9 @@ static void storage_bind_resource(uint8_t *buf)
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
+
+	STORAGE_GET_ONE_ARG
+	partition_id = arg0;
 
 	if (partition_id >= NUM_PARTITIONS) {
 		STORAGE_SET_ONE_RET(ERR_INVALID)
