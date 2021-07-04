@@ -5,7 +5,7 @@ int init_runtime(int runtime_id);
 void close_runtime(void);
 void runtime_core(void);
 
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t count);
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count, timeout_t timeout);
 int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner);
 void mailbox_force_ownership(uint8_t queue_id, uint8_t owner);
 void mailbox_change_queue_access_bottom_half(uint8_t queue_id);

@@ -1,7 +1,7 @@
 #ifndef _OCTOPOS_RUNTIME_H_
 #define _OCTOPOS_RUNTIME_H_
 
-#ifndef UNTRUSTED_DOMAIN
+#if !defined(UNTRUSTED_DOMAIN) && !defined(ARCH_SEC_HW)
 #include <network/sock.h>
 #endif
 
