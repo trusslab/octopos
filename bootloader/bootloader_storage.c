@@ -277,8 +277,6 @@ void bootloader_close_file_system(void)
 {
 	close_file_system();
 	fclose(filep);
-
-	return 0;
 }
 #endif /* ARCH_SEC_HW_BOOT */
 

@@ -51,7 +51,7 @@ static void distribute_input(void)
 	}
 }
 
-#if defined(ARCH_SEC_HW) && !defined(ARCH_SEC_HW_BOOT)
+#if (defined(ARCH_SEC_HW) && !defined(ARCH_SEC_HW_BOOT)) || !defined(ARCH_SEC_HW)
 int main()
 {
 	/* Non-buffering stdout */

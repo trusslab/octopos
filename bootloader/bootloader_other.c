@@ -445,7 +445,9 @@ repeat:
 		offset += STORAGE_BLOCK_SIZE;
 	}
 
+#ifdef ARCH_SEC_HW_BOOT
 	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+#endif /* ARCH_SEC_HW_BOOT */
 
 	if (need_repeat)
 		goto repeat;
