@@ -484,6 +484,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 	queue_limits[Q_STORAGE_DATA_OUT] = limit;
 	queue_timeouts[Q_STORAGE_DATA_OUT] = timeout;
 
+#ifndef ARCH_SEC_HW
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_STORAGE, expected_pcr);
 		if (ret) {
@@ -499,6 +500,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 			goto error;
 		}
 	}
+#endif
 	
 	queue_update_callbacks[Q_STORAGE_CMD_IN] = callback;
 	queue_update_callbacks[Q_STORAGE_CMD_OUT] = callback;
