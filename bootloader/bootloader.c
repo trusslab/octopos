@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -11,7 +12,6 @@
 #include <tpm/hash.h>
 #include <tpm/rsa.h>
 #endif
-#include <stdint.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>

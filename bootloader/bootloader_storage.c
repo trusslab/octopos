@@ -247,8 +247,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	fclose(copy_filep);
 	file_system_close_file(fd);
 
-	close_file_system();
-	fclose(filep);
 #else /* ARCH_SEC_HW_BOOT */
 
 #ifndef IMAGE_WRITER_MODE

@@ -1186,7 +1186,8 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			dir_data_ptr += 4;
 #endif
 			
-			file->opened = 0;
+			/* FIXME: Zephyr added this because it's not initialized to zero */
+			// file->opened = 0;
 			add_file_to_list(file);
 		}
 	} else {

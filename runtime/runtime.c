@@ -1541,18 +1541,18 @@ static void load_application(char *msg)
 		.yield_secure_ipc = yield_secure_ipc,
 		.send_msg_on_secure_ipc = send_msg_on_secure_ipc,
 		.recv_msg_on_secure_ipc = recv_msg_on_secure_ipc,
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 		.request_tpm_attestation_report = request_tpm_attestation_report,
 #endif
 		.get_runtime_proc_id = get_runtime_proc_id,
 		.get_runtime_queue_id = get_runtime_queue_id,
 		.terminate_app = terminate_app,
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 		.schedule_func_execution = schedule_func_execution,
 #endif
 		.get_random_uint = get_random_uint,
 		.get_time = get_time,
-#ifdef ARCH_UMODE
+#ifndef ARCH_SEC_HW
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
 		.close_socket = close_socket,
