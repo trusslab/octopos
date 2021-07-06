@@ -33,4 +33,6 @@ XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...);
 
 int sem_getvalue(sem_t *sem, int *value);
 
+int _sem_deliver_mailbox_message_blocking(XMbox *InstancePtr, u32* buf);
+
 #endif /* __SEC_HW_SEMAPHORE_H */
