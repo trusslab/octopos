@@ -17,7 +17,9 @@
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox.h"
 #include "arch/octopos_mbox_owner_map.h"
+#ifndef ARCH_SEC_HW_BOOT
 #include "arch/preload_application_map.h"
+#endif
 
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
@@ -31,7 +33,7 @@
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_OCTOPOS_MAILBOX_3WRI_0_INTERRUPT_1_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_OCTOPOS_MAILBOX_3WRI_2_INTERRUPT_FIXED_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_OCTOPOS_MAILBOX_3WRI_1_INTERRUPT_1_INTR
-	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_1_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_OCTOPOS_MAILBOX_1WRI_1_INTERRUPT_1_INTR
 	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_1_INTR
 	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_1_INTR
 	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_2_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_1_INTR
@@ -42,15 +44,21 @@
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_1_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_OCTOPOS_MAILBOX_3WRI_0_INTERRUPT_2_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_OCTOPOS_MAILBOX_3WRI_2_INTERRUPT_1_INTR
 	#define XPAR_COMMON_AXI_INTC_MAILBOX_3_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_OCTOPOS_MAILBOX_3WRI_1_INTERRUPT_CTRL_FIXED_INTR
-	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_2_INTR
+	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_OUT_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_OCTOPOS_MAILBOX_1WRI_1_INTERRUPT_2_INTR
 	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_DATA_IN_INTERRUPT_2_INTR
 	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_OUT_2_INTERRUPT_2_INTR
 	#define XPAR_COMMON_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_0_INTR XPAR_MICROBLAZE_3_AXI_INTC_Q_STORAGE_IN_2_INTERRUPT_2_INTR
 #endif
 
+#ifdef ARCH_SEC_HW_BOOT
+int		p_runtime = 0;
+int		q_runtime = 0;
+int		q_os = 0;
+#else
 extern int		p_runtime;
 extern int		q_runtime;
 extern int		q_os;
+#endif
 
 uint8_t 		load_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
 extern bool 	still_running;
@@ -104,10 +112,13 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 	usleep(100);
 	octopos_mailbox_deduct_and_set_owner(queue_ptr, P_PREVIOUS);
 
-	_SEC_HW_DEBUG("After yield: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_DEBUG("After yield: queue%d:%08x",
+			queue_id,
+			octopos_mailbox_get_status_reg(queue_ptr));
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
+int mailbox_attest_queue_access(uint8_t queue_id, limit_t count,
+		timeout_t timeout)
 {
 	_SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
 
@@ -116,7 +127,10 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count)
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
 	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
-	result &= octopos_mailbox_attest_quota_limit(queue_ptr, count * factor);
+	result &= octopos_mailbox_attest_quota_limit(queue_ptr,
+			count * factor);
+
+	/* FIXME: implement timeout attestation */
 
 	return result;
 }
@@ -584,6 +598,8 @@ int init_runtime(int runtime_id)
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox_sys, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_sys, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
+#ifndef ARCH_SEC_HW_BOOT
+
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
 
@@ -763,6 +779,7 @@ int init_runtime(int runtime_id)
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
+#endif
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
 	/* Q_RUNTIME semaphores are not used directly because there is
@@ -790,7 +807,9 @@ int init_runtime(int runtime_id)
 	sem_init(&load_app_sem, 0, 0);
 	sem_init(&syscall_wakeup, 0, 0);
 
+#ifndef ARCH_SEC_HW_BOOT
 	preloaded_app_init();
+#endif
 
 	runtime_inited = TRUE;
 
