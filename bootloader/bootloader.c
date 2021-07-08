@@ -221,21 +221,21 @@ int main(int argc, char *argv[])
 	memset((void*) DDR_BASE_ADDRESS, 0, DDR_RANGE);
 
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
-	char *name = ":storage";
+	char *name = "storage";
 #elif defined(ARCH_SEC_HW_BOOT_KEYBOARD)
-	char *name = ":keyboard";
+	char *name = "keyboard";
 #elif defined(ARCH_SEC_HW_BOOT_SERIAL_OUT)
-	char *name = ":serial_out";
+	char *name = "serial_out";
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_1)
-	char *name = ":runtime1";
+	char *name = "runtime1";
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_2)
-	char *name = ":runtime2";
+	char *name = "runtime2";
 #elif defined(ARCH_SEC_HW_BOOT_OS)
-	char *name = ":os";
+	char *name = "os";
 #elif defined(ARCH_SEC_HW_BOOT_NETWORK)
-	char *name = ":network";
+	char *name = "network";
 #elif defined(ARCH_SEC_HW_BOOT_LINUX)
-	char *name = ":linux";
+	char *name = "linux";
 #endif /* ARCH_SEC_HW_BOOT_STORAGE */
 
 #endif /* ARCH_SEC_HW_BOOT */

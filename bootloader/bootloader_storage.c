@@ -77,10 +77,11 @@
 #include <arch/mailbox_storage.h>
 #include "xil_printf.h"
 #include "arch/sec_hw.h"
+#include "arch/pmod_fop.h"
 #include "sleep.h"
 #include "xstatus.h"
 
-void storage_request_boot_image_by_line();
+void storage_request_boot_image_by_line(char *filename);
 //int load_boot_image_from_storage(int pid, void *ptr);
 int write_boot_image_to_storage(int pid, void *ptr);
 
@@ -116,6 +117,16 @@ int write_boot_image_to_storage(int pid, void *ptr);
 #endif /* IMAGE_WRITER_MODE */
 #endif /* ARCH_SEC_HW_BOOT */
 
+/* compatible fops */
+#ifndef ARCH_SEC_HW_BOOT
+#define fop_open fopen
+#define fop_close fclose
+#define fop_seek fseek
+#define fop_read fread
+#define fop_write fwrite
+#else /* ARCH_SEC_HW_BOOT */
+#define FILE DFILE
+#endif /* ARCH_SEC_HW_BOOT */
 
 #ifndef ARCH_SEC_HW_BOOT
 /* in file system wrapper */
@@ -153,7 +164,6 @@ int init_mailbox(void)
 		return -1;
 	}
 
-
 	return 0;
 }
 
@@ -169,8 +179,17 @@ void close_mailbox(void)
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
-#ifndef ARCH_SEC_HW_BOOT
-	filep = fopen("./storage/octopos_partition_0_data", "r");
+#ifdef ARCH_SEC_HW_BOOT
+	int Status;
+
+	Status = init_storage();
+	if (Status != XST_SUCCESS) {
+		SEC_HW_DEBUG_HANG();
+		return;
+	}
+#endif
+
+	filep = fop_open("./storage/octopos_partition_0_data", "r");
 	if (!filep) {
 		printf("Error: %s: Couldn't open the boot partition file.\n",
 		       __func__);
@@ -183,16 +202,6 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	 */
 	total_blocks = STORAGE_BOOT_PARTITION_SIZE + 1;
 	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
-#else
-	int Status;
-
-	Status = init_storage();
-	if (Status != XST_SUCCESS) {
-		SEC_HW_DEBUG_HANG();
-		return;
-	}
-
-#endif
 }
 
 /*
@@ -218,7 +227,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 		return -1;
 	}
 
-	copy_filep = fopen(path, "w");
+	copy_filep = fop_open(path, "w");
 	if (!copy_filep) {
 		printf("Error: %s: Couldn't open the target file (%s).\n",
 		       __func__, path);
@@ -238,19 +247,19 @@ int copy_file_from_boot_partition(char *filename, char *path)
 			break;
 		}
 
-		fseek(copy_filep, offset, SEEK_SET);
-		fwrite(buf, sizeof(uint8_t), _size, copy_filep);
+		fop_seek(copy_filep, offset, SEEK_SET);
+		fop_write(buf, sizeof(uint8_t), _size, copy_filep);
 
 		offset += _size;
 	}
 
-	fclose(copy_filep);
+	fop_close(copy_filep);
 	file_system_close_file(fd);
 
 #else /* ARCH_SEC_HW_BOOT */
 
 #ifndef IMAGE_WRITER_MODE
-	storage_request_boot_image_by_line();
+	storage_request_boot_image_by_line(filename);
 #else /* IMAGE_WRITER_MODE */
 
 	write_boot_image_to_storage(TARGET_BOOT_PROCESSOR, binary);
@@ -270,13 +279,11 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	return 0;
 }
 
-#ifndef ARCH_SEC_HW_BOOT
 void bootloader_close_file_system(void)
 {
 	close_file_system();
-	fclose(filep);
+	fop_close(filep);
 }
-#endif /* ARCH_SEC_HW_BOOT */
 
 #ifndef ARCH_SEC_HW_BOOT
 void send_measurement_to_tpm(char *path)

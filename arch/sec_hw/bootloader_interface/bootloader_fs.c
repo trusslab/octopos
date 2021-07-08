@@ -15,7 +15,6 @@ static srec_info_t srinfo;
 static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 
-int partition_read_physical(u32 data_address, u32 size, void *ptr);
 void cleanup_qspi_flash();
 
 /*
@@ -196,32 +195,33 @@ void os_request_boot_image_by_line(char *filename, char *path)
 	return;
 }
 
-#define STORAGE_BOOT_BLOCK_SIZE 2048
+/* FIXME: storage has direct access to flash, so why not reading more each time? */
+#define STORAGE_BOOT_BLOCK_SIZE STORAGE_BLOCK_SIZE
 #define STORAGE_BOOT_UNPACK_BUF_SIZE 8192
 
-void storage_request_boot_image_by_line()
-{
-//	memset((void*) 0x600f0000, 0, STORAGE_BOOT_BLOCK_SIZE + 48);
-//	u8* buf = (void*) 0x600f0000;
-//	// write and readback test
-//	*buf = 0xb0;
-//	volatile u8 buf_readback = *buf;
-//	SEC_HW_DEBUG_HANG();
+#if STORAGE_BOOT_BLOCK_SIZE >= STORAGE_BOOT_UNPACK_BUF_SIZE
+#error STORAGE_BOOT_BLOCK_SIZE cannot be bigger than STORAGE_BOOT_UNPACK_BUF_SIZE
+#endif
 
+void storage_request_boot_image_by_line(char *filename)
+{
     u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
-    /* FIXME: storage has direct access to flash, so why not reading more each time? */
-    u8 buf[STORAGE_BOOT_BLOCK_SIZE + 48] __attribute__ ((aligned(64)));
+    u8 buf[STORAGE_BOOT_BLOCK_SIZE];
     u16 unpack_buf_head = 0;
-    u32 base_address = 0;
+    u32 fd;
     int line_count;
     void (*laddr)();
     int _size;
-    int offset;
+    int offset = 0;
+
+    fd = file_system_open_file(filename, FILE_OPEN_MODE); 
+    if (fd == 0) {
+        printf("Error: %s: Couldn't open file %s in octopos file "
+               "system.\n", __func__, filename);
+        return;
+    }
 
     srinfo.sr_data = sr_data_buf;
-
-    offset = 0;
-    base_address = get_boot_image_address(P_STORAGE);
 
     while (1) {
         /* unpack buffer is full, but still, haven't finish a line */
@@ -229,7 +229,8 @@ void storage_request_boot_image_by_line()
             SEC_HW_DEBUG_HANG();
 
         /* read message from file */
-        _size = partition_read_physical(base_address + offset, STORAGE_BOOT_BLOCK_SIZE, buf);
+        _size = file_system_read_from_file(fd, buf, STORAGE_BOOT_BLOCK_SIZE,
+                           offset);
         if (_size == 0)
             break;
 
@@ -237,6 +238,8 @@ void storage_request_boot_image_by_line()
             printf("Error: %s: reading file.\n", __func__);
             break;
         }
+
+        offset += _size;
 
         /* copy into unpack buffer */
         memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BOOT_BLOCK_SIZE);
@@ -264,7 +267,6 @@ void storage_request_boot_image_by_line()
 
                     cleanup_qspi_flash();
 
-//                    SEC_HW_DEBUG_HANG();
                     /* jump to start vector of loaded program */
                     (*laddr)();
 
@@ -277,7 +279,6 @@ void storage_request_boot_image_by_line()
                     &unpack_buf[line_count],
                     unpack_buf_head - line_count);
 
-//            sleep(5);
             unpack_buf_head -= line_count;
             memset(&unpack_buf[unpack_buf_head], 0, line_count);
         }

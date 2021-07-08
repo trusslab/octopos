@@ -7,7 +7,6 @@
 #include "xintc.h"
 
 #include "xil_cache.h"
-//#include "ff.h"
 
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
@@ -15,6 +14,7 @@
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox_owner_map.h"
 #include "arch/octopos_mbox.h"
+#include "arch/pmod_fop.h"
 
 #include "octopos/mailbox.h"
 #include "octopos/storage.h"
@@ -38,7 +38,6 @@ u32				DEBUG_STATUS_REGISTERS[30] = {0};
 
 void process_request(uint8_t *buf, uint8_t proc_id);
 void initialize_storage_space(void);
-void initialize_pmodsd(void);
 
 void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 {
