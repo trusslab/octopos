@@ -11,19 +11,12 @@
 #include <network/list.h>
 #include <network/netcfg.h>
 #include <network/arp.h>
-#include "arch/ethernet_hw_params.h"
-
-//#include "tap.h"
-
-#include "netif/xadapter.h"
-#include "netif/xaxiemacif.h"
+#include "arch/network/ethernet_hw_params.h"
+#include "arch/network/netif/xaxiemacif.h"
 #include "xllfifo_hw.h"
 #include "xllfifo.h"
-#include "lwip/inet.h"
+#include "arch/network/netif/octopos_pbuf.h"
 
-//extern int initialize_network_hardware(struct netif *);
-//struct netif *xil_netif;
-//struct netif server_netif;
 struct xemac_s *xil_xemac;
 struct xemac_s server_xemac;
 u8_t mac_hwaddr[6];
@@ -38,42 +31,6 @@ int xil_netif_initialized =0;
 #define DEFAULT_IP_MASK_HEX		0x00ffffff // "255.255.255.0"
 
 
-
-err_t
-ethernet_input(struct pbuf *p, struct netif *netif)
-{
-	  return ERR_OK;
-}
-
-/*
- * xemac_add: this is a function to add xaxiemacif interface
- */
-struct netif *
-xemac_add(struct netif *netif,
-	ip_addr_t *ipaddr, ip_addr_t *netmask, ip_addr_t *gw,
-	unsigned char *mac_ethernet_address,
-	unsigned mac_baseaddr)
-{
-	int i;
-	/* set mac address */
-	for (i = 0; i < 6; i++){
-		netif->hwaddr[i] = mac_ethernet_address[i];
-		mac_hwaddr[i] = mac_ethernet_address[i];
-
-	}
-
-    netif->mtu = 0;
-	netif->flags = 0;
-	/* remember netif specific state information data */
-	netif->state = (void*)(UINTPTR)mac_baseaddr;
-	netif->num = 1;
-	netif->input = ethernet_input;
-	if (xaxiemacif_init(netif) != ERR_OK) {
-	  return NULL;
-	}
-
-	return netif;
-}
 
 
 
@@ -157,23 +114,17 @@ static int xileth_recv(struct pkbuf *pkb)
 {
 	int l;
 	if(xil_netif_initialized == 1){
-		////struct xemac_s *xemac = (struct xemac_s *)(xil_netif->state);
 		struct xemac_s *xemac = xil_xemac;
-		struct pbuf *p;
-	//	printf("%s: xemac=%p\r\n",xemac);
+		struct octopos_pbuf *p;
 		xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
 
-//		printf("%s: [0] %d\n\r",__func__,pq_qlength(xaxiemacif->recv_q));
 		if (pq_qlength(xaxiemacif->recv_q) == 0)
 			return 0;
-//		printf("%s: [1] something on the queue \n\r",__func__);
-		p = (struct pbuf *)pq_dequeue(xaxiemacif->recv_q);
-		l = p->tot_len;
+		p = (struct octopos_pbuf *)pq_dequeue(xaxiemacif->recv_q);
+		l = p->len;
 		pkb->pk_len = l;
 		memcpy(pkb->pk_data, p->payload, l);
-		free(p->payload);
-		free(p);
-		//l = read(tap->fd, pkb->pk_data, pkb->pk_len);
+		octopos_pbuf_free(p);
 		if (l <= 0) {
 			devdbg("read net dev");
 			xileth->net_stats.rx_errors++;
@@ -206,10 +157,8 @@ void xileth_poll(void)
 
 void xileth_init(void)
 {
-	//xil_netif = &server_netif;
 	xil_xemac = &server_xemac;
 	xileth = netdev_alloc("xileth", &xileth_ops);
-	//initialize_network_hardware(xil_netif);
 	initialize_network_hardware(xil_xemac);
 	hardware_ready = 1;
 	xileth_dev_init(xileth);
