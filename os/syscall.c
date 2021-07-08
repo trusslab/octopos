@@ -456,22 +456,23 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 			SYSCALL_SET_ONE_RET(0)
 		break;
 	}
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		handle_allocate_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
 	case SYSCALL_REQUEST_NETWORK_ACCESS: {
 		handle_request_network_access_syscall(runtime_proc_id, buf);
+
 		break;
 	}
 	case SYSCALL_CLOSE_SOCKET: {
 		handle_close_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
-
+#ifdef ARCH_UMODE
 	case SYSCALL_REQUEST_BLUETOOTH_ACCESS: {
-		SYSCALL_GET_THREE_ARGS_DATA
+						       SYSCALL_GET_THREE_ARGS_DATA
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
 		uint32_t num_devices = arg2;
@@ -496,7 +497,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 			break;
 		}
 #endif
-		
+
 		/* Reset bluetooth proc if needed */
 		if (bluetooth_proc_need_reset)
 			reset_proc(P_BLUETOOTH);

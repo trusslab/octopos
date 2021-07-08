@@ -32,7 +32,11 @@ static int network_set_up_socket(uint32_t saddr, uint32_t sport,
 static int get_network_src_addr(uint32_t *saddr)
 {
 	/* FIXME: hard-coded */
+#ifndef ARCH_SEC_HW	
 	*saddr = 0x0100000a;
+#else
+	*saddr = 0x0a01a8c0;
+#endif /*ARCH_SEC_HW*/	
 
 	return 0;
 }
@@ -54,7 +58,6 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 	struct app *app = runtime_proc->app;
-
 	SYSCALL_GET_FOUR_ARGS
 	uint32_t protocol = arg0;
 	uint32_t requested_port = arg1;
@@ -97,13 +100,16 @@ void handle_allocate_socket_syscall(uint8_t runtime_proc_id,
 	app->socket_daddr = daddr;
 	app->socket_dport = dport;
 	app->socket_created = true;
-
 	SYSCALL_SET_TWO_RETS(saddr, sport)
 }
+
+
+
 
 void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 					   uint8_t *buf)
 {
+
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
@@ -120,6 +126,7 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 	uint32_t limit = arg0;
 	uint32_t timeout = arg1;
 
+	
 	/* FIXME: arbitrary thresholds */
 	/* No more than 200 block reads/writes; no more than 100 seconds */
 	if (limit > 200 || timeout > 100) {
@@ -129,6 +136,7 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 
 	int ret_in = is_queue_available(Q_NETWORK_DATA_IN);
 	int ret_out = is_queue_available(Q_NETWORK_DATA_OUT);
+
 	/* Or should we make this blocking? */
 	if (!ret_in || !ret_out) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_AVAILABLE)
@@ -146,11 +154,10 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 
 	mark_queue_unavailable(Q_NETWORK_DATA_IN);
 	mark_queue_unavailable(Q_NETWORK_DATA_OUT);
-
-	mailbox_delegate_queue_access(Q_NETWORK_DATA_IN, runtime_proc_id,
-				      (limit_t) limit, (timeout_t) timeout);
-	mailbox_delegate_queue_access(Q_NETWORK_DATA_OUT, runtime_proc_id,
-				      (limit_t) limit, (timeout_t) timeout);
+	mailbox_delegate_queue_access(Q_NETWORK_DATA_IN, runtime_proc_id, (limit_t) limit,
+			(timeout_t) timeout);
+	mailbox_delegate_queue_access(Q_NETWORK_DATA_OUT, runtime_proc_id, (limit_t) limit,
+			(timeout_t) timeout);
 
 	SYSCALL_SET_ONE_RET((uint32_t) 0)
 }
@@ -158,6 +165,7 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 void handle_close_socket_syscall(uint8_t runtime_proc_id,
 				 uint8_t *buf)
 {
+
 	struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)

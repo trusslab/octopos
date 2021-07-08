@@ -1,4 +1,4 @@
-#ifndef ARCH_SEC_HW
+//#ifndef ARCH_SEC_HW
 
 /* socket_client app */
 #include <stdio.h>
@@ -11,6 +11,7 @@
 #include <octopos/storage.h>
 #include <network/sock.h>
 #include <network/socket.h>
+
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
@@ -54,12 +55,10 @@ static void send_receive(struct runtime_api *api)
 {
 	char buf[32];
 	int len;
-
 	if (api->connect_socket(sock, &skaddr) < 0) {
 		printf("%s: Error: _connect\n", __func__);
 		return;
 	}
-
 	insecure_printf("Type your message: ");
 	int ret = api->read_from_shell(buf, &len);
 	if (ret) {
@@ -74,24 +73,31 @@ static void send_receive(struct runtime_api *api)
 		insecure_printf("%.*s\n", len, buf);
 	}
 }
-
+#ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
+#else /*ARCH_SEC_HW*/
+void socket_client(struct runtime_api *api)
+#endif /*ARCH_SEC_HW*/
 {
 	int err = 0;
+	struct socket *tmp;
 	/* init arguments */
 	memset(&skaddr, 0x0, sizeof(skaddr));
 	type = SOCK_STREAM;	/* default TCP stream */
 	sock = NULL;
-	
-	char addr[256] = "10.0.0.2:12345";	
+#ifndef ARCH_SEC_HW	
+	char addr[256] = "10.0.0.2:12345";
+#else
+	char addr[256] = "192.168.1.1:12345";
+#endif	
 	err = _parse_ip_port(addr, &skaddr.dst_addr,
 					&skaddr.dst_port);
 	if (err < 0) {
 		printf("address format is error\n");
 		return;
 	}
-
+	printf("%s: 0x%x , %u \n\r",__func__, skaddr.dst_addr, skaddr.dst_port);
 	/* init socket */
 	sock = api->create_socket(AF_INET, type, 0, &skaddr);
 	if (!sock) {
@@ -103,11 +109,11 @@ void app_main(struct runtime_api *api)
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}
-
 	send_receive(api);
 
+
+
 out:	/* close and out */
-	struct socket *tmp;
 	if (sock) {
 		tmp = sock;
 		sock = NULL;
@@ -115,4 +121,4 @@ out:	/* close and out */
 	}
 	api->yield_network_access();
 }
-#endif
+//#endif

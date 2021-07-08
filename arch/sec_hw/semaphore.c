@@ -227,6 +227,134 @@ int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
 	return bytes_read;
 }
 
+
+int _sem_retrieve_mailbox_message_buf_large(XMbox *InstancePtr, uint8_t* buf)
+{
+	u32			bytes_read;
+	int			status;
+
+	if (sketch_buffer)
+		status = XMbox_Read(InstancePtr,
+				(u32*)(buf),
+				MAILBOX_QUEUE_MSG_SIZE_LARGE - sketch_buffer_offset,
+				&bytes_read);
+	else
+		status = XMbox_Read(InstancePtr,
+				(u32*)(buf),
+				MAILBOX_QUEUE_MSG_SIZE_LARGE,
+				&bytes_read);
+
+	if (status != XST_SUCCESS) {
+		return 0;
+	} else if (bytes_read == 0) {
+		return 0;
+	} else if (bytes_read != MAILBOX_QUEUE_MSG_SIZE_LARGE) {
+		/* Hardware mailbox messages (4 Bytes) are free of sync issue. However, we
+		 * are merging many 4 Bytes messages into one MAILBOX_QUEUE_MSG_SIZE message.
+		 * We must consider the sync issue when the writer and reader use the queue
+		 * at the same time. The reader may read incomplete messages.
+		 */
+		_SEC_HW_DEBUG("MBox read only %d bytes, should be %d bytes",
+			bytes_read,
+			MAILBOX_QUEUE_MSG_SIZE_LARGE);
+		if (!sketch_buffer) {
+			sketch_xmbox_instance = InstancePtr;
+			sketch_buffer_offset = bytes_read;
+			sketch_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE_LARGE, sizeof(uint8_t));
+			memcpy(sketch_buffer, buf, bytes_read);
+			return 0;
+		} else {
+			/* There is already a incomplete message on the sketch_buffer */
+			if (bytes_read + sketch_buffer_offset > MAILBOX_QUEUE_MSG_SIZE_LARGE) {
+				_SEC_HW_ERROR("mailbox corrupted: buffer overflow");
+				_SEC_HW_ASSERT_NON_VOID(FALSE)
+			}
+			if (sketch_xmbox_instance == InstancePtr) {
+				_SEC_HW_ERROR("mailbox corrupted: inconsistent id");
+				_SEC_HW_ASSERT_NON_VOID(FALSE)
+			}
+
+			memcpy(sketch_buffer + sketch_buffer_offset, buf, bytes_read);
+			if (bytes_read + sketch_buffer_offset == MAILBOX_QUEUE_MSG_SIZE_LARGE) {
+				/* This read completes the message */
+				memcpy(buf, sketch_buffer, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+				free(sketch_buffer);
+				sketch_buffer = NULL;
+				return MAILBOX_QUEUE_MSG_SIZE_LARGE;
+			} else {
+				/* The message is still incomplete after this read */
+				return 0;
+			}
+
+		}
+	}
+
+	return bytes_read;
+}
+
+int _sem_retrieve_mailbox_message_buf2(XMbox *InstancePtr, uint8_t* buf)
+{
+	u32			bytes_read;
+	int			status;
+
+//	if (sketch_buffer)
+//		status = XMbox_Read(InstancePtr,
+//				(u32*)(buf),
+//				MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset,
+//				&bytes_read);
+//	else
+		status = XMbox_Read2(InstancePtr,
+				(u32*)(buf),
+				MAILBOX_QUEUE_MSG_SIZE,
+				&bytes_read);
+
+//	if (status != XST_SUCCESS) {
+//		return 0;
+//	} else if (bytes_read == 0) {
+//		return 0;
+//	} else if (bytes_read != MAILBOX_QUEUE_MSG_SIZE) {
+//		/* Hardware mailbox messages (4 Bytes) are free of sync issue. However, we
+//		 * are merging many 4 Bytes messages into one MAILBOX_QUEUE_MSG_SIZE message.
+//		 * We must consider the sync issue when the writer and reader use the queue
+//		 * at the same time. The reader may read incomplete messages.
+//		 */
+//		_SEC_HW_DEBUG("MBox read only %d bytes, should be %d bytes",
+//			bytes_read, 
+//			MAILBOX_QUEUE_MSG_SIZE);
+//		if (!sketch_buffer) {
+//			sketch_xmbox_instance = InstancePtr;
+//			sketch_buffer_offset = bytes_read;
+//			sketch_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+//			memcpy(sketch_buffer, buf, bytes_read);
+//			return 0;
+//		} else {
+//			/* There is already a incomplete message on the sketch_buffer */
+//			if (bytes_read + sketch_buffer_offset > MAILBOX_QUEUE_MSG_SIZE) {
+//				_SEC_HW_ERROR("mailbox corrupted: buffer overflow");
+//				_SEC_HW_ASSERT_NON_VOID(FALSE)
+//			}
+//			if (sketch_xmbox_instance == InstancePtr) {
+//				_SEC_HW_ERROR("mailbox corrupted: inconsistent id");
+//				_SEC_HW_ASSERT_NON_VOID(FALSE)
+//			}
+//
+//			memcpy(sketch_buffer + sketch_buffer_offset, buf, bytes_read);
+//			if (bytes_read + sketch_buffer_offset == MAILBOX_QUEUE_MSG_SIZE) {
+//				/* This read completes the message */
+//				memcpy(buf, sketch_buffer, MAILBOX_QUEUE_MSG_SIZE);
+//				free(sketch_buffer);
+//				sketch_buffer = NULL;
+//				return MAILBOX_QUEUE_MSG_SIZE;
+//			} else {
+//				/* The message is still incomplete after this read */
+//				return 0;
+//			}
+//
+//		}
+//	}
+
+	return bytes_read;
+}
 int _sem_deliver_mailbox_message_blocking(XMbox *InstancePtr, u32* buf)
 {
 	XMbox_WriteBlocking(InstancePtr, buf, MAILBOX_QUEUE_MSG_SIZE);
@@ -349,6 +477,41 @@ int sem_wait_one_time_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
 	} else {
 		sem->count -= 1;
 		bytes_read = _sem_retrieve_mailbox_message_buf(InstancePtr, buf);
+		return bytes_read;
+	}
+}
+
+
+int sem_wait_one_time_receive_buf_large(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
+{
+	u32 bytes_read;
+
+	if (sem->count <= 0) {
+		bytes_read = _sem_retrieve_mailbox_message_buf_large(InstancePtr, buf);
+		if (bytes_read != 0 && sem->count > 0) {
+			sem->count -= 1;
+		}
+		return bytes_read;
+	} else {
+		sem->count -= 1;
+		bytes_read = _sem_retrieve_mailbox_message_buf_large(InstancePtr, buf);
+		return bytes_read;
+	}
+}
+
+int sem_wait_one_time_receive_buf2(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
+{
+	u32 bytes_read;
+	bytes_read = 0;
+	if (sem->count <= 0) {
+		bytes_read = _sem_retrieve_mailbox_message_buf2(InstancePtr, buf);
+		if (bytes_read != 0 && sem->count > 0) {
+			sem->count -= 1;
+		}
+		return bytes_read;
+	} else {
+		sem->count -= 1;
+		bytes_read = _sem_retrieve_mailbox_message_buf2(InstancePtr, buf);
 		return bytes_read;
 	}
 }

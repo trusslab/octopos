@@ -94,7 +94,6 @@ struct runtime_api {
 	uint32_t (*get_random_uint)(void);
 	uint64_t (*get_time)(void);
 
-#ifndef ARCH_SEC_HW
 	/* socket and network */
 	struct socket *(*create_socket)(int family, int type, int protocol,
 					struct sock_addr *skaddr);
@@ -111,6 +110,7 @@ struct runtime_api {
 				      uint8_t *expected_pcr, uint8_t *return_pcr);
 	int (*yield_network_access)(void);
 
+#ifndef ARCH_SEC_HW
 	/* bluetooth */
 	int (*request_secure_bluetooth_access)(uint8_t *device_names,
 					       uint32_t num_devices,

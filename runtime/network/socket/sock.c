@@ -3,6 +3,12 @@
 #include "sock.h"
 #include "lib.h"
 #include "list.h"
+#else /*ARCH_SEC_HW*/
+#include <network/socket.h>
+#include <network/sock.h>
+#include <network/lib.h>
+#include <network/list.h>
+#endif /*ARCH_SEC_HW*/
 
 int alloc_socks = 0;
 int free_socks = 0;
@@ -90,4 +96,4 @@ int sock_autobind(struct sock *sk, struct sock_addr *skaddr)
 		return sk->ops->set_port(sk, skaddr, 0);
 	return -1;
 }
-#endif
+

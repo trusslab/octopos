@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "netif.h"
 #include "ether.h"
 #include "arp.h"
@@ -6,13 +7,24 @@
 #include "icmp.h"
 #include "route.h"
 #include "lib.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/arp.h>
+#include <network/ip.h>
+#include <network/icmp.h>
+#include <network/route.h>
+#include <network/lib.h>
+//#undef ipdbg
+//#define ipdbg(fmt, ...) printf(fmt"\n\r",##__VA_ARGS__)
+#endif /*ARCH_SEC_HW_NETWORK*/
+
 
 void ip_send_dev(struct netdev *dev, struct pkbuf *pkb)
 {
 	struct arpentry *ae;
 	unsigned int dst;
 	struct rtentry *rt = pkb->pk_rtdst;
-
 	if (rt->rt_flags & RT_LOCALHOST) {
 		ipdbg("To loopback");
 		netdev_tx(dev, pkb, pkb->pk_len - ETH_HRD_SZ,
@@ -86,3 +98,4 @@ void ip_send_info(struct pkbuf *pkb, unsigned char tos, unsigned short len,
 
 	ip_send_out(pkb);
 }
+

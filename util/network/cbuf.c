@@ -3,8 +3,13 @@
  *  Although the code is clean and simple,
  *  the culculation is complex (CBUFHEADRIGHT).
  */
+#ifndef ARCH_SEC_HW
 #include "lib.h"
 #include "cbuf.h"
+#else /*ARCH_SEC_HW*/
+#include <network/lib.h>
+#include <network/cbuf.h>
+#endif /*ARCH_SEC_HW*/
 
 int alloc_cbufs = 0;
 int free_cbufs = 0;

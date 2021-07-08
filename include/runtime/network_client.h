@@ -32,6 +32,22 @@
 	}										\
 	data = &buf[2];
 
+
+#define MY_NETWORK_GET_ZERO_ARGS_DATA							\
+	uint8_t *data;									\
+	uint16_t data_size;								\
+	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;				\
+	if (max_size >= 65536) {							\
+		printf("Error (%s): max_size not supported\n", __func__);		\
+		return NULL;								\
+	}										\
+	data_size = *((uint16_t *) &net_buf[0]);						\
+	if (data_size > max_size) {							\
+		printf("Error (%s): size not supported (%d)\n", __func__, data_size);	\
+		return NULL;								\
+	}										\
+	data = &net_buf[2];
+
 #ifdef CONFIG_UML
 /* FIXME: copied from include/network/list.h */
 /* list head */

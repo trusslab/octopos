@@ -31,7 +31,9 @@
 #include <octopos/error.h>
 #ifndef UNTRUSTED_DOMAIN
 #include <arch/mailbox_runtime.h> 
+#include <network/ip.h>
 #endif
+
 
 #ifdef UNTRUSTED_DOMAIN
 #define printf printk
@@ -54,7 +56,16 @@ void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
 #endif
 
-#ifndef ARCH_SEC_HW
+#ifdef SEC_HW
+static int send_msg_to_network(uint8_t *buf)
+{
+	runtime_send_msg_on_queue_large(buf, Q_NETWORK_DATA_IN);
+
+	return 0;
+}
+#endif
+
+//#ifndef ARCH_SEC_HW
 // TODO: missing pkbuf definition
 void ip_send_out(struct pkbuf *pkb)
 {
@@ -66,7 +77,7 @@ void ip_send_out(struct pkbuf *pkb)
 	report_queue_usage(Q_NETWORK_DATA_IN);
 #endif
 }
-#endif
+//#endif
 
 uint8_t *ip_receive(uint8_t *buf, uint16_t *size)
 {
@@ -195,6 +206,7 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	}
 
 #ifndef UNTRUSTED_DOMAIN
+#ifndef ARCH_SEC_HW	
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr() or read_tpm_pcr_for_proc().
 	 * This is because those calls issue syscalls, which might take
@@ -238,6 +250,7 @@ int request_network_access(limit_t limit, timeout_t timeout,
 			return ERR_FAULT;
 		}
 	}
+#endif
 #endif
 
 	ret = net_start_receive();

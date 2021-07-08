@@ -4,6 +4,13 @@
 #include "route.h"
 #include "ip.h"
 #include "tcp.h"
+#else /*ARCH_SEC_HW*/
+#include <network/lib.h>
+#include <network/netif.h>
+#include <network/route.h>
+#include <network/ip.h>
+#include <network/tcp.h>
+#endif /*ARCH_SEC_HW*/
 
 static int tcp_init_pkb(struct tcp_sock *tsk, struct pkbuf *pkb,
 			unsigned int saddr, unsigned int daddr)
@@ -26,7 +33,6 @@ void tcp_send_out(struct tcp_sock *tsk, struct pkbuf *pkb, struct tcp_segment *s
 	struct ip *iphdr = pkb2ip(pkb);
         struct tcp *tcphdr = (struct tcp *)iphdr->ip_data;
 	unsigned int saddr, daddr;
-
 	if (seg) {
 		daddr = seg->iphdr->ip_src;
 		saddr = seg->iphdr->ip_dst;
@@ -174,6 +180,7 @@ void tcp_send_syn(struct tcp_sock *tsk, struct tcp_segment *seg)
 	tcpdbg("send SYN(%u) [WIN %d] to "IPFMT":%d",
 			_ntohl(otcp->seq), _ntohs(otcp->window),
 			ipfmt(tsk->sk.sk_daddr), _ntohs(otcp->dst));
+
 	tcp_send_out(tsk, opkb, seg);
 }
 
@@ -204,4 +211,3 @@ void tcp_send_fin(struct tcp_sock *tsk)
 			_ntohs(otcp->dst));
 	tcp_send_out(tsk, opkb, NULL);
 }
-#endif

@@ -33,6 +33,18 @@
 #include <runtime/network_client.h>
 #endif
 
+
+#ifdef ARCH_SEC_HW
+#include <sys/stat.h>
+#include <runtime/runtime.h>
+#include <runtime/storage_client.h>
+#include <network/sock.h>
+#include <network/socket.h>
+#include <network/netif.h>
+#include <network/tcp_timer.h>
+#include <runtime/network_client.h>
+#endif
+
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
@@ -51,6 +63,9 @@
 #include "xparameters.h"
 #include "arch/sec_hw.h"
 #include "xil_cache.h"
+
+#include <network/ip.h>
+#include <network/tcp.h>
 #endif
 /* FIXME: remove */
 #ifdef ARCH_UMODE
@@ -338,7 +353,7 @@ void timer_tick(void)
 	}
 }
 
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 /* network */
 int local_address(unsigned int addr)
 {
@@ -360,9 +375,12 @@ int rt_output(struct pkbuf *pkb)
 	exit(-1);
 	return 0;
 }
+extern bool has_network_access;
+extern int network_access_count;
 
+#ifndef ARCH_SEC_HW
 static void *tcp_receive(void *_data)
-{
+{	
 	while (1) {
 		uint8_t *buf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
 		if (!buf) {
@@ -375,10 +393,9 @@ static void *tcp_receive(void *_data)
 		uint16_t data_size;
 
 		data = ip_receive(buf, &data_size);
-		if (!data_size) {
-			printf("Error: %s: bad network data message\n",
-			       __func__);
-			continue;
+		if (!data_size || data==NULL) {
+			printf("%s: Error: bad network data message\n", __func__);
+			return NULL;
 		}
 
 		struct pkbuf *pkb = (struct pkbuf *) data;
@@ -392,31 +409,114 @@ static void *tcp_receive(void *_data)
 			return NULL;
 		}
 
-		/* FIXME: is the call to raw_in() needed? */
+		///* FIXME: is the call to raw_in() needed? */
 		raw_in(pkb);
 		tcp_in(pkb);
 		free(buf);
 	}
 }
+#else /*ARCH_SEC_HW*/
+bool had_network_access;
+#define NETWRORK_RECEIVE_INTR_WORK
+uint8_t net_buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+int tcp_receive()
+{
+//	uint8_t *buf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
+//	if (!buf) {
+//		printf("%s: Error: could not allocate memory for buf\n", __func__);
+//		exit(-1);
+//	}
+
+//	uint8_t *data;
+//	uint16_t data_size;
+	_Bool result = TRUE;
+	UINTPTR queue_ptr = Mbox_ctrl_regs[Q_NETWORK_DATA_OUT];
+	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
+
+	int bytes_read;
+	if(!has_network_access){
+		had_network_access = has_network_access;
+		return -1;
+	}
+	if(has_network_access & !had_network_access){
+		for(int i =0 ; i<100000; i++){
+		}
+		had_network_access = true;
+
+	}
+//	_SEC_HW_DEBUG_MJ("MJ: %08x: %08x", queue_ptr, octopos_mailbox_get_status_reg(queue_ptr));
+
+#ifdef NETWRORK_RECEIVE_INTR_WORK
+
+	if (!result){
+		while(1);
+	}
+	if (XMbox_IsEmptyHw(Mbox_regs[Q_NETWORK_DATA_OUT]->Config.BaseAddress)){
+//		_SEC_HW_DEBUG_MJ("MJ: just query for emptiness", bytes_read);
+		return XST_NO_DATA;
+	}
+
+	bytes_read = sem_wait_one_time_receive_buf_large(&interrupts[Q_NETWORK_DATA_OUT], Mbox_regs[Q_NETWORK_DATA_OUT], net_buf);
+	_SEC_HW_DEBUG_MJ("MJ: after actual read bytes_read = %d, mbox_stat_reg=%08x", bytes_read,octopos_mailbox_get_status_reg(queue_ptr));
+
+	if (bytes_read == NULL){
+		return -1;
+	}
+
+
+
+        MY_NETWORK_GET_ZERO_ARGS_DATA
+	if (!data_size) {
+		printf("%s: Error: bad network data message\n", __func__);
+		return -1;
+	}
+
+	struct pkbuf *pkb = (struct pkbuf *) data;
+	pkb->pk_refcnt = 2; /* prevents the TCP code from freeing the pkb */
+	list_init(&pkb->pk_list);
+	/* FIXME: add */
+	//pkb_safe();
+	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
+		printf("%s: Error: packet size is not correct.\n", __func__);
+		return -1;
+	}
+
+	/* FIXME: is the call to raw_in() needed? */
+//	raw_in(pkb);
+	_SEC_HW_DEBUG_MJ("MJ: right before tcp_in");
+	tcp_in(pkb);
+	_SEC_HW_DEBUG_MJ("MJ: after tcp_in");
+
+//	free(buf);
+#endif
+
+	return 0;
+}
+#endif /*ARCH_SEC_HW*/
+
 
 int net_start_receive(void)
 {
 	/* tcp receive */
 	/* FIXME: process received message on the main thread */
+
+#ifndef ARCH_SEC_HW
 	int ret = pthread_create(&tcp_threads[1], NULL, (pfunc_t) tcp_receive, NULL);
 	if (ret) {
 		printf("Error: couldn't launch tcp_threads[1]\n");
 		return ret;
 	}
-
+#endif
 	return 0;
 }
 
 void net_stop_receive(void)
 {
+#ifndef ARCH_SEC_HW
 	int ret = pthread_cancel(tcp_threads[1]);
 	if (ret)
 		printf("Error: couldn't kill tcp_threads[1]");
+#endif
 }
 
 int net_stack_init(void)
@@ -425,22 +525,25 @@ int net_stack_init(void)
 
 	/* tcp timer */
 	/* FIXME: do we need this? */
+#ifndef ARCH_SEC_HW
 	int ret = pthread_create(&tcp_threads[0], NULL, (pfunc_t) tcp_timer, NULL);
 	if (ret) {
 		printf("Error: couldn't launch tcp_threads[0]\n");
 		return -1;
 	}
-
+#endif
 	return 0;
 }
 
 void net_stack_exit(void)
 {
+#ifndef ARCH_SEC_HW
 	int ret = pthread_cancel(tcp_threads[0]);
 	if (ret)
 		printf("Error: couldn't kill tcp_threads[0]");
+#endif	
 }
-#endif
+//#endif
 
 /* Only to be used for queues that runtime writes to */
 /* FIXME: busy-waiting */
@@ -974,7 +1077,7 @@ static uint64_t get_time(void)
 extern bool has_network_access;
 extern int network_access_count;
 
-#ifdef ARCH_UMODE
+
 static struct socket *create_socket(int family, int type, int protocol,
 					struct sock_addr *skaddr)
 {
@@ -1035,7 +1138,6 @@ static int connect_socket(struct socket *sock, struct sock_addr *skaddr)
 	}
 
 	network_access_count -= 10;
-
 	return _connect(sock, skaddr);
 }
 
@@ -1071,6 +1173,7 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 	return _write(sock, buf, len);
 }
 
+#ifdef ARCH_UMODE
 static int verify_bluetooth_service_state(uint8_t *device_names,
 					  uint32_t num_devices,
 					  uint8_t *am_addrs)
@@ -1552,7 +1655,6 @@ static void load_application(char *msg)
 #endif
 		.get_random_uint = get_random_uint,
 		.get_time = get_time,
-#ifndef ARCH_SEC_HW
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
 		.close_socket = close_socket,
@@ -1563,6 +1665,7 @@ static void load_application(char *msg)
 		.write_to_socket = write_to_socket,
 		.request_network_access = request_network_access,
 		.yield_network_access = yield_network_access,
+#ifdef ARCH_UMODE
 		.request_secure_bluetooth_access =
 					request_secure_bluetooth_access,
 		.authenticate_with_bluetooth_service =
@@ -1720,7 +1823,7 @@ int main()
 #endif /* ARCH_SEC_HW */
 
 	int runtime_id = -1;
-
+#ifndef ARCH_SEC_HW
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -1739,6 +1842,7 @@ int main()
 		       "to storage block size\n", __func__);
 		return -1;
 	}
+#endif
 #ifdef ARCH_UMODE
 	if (argc != 2) {
 		printf("Error: %s: incorrect command. Use ``runtime "
@@ -1784,19 +1888,19 @@ int main()
 		queue_update_callbacks[i] = NULL;
 	}
 
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 	ret = net_stack_init();
 	if (ret) {
 		printf("Error: %s: couldn't initialize the runtime network "
 		       "stack\n", __func__);
 		return -1;
 	}
-#endif
+//#endif
 
 	runtime_core();
-#ifdef ARCH_UMODE
+//#ifdef ARCH_UMODE
 	net_stack_exit();
-#endif
+//#endif
 
 	close_runtime();
 

@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 /* octopos network code */
 #include <stdio.h>
 #include <string.h>
@@ -383,3 +384,4 @@ int main(int argc, char **argv)
 
 	net_stack_exit();
 }
+#endif

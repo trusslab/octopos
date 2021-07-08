@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW_NETWORK
 /*
  * special net device independent L2 code
  */
@@ -12,6 +13,14 @@
 #include "arp.h"
 #include "lib.h"
 #include "netcfg.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/ip.h>
+#include <network/arp.h>
+#include <network/lib.h>
+#include <network/netcfg.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 /* referred to eth_trans_type() in linux */
 static struct ether *eth_init(struct netdev *dev, struct pkbuf *pkb)
@@ -57,10 +66,11 @@ void net_in(struct netdev *dev, struct pkbuf *pkb)
 		arp_in(dev, pkb);
 		break;
 	case ETH_P_IP:
+//		printf("%s: IP  message recved\n\r",__func__);
 		ip_in(dev, pkb);
 		break;
 	default:
-		l2dbg("drop unkown-type packet");
+//		l2dbg("drop unkown-type packet");
 		free_pkb(pkb);
 		break;
 	}

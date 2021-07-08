@@ -17,6 +17,8 @@
 
 extern int q_os;
 extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
+extern UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
+
 extern sem_t interrupts[NUM_QUEUES + 1];
 #endif
 
@@ -137,10 +139,21 @@ char host_printf_buf[64];
 //	host_printf_buf[2] = 61;												\
 //	snprintf(&host_printf_buf[3], 61,										\
 //		"DBG: " fmt "\r\n", ##__VA_ARGS__);									\
-//    sem_wait_impatient_send(&interrupts[q_os],							\
+    sem_wait_impatient_send(&interrupts[q_os],							\
 //		Mbox_regs[q_os], (u32*) host_printf_buf);} while(0)
 
 #define _SEC_HW_DEBUG(fmt, ...)
+
+
+#define _SEC_HW_DEBUG_MJ(fmt, ...)											\
+	do {memset(host_printf_buf, 0x0, 64);  									\
+	*((uint16_t *) &host_printf_buf[0]) = SYSCALL_DEBUG_OUTPUTS;			\
+	host_printf_buf[2] = 61;												\
+	snprintf(&host_printf_buf[3], 61,										\
+		"DBG: " fmt "\r\n", ##__VA_ARGS__);									\
+    sem_wait_impatient_send(&interrupts[q_os],							\
+		Mbox_regs[q_os], (u32*) host_printf_buf);} while(0)
+
 
 #else
 
@@ -156,9 +169,9 @@ char host_printf_buf[64];
 	do {xil_printf("--INFO: %-20.20s: " fmt "\r\n", __FUNCTION__,	\
 			##__VA_ARGS__);} while (0)
 
-// #define _SEC_HW_DEBUG1(fmt, ...)										\
-// 	do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n",		\
-// 		__FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
+ #define _SEC_HW_DEBUG_MJ(fmt, ...)										\
+ 	do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n",		\
+ 		__FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);} while (0)
 
 // #define _SEC_HW_DEBUG(fmt, ...)										\
 // 	do {xil_printf("--DEBUG: %-20.20s %-20.20s #%-5i: " fmt "\r\n", 	\
