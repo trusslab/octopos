@@ -1,56 +1,5 @@
 /* OctopOS bootloader for storage */
 
-/******************************************************************************
-*
-* Copyright (C) 2009 - 2014 Xilinx, Inc.  All rights reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* Use of the Software is limited solely to applications:
-* (a) running on a Xilinx device, or
-* (b) that interact with a Xilinx device through a bus or interconnect.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-* XILINX  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
-* OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*
-* Except as contained in this notice, the name of the Xilinx shall not be used
-* in advertising or otherwise to promote the sale, use or other dealings in
-* this Software without prior written authorization from Xilinx.
-*
-******************************************************************************/
-
-/*
- *      Simple SREC Bootloader
- *      This simple bootloader is provided with Xilinx EDK for you to easily re-use in your
- *      own software project. It is capable of booting an SREC format image file
- *      (Mototorola S-record format), given the location of the image in memory.
- *      In particular, this bootloader is designed for images stored in non-volatile flash
- *      memory that is addressable from the processor.
- *
- *      Please modify the define "FLASH_IMAGE_BASEADDR" in the blconfig.h header file
- *      to point to the memory location from which the bootloader has to pick up the
- *      flash image from.
- *
- *      You can include these sources in your software application project in XPS and
- *      build the project for the processor for which you want the bootload to happen.
- *      You can also subsequently modify these sources to adapt the bootloader for any
- *      specific scenario that you might require it for.
- *
- */
-
 #if !defined(ARCH_SEC_HW_BOOT) || defined(ARCH_SEC_HW_BOOT_STORAGE)
 
 #include <stdio.h>
@@ -82,39 +31,8 @@
 #include "xstatus.h"
 
 void storage_request_boot_image_by_line(char *filename);
-//int load_boot_image_from_storage(int pid, void *ptr);
 int write_boot_image_to_storage(int pid, void *ptr);
 
-#ifdef IMAGE_WRITER_MODE
-
-/* select the target processor (for use by installer only */
-// #define TARGET_BOOT_PROCESSOR P_OS
-// #define TARGET_BOOT_PROCESSOR P_STORAGE
-// #define TARGET_BOOT_PROCESSOR P_RUNTIME1
-//#define TARGET_BOOT_PROCESSOR P_KEYBOARD
-//#define TARGET_BOOT_PROCESSOR P_SERIAL_OUT
-//#define TARGET_BOOT_PROCESSOR P_UNTRUSTED_BOOT_P0
-#define TARGET_BOOT_PROCESSOR P_UNTRUSTED_BOOT_P1
-
-/* debug code needed for future storage development */
-//uint8_t binary_DEBUG_READ_BACK[KEYBOARD_IMAGE_SIZE + 48] __attribute__ ((aligned(64)));
-#if (TARGET_BOOT_PROCESSOR == P_STORAGE)
-#include "arch/bin/storage_image.h"
-#elif (TARGET_BOOT_PROCESSOR == P_OS)
-#include "arch/bin/os_image.h"
-#elif (TARGET_BOOT_PROCESSOR == P_RUNTIME1)
-#include "arch/bin/runtime1_image.h"
-#elif (TARGET_BOOT_PROCESSOR == P_KEYBOARD)
-#include "arch/bin/keyboard_image.h"
-#elif (TARGET_BOOT_PROCESSOR == P_SERIAL_OUT)
-#include "arch/bin/serialout_image.h"
-#elif (TARGET_BOOT_PROCESSOR == P_UNTRUSTED_BOOT_P0)
-#include "arch/bin/image.bin.0.h"
-#elif (TARGET_BOOT_PROCESSOR == P_UNTRUSTED_BOOT_P1)
-#include "arch/bin/image.bin.1.h"
-#endif
-
-#endif /* IMAGE_WRITER_MODE */
 #endif /* ARCH_SEC_HW_BOOT */
 
 /* compatible fops */
@@ -128,12 +46,12 @@ int write_boot_image_to_storage(int pid, void *ptr);
 #define FILE DFILE
 #endif /* ARCH_SEC_HW_BOOT */
 
-#ifndef ARCH_SEC_HW_BOOT
 /* in file system wrapper */
 extern FILE *filep;
 /* FIXME: why should we need the total_blocks in bootloader? */
 extern uint32_t total_blocks;
 
+#ifndef ARCH_SEC_HW_BOOT
 int fd_out, fd_intr;
 pthread_t mailbox_thread;
 
@@ -189,7 +107,11 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	}
 #endif
 
+#ifdef ARCH_SEC_HW_BOOT
+	filep = fop_open("octopos_partition_0_data", "r");
+#else
 	filep = fop_open("./storage/octopos_partition_0_data", "r");
+#endif
 	if (!filep) {
 		printf("Error: %s: Couldn't open the boot partition file.\n",
 		       __func__);
@@ -258,21 +180,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 #else /* ARCH_SEC_HW_BOOT */
 
-#ifndef IMAGE_WRITER_MODE
 	storage_request_boot_image_by_line(filename);
-#else /* IMAGE_WRITER_MODE */
-
-	write_boot_image_to_storage(TARGET_BOOT_PROCESSOR, binary);
-	/* debug code needed for future use */
-//	load_boot_image_from_storage(TARGET_BOOT_PROCESSOR, binary_DEBUG_READ_BACK);
-//
-//	for (int i = 0; i < KEYBOARD_IMAGE_SIZE; i++) {
-//		if (binary[i] != binary_DEBUG_READ_BACK[i])
-//			SEC_HW_DEBUG_HANG();
-//	}
-
-	SEC_HW_DEBUG_HANG();
-#endif /* IMAGE_WRITER_MODE */
 
 #endif /* ARCH_SEC_HW_BOOT */
 

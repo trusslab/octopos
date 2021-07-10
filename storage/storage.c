@@ -145,14 +145,7 @@ uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100, 100};
 	
 #ifdef ARCH_SEC_HW_STORAGE
-uint32_t boot_image_sizes[NUM_PROCESSORS + 1] = 
-	{0, OS_IMAGE_SIZE, KEYBOARD_IMAGE_SIZE, SERIALOUT_IMAGE_SIZE, 
-		STORAGE_IMAGE_SIZE, 0, 0, RUNTIME1_IMAGE_SIZE, 0,
-		UNTRUSTED_KERNEL_SIZE};
-
 uint8_t get_srec_line(uint8_t *line, uint8_t *buf);
-u32 get_boot_image_address(int pid);
-u32 get_boot_image_write_address(int pid);
 #endif
 
 uint8_t bound_partition = 0xFF; /* 0xFF is an invalid partition number. */
@@ -581,29 +574,6 @@ static void storage_receive_data(uint8_t *buf)
 	STORAGE_GET_TWO_ARGS
 	start_block = arg0;
 	num_blocks = arg1;
-
-// #ifdef ARCH_SEC_HW_STORAGE
-// 	/* FIXME: use proper file read/write. */
-// 	/* handle special boot image files */
-// 	if (start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE) {
-// 		/* FIXME: this is an ad hoc way to get the boot image address, by passing the
-// 		 * address directly on argument.
-// 		 */
-// 		u32 address = start_block;
-// 		uint8_t message_buf[STORAGE_BLOCK_SIZE + 48] 
-// 			__attribute__ ((aligned(64)));
-
-// 		for (u32 blk = 0; blk < num_blocks; blk++) {
-// 			partition_read_physical(address + 
-// 					blk * STORAGE_BLOCK_SIZE,
-// 					STORAGE_BLOCK_SIZE, message_buf);
-// 			write_data_to_queue(message_buf, Q_STORAGE_DATA_OUT);
-// 		}
-
-// 		STORAGE_SET_TWO_RETS(0, STORAGE_BLOCK_SIZE);
-// 		return;
-// 	}
-// #endif
 
 	if (start_block + num_blocks > partitions[partition_id].size) {
 		printf("Error: %s: invalid args\n", __func__);

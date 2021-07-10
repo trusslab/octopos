@@ -34,7 +34,6 @@
 
 void init_platform();
 void cleanup_platform();
-void cleanup_qspi_flash();
 
 /* Defines */
 #define CR       13
@@ -58,63 +57,60 @@ static uint8 *flbuf;
 
 static uint8 load_exec()
 {
-		uint8 ret;
-		void (*laddr)();
-		int8 done = 0;
+	uint8 ret;
+	void (*laddr)();
+	int8 done = 0;
+	srinfo.sr_data = sr_data_buf;
 
-		srinfo.sr_data = sr_data_buf;
+	while (!done) {
+		if ((ret = flash_get_srec_line (sr_buf)) != 0)
+			return ret;
+		if ((ret = decode_srec_line (sr_buf, &srinfo)) != 0)
+			return ret;
+		switch (srinfo.type) {
+			case SREC_TYPE_0:
+				break;
+			case SREC_TYPE_1:
+			case SREC_TYPE_2:
+			case SREC_TYPE_3:
+				memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+				break;
+			case SREC_TYPE_5:
+				break;
+			case SREC_TYPE_7:
+			case SREC_TYPE_8:
+			case SREC_TYPE_9:
+				laddr = (void (*)())srinfo.addr;
+				done = 1;
+				ret = 0;
+				break;
+			}
+	}
 
-		while (!done) {
-				if ((ret = flash_get_srec_line (sr_buf)) != 0)
-						return ret;
+	(*laddr)();
 
-				if ((ret = decode_srec_line (sr_buf, &srinfo)) != 0)
-						return ret;
-
-				switch (srinfo.type) {
-						case SREC_TYPE_0:
-								break;
-						case SREC_TYPE_1:
-						case SREC_TYPE_2:
-						case SREC_TYPE_3:
-								memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
-								break;
-						case SREC_TYPE_5:
-								break;
-						case SREC_TYPE_7:
-						case SREC_TYPE_8:
-						case SREC_TYPE_9:
-								laddr = (void (*)())srinfo.addr;
-								done = 1;
-								ret = 0;
-								break;
-				}
-		}
-
-		(*laddr)();
-
-		/* We will be dead at this point */
-		return 0;
+	/* We will be dead at this point */
+	return 0;
 }
 
 static uint8 flash_get_srec_line (uint8 *buf)
 {
-		uint8 c;
-		int count = 0;
+	uint8 c;
+	int count = 0;
 
-		while (1) {
-				c  = *flbuf++;
-				if (c == 0xD) {
-						/* Eat up the 0xA too */
-						c = *flbuf++;
-						return 0;
-				}
-
-				*buf++ = c;
-				count++;
-				if (count > SREC_MAX_BYTES)
-						return LD_SREC_LINE_ERROR;
+	while (1) {
+		c  = *flbuf++;
+		if (c == 0xD) {
+			/* Eat up the 0xA too */
+			c = *flbuf++;
+			return 0;
 		}
+
+		*buf++ = c;
+		count++;
+		if (count > SREC_MAX_BYTES)
+			return LD_SREC_LINE_ERROR;
+	}
 }
 #endif
 

@@ -32,18 +32,6 @@ void cleanup_platform();
 
 #define QSPI_SECTOR_SIZE 128 * 1024
 
-/* image size measured in bytes. it must be a multiple of 512. 
- * its okay to be bigger than actual size (ceiling to the next multiple of 512).
- */
-#define MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR 4
-#define UNTRUSTED_IMAGE_SIZE_IN_SECTOR 140
-#define STORAGE_IMAGE_SIZE 274432
-#define OS_IMAGE_SIZE 457728
-#define RUNTIME1_IMAGE_SIZE 464896
-#define KEYBOARD_IMAGE_SIZE 325120
-#define SERIALOUT_IMAGE_SIZE 320512
-#define UNTRUSTED_KERNEL_SIZE 18057216
-
 #define P_UNTRUSTED_BOOT_P0 100
 #define P_UNTRUSTED_BOOT_P1 101
 #define UNTRUSTED_KERNEL_P0_SIZE 13107200
