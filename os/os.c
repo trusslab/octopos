@@ -62,6 +62,8 @@ int main()
 	if (ret)
 		return ret;
 
+	//DEBUG
+	sleep(5);
 #ifndef ARCH_SEC_HW
 	enforce_running_process(P_OS);
 	connect_to_pmu();

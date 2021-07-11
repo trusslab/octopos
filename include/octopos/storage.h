@@ -1,7 +1,7 @@
 #ifndef __STORAGE_OCTOPOS_CORE_H_
 #define __STORAGE_OCTOPOS_CORE_H_
 
-#if defined(ARCH_SEC_HW) && !defined(PROJ_CPP)
+#if defined(ARCH_SEC_HW) && !defined(PROJ_CPP) && !defined(ROLE_INSTALLER)
 #define bool _Bool
 #define true 1
 #define false 0

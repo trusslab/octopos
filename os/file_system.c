@@ -27,8 +27,6 @@
 
 #ifdef ARCH_SEC_HW
 #include <arch/sec_hw.h>
-
-u32 get_boot_image_address(int pid);
 #endif
 
 /* FIXME: do we need access control for this FS? Currently, anyone can
@@ -682,22 +680,8 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size,
 	uint32_t ret = 0;
 
 	while (read_size < size) {
-#ifdef ARCH_SEC_HW_BOOT
-        /* FIXME: this is a hack to make file system uses
-         * address instead of block number.
-         */
-		if (file->start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE) {
-			ret = read_from_block(&data[read_size], 
-					file->start_block + block_num * STORAGE_BLOCK_SIZE,
-					block_offset, next_read_size);
-		} else {
-			ret = read_from_block(&data[read_size], file->start_block + 
-				    block_num, block_offset, next_read_size);
-		}
-#else
 		ret = read_from_block(&data[read_size], file->start_block +
 				      block_num, block_offset, next_read_size);
-#endif
 		if (ret != next_read_size) {
 			read_size += ret;
 			break;
@@ -911,22 +895,8 @@ repeat:
 				      MAILBOX_DEFAULT_TIMEOUT_VAL);
 #endif
 
-/* FIXME: similar as in file_system_read_file(), an ad-hoc
- * solution to pass boot image address 
- */
-#ifdef ARCH_SEC_HW
-	u32 start_block_or_address = 0;
-	if (file->start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE)
-		start_block_or_address = file->start_block + 
-			(start_block + total_read_blocks) * STORAGE_BLOCK_SIZE;
-	else
-		start_block_or_address = file->start_block + 
-			start_block + total_read_blocks;
-	STORAGE_SET_TWO_ARGS(start_block_or_address, next_num_blocks)
-#else
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + 
 			     total_read_blocks, next_num_blocks)
-#endif
 
 	buf[0] = IO_OP_RECEIVE_DATA;
 	send_msg_to_storage_no_response(buf);
@@ -1136,7 +1106,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 #endif
 			
 			/* FIXME: Zephyr added this because it's not initialized to zero */
-			// file->opened = 0;
+			file->opened = 0;
 			add_file_to_list(file);
 		}
 	} else {

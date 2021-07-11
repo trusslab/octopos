@@ -3,9 +3,11 @@
 
 #include <stdio.h>
 
+#ifndef ROLE_INSTALLER
 #include "xil_printf.h"
 #include "xil_exception.h"
 #include "xil_assert.h"
+#endif
 
 #ifdef ARCH_SEC_HW_RUNTIME
 #include <octopos/syscall.h>
@@ -23,8 +25,11 @@ extern sem_t interrupts[NUM_QUEUES + 1];
 void init_platform();
 void cleanup_platform();
 
+#ifndef ROLE_INSTALLER
 #define printf 	xil_printf
-#if !defined(PROJ_CPP)
+#endif
+
+#if !defined(PROJ_CPP) && !defined(ROLE_INSTALLER)
 #define true    1
 #define false   0
 #define bool    _Bool

@@ -115,7 +115,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	if (!filep) {
 		printf("Error: %s: Couldn't open the boot partition file.\n",
 		       __func__);
-		exit(-1);
+		while(1);
 	}
 
 	/* The added 1 is for the signature.

@@ -131,7 +131,7 @@ void os_request_boot_image_by_line(char *filename, char *path)
 
 /* FIXME: storage has direct access to flash, so why not reading more each time? */
 #define STORAGE_BOOT_BLOCK_SIZE STORAGE_BLOCK_SIZE
-#define STORAGE_BOOT_UNPACK_BUF_SIZE 8192
+#define STORAGE_BOOT_UNPACK_BUF_SIZE 4096
 
 #if STORAGE_BOOT_BLOCK_SIZE >= STORAGE_BOOT_UNPACK_BUF_SIZE
 #error STORAGE_BOOT_BLOCK_SIZE cannot be bigger than STORAGE_BOOT_UNPACK_BUF_SIZE
@@ -152,7 +152,7 @@ void storage_request_boot_image_by_line(char *filename)
 	if (fd == 0) {
 		printf("Error: %s: Couldn't open file %s in octopos file "
 			   "system.\n", __func__, filename);
-		return;
+		while(1);
 	}
 
 	srinfo.sr_data = sr_data_buf;
@@ -218,7 +218,6 @@ void storage_request_boot_image_by_line(char *filename)
 			memset(&unpack_buf[unpack_buf_head], 0, line_count);
 		}
 
-		offset += _size;
 	}
 
 	/* if program reaches here, something goes wrong */
