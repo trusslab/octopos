@@ -144,10 +144,6 @@ struct partition partitions[NUM_PARTITIONS];
 uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100, 100};
 	
-#ifdef ARCH_SEC_HW_STORAGE
-uint8_t get_srec_line(uint8_t *line, uint8_t *buf);
-#endif
-
 uint8_t bound_partition = 0xFF; /* 0xFF is an invalid partition number. */
 uint8_t bound = 0;
 uint8_t used = 0;

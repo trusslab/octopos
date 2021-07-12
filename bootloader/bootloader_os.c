@@ -24,18 +24,29 @@
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 
-#ifndef ARCH_SEC_HW_BOOT
-extern int fd_out;
-extern sem_t interrupts[];
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	init_os_mailbox();
-	
+
+#ifdef ARCH_SEC_HW_BOOT
+	// FIXME: is there a better way to wait for storage boot?
+	sleep(5);
+#endif
+
 	initialize_storage();
 
 	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 }
+
+void bootloader_close_file_system(void)
+{
+	close_file_system();
+}
+
+#ifndef ARCH_SEC_HW_BOOT
+extern int fd_out;
+extern sem_t interrupts[];
 
 /*
  * @filename: the name of the file in the partition
@@ -92,11 +103,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	return 0;
 }
 
-void bootloader_close_file_system(void)
-{
-	close_file_system();
-}
-
 void send_measurement_to_tpm(char *path)
 {
 	enforce_running_process(P_OS);
@@ -107,23 +113,9 @@ void send_measurement_to_tpm(char *path)
 #else
 void os_request_boot_image_by_line(char *filename, char *path);
 
-void prepare_bootloader(char *filename, int argc, char *argv[])
-{
-	int ret = init_os_mailbox();
-	if (ret)
-		SEC_HW_DEBUG_HANG();
-
-	// FIXME: is there a better way to wait for storage boot?
-	sleep(2);
-
-	initialize_storage();
-
-	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
-}
-
 int copy_file_from_boot_partition(char *filename, char *path)
 {
-	os_request_boot_image_by_line(filename, path);
+	storage_request_boot_image_by_line(filename, path);
 	return 0;
 }
 

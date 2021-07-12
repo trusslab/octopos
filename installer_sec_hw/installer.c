@@ -174,7 +174,7 @@ static int prepare_boot_partition(void)
 	// 		       (char *) "./serial_out/serial_out");
 	copy_file_to_partition((char *) "storage",
 			       (char *) "./storage/storage.srec");
-	// copy_file_to_partition((char *) "os", (char *) "./os/os");
+	copy_file_to_partition((char *) "os", (char *) "./os/os.srec");
 	// copy_file_to_partition((char *) "runtime",
 	// 		       (char *) "./runtime/runtime");
 	// copy_file_to_partition((char *) "network",
@@ -213,8 +213,8 @@ static int prepare_boot_partition(void)
 	// 			 (char *) "./installer/copy_serial_out", 0);
 	copy_file_from_partition((char *) "storage",
 				 (char *) "./installer_sec_hw/copy_storage", 0);
-	// copy_file_from_partition((char *) "os",
-	// 			 (char *) "./installer/copy_os", 0);
+	copy_file_from_partition((char *) "os",
+				 (char *) "./installer/copy_os", 0);
 	// copy_file_from_partition((char *) "runtime",
 	// 			 (char *) "./installer/copy_runtime", 0);
 	// copy_file_from_partition((char *) "network",
