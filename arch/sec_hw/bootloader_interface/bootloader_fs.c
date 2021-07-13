@@ -41,7 +41,7 @@ int get_srec_line(uint8 *line, uint8 *buf)
 
 /* FIXME: storage has direct access to flash, so why not reading more each time? */
 #define STORAGE_BOOT_BLOCK_SIZE STORAGE_BLOCK_SIZE
-#define STORAGE_BOOT_UNPACK_BUF_SIZE 4096
+#define STORAGE_BOOT_UNPACK_BUF_SIZE 1024
 
 #if STORAGE_BOOT_BLOCK_SIZE >= STORAGE_BOOT_UNPACK_BUF_SIZE
 #error STORAGE_BOOT_BLOCK_SIZE cannot be bigger than STORAGE_BOOT_UNPACK_BUF_SIZE

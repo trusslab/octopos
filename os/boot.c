@@ -35,16 +35,7 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 #endif
 
 	/* Help with reading the image off of storage */
-#ifdef ARCH_SEC_HW
-	/* ad hoc solution for loading boot image as file */
-	char bootname[20] = {':'};
-	strcpy(&bootname[1], filename);
-	uint32_t fd = file_system_open_file(bootname, FILE_OPEN_MODE);
-
-#else
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
-#endif
-
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
@@ -125,9 +116,9 @@ void help_boot_procs(int boot_untrusted)
 	if (boot_untrusted)
 		help_boot_untrusted_proc();
 #else
-//	help_boot_serial_out_proc();
-//	help_boot_keyboard_proc();
-//	help_boot_runtime_proc(P_RUNTIME1);
+	help_boot_serial_out_proc();
+	help_boot_keyboard_proc();
+	help_boot_runtime_proc(P_RUNTIME1);
 //	if (boot_untrusted)
 //	 	help_boot_untrusted_proc();
 #endif
