@@ -35,19 +35,6 @@ void cleanup_platform();
 #define bool    _Bool
 #endif
 
-#define QSPI_SECTOR_SIZE 128 * 1024
-
-#define P_UNTRUSTED_BOOT_P0 100
-#define P_UNTRUSTED_BOOT_P1 101
-#define UNTRUSTED_KERNEL_P0_SIZE 13107200
-#define UNTRUSTED_KERNEL_P1_SIZE 4950016
-
-/* boot images store at this sector and beyond */
-#define BOOT_IMAGE_OFFSET 100
-
-/* special op code for boot image request */
-#define STORAGE_OP_BOOT_REQ 0xf
-
 /* This symbol is for debug only. It forces all mailbox to
  * wait on the queue until all expected bytes are delivered.
  */
@@ -58,7 +45,7 @@ void cleanup_platform();
 #define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING       \
 	(MAILBOX_MAX_COMMAND_SIZE-MAILBOX_QUEUE_MSG_SIZE+1)
 
-#define MAILBOX_MAX_COMMAND_SIZE_LARGE            64
+#define MAILBOX_MAX_COMMAND_SIZE_LARGE            512
 #define MAILBOX_MAX_COMMAND_SIZE_NO_PADDING_LARGE \
 	(MAILBOX_MAX_COMMAND_SIZE-MAILBOX_QUEUE_MSG_SIZE+1)
 

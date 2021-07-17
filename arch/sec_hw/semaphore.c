@@ -8,10 +8,10 @@
 #include "octopos/mailbox.h"
 
 #include "xil_assert.h"
-#include "xmbox.h"
+#include "arch/octopos_xmbox.h"
 
 #ifdef ARCH_SEC_HW_OS
-extern XMbox Mbox_keyboard;
+extern OCTOPOS_XMbox Mbox_keyboard;
 extern sem_t availables[NUM_QUEUES + 1];
 #endif
 
@@ -44,13 +44,13 @@ int sem_wait(sem_t *sem)
 	return 0;
 }
 
-int _sem_retrieve_mailbox_message_blocking_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
+int _sem_retrieve_mailbox_message_blocking_cbuf(OCTOPOS_XMbox *InstancePtr, cbuf_handle_t cbuf)
 {
 	int			status;
 	uint8_t		*message_buffer;
 
 	message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
-	XMbox_ReadBlocking(InstancePtr, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
+	OCTOPOS_XMbox_ReadBlocking(InstancePtr, (u32*)(message_buffer), MAILBOX_QUEUE_MSG_SIZE);
 
 	status = circular_buf_put(cbuf, (uint32_t) message_buffer);
 
@@ -63,27 +63,27 @@ int _sem_retrieve_mailbox_message_blocking_cbuf(XMbox *InstancePtr, cbuf_handle_
 	return 0;
 }
 
-int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf)
+int _sem_retrieve_mailbox_message_blocking_buf(OCTOPOS_XMbox *InstancePtr, uint8_t* buf)
 {
-	XMbox_ReadBlocking(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE);
+	OCTOPOS_XMbox_ReadBlocking(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE);
 	return 0;
 }
 
-int _sem_retrieve_mailbox_message_blocking_buf_large(XMbox *InstancePtr, uint8_t* buf)
+int _sem_retrieve_mailbox_message_blocking_buf_large(OCTOPOS_XMbox *InstancePtr, uint8_t* buf)
 {
-	XMbox_ReadBlocking(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	OCTOPOS_XMbox_ReadBlocking(InstancePtr, (u32*)(buf), MAILBOX_QUEUE_MSG_SIZE_LARGE);
 	return 0;
 }
 
 static uint8_t *sketch_buffer = NULL;
 static u32 sketch_buffer_offset = 0;
-static XMbox *sketch_xmbox_instance = NULL;
+static OCTOPOS_XMbox *sketch_xmbox_instance = NULL;
 
 /* The calling function must provide a cbuf handle for the message to be written to.
  * InstancePtr must be a valid XMbox base address. The function will return either
  * zero (in case no message is available), otherwise the number of bytes received.
  */
-int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
+int _sem_retrieve_mailbox_message_cbuf(OCTOPOS_XMbox *InstancePtr, cbuf_handle_t cbuf)
 {
 	u32			bytes_read;
 	int			status;
@@ -92,12 +92,12 @@ int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
 	message_buffer = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 
 	if (sketch_buffer)
-		status = XMbox_Read(InstancePtr,
+		status = OCTOPOS_XMbox_Read(InstancePtr,
 				(u32*)(message_buffer),
 				MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset,
 				&bytes_read);
 	else
-		status = XMbox_Read(InstancePtr,
+		status = OCTOPOS_XMbox_Read(InstancePtr,
 				(u32*)(message_buffer),
 				MAILBOX_QUEUE_MSG_SIZE,
 				&bytes_read);
@@ -163,18 +163,18 @@ int _sem_retrieve_mailbox_message_cbuf(XMbox *InstancePtr, cbuf_handle_t cbuf)
  * InstancePtr must be a valid XMbox base address. The function will return either
  * zero (in case no message is available), otherwise the number of bytes received.
  */
-int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
+int _sem_retrieve_mailbox_message_buf(OCTOPOS_XMbox *InstancePtr, uint8_t* buf)
 {
 	u32			bytes_read;
 	int			status;
 
 	if (sketch_buffer)
-		status = XMbox_Read(InstancePtr,
+		status = OCTOPOS_XMbox_Read(InstancePtr,
 				(u32*)(buf),
 				MAILBOX_QUEUE_MSG_SIZE - sketch_buffer_offset,
 				&bytes_read);
 	else
-		status = XMbox_Read(InstancePtr,
+		status = OCTOPOS_XMbox_Read(InstancePtr,
 				(u32*)(buf),
 				MAILBOX_QUEUE_MSG_SIZE,
 				&bytes_read);
@@ -227,21 +227,21 @@ int _sem_retrieve_mailbox_message_buf(XMbox *InstancePtr, uint8_t* buf)
 	return bytes_read;
 }
 
-int _sem_deliver_mailbox_message_blocking(XMbox *InstancePtr, u32* buf)
+int _sem_deliver_mailbox_message_blocking(OCTOPOS_XMbox *InstancePtr, u32* buf)
 {
-	XMbox_WriteBlocking(InstancePtr, buf, MAILBOX_QUEUE_MSG_SIZE);
+	OCTOPOS_XMbox_WriteBlocking(InstancePtr, buf, MAILBOX_QUEUE_MSG_SIZE);
 
 	return 0;
 }
 
-int _sem_deliver_mailbox_message_blocking_large(XMbox *InstancePtr, u32* buf)
+int _sem_deliver_mailbox_message_blocking_large(OCTOPOS_XMbox *InstancePtr, u32* buf)
 {
-	XMbox_WriteBlocking(InstancePtr, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	OCTOPOS_XMbox_WriteBlocking(InstancePtr, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 
 	return 0;
 }
 
-int sem_wait_impatient_send(sem_t *sem, XMbox *InstancePtr, u32* buf)
+int sem_wait_impatient_send(sem_t *sem, OCTOPOS_XMbox *InstancePtr, u32* buf)
 {
 	if (sem->count <= 0) {
 		_sem_deliver_mailbox_message_blocking(InstancePtr, buf);
@@ -256,7 +256,7 @@ int sem_wait_impatient_send(sem_t *sem, XMbox *InstancePtr, u32* buf)
 	return 0;
 }
 
-int sem_wait_impatient_send_large(sem_t *sem, XMbox *InstancePtr, u32* buf)
+int sem_wait_impatient_send_large(sem_t *sem, OCTOPOS_XMbox *InstancePtr, u32* buf)
 {
 	if (sem->count <= 0) {
 		_sem_deliver_mailbox_message_blocking_large(InstancePtr, buf);
@@ -271,7 +271,7 @@ int sem_wait_impatient_send_large(sem_t *sem, XMbox *InstancePtr, u32* buf)
 	return 0;
 }
 
-int sem_wait_impatient_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbuf)
+int sem_wait_impatient_receive_cbuf(sem_t *sem, OCTOPOS_XMbox *InstancePtr, cbuf_handle_t cbuf)
 {
 	if (sem->count <= 0) {
 		_sem_retrieve_mailbox_message_blocking_cbuf(InstancePtr, cbuf);
@@ -291,7 +291,7 @@ int sem_wait_impatient_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_
 	return 0;
 }
 
-int sem_wait_impatient_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
+int sem_wait_impatient_receive_buf(sem_t *sem, OCTOPOS_XMbox *InstancePtr, uint8_t* buf)
 {
 	if (sem->count <= 0) {
 		_sem_retrieve_mailbox_message_blocking_buf(InstancePtr, buf);
@@ -305,7 +305,7 @@ int sem_wait_impatient_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
 	return 0;
 }
 
-int sem_wait_impatient_receive_buf_large(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
+int sem_wait_impatient_receive_buf_large(sem_t *sem, OCTOPOS_XMbox *InstancePtr, uint8_t* buf)
 {
 	if (sem->count <= 0) {
 		_sem_retrieve_mailbox_message_blocking_buf_large(InstancePtr, buf);
@@ -319,7 +319,7 @@ int sem_wait_impatient_receive_buf_large(sem_t *sem, XMbox *InstancePtr, uint8_t
 	return 0;
 }
 
-int sem_wait_one_time_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t cbuf)
+int sem_wait_one_time_receive_cbuf(sem_t *sem, OCTOPOS_XMbox *InstancePtr, cbuf_handle_t cbuf)
 {
 	u32 bytes_read;
 
@@ -336,7 +336,7 @@ int sem_wait_one_time_receive_cbuf(sem_t *sem, XMbox *InstancePtr, cbuf_handle_t
 	}    
 }
 
-int sem_wait_one_time_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
+int sem_wait_one_time_receive_buf(sem_t *sem, OCTOPOS_XMbox *InstancePtr, uint8_t* buf)
 {
 	u32 bytes_read;
 
@@ -353,9 +353,9 @@ int sem_wait_one_time_receive_buf(sem_t *sem, XMbox *InstancePtr, uint8_t* buf)
 	}
 }
 
-XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
+OCTOPOS_XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
 {
-	XMbox*			InstancePtr = NULL;
+	OCTOPOS_XMbox*			InstancePtr = NULL;
 	_Bool			has_new = FALSE;
 	uint32_t		args_ptrs[mb_count];
 
@@ -363,7 +363,7 @@ XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
 		va_start(args, mb_count);
 
 		for (int i = 0; i < mb_count; ++i) {
-			InstancePtr = va_arg(args, XMbox*);
+			InstancePtr = va_arg(args, OCTOPOS_XMbox*);
 			_SEC_HW_ASSERT_NON_VOID(InstancePtr);
 
 			_SEC_HW_DEBUG("argument index: %d, mailbox: %p", i, InstancePtr);
@@ -375,15 +375,15 @@ XMbox* sem_wait_impatient_receive_multiple(sem_t *sem, int mb_count, ...)
 		while (!has_new) {
 			for (int i = 0; i < mb_count; ++i) {
 #ifdef ARCH_SEC_HW_OS
-				if ((XMbox*) args_ptrs[i] == &Mbox_keyboard &&
+				if ((OCTOPOS_XMbox*) args_ptrs[i] == &Mbox_keyboard &&
 						availables[Q_KEYBOARD].count == 0) {
 					continue;
 				}
 #endif
-				if (!XMbox_IsEmpty((XMbox*) args_ptrs[i])) {
+				if (!OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) args_ptrs[i])) {
 					has_new = TRUE;
 					_SEC_HW_DEBUG("mailbox %p has new message", InstancePtr);
-					InstancePtr = (XMbox*) args_ptrs[i];
+					InstancePtr = (OCTOPOS_XMbox*) args_ptrs[i];
 					break;
 				}
 			}

@@ -181,8 +181,8 @@ static int prepare_boot_partition(void)
 	// 		       (char *) "./network/network");
 	// copy_file_to_partition((char *) "bluetooth",
 	// 		       (char *) "./bluetooth/bluetooth");
-	// copy_file_to_partition((char *) "linux",
-	// 		       (char *) "./arch/umode/untrusted_linux/linux");
+	copy_file_to_partition((char *) "linux",
+			       (char *) "../petalinux_proj/untrusted-a53-zcu106b/images/linux/image.ub");
 	// copy_file_to_partition((char *) "attest_client",
 	// 		       (char *) "./applications/bin/attest_client.so");
 	// copy_file_to_partition((char *) "bank_client",
@@ -221,8 +221,8 @@ static int prepare_boot_partition(void)
 	// 			 (char *) "./installer/copy_network", 0);
 	// copy_file_from_partition((char *) "bluetooth",
 	// 			 (char *) "./installer/copy_bluetooth", 0);
-	// copy_file_from_partition((char *) "linux",
-	// 			 (char *) "./installer/copy_linux", 0);
+	copy_file_from_partition((char *) "linux",
+				 (char *) "./installer_sec_hw/copy_linux", 0);
 	// copy_file_from_partition((char *) "attest_client",
 	// 			 (char *) "./installer/copy_attest_client.so", 0);
 	// copy_file_from_partition((char *) "bank_client",

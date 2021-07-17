@@ -19,7 +19,6 @@
 #include <arch/srec.h>
 #include <arch/octopos_mbox.h>
 #include <arch/octopos_xmbox.h>
-#include "xmbox.h"
 #endif
 #include <stdint.h>
 #include <unistd.h>
@@ -276,7 +275,7 @@ static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
 extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
 
-int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf);
+int _sem_retrieve_mailbox_message_blocking_buf(OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
 int get_srec_line(uint8 *line, uint8 *buf);
 
 /* FIXME: import headers */

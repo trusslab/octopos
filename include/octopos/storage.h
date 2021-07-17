@@ -7,11 +7,7 @@
 #define false 0
 #endif
 
-#ifdef ARCH_SEC_HW
-#define STORAGE_BLOCK_SIZE	64  /* bytes */
-#else
 #define STORAGE_BLOCK_SIZE	512  /* bytes */
-#endif
 
 #define STORAGE_BOOT_PARTITION_SIZE			200000
 #define STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE	4000000
