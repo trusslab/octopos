@@ -275,7 +275,7 @@ static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
 extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
 
-int _sem_retrieve_mailbox_message_blocking_buf(OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
+int _sem_retrieve_mailbox_message_blocking_buf_large(OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
 int get_srec_line(uint8 *line, uint8 *buf);
 
 /* FIXME: import headers */
@@ -363,8 +363,7 @@ repeat:
     octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
 	limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
-
-	count = count / 16;
+	count = count / 128;
 #endif /* ARCH_SEC_HW_BOOT */
 
 	/*
@@ -375,7 +374,7 @@ repeat:
 #ifndef ARCH_SEC_HW_BOOT
 	if (count == MAILBOX_MAX_LIMIT_VAL)
 #else
-	if (count == MAILBOX_MAX_LIMIT_VAL / 16)
+	if (count == MAILBOX_MAX_LIMIT_VAL / 128)
 #endif
 		need_repeat = 1;
 	else
@@ -387,7 +386,7 @@ repeat:
 #ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
 #else
-		_sem_retrieve_mailbox_message_blocking_buf(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+		_sem_retrieve_mailbox_message_blocking_buf_large(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
 #endif
 		
 #ifndef ARCH_SEC_HW_BOOT
@@ -442,6 +441,7 @@ repeat:
 #endif /* ARCH_SEC_HW_BOOT */
 
 		offset += STORAGE_BLOCK_SIZE;
+
 	}
 
 #ifdef ARCH_SEC_HW_BOOT

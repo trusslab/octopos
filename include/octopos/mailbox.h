@@ -58,7 +58,11 @@
 #define MAILBOX_QUEUE_SIZE		4
 #define MAILBOX_QUEUE_MSG_SIZE		64
 
+#ifdef ARCH_SEC_HW
+#define MAILBOX_QUEUE_SIZE_LARGE	4
+#else
 #define MAILBOX_QUEUE_SIZE_LARGE	8
+#endif
 #define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
 
 typedef struct __attribute__((__packed__)) {

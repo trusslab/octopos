@@ -353,17 +353,33 @@ void _mailbox_print_queue_status(uint8_t runtime_proc_id)
 void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
 				   limit_t limit, timeout_t timeout)
 {
-	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
+	u8 factor;
 	mailbox_state_reg_t new_state;
+
+	if (queue_id == Q_STORAGE_DATA_OUT || queue_id == Q_STORAGE_DATA_IN)
+		factor = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4;
+	else
+		factor = MAILBOX_QUEUE_MSG_SIZE / 4;
 
 	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
 	new_state.owner = OMboxIds[queue_id][proc_id];
 
-	if (limit > MAILBOX_MAX_LIMIT_VAL / factor)
+	/* Zephyr notes: this logic is terrible. remove it once we fix mailbox deduction */
+	/* FIXME: several workarounds has been made:
+	 * 1. every message read will take 16 quotas;
+	 * 2. a bug in mailbox hardware, which causes quota (q) can only be 
+	 *    q = 4094 - 16n, where n is number of messages.
+	 *    E.g., if the initial quota is 4080, after a message read,
+	 *    the new quota becomes 4078. The correct quota is 4064=4080-16.
+	 *    To workaround this issue, 
+	 *    a) every delegation must add 14 quotas;
+	 *    b) the reader must yield / eat these 14 quotas left.
+	 */
+	if (limit * factor + 126 > MAILBOX_MAX_LIMIT_VAL)
 		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
 	else
-		new_state.limit = limit * factor;
+		new_state.limit = limit * factor + 126;
 
 	if (timeout > MAILBOX_MAX_TIMEOUT_VAL)
 		new_state.timeout = MAILBOX_MAX_TIMEOUT_VAL;

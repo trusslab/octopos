@@ -34,8 +34,6 @@ sem_t			interrupts[NUM_QUEUES + 1];
 OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
-u32				DEBUG_STATUS_REGISTERS[30] = {0};
-
 void process_request(uint8_t *buf, uint8_t proc_id);
 void initialize_storage_space(void);
 

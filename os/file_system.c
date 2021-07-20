@@ -855,7 +855,7 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 
 repeat:
 #ifdef ARCH_SEC_HW
-	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL / 16) {
+	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL / 128) {
 #else
 	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
 #endif
@@ -863,8 +863,8 @@ repeat:
 		num_blocks = 0;
 	} else {
 #ifdef ARCH_SEC_HW
-		next_num_blocks = MAILBOX_MAX_LIMIT_VAL / 16;
-		num_blocks -= MAILBOX_MAX_LIMIT_VAL / 16;
+		next_num_blocks = MAILBOX_MAX_LIMIT_VAL / 128;
+		num_blocks -= MAILBOX_MAX_LIMIT_VAL / 128;
 #else
 		next_num_blocks = MAILBOX_MAX_LIMIT_VAL;
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
@@ -875,25 +875,9 @@ repeat:
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
-#ifdef ARCH_SEC_HW
-	/* FIXME: several workarounds has been made:
-	 * 1. every message read will take 16 quotas;
-	 * 2. a bug in mailbox hardware, which causes quota (q) can only be 
-	 *    q = 4094 - 16n, where n is number of messages.
-	 *    E.g., if the initial quota is 4080, after a message read,
-	 *    the new quota becomes 4078. The correct quota is 4064=4080-16.
-	 *    To workaround this issue, 
-	 *    a) every delegation must add 14 quotas;
-	 *    b) the reader must yield / eat these 14 quotas left.
-	 */
-	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
-				      next_num_blocks * 16 + 14, 
-				      MAILBOX_DEFAULT_TIMEOUT_VAL);
-#else
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      next_num_blocks, 
 				      MAILBOX_DEFAULT_TIMEOUT_VAL);
-#endif
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + 
 			     total_read_blocks, next_num_blocks)
