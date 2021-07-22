@@ -6,6 +6,7 @@
 #include "sleep.h"
 #include "xstatus.h"
 #include "xintc.h"
+#include "xil_cache.h"
 
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
@@ -73,7 +74,8 @@ int init_serial_out(void)
 	int Status;
 	OCTOPOS_XMbox_Config *ConfigPtr, *Config_storage_data_out;
 
-	init_platform();
+	Xil_ICacheEnable();
+	Xil_DCacheEnable();
 
 	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_SERIAL_OUT_SERIAL_OUT_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox, ConfigPtr, ConfigPtr->BaseAddress);
@@ -143,7 +145,8 @@ void close_serial_out(void)
 {
 	circular_buf_free(cbuf_serial_out);
 
-	cleanup_platform();
+	Xil_DCacheDisable();
+	Xil_ICacheDisable();
 }
 #endif
 

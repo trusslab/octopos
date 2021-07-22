@@ -10,6 +10,7 @@
 #include "xintc.h"
 #include "xgpio.h"
 #include "sleep.h"
+#include "xil_cache.h"
 
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
@@ -43,7 +44,7 @@ sem_t			availables[NUM_QUEUES + 1];
 
 cbuf_handle_t	cbuf_keyboard;
 
-OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
+OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 XGpio reset_gpio_0;
@@ -621,7 +622,9 @@ int init_os_mailbox(void)
 					*Config_storage_cmd_out, *Config_storage_data_in, *Config_storage_data_out,
 					*Config_untrusted, *Config_osu;
 
-	init_platform();
+	Xil_ICacheEnable();
+	Xil_DCacheEnable();
+
 	OMboxIds_init();
 
 #ifndef ARCH_SEC_HW_BOOT
@@ -1059,6 +1062,7 @@ void close_os_mailbox(void)
 {
 	circular_buf_free(cbuf_keyboard);
 
-	cleanup_platform();
+	Xil_DCacheDisable();
+	Xil_ICacheDisable();
 }   
 #endif

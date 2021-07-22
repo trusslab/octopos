@@ -493,16 +493,19 @@ void runtime_core()
 /* Initializes the runtime and its mailbox */
 int init_runtime(int runtime_id)
 {
-	int				Status;
+	int Status;
 	OCTOPOS_XMbox_Config	*ConfigPtr_out,
-					*ConfigPtr_keyboard,
-					*ConfigPtr_Runtime1,
-					*ConfigPtr_Runtime2,
-					*ConfigPtr_sys, 
-					*Config_storage_cmd_in,
-					*Config_storage_cmd_out,
-					*Config_storage_data_in, 
-					*Config_storage_data_out;
+							*ConfigPtr_keyboard,
+							*ConfigPtr_Runtime1,
+							*ConfigPtr_Runtime2,
+							*ConfigPtr_sys, 
+							*Config_storage_cmd_in,
+							*Config_storage_cmd_out,
+							*Config_storage_data_in, 
+							*Config_storage_data_out;
+
+	Xil_ICacheEnable();
+	Xil_DCacheEnable();
 
 	switch(runtime_id) {
 	case 1:
@@ -820,6 +823,9 @@ void close_runtime(void)
 {
 	preloaded_app_destroy();
 	runtime_terminated = TRUE;
+
+	Xil_DCacheDisable();
+	Xil_ICacheDisable();
 }
 
 #endif

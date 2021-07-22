@@ -50,7 +50,6 @@
 #include <runtime/storage_client.h>
 #include "xparameters.h"
 #include "arch/sec_hw.h"
-#include "xil_cache.h"
 #endif
 /* FIXME: remove */
 #ifdef ARCH_UMODE
