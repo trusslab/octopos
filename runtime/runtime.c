@@ -517,6 +517,7 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 	queue_limits[Q_KEYBOARD] = limit;
 	queue_timeouts[Q_KEYBOARD] = timeout;
 
+#ifndef ARCH_SEC_HW
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_KEYBOARD, expected_pcr);
 		if (ret) {
@@ -528,6 +529,7 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 			return ERR_UNEXPECTED;
 		}
 	}
+#endif
 
 	queue_update_callbacks[Q_KEYBOARD] = callback;
 
@@ -571,8 +573,9 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 			     (uint32_t) timeout);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	if (ret0)
+	if (ret0) {
 		return (int) ret0;
+	}
 
 	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
 	if (!ret) {
@@ -592,6 +595,7 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 	queue_limits[Q_SERIAL_OUT] = limit;
 	queue_timeouts[Q_SERIAL_OUT] = timeout;
 
+#ifndef ARCH_SEC_HW
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_SERIAL_OUT, expected_pcr);
 		if (ret) {
@@ -604,11 +608,11 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 			return ERR_UNEXPECTED;
 		}
 	}
+#endif
 
 	has_secure_serial_out_access = true;
 
 	queue_update_callbacks[Q_SERIAL_OUT] = callback;
-
 	return 0;
 }
 

@@ -2,6 +2,7 @@
  cp include/octopos/runtime.h ../petalinux_proj/linux-xlnx/include/octopos/runtime.h
  cp include/octopos/syscall.h ../petalinux_proj/linux-xlnx/include/octopos/syscall.h
  cp include/octopos/error.h ../petalinux_proj/linux-xlnx/include/octopos/error.h
+ cp include/octopos/io.h ../petalinux_proj/linux-xlnx/include/octopos/io.h
  cp include/octopos/storage.h ../petalinux_proj/linux-xlnx/include/octopos/storage.h
  cp include/runtime/runtime.h ../petalinux_proj/linux-xlnx/include/octopos/runtime/runtime.h
  cp include/runtime/storage_client.h ../petalinux_proj/linux-xlnx/drivers/block/octopos_blk/storage_client.h

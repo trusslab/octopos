@@ -73,20 +73,20 @@ void fs_test(struct runtime_api *api)
 	}
 
 	insecure_printf("Test 1 passed.\n");
-//	insecure_printf("Test 2\n");
-//	uint8_t block[STORAGE_BLOCK_SIZE * 100];
-//	memset(block, 0x0, STORAGE_BLOCK_SIZE);
-//
-//	block[10] = 14;
-//	api->write_file_blocks(fd2, block, 0, 1);
-//	memset(block, 0x0, STORAGE_BLOCK_SIZE);
-//	api->read_file_blocks(fd2, block, 0, 1);
-//	insecure_printf("block[10] = %d\n", (int) block[10]);
-//	if (block[10] != 14) {
-//		insecure_printf("Test 2 failed\n");
-//		goto out;
-//	}
-//	insecure_printf("Test 2 passed.\n");
+	insecure_printf("Test 2\n");
+	uint8_t block[STORAGE_BLOCK_SIZE * 2];
+	memset(block, 0x0, STORAGE_BLOCK_SIZE);
+
+	block[10] = 14;
+	api->write_file_blocks(fd2, block, 0, 1);
+	memset(block, 0x0, STORAGE_BLOCK_SIZE);
+	api->read_file_blocks(fd2, block, 0, 1);
+	insecure_printf("block[10] = %d\n", (int) block[10]);
+	if (block[10] != 14) {
+		insecure_printf("Test 2 failed\n");
+		goto out;
+	}
+	insecure_printf("Test 2 passed.\n");
 //
 //	insecure_printf("Test 3\n");
 //	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);

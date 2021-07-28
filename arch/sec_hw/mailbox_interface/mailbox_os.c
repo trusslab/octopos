@@ -354,13 +354,16 @@ void _mailbox_print_queue_status(uint8_t runtime_proc_id)
 void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
 				   limit_t limit, timeout_t timeout)
 {
-	u8 factor;
+	u8 factor, tail_offset;
 	mailbox_state_reg_t new_state;
 
-	if (queue_id == Q_STORAGE_DATA_OUT || queue_id == Q_STORAGE_DATA_IN)
+	if (queue_id == Q_STORAGE_DATA_OUT || queue_id == Q_STORAGE_DATA_IN) {
 		factor = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4;
-	else
+		tail_offset = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4 - 2;
+	} else {
 		factor = MAILBOX_QUEUE_MSG_SIZE / 4;
+		tail_offset = MAILBOX_QUEUE_MSG_SIZE / 4 - 2;
+	}
 
 	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
@@ -377,10 +380,10 @@ void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
 	 *    a) every delegation must add 14 quotas;
 	 *    b) the reader must yield / eat these 14 quotas left.
 	 */
-	if (limit * factor + 126 > MAILBOX_MAX_LIMIT_VAL)
+	if (limit * factor + tail_offset > MAILBOX_MAX_LIMIT_VAL)
 		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
 	else
-		new_state.limit = limit * factor + 126;
+		new_state.limit = limit * factor + tail_offset;
 
 	if (timeout > MAILBOX_MAX_TIMEOUT_VAL)
 		new_state.timeout = MAILBOX_MAX_TIMEOUT_VAL;

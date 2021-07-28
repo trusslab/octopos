@@ -420,6 +420,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 		}
 	}
 
+printf("\r\ncreation debug[0]\r\n");
 	ret = storage_create_secure_partition(app_key, runtime_proc_id,
 					      partition_size, &sec_partition_id);
 	if (ret) {
@@ -447,6 +448,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	timeout = arg1;
 
 	if (limit > MAILBOX_MAX_LIMIT_VAL) {
+		while(1);
 		printf("Error: %s: limit (%d) too large\n", __func__, limit);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
@@ -454,6 +456,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
+		while(1);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 		return;
 	}
@@ -461,6 +464,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	app = runtime_proc->app;
 
 	if (!app->sec_partition_created) {
+		while(1);
 		printf("Error: %s: app does not have a secure storage "
 		       "partition.\n", __func__);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -473,6 +477,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		 * request in order not to starve other domains.
 		 */
 		if (timeout > MAILBOX_DEFAULT_TIMEOUT_VAL) {
+			while(1);
 			printf("Error: %s: timeout (%d) too large for the "
 			       "untrusted domain\n", __func__, timeout);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -480,6 +485,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 	} else {
 		if (timeout > 100) {
+			while(1);
 			printf("Error: %s: timeout (%d) too large\n", __func__,
 			       timeout);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -508,6 +514,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			if (app == &untrusted_app)
 				no_reset = 1;
 		} else {
+			while(1);
 			printf("Error: %s: app already has access to the "
 			       "storage queues.\n", __func__);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -519,6 +526,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		if (storage_status == OS_USE) {
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
+				while(1);
 				printf("Error: %s: couldn't reset the storage "
 				       "service.\n", __func__);
 				SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
@@ -530,6 +538,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			wait_for_storage();
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
+				while(1);
 				printf("Error: %s: couldn't reset the storage "
 				       "service (2).\n", __func__);
 				SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
@@ -544,6 +553,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	if (!no_reset) {
 		ret = bind_partition(app->sec_partition_id);
 		if (ret) {
+			while(1);
 			printf("Error: %s: couldn't bind the storage service "
 			       "to partition (%d).\n", __func__,
 			       app->sec_partition_id);

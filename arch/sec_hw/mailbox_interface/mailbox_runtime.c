@@ -120,15 +120,28 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 int mailbox_attest_queue_access(uint8_t queue_id, limit_t count,
 		timeout_t timeout)
 {
-	_SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
-
+	u8 factor, tail_offset;
 	_Bool result = TRUE;
-	u8 factor = MAILBOX_QUEUE_MSG_SIZE / 4;
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
+	_SEC_HW_ASSERT_NON_VOID(queue_id <= NUM_QUEUES + 1)
+
+	if (queue_id == Q_STORAGE_DATA_OUT || queue_id == Q_STORAGE_DATA_IN) {
+		factor = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4;
+		tail_offset = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4 - 2;
+	} else {
+		factor = MAILBOX_QUEUE_MSG_SIZE / 4;
+		tail_offset = MAILBOX_QUEUE_MSG_SIZE / 4 - 2;
+	}
+
 	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
-	result &= octopos_mailbox_attest_quota_limit(queue_ptr,
-			count * factor);
+
+	if (count * factor + tail_offset > MAILBOX_MAX_LIMIT_VAL)
+		result &= octopos_mailbox_attest_quota_limit(queue_ptr,
+				MAILBOX_MAX_LIMIT_VAL);
+	else
+		result &= octopos_mailbox_attest_quota_limit(queue_ptr,
+				count * factor + tail_offset);
 
 	/* FIXME: implement timeout attestation */
 

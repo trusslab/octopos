@@ -605,15 +605,26 @@ static void storage_create_resource(uint8_t *buf)
 	uint32_t partition_id, tag, size;
 	int ret;
 
+#ifndef ARCH_SEC_HW
 	if (bound) {
 		printf("Error: %s: some partition is bound to queue set\n",
 		       __func__);
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
+#else
+	if (bound) {
+		/* if bound, simulate a reset */
+		used = 0;
+		bound = 0;
+		authenticated = 0;
+		bound_partition = 0xFF;
+	}
+#endif
 
 	STORAGE_GET_ONE_ARG_DATA
 	if (data_size != STORAGE_KEY_SIZE) {
+		while(1);
 		printf("Error: %s: incorrect key (TPM hash) size\n", __func__);
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
@@ -622,6 +633,7 @@ static void storage_create_resource(uint8_t *buf)
 	partition_id = arg0;
 
 	if (partition_id >= NUM_PARTITIONS) {
+		while(1);
 		printf("Error: %s: invalid requested partition ID (%d)\n",
 		       __func__, partition_id);
 		STORAGE_SET_ONE_RET(ERR_INVALID)
@@ -636,6 +648,7 @@ static void storage_create_resource(uint8_t *buf)
 
 	filep = fop_open(partitions[partition_id].create_name, "w");
 	if (!filep) {
+		while(1);
 		printf("Error: %s: Couldn't open %s.\n", __func__,
 		       partitions[partition_id].create_name);
 		STORAGE_SET_ONE_RET(ERR_FAULT)
@@ -648,6 +661,7 @@ static void storage_create_resource(uint8_t *buf)
 	fop_close(filep);
 
 	if (size != 4) {
+		while(1);
 		STORAGE_SET_ONE_RET(ERR_FAULT)
 		if (size > 0) { /* partial write */
 			/* wipe the file */

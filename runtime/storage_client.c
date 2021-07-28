@@ -408,6 +408,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 	int ret;
 
 	if (!secure_storage_created) {
+		while(1);
 		printf("Error: %s: secure storage not created.\n", __func__);
 		return ERR_INVALID;
 	}
@@ -421,8 +422,10 @@ static int request_secure_storage_queues_access(limit_t limit,
 			     (uint32_t) limit, (uint32_t) timeout)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	if (ret0)
+	if (ret0) {
+		while(1);
 		return (int) ret0;
+	}
 
 	/* FIXME: wait for OS to switch the queue. Microblaze does not have this problem */
 #ifdef CONFIG_ARM64
@@ -431,6 +434,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, limit, timeout);
 	if (!ret) {
+		while(1);
 		printf("%s: Error: failed to attest secure storage cmd write "
 		       "access\n", __func__);
 		return ERR_FAULT;
@@ -438,6 +442,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT, limit, timeout);
 	if (!ret) {
+		while(1);
 		printf("%s: Error: failed to attest secure storage cmd read "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -447,6 +452,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN, limit, timeout);
 	if (!ret) {
+		while(1);// DEAD HERE
 		printf("%s: Error: failed to attest secure storage data write "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -457,6 +463,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT, limit, timeout);
 	if (!ret) {
+		while(1);
 		printf("%s: Error: failed to attest secure storage data read "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
@@ -510,6 +517,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = query_and_verify_storage();
 	if (ret) {
+		while(1);
 		printf("%s: Error: couldn't query and verify access to the "
 		       "storage service\n", __func__);
 		ret = ERR_UNEXPECTED;
@@ -518,6 +526,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = authenticate_storage();
 	if (ret) {
+		while(1);
 		printf("%s: Error: couldn't authenticate with the storage "
 		       "service\n", __func__);
 		ret = ERR_UNEXPECTED;
@@ -564,6 +573,7 @@ int request_secure_storage_access(uint32_t partition_size,
 
 	ret = request_secure_storage_creation(partition_size);
 	if (ret) {
+		while(1);
 		printf("%s: Error: request for secure storage creation "
 		       "failed.\n", __func__);
 		return ret;
@@ -572,6 +582,7 @@ int request_secure_storage_access(uint32_t partition_size,
 	ret = request_secure_storage_queues_access(limit, timeout,
 				callback, expected_pcr, return_pcr);	
 	if (ret) {
+		while(1);
 		printf("%s: Error: couldn't gain access to storage "
 		       "queues.\n", __func__);
 		return ret;
@@ -785,7 +796,7 @@ int write_context_to_storage(int do_yield)
 		return ERR_INVALID;
 	}
 
-#ifdef ARCH_SEC_HW
+#if defined(ARCH_SEC_HW) && !defined(CONFIG_ARM64)
 	async_syscall_mode = true;
 #endif
 

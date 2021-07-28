@@ -116,9 +116,9 @@ void help_boot_procs(int boot_untrusted)
 	if (boot_untrusted)
 		help_boot_untrusted_proc();
 #else
-	help_boot_serial_out_proc();
-	help_boot_keyboard_proc();
-	help_boot_runtime_proc(P_RUNTIME1);
+//	help_boot_serial_out_proc();
+//	help_boot_keyboard_proc();
+//	help_boot_runtime_proc(P_RUNTIME1);
 //	if (boot_untrusted)
 //	 	help_boot_untrusted_proc();
 #endif

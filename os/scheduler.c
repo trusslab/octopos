@@ -110,6 +110,7 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 
 	/* Let's first see if any of the runtimes are idle */
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
+		printf("RT%d state%d\r\n", i, runtime_procs[i].state);
 		/* FIXME: this needs to be in a critical section */
 		if (runtime_procs[i].state == RUNTIME_PROC_IDLE) {
 			runtime_procs[i].state = RUNTIME_PROC_RESERVED;
