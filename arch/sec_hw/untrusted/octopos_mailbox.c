@@ -138,11 +138,15 @@ static int read_syscall_response(uint8_t *buf)
 
 int issue_syscall(uint8_t *buf)
 {
+	printk("%s[0]\n", __func__);
 	send_msg_on_queue(buf, Q_OSU, MAILBOX_QUEUE_MSG_SIZE);
+	printk("%s[1]\n", __func__);
 
 	/* wait on queue */
 	down(&interrupts[Q_UNTRUSTED]);
+	printk("%s[2]\n", __func__);
 	read_syscall_response(buf);
+	printk("%s[3]\n", __func__);
 	
 	return 0;
 }
@@ -287,11 +291,15 @@ void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	unsigned long flags;
 
+	printk("%s[0]\n", __func__);
 	down(&interrupts[queue_id]);
+	printk("%s[1]\n", __func__);
 	spin_lock_irqsave(&mailbox_lock, flags);
+	printk("%s[2]\n", __func__);
 	xilinx_mbox_send_data_blocking(mbox_map[queue_id],
 		(u32*) buf,
 		queue_msg_size);
+	printk("%s[3]\n", __func__);
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
@@ -367,9 +375,11 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 	u8 factor, tail_offset;
 
 	if (queue_id == Q_STORAGE_DATA_OUT || queue_id == Q_STORAGE_DATA_IN) {
+		printk("large queue\n");
 		factor = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4;
 		tail_offset = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4 - 2;
 	} else {
+		printk("small queue\n");
 		factor = MAILBOX_QUEUE_MSG_SIZE / 4;
 		tail_offset = MAILBOX_QUEUE_MSG_SIZE / 4 - 2;
 	}
@@ -377,8 +387,11 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 	spin_lock_irqsave(&mailbox_lock, flags);
 	if (octopos_mailbox_attest_owner_fast_hw(mbox_ctrl_map[queue_id])) {
 		raw_state = octopos_mailbox_get_status_reg(mbox_ctrl_map[queue_id]);
+	printk("%u state=%lu\n", (unsigned int) queue_id, (unsigned int) raw_state);
 		memcpy(&state, &raw_state, sizeof(state));
+	printk("%u %u\n", (unsigned int) state.limit, (unsigned int) state.timeout);
 	} else {
+		printk("%s: Error: no access to mailbox\n", __func__);
 		return 0;
 	}
 	spin_unlock_irqrestore(&mailbox_lock, flags);
@@ -389,7 +402,9 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 	if (state.timeout && (state.timeout != MAILBOX_NO_TIMEOUT_VAL))
 		queue_timeouts[queue_id] = state.timeout;
 
-	if (state.limit / factor == limit)
+	if (state.limit / factor == limit || 
+			(limit == MAILBOX_MAX_LIMIT_VAL && state.limit == MAILBOX_MAX_LIMIT_VAL)
+		)
 		return 1;
 	else
 		return 0;

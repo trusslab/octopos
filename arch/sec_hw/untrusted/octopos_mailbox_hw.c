@@ -512,7 +512,7 @@ static uint8_t find_mbox_ctrl_by_name(const char* dev_name)
 {
 	uint8_t queue_id;
 
-	if (strcmp(dev_name, "a0002000.Octopos-MailBox-4Writer-1Reader-large") == 0)
+	if (strcmp(dev_name, "a0002000.Octopos_MailBox_4Writer_1Reader_large") == 0)
 		queue_id = Q_STORAGE_DATA_IN;
 	else if (strcmp(dev_name, "a0006000.Octopos_MailBox_1Writer_6Reader_v1_0") == 0)
 		queue_id = Q_STORAGE_DATA_OUT;
@@ -731,7 +731,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		/* read queue type and id based on dev name */
 		queue_id = find_mbox_ctrl_by_name(dev_name(mbox_ctrl->dev));
 		if (unlikely(queue_id == 0)) {
-			dev_err(mbox_ctrl->dev, "Invalid device name. %s\n", mbox_ctrl->dev);
+			dev_err(mbox_ctrl->dev, "Invalid device name.\n");
 			BUG();
 		}
 		mbox_ctrl->qid = queue_id;
