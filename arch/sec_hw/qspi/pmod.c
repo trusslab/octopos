@@ -5,18 +5,20 @@
 #include <stdlib.h>
 #include <octopos/error.h>
 
-DXSPISDVOL disk(XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR,
-		XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SDCS_BASEADDR);
+DXSPISDVOL *disk;
 
 void initialize_pmodsd()
 {
 	static const char szDriveNbr[] = "0:";
-	DFATFS::fsmount(disk, szDriveNbr, 1);
+	
+	disk = new DXSPISDVOL(XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR,
+		XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SDCS_BASEADDR);
+	DFATFS::fsmount(*disk, szDriveNbr, 1);
 }
 
 DFILE* fop_open(const char *filename, const char *mode)
 {
-	DFILE* filep = (DFILE*) malloc(sizeof(DFILE));
+	DFILE * filep = new DFILE;
 	BYTE _mode;
 	FRESULT result;
 

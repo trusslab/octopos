@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
 #else /* ARCH_SEC_HW_BOOT */
 
 	/* Clear target memory contents */
-	memset((void*) DDR_BASE_ADDRESS, 0, DDR_RANGE);
+	memset((void*) RAM_BASE_ADDRESS, 0, RAM_RANGE);
 
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
 	char *name = "storage";
