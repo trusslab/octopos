@@ -192,6 +192,14 @@ static int secure_boot_check(char *path, char *signature_path)
 
 int main(int argc, char *argv[])
 {
+	/* lock ROM */
+	unsigned int * boot_status_reg = (unsigned int *) 0x15FFE0;
+	unsigned int * fuse1 = (unsigned int *) ROM_FUSE1;
+	unsigned int * fuse2 = (unsigned int *) ROM_FUSE2;
+	*fuse1 = FUSE_BURN_VALUE;
+	*fuse2 = FUSE_BURN_VALUE;
+	*boot_status_reg = 0;
+
 	char path[128];
 	int ret;
 #ifndef ARCH_SEC_HW_BOOT

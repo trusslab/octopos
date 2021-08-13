@@ -47,8 +47,11 @@ int get_srec_line(uint8 *line, uint8 *buf)
 #error STORAGE_BOOT_BLOCK_SIZE cannot be bigger than STORAGE_BOOT_UNPACK_BUF_SIZE
 #endif
 
+// FIXME: Why bootloader_other has its own load_by_line implementation?
+// should merge into this function. Don't forget to add memset common_heap_and_stack
 void storage_request_boot_image_by_line(char *filename)
 {
+	unsigned int * boot_status_reg = (unsigned int *) 0x15FFE0;
 	u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
 	u8 buf[STORAGE_BOOT_BLOCK_SIZE];
 	u16 unpack_buf_head = 0;
@@ -107,11 +110,14 @@ void storage_request_boot_image_by_line(char *filename)
 				case SREC_TYPE_7:
 				case SREC_TYPE_8:
 				case SREC_TYPE_9:
-					laddr = (void (*)())srinfo.addr;
+//					laddr = (void (*)())srinfo.addr;
 
 					/* clean up before load program */
 					bootloader_close_file_system();
-					
+					*(boot_status_reg) = 1;
+
+					laddr = (void (*)()) 0x15FFB0;
+
 					/* jump to start vector of loaded program */
 					(*laddr)();
 
