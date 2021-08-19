@@ -225,6 +225,7 @@ int main(int argc, char *argv[])
 	memset((void*) RAM_BASE_ADDRESS, 0, RAM_RANGE);
 
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
+	Xil_Out32(XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40 ,0x0000000A);
 	char *name = "storage";
 #elif defined(ARCH_SEC_HW_BOOT_KEYBOARD)
 	char *name = "keyboard";

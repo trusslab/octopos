@@ -977,6 +977,8 @@ int main(int argc, char **argv)
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: storage init\n", __func__);
 
+	Xil_Out32(XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40 ,0x0000000A);
+
 #ifndef ARCH_SEC_HW
 	enforce_running_process(P_STORAGE);
 #endif

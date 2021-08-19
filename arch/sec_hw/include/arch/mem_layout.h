@@ -17,27 +17,27 @@
 
 #elif defined(ARCH_SEC_HW_BOOT_KEYBOARD)
 #define RAM_BASE_ADDRESS 0x00120000
-#define RAM_RANGE 0x3ffff - 0x4000
+#define RAM_RANGE 0x1ffff - 0x4000
 
 #elif defined(ARCH_SEC_HW_BOOT_SERIAL_OUT)
 #define RAM_BASE_ADDRESS 0x00120000
-#define RAM_RANGE 0x3ffff - 0x4000
+#define RAM_RANGE 0x1ffff - 0x4000
 
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_1)
 #define RAM_BASE_ADDRESS 0x00120000
-#define RAM_RANGE 0x3ffff - 0x4000
+#define RAM_RANGE 0x1ffff - 0x4000
 
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_2)
 #define RAM_BASE_ADDRESS 0x00120000
-#define RAM_RANGE 0x3ffff - 0x4000
+#define RAM_RANGE 0x1ffff - 0x4000
 
 #elif defined(ARCH_SEC_HW_BOOT_OS)
 #define RAM_BASE_ADDRESS 0x00120000
-#define RAM_RANGE 0x3ffff - 0x4000
+#define RAM_RANGE 0x1ffff - 0x4000
 
 #elif defined(ARCH_SEC_HW_BOOT_NETWORK)
 #define RAM_BASE_ADDRESS 0x00120000
-#define RAM_RANGE 0x3ffff - 0x4000
+#define RAM_RANGE 0x1ffff - 0x4000
 
 #endif /* ARCH_SEC_HW_BOOT_STORAGE */
 

@@ -177,7 +177,13 @@ int reset_proc(uint8_t proc_id)
 
 int reset_proc_simple(uint8_t proc_id)
 {
+	/* FIXME: newer compiler doesn't zero it out. */
+	/* this is ad hoc for SEC_HW */
+#ifdef ARCH_SEC_HW
+	int ret = 0;
+#else
 	int ret;
+#endif
 
 #ifndef ARCH_SEC_HW
 	ret = pmu_reset_proc(proc_id);
@@ -188,7 +194,14 @@ int reset_proc_simple(uint8_t proc_id)
 
 int reboot_system(void)
 {
+	/* FIXME: newer compiler doesn't zero it out. */
+	/* this is ad hoc for SEC_HW */
+#ifdef ARCH_SEC_HW
+	int ret = 0;
+#else
 	int ret;
+#endif
+
 #ifndef ARCH_SEC_HW
 	/* send a reboot cmd to PMU */
 	ret = pmu_reboot();
@@ -198,7 +211,14 @@ int reboot_system(void)
 
 int halt_system(void)
 {
+	/* FIXME: newer compiler doesn't zero it out. */
+	/* this is ad hoc for SEC_HW */
+#ifdef ARCH_SEC_HW
+	int ret = 0;
+#else
 	int ret;
+#endif
+	
 #ifndef ARCH_SEC_HW
 	/* send a shutdown cmd to PMU */
 	/* FIXME: there is a race condition here.
