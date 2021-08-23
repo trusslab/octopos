@@ -37,7 +37,7 @@
  */
 
 /* FIXME: hard-coded */
-uint32_t partition_num_blocks = 0;
+uint32_t partition_num_blocks;
 
 struct file {
 	char filename[MAX_FILENAME_SIZE];
@@ -59,11 +59,11 @@ struct file_list_node {
 	struct file_list_node *next;
 };
 
-struct file_list_node *file_list_head = NULL;
-struct file_list_node *file_list_tail = NULL;
+struct file_list_node *file_list_head;
+struct file_list_node *file_list_tail;
 
 uint8_t dir_data[DIR_DATA_SIZE];
-int dir_data_ptr = 0;
+int dir_data_ptr;
 
 static int get_unused_fd(void)
 {
@@ -1007,6 +1007,11 @@ int file_system_remove_file(char *filename)
 
 void initialize_file_system(uint32_t _partition_num_blocks)
 {
+	file_list_head = NULL;
+	file_list_tail = NULL;
+	dir_data_ptr = 0;
+	partition_num_blocks = 0;
+
 	/* initialize fd bitmap */
 	if (MAX_NUM_FD % 8) {
 		printf("Error: %s: MAX_NUM_FD must be divisible by 8\n",

@@ -27,10 +27,10 @@
 #include <arch/mailbox_os.h>
 
 struct partition *partitions;
-uint32_t num_partitions = 0;
-uint8_t storage_status = OS_ACCESS;
-struct app *current_app_with_storage_access = NULL;
-struct partition *boot_partition = NULL;
+uint32_t num_partitions;
+uint8_t storage_status;
+struct app *current_app_with_storage_access;
+struct partition *boot_partition;
 extern struct app untrusted_app;
 
 static int query_number_partitions(void)
@@ -72,17 +72,18 @@ static int query_partition(uint32_t partition_id, struct partition *partition)
 	
 	STORAGE_SET_TWO_ARGS(query_type, partition_id)
 	buf[0] = IO_OP_QUERY_ALL_RESOURCES;
-	
+
 	send_msg_to_storage_no_response(buf);
 	get_response_from_storage(buf);
-	
+
 	STORAGE_GET_ONE_RET_DATA(data)
 	
 	if (ret0)
 		return (int) ret0;
 
 	if (_size != (5 + TPM_EXTEND_HASH_SIZE)) {
-		printf("Error: %s: unexpected returned data size.\n", __func__);
+		printf("Error: %s: unexpected returned data size (%d).\n", __func__, _size);
+		while(1); //debug
 		return ERR_UNEXPECTED;
 	}
 
@@ -602,6 +603,11 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 uint32_t initialize_storage(void)
 {
 	int ret;
+
+	storage_status = OS_ACCESS;
+	num_partitions = 0;
+	current_app_with_storage_access = NULL;
+	boot_partition = NULL;
 
 #ifdef ROLE_OS
 	/* The bootloader has already used the partition. */

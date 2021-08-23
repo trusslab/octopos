@@ -45,7 +45,7 @@ sem_t			availables[NUM_QUEUES + 1];
 cbuf_handle_t	cbuf_keyboard;
 
 OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
-UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
 XGpio reset_gpio_0;
 
@@ -794,6 +794,9 @@ int init_os_mailbox(void)
 #ifndef ARCH_SEC_HW_BOOT
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
+
+	/* Initialize XIntc hardware in case the domain is not power cycled */
+	XIntc_Out32(XPAR_INTC_SINGLE_BASEADDR + 28, 0);
 
 	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
 	if (Status != XST_SUCCESS) {

@@ -24,6 +24,7 @@
 #include <arch/srec_errors.h>
 #include <arch/mem_layout.h>
 #include <arch/srec.h>
+#include "xil_io.h"
 
 /* Need to make sure msgs are big enough so that we don't overflow
  * when processing incoming msgs and preparing outgoing ones.
@@ -198,6 +199,7 @@ int main(int argc, char *argv[])
 	unsigned int * fuse2 = (unsigned int *) ROM_FUSE2;
 	*fuse1 = FUSE_BURN_VALUE;
 	*fuse2 = FUSE_BURN_VALUE;
+	printf("BL main\r\n");
 	*boot_status_reg = 0;
 
 	char path[128];

@@ -93,6 +93,9 @@ int init_serial_out(void)
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
 
+	/* Initialize XIntc hardware in case the domain is not power cycled */
+	XIntc_Out32(XPAR_INTC_SINGLE_BASEADDR + 28, 0);
+
 	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Initialize %d failed", XPAR_INTC_SINGLE_DEVICE_ID);

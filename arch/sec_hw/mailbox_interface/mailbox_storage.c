@@ -192,6 +192,9 @@ int init_storage(void)
 	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_STORAGE_Q_STORAGE_DATA_OUT_BASEADDR;
 	Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_STORAGE_Q_STORAGE_DATA_IN_BASEADDR;
 
+	/* Initialize XIntc hardware in case the domain is not power cycled */
+	XIntc_Out32(XPAR_INTC_SINGLE_BASEADDR + 28, 0);
+
 	/* Initialize XIntc */
 	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
 	if (Status != XST_SUCCESS) {

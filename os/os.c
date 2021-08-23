@@ -72,12 +72,11 @@ int main()
 #if defined(ARCH_UMODE) || defined(ARCH_SEC_HW)
 	initialize_file_system(partition_size);
 #endif
-
 	help_boot_procs(1);
 
 	initialize_shell();
 	initialize_scheduler();
-
+	printf("%s: OS [2]\r\n", __func__);
 	while (1) {
 		distribute_input();
 	}

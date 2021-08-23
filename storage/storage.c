@@ -76,18 +76,18 @@
 
 #define STORAGE_GET_ONE_ARG		\
 	uint32_t arg0;			\
-	arg0 = *((uint32_t *) &buf[1]); \
+	DESERIALIZE_32(&arg0, &buf[1])	\
 
 #define STORAGE_GET_TWO_ARGS		\
 	uint32_t arg0, arg1;		\
-	arg0 = *((uint32_t *) &buf[1]); \
-	arg1 = *((uint32_t *) &buf[5]); \
+	DESERIALIZE_32(&arg0, &buf[1])	\
+	DESERIALIZE_32(&arg1, &buf[5])	\
 
 #define STORAGE_GET_THREE_ARGS		\
 	uint32_t arg0, arg1, arg2;	\
-	arg0 = *((uint32_t *) &buf[1]); \
-	arg1 = *((uint32_t *) &buf[5]); \
-	arg2 = *((uint32_t *) &buf[9]);\
+	DESERIALIZE_32(&arg0, &buf[1])	\
+	DESERIALIZE_32(&arg1, &buf[5])	\
+	DESERIALIZE_32(&arg2, &buf[9])	\
 
 #define STORAGE_GET_ZERO_ARGS_DATA				\
 	uint8_t data_size, *data;				\
@@ -108,7 +108,7 @@
 #define STORAGE_GET_ONE_ARG_DATA				\
 	uint32_t arg0;						\
 	uint8_t data_size, *data;				\
-	arg0 = *((uint32_t *) &buf[1]);				\
+	DESERIALIZE_32(&arg0, &buf[1])	\
 	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
 	if (max_size >= 256) {					\
 		printf("Error: max_size not supported\n");	\
@@ -711,6 +711,10 @@ static void storage_query_all_resources(uint8_t *buf)
 
 	STORAGE_GET_TWO_ARGS
 
+	//debug
+	printf("%s: %d\r\n", __FUNCTION__, arg0);
+	//debug
+	printf("\r\n%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8]);
 	if (arg0 == 0) {
 		/* query the number of partitions */
 		num_partitions = NUM_PARTITIONS;
@@ -733,7 +737,6 @@ static void storage_query_all_resources(uint8_t *buf)
 			       __func__, partition_id);
 			char dummy;
 			STORAGE_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
-			while(1); // DEBUG
 			return;
 		}
 
