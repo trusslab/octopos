@@ -24,7 +24,7 @@ sem_t			interrupt_keyboard;
 cbuf_handle_t	cbuf_serial_in;
 
 OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
-UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
 uint8_t read_char_from_keyboard(void)
 {
@@ -99,16 +99,16 @@ int init_keyboard(void)
 	}
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_MICROBLAZE_1_AXI_INTC_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR,
+		XPAR_SECURE_SERIAL_IN_MICROBLAZE_1_AXI_INTC_SECURE_SERIAL_IN_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR,
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_MICROBLAZE_1_AXI_INTC_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR);
+			XPAR_SECURE_SERIAL_IN_MICROBLAZE_1_AXI_INTC_SECURE_SERIAL_IN_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_1_AXI_INTC_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_SECURE_SERIAL_IN_MICROBLAZE_1_AXI_INTC_SECURE_SERIAL_IN_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
@@ -130,7 +130,7 @@ int init_keyboard(void)
 //	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
-	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_SERIAL_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_KEYBOARD_SERIAL_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
 #endif
 
 	setvbuf(stdin, NULL, _IONBF, 0);

@@ -24,7 +24,7 @@ sem_t			interrupt_serial_out;
 cbuf_handle_t	cbuf_serial_out;
 
 OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
-UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
 void get_chars_from_serial_out_queue(uint8_t *buf)
 {
@@ -103,16 +103,16 @@ int init_serial_out(void)
 	}
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_MICROBLAZE_0_AXI_INTC_OCTOPOS_MAILBOX_3WRI_0_INTERRUPT_FIXED_INTR,
+		XPAR_SECURE_SERIAL_OUT_MICROBLAZE_0_AXI_INTC_SECURE_SERIAL_OUT_OCTOPOS_MAILBOX_3WRI_0_INTERRUPT_FIXED_INTR,
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_MICROBLAZE_0_AXI_INTC_OCTOPOS_MAILBOX_3WRI_0_INTERRUPT_FIXED_INTR);
+			XPAR_SECURE_SERIAL_OUT_MICROBLAZE_0_AXI_INTC_SECURE_SERIAL_OUT_OCTOPOS_MAILBOX_3WRI_0_INTERRUPT_FIXED_INTR);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_MICROBLAZE_0_AXI_INTC_OCTOPOS_MAILBOX_3WRI_0_INTERRUPT_FIXED_INTR);
+	XIntc_Enable(&intc, XPAR_SECURE_SERIAL_OUT_MICROBLAZE_0_AXI_INTC_SECURE_SERIAL_OUT_OCTOPOS_MAILBOX_3WRI_0_INTERRUPT_FIXED_INTR);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
@@ -134,7 +134,7 @@ int init_serial_out(void)
 //	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
 	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
-	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_SERIAL_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_SERIAL_OUT_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
 #endif
 
 	sem_init(&interrupt_serial_out, 0, 0);
