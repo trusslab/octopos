@@ -193,6 +193,8 @@ static int secure_boot_check(char *path, char *signature_path)
 
 int main(int argc, char *argv[])
 {
+	memset((void*) RAM_BASE_ADDRESS + RAM_RANGE, 0, 0x4000);
+
 	/* lock ROM */
 	unsigned int * boot_status_reg = (unsigned int *) 0x15FFE0;
 	unsigned int * fuse1 = (unsigned int *) ROM_FUSE1;
