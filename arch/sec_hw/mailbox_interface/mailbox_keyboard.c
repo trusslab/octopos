@@ -79,7 +79,6 @@ int init_keyboard(void)
 
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();
-
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
@@ -133,10 +132,11 @@ int init_keyboard(void)
 	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_KEYBOARD_SERIAL_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
 #endif
 
+#ifndef ARCH_SEC_HW
 	setvbuf(stdin, NULL, _IONBF, 0);
+#endif
 
 	sem_init(&interrupt_keyboard, 0, MAILBOX_QUEUE_SIZE);
-
 	cbuf_serial_in = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
 
 	return XST_SUCCESS;
