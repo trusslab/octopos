@@ -1,3 +1,5 @@
+#ifdef ARCH_SEC_HW_BOOT
+
 #include "xil_printf.h"
 #include <arch/mailbox_os.h>
 #include <arch/sec_hw.h>
@@ -10,6 +12,7 @@
 #include <os/file_system.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
+#include <arch/mem_layout.h>
 
 static srec_info_t srinfo;
 static uint8 sr_buf[SREC_MAX_BYTES];
@@ -51,7 +54,7 @@ int get_srec_line(uint8 *line, uint8 *buf)
 // should merge into this function. Don't forget to add memset common_heap_and_stack
 void storage_request_boot_image_by_line(char *filename)
 {
-	unsigned int * boot_status_reg = (unsigned int *) 0x15FFE0;
+	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
 	u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
 	u8 buf[STORAGE_BOOT_BLOCK_SIZE];
 	u16 unpack_buf_head = 0;
@@ -116,7 +119,7 @@ void storage_request_boot_image_by_line(char *filename)
 					bootloader_close_file_system();
 					*(boot_status_reg) = 1;
 
-					laddr = (void (*)()) 0x15FFB0;
+					laddr = (void (*)()) BOOT_RESET_REG;
 
 					/* jump to start vector of loaded program */
 					(*laddr)();
@@ -140,3 +143,6 @@ void storage_request_boot_image_by_line(char *filename)
 	SEC_HW_DEBUG_HANG();
 	return;
 }
+
+
+#endif

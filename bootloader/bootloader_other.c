@@ -19,6 +19,7 @@
 #include <arch/srec.h>
 #include <arch/octopos_mbox.h>
 #include <arch/octopos_xmbox.h>
+#include <arch/mem_layout.h>
 #endif
 #include <stdint.h>
 #include <unistd.h>
@@ -30,7 +31,11 @@
 #include <os/storage.h>
 #include <tpm/hash.h>
 
+#ifndef ARCH_SEC_HW_BOOT
 int need_repeat = 0, total_count = 0;
+#else
+int need_repeat, total_count;
+#endif
 
 #ifndef ARCH_SEC_HW_BOOT
 int fd_out, fd_in, fd_intr;
@@ -301,11 +306,13 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #ifndef ARCH_SEC_HW_BOOT
 	FILE *copy_filep;
 #else /* ARCH_SEC_HW_BOOT */
-
+	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
 	u8 unpack_buf[1024] = {0};
 	u16 unpack_buf_head = 0;
 	int line_count;
 	void (*laddr)();
+	need_repeat = 0;
+	total_count = 0;
 
 	srinfo.sr_data = sr_data_buf;
 
@@ -420,7 +427,11 @@ repeat:
 
                 	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
 
-                    laddr = (void (*)())srinfo.addr;
+//                    laddr = (void (*)())srinfo.addr;
+
+					*(boot_status_reg) = 1;
+
+					laddr = (void (*)()) BOOT_RESET_REG;
 
                     /* jump to start vector of loaded program */
                     (*laddr)();

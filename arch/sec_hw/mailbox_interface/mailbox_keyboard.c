@@ -70,15 +70,15 @@ int init_keyboard(void)
 	int Status;
 	OCTOPOS_XMbox_Config *ConfigPtr, *Config_storage_data_out;
 
-	Xil_ICacheEnable();
-	Xil_DCacheEnable();
-
 	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_KEYBOARD_KEYBOARD_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox, ConfigPtr, ConfigPtr->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_KEYBOARD_KEYBOARD_DEVICE_ID);
 		return XST_FAILURE;
 	}
+
+	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
+	OMboxIds_init();
 
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
@@ -99,16 +99,16 @@ int init_keyboard(void)
 	}
 
 	Status = XIntc_Connect(&intc, 
-		XPAR_SECURE_SERIAL_IN_MICROBLAZE_1_AXI_INTC_SECURE_SERIAL_IN_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR,
+		OMboxIntrs[P_KEYBOARD][Q_KEYBOARD],
 		(XInterruptHandler)handle_mailbox_interrupts, 
 		(void*)&Mbox);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Connect %d failed", 
-			XPAR_SECURE_SERIAL_IN_MICROBLAZE_1_AXI_INTC_SECURE_SERIAL_IN_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR);
+			OMboxIntrs[P_KEYBOARD][Q_KEYBOARD]);
 		return XST_FAILURE;
 	}
 
-	XIntc_Enable(&intc, XPAR_SECURE_SERIAL_IN_MICROBLAZE_1_AXI_INTC_SECURE_SERIAL_IN_OCTOPOS_MAILBOX_1WRI_0_INTERRUPT_FIXED_INTR);
+	XIntc_Enable(&intc, OMboxIntrs[P_KEYBOARD][Q_KEYBOARD]);
 
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
@@ -145,8 +145,5 @@ int init_keyboard(void)
 void close_keyboard(void)
 {
 	circular_buf_free(cbuf_serial_in);
-
-	Xil_DCacheDisable();
-	Xil_ICacheDisable();
 }
 #endif
