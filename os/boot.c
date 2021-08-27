@@ -91,9 +91,7 @@ void help_boot_runtime_proc(uint8_t runtime_proc_id)
 	if (runtime_proc_id == P_RUNTIME1)
 		help_boot_proc(runtime_proc_id, (char *) "runtime1");
 	else if (runtime_proc_id == P_RUNTIME2)
-		// FIXME: now we only have runtime 1
-		SEC_HW_DEBUG_HANG();
-//		help_boot_proc(runtime_proc_id, (char *) "runtime2");
+		help_boot_proc(runtime_proc_id, (char *) "runtime2");
 	else
 		SEC_HW_DEBUG_HANG();
 #endif
@@ -118,7 +116,8 @@ void help_boot_procs(int boot_untrusted)
 #else
 	help_boot_serial_out_proc();
 	help_boot_keyboard_proc();
-//	help_boot_runtime_proc(P_RUNTIME1);
+	help_boot_runtime_proc(P_RUNTIME1);
+	help_boot_runtime_proc(P_RUNTIME2);
 //	if (boot_untrusted)
 //	 	help_boot_untrusted_proc();
 #endif

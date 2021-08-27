@@ -177,6 +177,8 @@ static int prepare_boot_partition(void)
 	copy_file_to_partition((char *) "os", (char *) "./os/os.srec");
 	copy_file_to_partition((char *) "runtime1",
 			       (char *) "./runtime/runtime1.srec");
+	copy_file_to_partition((char *) "runtime2",
+			       (char *) "./runtime/runtime2.srec");
 	// copy_file_to_partition((char *) "network",
 	// 		       (char *) "./network/network");
 	// copy_file_to_partition((char *) "bluetooth",
@@ -217,6 +219,8 @@ static int prepare_boot_partition(void)
 				 (char *) "./installer_sec_hw/copy_os", 0);
 	copy_file_from_partition((char *) "runtime1",
 				 (char *) "./installer_sec_hw/copy_runtime1", 0);
+	copy_file_from_partition((char *) "runtime2",
+				 (char *) "./installer_sec_hw/copy_runtime2", 0);
 	// copy_file_from_partition((char *) "network",
 	// 			 (char *) "./installer/copy_network", 0);
 	// copy_file_from_partition((char *) "bluetooth",

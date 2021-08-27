@@ -285,6 +285,7 @@ void wait_for_app_load(void)
 	sem_wait(&load_app_sem);
 }
 
+#ifndef ARCH_SEC_HW_BOOT
 void load_application_arch(char *msg, struct runtime_api *api)
 {
 	char output_buf[64];    
@@ -313,6 +314,7 @@ void load_application_arch(char *msg, struct runtime_api *api)
 
 	((void(*)(struct runtime_api*))app_main)(api);
 }
+#endif
 
 static void context_switch() __attribute__((noinline));
 static void context_switch()
@@ -580,20 +582,20 @@ int init_runtime(int runtime_id)
 		Mbox_ctrl_regs[Q_SERIAL_OUT] = OCTOPOS_ENCLAVE_1_MAILBOX_SERIAL_OUT_BASEADDR;
 		Mbox_ctrl_regs[Q_RUNTIME1] = OCTOPOS_ENCLAVE_1_MAILBOX_RUNTIME1_BASEADDR;
 		Mbox_ctrl_regs[Q_RUNTIME2] = OCTOPOS_ENCLAVE_1_MAILBOX_RUNTIME2_BASEADDR;
-		Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_1_ENCLAVE_Q_STORAGE_DATA_IN_BASEADDR;
-		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_1_ENCLAVE_Q_STORAGE_DATA_OUT_BASEADDR;
-		Mbox_ctrl_regs[Q_STORAGE_CMD_IN] = OCTOPOS_1_ENCLAVE_Q_STORAGE_IN_2_BASEADDR;
-		Mbox_ctrl_regs[Q_STORAGE_CMD_OUT] = OCTOPOS_1_ENCLAVE_Q_STORAGE_OUT_2_BASEADDR;
+		Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_ENCLAVE_1_Q_STORAGE_DATA_IN_BASEADDR;
+		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_ENCLAVE_1_Q_STORAGE_DATA_OUT_BASEADDR;
+		Mbox_ctrl_regs[Q_STORAGE_CMD_IN] = OCTOPOS_ENCLAVE_1_Q_STORAGE_IN_2_BASEADDR;
+		Mbox_ctrl_regs[Q_STORAGE_CMD_OUT] = OCTOPOS_ENCLAVE_1_Q_STORAGE_OUT_2_BASEADDR;
 		break;
 	case 2:
 		Mbox_ctrl_regs[Q_KEYBOARD] = OCTOPOS_ENCLAVE_2_MAILBOX_KEYBOARD_BASEADDR;
 		Mbox_ctrl_regs[Q_SERIAL_OUT] = OCTOPOS_ENCLAVE_2_MAILBOX_SERIAL_OUT_BASEADDR;
 		Mbox_ctrl_regs[Q_RUNTIME1] = OCTOPOS_ENCLAVE_2_MAILBOX_RUNTIME1_BASEADDR;
 		Mbox_ctrl_regs[Q_RUNTIME2] = OCTOPOS_ENCLAVE_2_MAILBOX_RUNTIME2_BASEADDR;
-		Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_2_ENCLAVE_Q_STORAGE_DATA_IN_BASEADDR;
-		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_2_ENCLAVE_Q_STORAGE_DATA_OUT_BASEADDR;
-		Mbox_ctrl_regs[Q_STORAGE_CMD_IN] = OCTOPOS_2_ENCLAVE_Q_STORAGE_IN_2_BASEADDR;
-		Mbox_ctrl_regs[Q_STORAGE_CMD_OUT] = OCTOPOS_2_ENCLAVE_Q_STORAGE_OUT_2_BASEADDR;
+		Mbox_ctrl_regs[Q_STORAGE_DATA_IN] = OCTOPOS_ENCLAVE_2_Q_STORAGE_DATA_IN_BASEADDR;
+		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_ENCLAVE_2_Q_STORAGE_DATA_OUT_BASEADDR;
+		Mbox_ctrl_regs[Q_STORAGE_CMD_IN] = OCTOPOS_ENCLAVE_2_Q_STORAGE_IN_2_BASEADDR;
+		Mbox_ctrl_regs[Q_STORAGE_CMD_OUT] = OCTOPOS_ENCLAVE_2_Q_STORAGE_OUT_2_BASEADDR;
 		break;
 	default:
 		return -1;
@@ -831,7 +833,9 @@ int init_runtime(int runtime_id)
 
 void close_runtime(void)
 {
+#ifndef ARCH_SEC_HW_BOOT
 	preloaded_app_destroy();
+#endif
 	runtime_terminated = TRUE;
 }
 

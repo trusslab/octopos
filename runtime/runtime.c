@@ -58,12 +58,14 @@
 #include "raw.h"
 #endif
 
+/* DISABLED UNTIL WE WORK ON RESET
 #ifdef ARCH_SEC_HW
 volatile int i = 0xDEADBEEF;
 extern unsigned char __datacopy;
 extern unsigned char __data_start;
 extern unsigned char __data_end;
 #endif
+*/
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -1501,6 +1503,7 @@ int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 }
 #endif
 
+#ifndef ARCH_SEC_HW_BOOT
 static void load_application(char *msg)
 {
 	/* The bound is the length of load_buf minus one (for the null
@@ -1663,6 +1666,12 @@ void *run_app(void *load_buf)
 	return NULL;
 }
 
+#else /* ARCH_SEC_HW_BOOT */
+
+void *run_app(void *load_buf) {}
+
+#endif /* ARCH_SEC_HW_BOOT */
+
 /* FIXME: copied from mailbox.c */
 static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 {
@@ -1707,6 +1716,7 @@ int main()
 {
 #ifdef ARCH_SEC_HW
 
+	/* DISABLED UNTIL WE WORK ON RESET
 	unsigned char *dataCopyStart = &__datacopy;
 	unsigned char *dataStart = &__data_start;
 	unsigned char *dataEnd = &__data_end;
@@ -1720,6 +1730,7 @@ int main()
 	}
 
 	i = 0;
+	*/
 #endif /* ARCH_SEC_HW */
 
 	int runtime_id = -1;
