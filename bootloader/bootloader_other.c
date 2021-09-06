@@ -325,7 +325,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_1)
 	init_runtime(1);
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_2)
-	/* no-op */
+	init_runtime(2);
 #elif defined(ARCH_SEC_HW_BOOT_OS)
 	/* no-op */
 #elif defined(ARCH_SEC_HW_BOOT_NETWORK)
