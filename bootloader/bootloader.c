@@ -193,7 +193,9 @@ static int secure_boot_check(char *path, char *signature_path)
 
 int main(int argc, char *argv[])
 {
-	memset((void*) RAM_BASE_ADDRESS + RAM_RANGE, 0, BOOT_STACK_HEAP_SIZE);
+#ifdef ARCH_SEC_HW_BOOT
+	/* Clear target memory contents */
+	memset((void*) RAM_BASE_ADDRESS, 0, RAM_RANGE + BOOT_STACK_HEAP_SIZE);
 
 	/* lock ROM */
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
@@ -203,6 +205,7 @@ int main(int argc, char *argv[])
 	*fuse2 = FUSE_BURN_VALUE;
 	printf("BL main\r\n");
 	*boot_status_reg = 0;
+#endif /* ARCH_SEC_HW_BOOT */
 
 	char path[128];
 	int ret;
@@ -224,9 +227,6 @@ int main(int argc, char *argv[])
 
 	name = argv[1];
 #else /* ARCH_SEC_HW_BOOT */
-
-	/* Clear target memory contents */
-	memset((void*) RAM_BASE_ADDRESS, 0, RAM_RANGE);
 
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
 	Xil_Out32(XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40 ,0x0000000A);

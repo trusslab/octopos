@@ -495,7 +495,7 @@ static uint8_t find_mbox_by_name(const char* dev_name)
 		queue_id = Q_STORAGE_CMD_IN;
 	else if (strcmp(dev_name, "a0009000.mailbox") == 0)
 		queue_id = Q_STORAGE_CMD_OUT;
-	else if (strcmp(dev_name, "1300000000.mailbox") == 0)
+	else if (strcmp(dev_name, "a0003000.mailbox") == 0)
 		queue_id = Q_STORAGE_DATA_IN;
 	else if (strcmp(dev_name, "a0007000.mailbox") == 0)
 		queue_id = Q_STORAGE_DATA_OUT;
