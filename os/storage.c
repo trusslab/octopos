@@ -353,7 +353,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	SYSCALL_GET_ONE_ARG
 	partition_size = arg0;
 
-	printf("Note[0] %d\r\n", partition_size);
+	// printf("Note[0] %d\r\n", partition_size);
 
 	/* sanity check on the requested size:
 	 * the root_fs of the untrusted domain should be
@@ -376,7 +376,6 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 
 	/* Let's see if the app already has a partition. */
 	if (app->sec_partition_created) {
-		printf("Error[2]\r\n");
 		SYSCALL_SET_TWO_RETS(0, app->sec_partition_id)
 		return;
 	}
@@ -391,7 +390,6 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	}
 #endif
 
-	printf("Note[1]\r\n");
 	/* The partition might have been created in previous runs. Therefore,
 	 * let's check the query data we received from the storage service too.
 	 */
@@ -405,7 +403,6 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 		}
 	}
 
-	printf("Note[2]\r\n");
 	if (storage_status != OS_ACCESS) {
 		if (storage_status == OS_USE) {
 			ret = reset_proc_simple(P_STORAGE);
@@ -429,7 +426,6 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 		}
 	}
 
-	printf("Note[4]\r\n");
 	ret = storage_create_secure_partition(app_key, runtime_proc_id,
 					      partition_size, &sec_partition_id);
 	if (ret) {
@@ -441,7 +437,6 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	app->sec_partition_id = sec_partition_id;
 	app->sec_partition_created = true;
 
-	printf("Note[6]\r\n");
 	SYSCALL_SET_TWO_RETS(0, sec_partition_id)
 }
 
@@ -458,7 +453,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	limit = arg0;
 	timeout = arg1;
 
-	printf("Note[6.5] %d %d\r\n", limit, timeout);
+	// printf("Note[6.5] %d %d\r\n", limit, timeout);
 
 	if (limit > MAILBOX_MAX_LIMIT_VAL) {
 		printf("Error[7]\r\n");
@@ -533,10 +528,10 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 	}
 
-	printf("Note[11]\r\n");
+	// printf("Note[11]\r\n");
 	if ((storage_status != OS_ACCESS) && !no_reset) {
 		if (storage_status == OS_USE) {
-	printf("Note[12]\r\n");
+	// printf("Note[12]\r\n");
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
@@ -547,9 +542,9 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			current_app_with_storage_access = app;
 			storage_status = APP_ACCESS;
 		} else {
-	printf("Note[13]\r\n");
+	// printf("Note[13]\r\n");
 			wait_for_storage();
-	printf("Note[14]\r\n");
+	// printf("Note[14]\r\n");
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
@@ -559,15 +554,15 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			}
 		}
 	}
-	printf("Note[15]\r\n");
+	// printf("Note[15]\r\n");
 
 	current_app_with_storage_access = app;
 	storage_status = APP_ACCESS;
 
 	if (!no_reset) {
-	printf("Note[16]\r\n");
+	// printf("Note[16]\r\n");
 		ret = bind_partition(app->sec_partition_id);
-	printf("Note[17]\r\n");
+	// printf("Note[17]\r\n");
 		if (ret) {
 			printf("Error: %s: couldn't bind the storage service "
 			       "to partition (%d).\n", __func__,
@@ -576,7 +571,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			return;
 		}
 	}
-	printf("Note[18]\r\n");
+	// printf("Note[18]\r\n");
 
 	// wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	// wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -594,7 +589,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 				      (limit_t) limit, (timeout_t) timeout);
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      (limit_t) limit, (timeout_t) timeout);
-	printf("Note[19]\r\n");
+	// printf("Note[19]\r\n");
 
 	SYSCALL_SET_ONE_RET(0)
 }

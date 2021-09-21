@@ -85,13 +85,11 @@ static int obd_do_bvec(struct page *page, unsigned int len, unsigned int off,
 	unsigned int factor;
 	uint8_t data_queue = (op_is_write(op)) ? Q_STORAGE_DATA_IN : Q_STORAGE_DATA_OUT;
 
-printk("%s[0]\n",__func__);
 	if (!om_inited)
 		return ERR_FAULT;
 
 	if (len % STORAGE_BLOCK_SIZE)
 		BUG();
-printk("%s[1]\n",__func__);
 
 	num_blocks = len / STORAGE_BLOCK_SIZE;
 	// FIXME: How is sector size defined? Replace 512 with sector size.
@@ -109,7 +107,6 @@ printk("%s[1]\n",__func__);
 	    get_queue_timeout(Q_STORAGE_CMD_IN) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL ||
 	    get_queue_timeout(Q_STORAGE_CMD_OUT) < MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL) {
 
-printk("%s[2]\n",__func__);
 		/* FIXME: we don't need to yield if it already expired.
 		 * We currently have to do this since we're not dealing
 		 * with the storage queues separately.
@@ -117,13 +114,11 @@ printk("%s[2]\n",__func__);
 		 * This can create a warning in the mailbox (umode) 
 		 */
 		yield_secure_storage_access();
-printk("%s[3]\n",__func__);
 
 		ret = request_secure_storage_access(
 				STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE,
 				MAILBOX_MAX_LIMIT_VAL,
 				MAILBOX_DEFAULT_TIMEOUT_VAL, NULL, NULL, NULL);
-printk("%s[4]\n",__func__);
 		if (ret) {
 			printk("Error (%s): Failed to get secure access to "
 			       "storage.\n", __func__);
@@ -131,27 +126,20 @@ printk("%s[4]\n",__func__);
 			return ret;
 		}
 	}
-printk("%s[5]\n",__func__);
 	decrement_queue_limit(data_queue, num_blocks);
 	decrement_queue_limit(Q_STORAGE_CMD_IN, 1);
 	decrement_queue_limit(Q_STORAGE_CMD_OUT, 1);
 	mem = kmap_atomic(page);
-printk("%s[6]\n",__func__);
 	if (!op_is_write(op)) {
-printk("%s[7]\n",__func__);
 		read_secure_storage_blocks(mem + off, sector * factor, num_blocks);
-printk("%s[8]\n",__func__);
 		flush_dcache_page(page);
 	} else {
-printk("%s[9]\n",__func__);
 		flush_dcache_page(page);
-printk("%s[10]\n",__func__);
 		write_secure_storage_blocks(mem + off, sector * factor, num_blocks);
 	}
 	kunmap_atomic(mem);
 
 	mutex_unlock(&obd_lock);
-printk("%s[11]\n",__func__);
 
 	return 0;
 }

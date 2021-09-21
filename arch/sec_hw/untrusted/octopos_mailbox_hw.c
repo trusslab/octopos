@@ -87,9 +87,7 @@
 /* compatible data */
 enum octopos_mailbox_version {
 	SIMPLE_MAILBOX_V2_1,
-	OCTOPOS_MAILBOX_4Writer_1Reader_V1_0,
-	OCTOPOS_MAILBOX_1Writer_4Reader_V1_0,
-	OCTOPOS_MAILBOX_1Writer_7Reader_V1_0,
+	OCTOPOS_MAILBOX_V1_0,
 };
 
 int write_syscall_response(uint8_t *buf);
@@ -123,14 +121,8 @@ void* mbox_ctrl_map[NUM_QUEUES + 1] = {0};
 EXPORT_SYMBOL(mbox_ctrl_map);
 
 static const struct of_device_id xilinx_mbox_match[] = {
-	{ .compatible = "xlnx,Octopos-MailBox-1Writer-4Reader-v1-0-1.0",
-		.data = (void *)OCTOPOS_MAILBOX_1Writer_4Reader_V1_0 },
-	{ .compatible = "xlnx,Octopos-MailBox-4Writer-1Reader-v1-0-1.0",
-		.data = (void *)OCTOPOS_MAILBOX_4Writer_1Reader_V1_0 },
-	{ .compatible = "xlnx,Octopos-MailBox-1Writer-7Reader-v1-0-1.0",
-		.data = (void *)OCTOPOS_MAILBOX_1Writer_7Reader_V1_0 },
-	{ .compatible = "xlnx,Octopos-MailBox-4Writer-1Reader-large-1.0",
-		.data = (void *)OCTOPOS_MAILBOX_4Writer_1Reader_V1_0 },
+	{ .compatible = "xlnx,Octopos_mailbox",
+		.data = (void *)OCTOPOS_MAILBOX_V1_0 },
 	{ .compatible = "xlnx,mailbox-2.1", 
 		.data = (void *)SIMPLE_MAILBOX_V2_1 },
 	{ /* sentinel */ }
@@ -391,7 +383,7 @@ static irqreturn_t xilinx_mbox_interrupt(int irq, void *p)
 	uint8_t *buf;
 
 	mask = readl_relaxed(mbox->mbox_base + MAILBOX_REG_IS);
-	// dev_info(mbox->dev, "irq %d mask = %d\n", irq, mask);
+	// dev_err(mbox->dev, "irq %d mask = %d\n", irq, mask);
 
 	if (mask & INT_STATUS_RTI) {
 		switch(mbox->qid) {
@@ -456,6 +448,8 @@ static irqreturn_t octopos_mbox_ctrl_interrupt(int irq, void *p)
 	}
 
 	uint8_t queue_id = mbox_ctrl->qid;
+	// dev_err(mbox->dev, "irq %d queue id = %d\n", irq, queue_id);
+
 	octopos_mbox_clear_interrupt(mbox_ctrl);
 
 	switch (queue_id) {
@@ -491,18 +485,6 @@ static uint8_t find_mbox_by_name(const char* dev_name)
 		queue_id = Q_OSU;
 	else if (strcmp(dev_name, "a0001000.mailbox") == 0)
 		queue_id = Q_UNTRUSTED;
-	else if (strcmp(dev_name, "a0005000.mailbox") == 0)
-		queue_id = Q_STORAGE_CMD_IN;
-	else if (strcmp(dev_name, "a0009000.mailbox") == 0)
-		queue_id = Q_STORAGE_CMD_OUT;
-	else if (strcmp(dev_name, "a0003000.mailbox") == 0)
-		queue_id = Q_STORAGE_DATA_IN;
-	else if (strcmp(dev_name, "a0007000.mailbox") == 0)
-		queue_id = Q_STORAGE_DATA_OUT;
-	// else if (strcmp(dev_name, "") == 0)
-	// 	queue_id = Q_NETWORK_DATA_IN;
-	// else if (strcmp(dev_name, "") == 0)
-	// 	queue_id = Q_NETWORK_DATA_OUT;
 	else
 		return 0;
 
@@ -513,18 +495,22 @@ static uint8_t find_mbox_ctrl_by_name(const char* dev_name)
 {
 	uint8_t queue_id;
 
-	if (strcmp(dev_name, "a0070000.Octopos_MailBox_4Writer_1Reader_large_v1_0") == 0)
+	if (strcmp(dev_name, "a0070000.Octopos_mailbox") == 0)
 		queue_id = Q_STORAGE_DATA_IN;
-	else if (strcmp(dev_name, "a0080000.Octopos_MailBox_1Writer_7Reader_v1_0") == 0)
+	else if (strcmp(dev_name, "a0080000.Octopos_mailbox") == 0)
 		queue_id = Q_STORAGE_DATA_OUT;
-	else if (strcmp(dev_name, "a0004000.Octopos_MailBox_4Writer_1Reader_v1_0") == 0)
+	else if (strcmp(dev_name, "a0004000.Octopos_mailbox") == 0)
 		queue_id = Q_STORAGE_CMD_IN;
-	else if (strcmp(dev_name, "a0008000.Octopos_MailBox_1Writer_4Reader_v1_0") == 0)
+	else if (strcmp(dev_name, "a0008000.Octopos_mailbox") == 0)
 		queue_id = Q_STORAGE_CMD_OUT;
-	// else if (strcmp(dev_name, "") == 0)
-	// 	queue_id = Q_NETWORK_DATA_IN;
-	// else if (strcmp(dev_name, "") == 0)
-	// 	queue_id = Q_NETWORK_DATA_OUT;
+	else if (strcmp(dev_name, "a0010000.Octopos_mailbox") == 0)
+		queue_id = Q_NETWORK_DATA_IN;
+	else if (strcmp(dev_name, "a0020000.Octopos_mailbox") == 0)
+		queue_id = Q_NETWORK_DATA_OUT;
+	else if (strcmp(dev_name, "a0030000.Octopos_mailbox") == 0)
+		queue_id = Q_NETWORK_CMD_IN;
+	else if (strcmp(dev_name, "a0040000.Octopos_mailbox") == 0)
+		queue_id = Q_NETWORK_CMD_OUT;
 	else
 		return 0;
 
@@ -598,7 +584,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 
 		mbox->dev = &pdev->dev;
 
-		ret = request_irq(mbox->irq, xilinx_mbox_interrupt, 0,
+		ret = devm_request_irq(&pdev->dev, mbox->irq, xilinx_mbox_interrupt, IRQF_SHARED,
 				  dev_name(mbox->dev), mbox);
 		dev_info(&pdev->dev, "[1] %d\n", ret);
 
@@ -638,9 +624,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		platform_set_drvdata(pdev, mbox);
 		dev_info(&pdev->dev, "[6]\n");
 		break;
-	case OCTOPOS_MAILBOX_1Writer_4Reader_V1_0:
-	case OCTOPOS_MAILBOX_4Writer_1Reader_V1_0:
-	case OCTOPOS_MAILBOX_1Writer_7Reader_V1_0:
+	case OCTOPOS_MAILBOX_V1_0:
 		mbox_ctrl = devm_kzalloc(&pdev->dev, sizeof(*mbox_ctrl), GFP_KERNEL);
 		if (!mbox_ctrl)
 			return -ENOMEM;
@@ -673,6 +657,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "[3] %08x\n", regs_ctrl->start);
 		dev_info(&pdev->dev, "-> %08x\n", mbox_ctrl->ctrl_base);
 
+		/* get and map mbox data register */
 		regs_data = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 
 		mbox->mbox_base = devm_ioremap_resource(&pdev->dev, regs_data);
@@ -691,6 +676,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 			return -EINTR;
 		}
 
+		/* get and config mbox data irq */
 		mbox->id = &pdev->id; 
 		mbox->irq = platform_get_irq(pdev, 1);
 		dev_info(&pdev->dev, "data IRQ = %d\n", mbox->irq);
@@ -703,7 +689,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		mbox_ctrl->dev = &pdev->dev;
 		mbox->dev = &pdev->dev;
 
-		ret = request_irq(mbox_ctrl->irq, octopos_mbox_ctrl_interrupt, 0,
+		ret = devm_request_irq(&pdev->dev, mbox_ctrl->irq, octopos_mbox_ctrl_interrupt, IRQF_SHARED,
 				  dev_name(mbox_ctrl->dev), mbox_ctrl);
 
 		if (unlikely(ret)) {
@@ -714,7 +700,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		}
 		dev_info(&pdev->dev, "[5]\n");
 
-		ret = request_irq(mbox->irq, xilinx_mbox_interrupt, 0,
+		ret = devm_request_irq(&pdev->dev, mbox->irq, xilinx_mbox_interrupt, IRQF_SHARED,
 				  dev_name(mbox->dev), mbox);
 
 		if (unlikely(ret)) {
