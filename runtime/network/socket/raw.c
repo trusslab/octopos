@@ -4,6 +4,13 @@
 #include "list.h"
 #include "raw.h"
 #include "ip.h"
+#else /*ARCH_SEC_HW*/
+#include <network/netif.h>
+#include <network/socket.h>
+#include <network/list.h>
+#include <network/raw.h>
+#include <network/ip.h>
+#endif /*ARCH_SEC_HW*/
 
 static void raw_recv(struct pkbuf *pkb, struct sock *sk)
 {
@@ -29,4 +36,3 @@ void raw_in(struct pkbuf *pkb)
 							iphdr->ip_pro);
 	}
 }
-#endif

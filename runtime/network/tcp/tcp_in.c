@@ -3,6 +3,12 @@
 #include "netif.h"
 #include "tcp.h"
 #include "ip.h"
+#else /*ARCH_SEC_HW*/
+#include <network/lib.h>
+#include <network/netif.h>
+#include <network/tcp.h>
+#include <network/ip.h>
+#endif /*ARCH_SEC_HW*/
 
 static char *tcp_control_string(struct tcp *tcphdr)
 {
@@ -91,10 +97,10 @@ void tcp_in(struct pkbuf *pkb)
 	if (tcp_chksum(iphdr->ip_src, iphdr->ip_dst,
 		tcplen, (unsigned short *)tcphdr) != 0) {
 		tcpdbg("tcp packet checksum corrupts");
+
 		goto drop_pkb;
 	}
 	return tcp_recv(pkb, iphdr, tcphdr);
 drop_pkb:
 	free_pkb(pkb);
 }
-#endif
