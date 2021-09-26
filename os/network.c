@@ -32,7 +32,11 @@ static int network_set_up_socket(uint32_t saddr, uint32_t sport,
 static int get_network_src_addr(uint32_t *saddr)
 {
 	/* FIXME: hard-coded */
+#ifndef ARCH_SEC_HW
 	*saddr = 0x0100000a;
+#else
+	*saddr = 0x0a01a8c0;
+#endif /*ARCH_SEC_HW*/
 
 	return 0;
 }
