@@ -1,8 +1,16 @@
+#ifndef ARCH_SEC_HW
 #include "lib.h"
 #include "netif.h"
 #include "ip.h"
 #include "udp.h"
 #include "tcp.h"
+#else /*ARCH_SEC_HW*/
+#include <network/lib.h>
+#include <network/netif.h>
+#include <network/ip.h>
+#include <network/udp.h>
+#include <network/tcp.h>
+#endif /*ARCH_SEC_HW*/
 
 static _inline unsigned int sum(unsigned short *data, int size,
 		unsigned int origsum)
