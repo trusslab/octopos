@@ -184,7 +184,7 @@ static int prepare_boot_partition(void)
 	// copy_file_to_partition((char *) "bluetooth",
 	// 		       (char *) "./bluetooth/bluetooth");
 	copy_file_to_partition((char *) "linux",
-			       (char *) "../boot/linux/image.ub");
+			       (char *) "./bin/linux/image.ub");
 	// copy_file_to_partition((char *) "attest_client",
 	// 		       (char *) "./applications/bin/attest_client.so");
 	// copy_file_to_partition((char *) "bank_client",

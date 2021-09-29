@@ -1,0 +1,9 @@
+//arch = zynqmp; split = false; format = BIN
+the_ROM_image:
+{
+	[bootloader]/home/zephyr/octopos/boot/linux/zynqmp_fsbl.elf
+	[pmufw_image]/home/zephyr/octopos/boot/linux/pmufw.elf
+	[destination_device = pl]/home/zephyr/octopos/boot/linux/system_mb6.bit
+	[destination_cpu = a53-0, exception_level = el-3, trustzone]/home/zephyr/octopos/boot/linux/bl31.elf
+	[destination_cpu = a53-0, exception_level = el-2]/home/zephyr/octopos/boot/linux/u-boot.elf
+}
