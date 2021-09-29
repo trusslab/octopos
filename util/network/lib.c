@@ -1,6 +1,10 @@
+#ifndef ARCH_SEC_HW
 #include "lib.h"
 #include "ip.h"
-
+#else /*ARCH_SEC_HW*/
+#include <network/lib.h>
+#include <network/ip.h>
+#endif /*ARCH_SEC_HW*/
 void perrx(char *str)
 {
 	if (errno)

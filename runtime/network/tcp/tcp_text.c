@@ -6,7 +6,15 @@
 #include "route.h"
 #include "sock.h"
 #include "cbuf.h"
-
+#else /*ARCH_SEC_HW*/
+#include <network/tcp.h>
+#include <network/ip.h>
+#include <network/ether.h>
+#include <network/netif.h>
+#include <network/route.h>
+#include <network/sock.h>
+#include <network/cbuf.h>
+#endif /*ARCH_SEC_HW*/
 void tcp_free_buf(struct tcp_sock *tsk)
 {
 	if (tsk->rcv_buf) {
@@ -121,4 +129,3 @@ int tcp_send_text(struct tcp_sock *tsk, void *buf, int len)
 	return slen;
 }
 
-#endif

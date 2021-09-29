@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW_NETWORK
 /*
  *  Lowest net device code:
  *    virtual net device driver based on tap device
@@ -141,3 +142,4 @@ void veth_exit(void)
 {
 	netdev_free(veth);
 }
+#endif

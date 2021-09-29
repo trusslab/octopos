@@ -1,5 +1,3 @@
-#ifndef ARCH_SEC_HW
-
 /* socket_client app */
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +9,7 @@
 #include <octopos/storage.h>
 #include <network/sock.h>
 #include <network/socket.h>
+
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
@@ -75,16 +74,23 @@ static void send_receive(struct runtime_api *api)
 	}
 }
 
+#ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
+#else /*ARCH_SEC_HW*/
+void socket_client(struct runtime_api *api)
+#endif /*ARCH_SEC_HW*/
 {
 	int err = 0;
 	/* init arguments */
 	memset(&skaddr, 0x0, sizeof(skaddr));
 	type = SOCK_STREAM;	/* default TCP stream */
 	sock = NULL;
-	
-	char addr[256] = "10.0.0.2:12345";	
+#ifndef ARCH_SEC_HW
+	char addr[256] = "10.0.0.2:12345";
+#else
+	char addr[256] = "192.168.1.1:12345";
+#endif
 	err = _parse_ip_port(addr, &skaddr.dst_addr,
 					&skaddr.dst_port);
 	if (err < 0) {
@@ -115,4 +121,3 @@ out:	/* close and out */
 	}
 	api->yield_network_access();
 }
-#endif

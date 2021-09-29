@@ -5,11 +5,19 @@
  *  Linux 2.6.11.12
  *  Xinu
  */
+#ifndef ARCH_SEC_HW_NETWORK
 #include "netif.h"
 #include "ip.h"
 #include "icmp.h"
 #include "route.h"
 #include "lib.h"
+#else // ARCH_SEC_HW_NETWORK
+#include <network/netif.h>
+#include <network/ip.h>
+#include <network/icmp.h>
+#include <network/route.h>
+#include <network/lib.h>
+#endif //ARCH_SEC_HW_NETWORK
 
 static void icmp_drop_reply(struct icmp_desc *, struct pkbuf *);
 static void icmp_dest_unreach(struct icmp_desc *, struct pkbuf *);

@@ -13,6 +13,7 @@ void ipc_sender(struct runtime_api *api);
 void secure_login(struct runtime_api *api);
 void simple_loop(struct runtime_api *api);
 void fs_test(struct runtime_api *api);
+void socket_client(struct runtime_api *api);
 
 void set_app(char* app_name, void* app_addr)
 {
@@ -42,6 +43,8 @@ void preloaded_app_init()
 	set_app("ipc_sender", (void*) ipc_sender);
 	set_app("simple_loop", (void*) simple_loop);
 	set_app("fs_test", (void*) fs_test);
+	set_app("socket_client", (void*) socket_client);
+
 }
 
 void* preloaded_app(char* app_name)

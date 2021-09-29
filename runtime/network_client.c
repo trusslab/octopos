@@ -1,4 +1,3 @@
-#ifndef ARCH_SEC_HW
 /* octopos network client */
 #ifndef CONFIG_UML /* Linux UML */
 #include <arch/defines.h>
@@ -31,6 +30,9 @@
 #include <octopos/error.h>
 #ifndef UNTRUSTED_DOMAIN
 #include <arch/mailbox_runtime.h> 
+#ifndef ARCH_SEC_HW
+#include <network/ip.h>
+#endif
 #endif
 
 #ifdef UNTRUSTED_DOMAIN
@@ -54,7 +56,8 @@ void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
 #endif
 
-#ifndef ARCH_SEC_HW
+
+
 // TODO: missing pkbuf definition
 void ip_send_out(struct pkbuf *pkb)
 {
@@ -63,10 +66,11 @@ void ip_send_out(struct pkbuf *pkb)
 	runtime_send_msg_on_queue_large(buf, Q_NETWORK_DATA_IN);
 
 #ifndef UNTRUSTED_DOMAIN
+#ifndef ARCH_SEC_HW
 	report_queue_usage(Q_NETWORK_DATA_IN);
 #endif
-}
 #endif
+}
 
 uint8_t *ip_receive(uint8_t *buf, uint16_t *size)
 {
@@ -167,7 +171,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 		printf("%s: Error: already has network access\n", __func__);
 		return ERR_INVALID;
 	}
-
 	reset_queue_sync(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	reset_queue_sync(Q_NETWORK_DATA_OUT, 0);
 
@@ -195,6 +198,7 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	}
 
 #ifndef UNTRUSTED_DOMAIN
+#ifndef ARCH_SEC_HW
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr() or read_tpm_pcr_for_proc().
 	 * This is because those calls issue syscalls, which might take
@@ -239,6 +243,7 @@ int request_network_access(limit_t limit, timeout_t timeout,
 		}
 	}
 #endif
+#endif
 
 	ret = net_start_receive();
 	if (ret) {
@@ -273,4 +278,3 @@ void syscall_close_socket(void)
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_CLOSE_SOCKET)
 	issue_syscall(buf);
 }
-#endif

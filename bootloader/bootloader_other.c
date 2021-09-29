@@ -329,7 +329,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #elif defined(ARCH_SEC_HW_BOOT_OS)
 	/* no-op */
 #elif defined(ARCH_SEC_HW_BOOT_NETWORK)
-	/* no-op */
+	init_network();
 #elif defined(ARCH_SEC_HW_BOOT_LINUX)
 	/* no-op */
 #endif

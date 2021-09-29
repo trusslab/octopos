@@ -1,6 +1,12 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "netif.h"
 #include "ip.h"
 #include "lib.h"
+#else  /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ip.h>
+#include <network/lib.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 #define LOOPBACK_MTU		1500
 #define LOOPBACK_IPADDR		0x0100007F	/* 127.0.0.1 */

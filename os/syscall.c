@@ -456,7 +456,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 			SYSCALL_SET_ONE_RET(0)
 		break;
 	}
-#ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		handle_allocate_socket_syscall(runtime_proc_id, buf);
 		break;
@@ -469,6 +468,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		handle_close_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
+#ifdef ARCH_UMODE
 
 	case SYSCALL_REQUEST_BLUETOOTH_ACCESS: {
 		SYSCALL_GET_THREE_ARGS_DATA

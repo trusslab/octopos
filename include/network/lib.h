@@ -28,7 +28,11 @@ typedef void *(*pfunc_t)(void *);
 extern pthread_t threads[];
 extern int newthread(pfunc_t thread_func);
 
+#ifndef ARCH_SEC_HW
 #define gettid() syscall(SYS_gettid)
+#else /*ARCH_SEC_HW*/
+#define gettid() 0
+#endif /*ARCH_SEC_HW*/
 
 
 /* colour macro */
