@@ -378,7 +378,7 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 	spin_lock_irqsave(&mailbox_lock, flags);
 	if (octopos_mailbox_attest_owner_fast_hw(mbox_ctrl_map[queue_id])) {
 		raw_state = octopos_mailbox_get_status_reg(mbox_ctrl_map[queue_id]);
-		printk("%u state=%lu\n", (unsigned int) queue_id, (unsigned int) raw_state);
+		// printk("%u state=%lu\n", (unsigned int) queue_id, (unsigned int) raw_state);
 		memcpy(&state, &raw_state, sizeof(state));
 		// printk("%u %u\n", (unsigned int) state.limit, (unsigned int) state.timeout);
 	} else {
