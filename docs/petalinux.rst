@@ -67,7 +67,6 @@ Image Packaging Configuration -> Root filesystem type -> Choose SD Card
 Set "Device node of SD device" to "/dev/octopos_blk"
 
 #9 shrink kernel and rootfs size
-================================
 Remove these drivers/packages:
 
 petalinux-config -c kernel

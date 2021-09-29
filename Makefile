@@ -72,6 +72,7 @@ install_sechw_boot:
 	rm ${BOOT_MEDIA}/*
 	cp ${PETALINUX_PRODUCTS}/boot.scr ${BOOT_MEDIA}/
 	cp ${OCTOPOS_DIR}/bin/BOOT.bin ${BOOT_MEDIA}/
+	cp ${PETALINUX_PRODUCTS}/image.ub ${BOOT_MEDIA}/
 	sync
 	echo "Done. Please remove media."
 
