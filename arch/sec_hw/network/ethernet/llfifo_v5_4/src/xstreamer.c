@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2005 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -489,3 +490,4 @@ void XStrm_Write(XStrm_TxFifoStreamer *InstancePtr, void *BufPtr,
 	}
 }
 /** @} */
+#endif /* ARCH_SEC_HW_NETWORK */

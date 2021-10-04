@@ -233,12 +233,12 @@ int _sem_retrieve_mailbox_message_buf_large(OCTOPOS_XMbox *InstancePtr, uint8_t*
 	int			status;
 
 	if (sketch_buffer)
-		status = XMbox_Read(InstancePtr,
+		status = OCTOPOS_XMbox_Read(InstancePtr,
 				(u32*)(buf),
 				MAILBOX_QUEUE_MSG_SIZE_LARGE - sketch_buffer_offset,
 				&bytes_read);
 	else
-		status = XMbox_Read(InstancePtr,
+		status = OCTOPOS_XMbox_Read(InstancePtr,
 				(u32*)(buf),
 				MAILBOX_QUEUE_MSG_SIZE_LARGE,
 				&bytes_read);

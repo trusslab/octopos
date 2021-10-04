@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2010 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -751,3 +752,4 @@ static void __attribute__ ((noinline)) AxiEthernetUtilPhyDelay(unsigned int Seco
     sleep(Seconds);
 #endif
 }
+#endif /* ARCH_SEC_HW_NETWORK */

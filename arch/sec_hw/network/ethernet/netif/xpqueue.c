@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2007 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -91,3 +92,4 @@ pq_qlength(pq_queue_t *q)
 {
 	return q->len;
 }
+#endif /* ARCH_SEC_HW_NETWORK */

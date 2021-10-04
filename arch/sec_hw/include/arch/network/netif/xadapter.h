@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2007 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -56,3 +57,4 @@ enum ethernet_link_status {
 #endif
 
 #endif
+#endif /* ARCH_SEC_HW_NETWORK */

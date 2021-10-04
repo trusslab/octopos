@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2010 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -1808,3 +1809,4 @@ void XAxiEthernet_PhyWrite(XAxiEthernet *InstancePtr, u32 PhyAddress,
 
 }
 /** @} */
+#endif /* ARCH_SEC_HW_NETWORK */

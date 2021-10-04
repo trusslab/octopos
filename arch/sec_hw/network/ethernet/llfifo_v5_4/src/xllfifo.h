@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2005 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -706,3 +707,4 @@ void XLlFifo_TxPutWord(XLlFifo *InstancePtr, u32 Word);
 #endif
 #endif				/* XLLFIFO_H  end of preprocessor protection symbols */
 /** @} */
+#endif /* ARCH_SEC_HW_NETWORK */

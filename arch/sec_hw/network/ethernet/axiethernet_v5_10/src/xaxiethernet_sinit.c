@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2010 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -71,3 +72,4 @@ XAxiEthernet_Config *XAxiEthernet_LookupConfig(u16 DeviceId)
 	return (CfgPtr);
 }
 /** @} */
+#endif /* ARCH_SEC_HW_NETWORK */

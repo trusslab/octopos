@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2007 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -57,3 +58,4 @@ int xtopology_find_index(unsigned base);
 
 #endif
 
+#endif /* ARCH_SEC_HW_NETWORK */

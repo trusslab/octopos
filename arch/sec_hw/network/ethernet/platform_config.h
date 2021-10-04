@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 #ifndef __PLATFORM_CONFIG_H_
 #define __PLATFORM_CONFIG_H_
 
@@ -11,3 +12,4 @@
 
 #endif
 
+#endif /* ARCH_SEC_HW_NETWORK */

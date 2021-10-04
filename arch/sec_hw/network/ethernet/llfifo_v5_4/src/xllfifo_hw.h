@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2005 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -214,3 +215,4 @@ extern u32 _xllfifo_rr_value;
 #endif
 #endif				/* XLLFIFO_HW_H  end of protection macro */
 /** @} */
+#endif /* ARCH_SEC_HW_NETWORK */

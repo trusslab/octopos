@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2010 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -100,3 +101,4 @@ void xaxiemac_error_handler(XAxiEthernet * Temac)
 	Pending = XAxiEthernet_IntPending(Temac);
 	XAxiEthernet_IntClear(Temac, Pending);
 }
+#endif /* ARCH_SEC_HW_NETWORK */

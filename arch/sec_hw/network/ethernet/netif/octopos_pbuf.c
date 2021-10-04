@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 #include "arch/network/netif/octopos_pbuf.h"
 #include <stdlib.h>
 
@@ -15,3 +16,4 @@ void octopos_pbuf_free(struct octopos_pbuf *p)
 	free(p->payload);
 	free(p);
 }
+#endif /* ARCH_SEC_HW_NETWORK */

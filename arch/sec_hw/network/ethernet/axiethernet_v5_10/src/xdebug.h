@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2010 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -56,3 +57,4 @@ int printf(const char *format, ...);
 #endif /* defined(DEBUG) && !defined(NDEBUG) */
 
 #endif /* XDEBUG */
+#endif /* ARCH_SEC_HW_NETWORK */

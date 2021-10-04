@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 
 /*******************************************************************
 *
@@ -51,4 +52,5 @@ XAxiEthernet_Config XAxiEthernet_ConfigTable[] =
 		0xFF
 	}
 };
+#endif /* ARCH_SEC_HW_NETWORK */
 

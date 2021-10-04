@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 void initialize_ethernet()
 {
 	/* the mac address of the board. this should be unique per board */
@@ -8,3 +9,4 @@ void initialize_ethernet()
 
 
 }
+#endif /* ARCH_SEC_HW_NETWORK */

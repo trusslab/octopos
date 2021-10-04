@@ -666,7 +666,7 @@ static void handle_fixed_timer_interrupts(void* ignored)
 int init_os_mailbox(void) 
 {
 	int				Status;
-	uint32_t		irqNo;
+//	uint32_t		irqNo;
 
 	OCTOPOS_XMbox_Config	*ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4,
 					*ConfigPtr_runtime1, *ConfigPtr_runtime2, *Config_storage_cmd_in,
@@ -1245,15 +1245,15 @@ int init_os_mailbox(void)
 	/* Initialize keyboard circular buffer */
 	cbuf_keyboard = circular_buf_get_instance(MAILBOX_QUEUE_SIZE);
 
-	/* Initialize GPIO. This is an ad-hoc impl of secure reset */
-	Status = XGpio_Initialize(&reset_gpio_0, XPAR_GPIO_1_DEVICE_ID);
-	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("Error: XGpio_initialize failed");
-		return -XST_FAILURE;
-	}
-
-	XGpio_SetDataDirection(&reset_gpio_0, 1, 0x0);
-	XGpio_SetDataDirection(&reset_gpio_0, 2, 0x0);
+//	/* Initialize GPIO. This is an ad-hoc impl of secure reset */
+//	Status = XGpio_Initialize(&reset_gpio_0, XPAR_GPIO_1_DEVICE_ID);
+//	if (Status != XST_SUCCESS) {
+//		_SEC_HW_ERROR("Error: XGpio_initialize failed");
+//		return -XST_FAILURE;
+//	}
+//
+//	XGpio_SetDataDirection(&reset_gpio_0, 1, 0x0);
+//	XGpio_SetDataDirection(&reset_gpio_0, 2, 0x0);
 #endif
 
 	return XST_SUCCESS;

@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2005 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -469,3 +470,4 @@ void XLlFifo_Initialize(XLlFifo *InstancePtr, UINTPTR BaseAddress)
 			(XStrm_GetVacancyFnType)XLlFifo_iTxVacancy);
 }
 /** @} */
+#endif /* ARCH_SEC_HW_NETWORK */

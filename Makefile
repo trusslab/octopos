@@ -75,6 +75,7 @@ sechw:
 
 	echo "Building Untrusted domain rootfs..."
 	rm -f ${OCTOPOS_DIR}/bin/rootfs.img
+	rm -rf ${OCTOPOS_DIR}/bin/rootfs_mount
 	dd if=/dev/zero of=${OCTOPOS_DIR}/bin/rootfs.img bs=512 count=65536
 	mkfs.ext4 -F ${OCTOPOS_DIR}/bin/rootfs.img
 	mkdir ${OCTOPOS_DIR}/bin/rootfs_mount

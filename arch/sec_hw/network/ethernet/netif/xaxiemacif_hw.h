@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2010 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -48,3 +49,4 @@ void octopos_init_axiemac(xaxiemacif_s *xaxiemac, unsigned char * mac_addr);
 #endif
 
 #endif
+#endif /* ARCH_SEC_HW_NETWORK */

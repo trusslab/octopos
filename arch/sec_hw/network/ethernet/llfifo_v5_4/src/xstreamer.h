@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2005 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -306,3 +307,4 @@ void XStrm_Read(XStrm_RxFifoStreamer *InstancePtr, void *BufPtr,
 #endif
 #endif				/* XSTREAMER_H  end of preprocessor protection symbols */
 /** @} */
+#endif /* ARCH_SEC_HW_NETWORK */

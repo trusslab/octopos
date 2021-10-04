@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2010 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -92,5 +93,6 @@ err_t octopos_xemac_init(struct xemac_s *xemac, unsigned char * mac_addr,  unsig
 	return ERR_OK;
 }
 
+#endif /* ARCH_SEC_HW_NETWORK */
 
 

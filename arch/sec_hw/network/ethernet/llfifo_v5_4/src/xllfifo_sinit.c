@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /******************************************************************************
 * Copyright (C) 2013 - 2020 Xilinx, Inc.  All rights reserved.
 * SPDX-License-Identifier: MIT
@@ -60,3 +61,4 @@ XLlFifo_Config *XLlFfio_LookupConfig(u32 DeviceId)
 	return CfgPtr;
 }
 /** @} */
+#endif /* ARCH_SEC_HW_NETWORK */

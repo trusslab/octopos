@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2010 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -84,3 +85,4 @@ extern xaxiemacif_s xaxiemacif;
 
 #endif /* __NETIF_XAXIEMACIF_H__ */
 
+#endif /* ARCH_SEC_HW_NETWORK */

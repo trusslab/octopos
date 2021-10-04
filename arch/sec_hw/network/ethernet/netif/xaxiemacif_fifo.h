@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2010 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -47,3 +48,4 @@ XStatus axififo_send(xaxiemacif_s *xaxiemacif, struct pbuf *p);
 #endif
 
 #endif
+#endif /* ARCH_SEC_HW_NETWORK */

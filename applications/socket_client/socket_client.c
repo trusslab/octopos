@@ -112,7 +112,7 @@ void socket_client(struct runtime_api *api)
 
 	send_receive(api);
 
-out:	/* close and out */
+out:	/* close and out */;
 	struct socket *tmp;
 	if (sock) {
 		tmp = sock;

@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2007 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -144,4 +145,5 @@ void eth_link_detect(struct netif *netif)
 	}
 }
 #endif
+#endif /* ARCH_SEC_HW_NETWORK */
 

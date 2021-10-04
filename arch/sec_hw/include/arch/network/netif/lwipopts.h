@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (c) 2001, 2002 Swedish Institute of Computer Science.
  * Copyright (C) 2007 - 2018 Xilinx, Inc.
@@ -110,3 +111,4 @@
 #define CONFIG_LINKSPEED_AUTODETECT 1
 
 #endif
+#endif /* ARCH_SEC_HW_NETWORK */

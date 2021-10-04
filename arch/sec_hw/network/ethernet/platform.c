@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 #include "platform.h"
 #include "platform_config.h"
 #include "xparameters.h"
@@ -106,3 +107,4 @@ void platform_setup_interrupts2(XIntc *intcp)
 
 
 }
+#endif /* ARCH_SEC_HW_NETWORK */

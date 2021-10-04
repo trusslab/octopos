@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 #include "arch/network/netif/xtopology.h"
 #include "xparameters.h"
 
@@ -13,3 +14,4 @@ struct xtopology_t xtopology[] = {
 };
 
 int xtopology_n_emacs = 1;
+#endif /* ARCH_SEC_HW_NETWORK */

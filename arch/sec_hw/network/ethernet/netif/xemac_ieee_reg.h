@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 /*
  * Copyright (C) 2018 - 2019 Xilinx, Inc.
  * All rights reserved.
@@ -99,3 +100,4 @@
 #define IEEE_MMD_ACCESS_CTRL_NOPIDEVAD_MASK        0x401F
 
 #endif /* __XEMAC_IEEE_REGS_H_ */
+#endif /* ARCH_SEC_HW_NETWORK */

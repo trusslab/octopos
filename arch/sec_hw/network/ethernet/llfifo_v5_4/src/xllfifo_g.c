@@ -1,3 +1,4 @@
+#ifdef ARCH_SEC_HW_NETWORK
 
 /*******************************************************************
 *
@@ -30,3 +31,4 @@ XLlFifo_Config XLlFifo_ConfigTable[] =
 	}
 };
 
+#endif /* ARCH_SEC_HW_NETWORK */
