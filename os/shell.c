@@ -32,10 +32,6 @@
 #endif
 #include <arch/defines.h>
 
-#ifdef 	ARCH_SEC_HW
-#include <arch/reset_api.h>
-#endif
-
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];
 pid_t pid;
@@ -310,11 +306,6 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		foreground_app = NULL;
 		output_printf("octopos$> ");
 	}
-#ifdef ARCH_SEC_HW
-	/* FIXME: merge into mainline api */
-	/* FIXME: consolidate with umode's use of reset_proc in syscall.c */
-	request_pmu_to_reset(runtime_proc_id);
-#endif
 
 	sched_clean_up_app(runtime_proc_id);
 }
@@ -332,9 +323,6 @@ void inform_shell_of_pause(uint8_t runtime_proc_id)
 		foreground_app = NULL;
 		output_printf("octopos$> ");
 	}
-#ifdef ARCH_SEC_HW
-	request_pmu_to_reset(runtime_proc_id);
-#endif
 	sched_pause_app(runtime_proc_id);
 }
 
@@ -438,7 +426,6 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			int ret;
 			uint8_t proc_id = (uint8_t) atoi(args[1]);
 
-#ifndef ARCH_SEC_HW
 			ret = reset_proc(proc_id);
 			if (ret == 1 && proc_id == P_UNTRUSTED) {
 				output_printf("Enter this command again to complete "
@@ -446,7 +433,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			} else if (ret) {
 				output_printf("Couldn't reset proc %d\n", proc_id);
 			}
-#endif
+
 			output_printf("octopos$> ");
 			return 0;
 		}

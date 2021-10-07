@@ -126,7 +126,6 @@ void help_boot_procs(int boot_untrusted)
 
 int reset_proc(uint8_t proc_id)
 {
-#ifndef ARCH_SEC_HW
 	int ret;
 
 	if (proc_id == P_STORAGE) {
@@ -171,23 +170,14 @@ int reset_proc(uint8_t proc_id)
 			untrusted_needs_help_with_boot = 0;
 		}
 	}
-#endif
 	return 0;
 }
 
 int reset_proc_simple(uint8_t proc_id)
 {
-	/* FIXME: newer compiler doesn't zero it out. */
-	/* this is ad hoc for SEC_HW */
-#ifdef ARCH_SEC_HW
-	int ret = 0;
-#else
 	int ret;
-#endif
 
-#ifndef ARCH_SEC_HW
 	ret = pmu_reset_proc(proc_id);
-#endif
 	
 	return ret;	
 }

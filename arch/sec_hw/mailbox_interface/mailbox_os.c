@@ -51,8 +51,6 @@ cbuf_handle_t	cbuf_keyboard;
 OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
 UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
-XGpio reset_gpio_0;
-
 int is_queue_available(uint8_t queue_id)
 {
 	int available;
