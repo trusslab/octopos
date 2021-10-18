@@ -36,6 +36,15 @@ clean_sechw:
 	rm -f ${OCTOPOS_DIR}/storage/octopos_partition_*
 
 sechw:
+	mkdir -p ${OCTOPOS_DIR}/bin
+
+	if [[ ${PETALINUX_PRODUCTS} == ${OCTOPOS_DIR}* ]]; then
+		echo "PETALINUX_PRODUCTS is local"
+	else
+		cp -r ${PETALINUX_PRODUCTS%/} ${OCTOPOS_DIR}/bin/
+		echo "Copying PETALINUX_PRODUCTS to local"
+	fi
+
 	echo "Merging bootloaders into bitstream..."
 	${VITIS_INSTALLATION}/2020.1/bin/updatemem -bit ${HW_DESIGN_WITH_ARBITTER}/zcu102_octopos.runs/impl_1/design_1_wrapper.bit \
 	-meminfo ${HW_DESIGN_WITH_ARBITTER}/zcu102_octopos.runs/impl_1/design_1_wrapper.mmi \
