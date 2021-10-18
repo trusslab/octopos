@@ -25,6 +25,8 @@ extern sem_t interrupts[NUM_QUEUES + 1];
 void init_platform();
 void cleanup_platform();
 
+#define CPU_SPEED_IN_MHZ (XPAR_MICROBLAZE_CORE_CLOCK_FREQ_HZ/1000000)										
+
 #ifndef ROLE_INSTALLER
 #define printf 	xil_printf
 #endif

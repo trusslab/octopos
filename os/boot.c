@@ -14,9 +14,9 @@
 #include <os/storage.h>
 #include <os/scheduler.h>
 #include <arch/mailbox_os.h>
-#ifndef ARCH_SEC_HW
 #include <arch/pmu.h>
-#else
+
+#ifdef ARCH_SEC_HW
 #include "arch/sec_hw.h"
 #include "arch/octopos_xmbox.h"
 
@@ -119,8 +119,8 @@ void help_boot_procs(int boot_untrusted)
 	help_boot_runtime_proc(P_RUNTIME1);
 	help_boot_runtime_proc(P_RUNTIME2);
 //	help_boot_network_proc();
-	if (boot_untrusted)
-	 	help_boot_untrusted_proc();
+	// if (boot_untrusted)
+	//  	help_boot_untrusted_proc();
 #endif
 }
 

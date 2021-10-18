@@ -605,22 +605,12 @@ static void storage_create_resource(uint8_t *buf)
 	uint32_t partition_id, tag, size;
 	int ret;
 
-#ifndef ARCH_SEC_HW
 	if (bound) {
 		printf("Error: %s: some partition is bound to queue set\n",
 		       __func__);
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
 	}
-#else
-	if (bound) {
-		/* if bound, simulate a reset */
-		used = 0;
-		bound = 0;
-		authenticated = 0;
-		bound_partition = 0xFF;
-	}
-#endif
 
 	STORAGE_GET_ONE_ARG_DATA
 	if (data_size != STORAGE_KEY_SIZE) {

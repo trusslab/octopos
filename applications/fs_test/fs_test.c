@@ -87,7 +87,10 @@ void fs_test(struct runtime_api *api)
 		goto out;
 	}
 	insecure_printf("Test 2 passed.\n");
-//
+
+/* sec_hw skip this test because 
+ * block[STORAGE_BLOCK_SIZE * 100] is way too large 
+ */
 //	insecure_printf("Test 3\n");
 //	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
 //

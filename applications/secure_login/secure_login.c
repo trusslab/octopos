@@ -43,6 +43,7 @@ void secure_login(struct runtime_api *api)
 	insecure_printf("This is secure login speaking.\n");
 	insecure_printf("Provide an insecure phrase:\n");
 
+	memset(line, 0x0, 1024);
 	api->read_from_shell(line, &size);
 	insecure_printf("Your phrase: %s (size = %d)\n", line, size);
 
@@ -95,7 +96,7 @@ void secure_login(struct runtime_api *api)
 
 	memset(line, 0x0, 1024);
 	api->read_from_file(fd, (uint8_t *) line, size, 50);
-	insecure_printf("Your secret phrase: %s (size = %d)\n", line, size);
+	insecure_printf("Your secret phrase: %02x %02x %02x (size = %d)\n", line[0], line[1], line[2], size);
 	api->close_file(fd);
 	
 	insecure_printf("Now testing secure storage\n");
@@ -112,7 +113,7 @@ void secure_login(struct runtime_api *api)
 	api->write_to_secure_storage_block((uint8_t *) line, 0, 0, size);
 	memset(line, 0x0, 1024);
 	api->read_from_secure_storage_block((uint8_t *) line, 0, 0, size);
-	insecure_printf("secret (from secure storage): %s (size = %d)\n", line,
+	insecure_printf("secret (from secure storage): %02x %02x %02x (size = %d)\n", line[0], line[1], line[2],
 			size);
 	api->delete_and_yield_secure_storage();
 }

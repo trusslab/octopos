@@ -33,6 +33,11 @@ struct app *current_app_with_storage_access;
 struct partition *boot_partition;
 extern struct app untrusted_app;
 
+#ifdef ARCH_SEC_HW
+/* FIXME: sechw - how do we know storage is ready? */
+#define STORAGE_REBOOT_WAIT printf("-");sleep(3);printf("+")
+#endif
+
 static int query_number_partitions(void)
 {
 	uint32_t query_type, partition_id;
@@ -202,13 +207,10 @@ void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
 
-/* FIXME: why do we need this ifdef? */
-#ifdef ROLE_OS	
 	ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
 	}
-#endif
 
 	ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {
@@ -261,6 +263,9 @@ int wait_for_storage_for_os_use(void)
 				return ERR_FAULT;
 			}
 
+#ifdef ARCH_SEC_HW
+			STORAGE_REBOOT_WAIT;
+#endif
 			storage_status = OS_ACCESS;
 			
 			ret = bind_partition(boot_partition->partition_id);
@@ -424,6 +429,9 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 			}
 			storage_status = OS_ACCESS;
 		}
+#ifdef ARCH_SEC_HW
+		STORAGE_REBOOT_WAIT;
+#endif
 	}
 
 	ret = storage_create_secure_partition(app_key, runtime_proc_id,
@@ -553,6 +561,9 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 				return;
 			}
 		}
+#ifdef ARCH_SEC_HW
+		STORAGE_REBOOT_WAIT;
+#endif
 	}
 	// printf("Note[15]\r\n");
 
@@ -612,6 +623,10 @@ uint32_t initialize_storage(void)
 		       __func__);
 		exit(-1);
 	}
+#endif
+
+#ifdef ARCH_SEC_HW
+	STORAGE_REBOOT_WAIT;
 #endif
 
 	ret = query_storage_partitions();

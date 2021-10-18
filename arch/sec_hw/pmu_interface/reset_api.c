@@ -1,12 +1,32 @@
 #ifdef 	ARCH_SEC_HW_OS
 
-#include "sleep.h"
-
 #include <octopos/mailbox.h>
 #include <octopos/error.h>
 #include <arch/sec_hw.h>
 #include <arch/pmu.h>
 #include <arch/mem_layout.h>
+
+/* "unitsleep: rsub %1, r11, %1" <- 1 clk cycle */
+/* "nop                        " <- 1 clk cycle */
+/* "bnei %1, unitsleep         " <- 3 clk cycle */	
+void octopos_usleep(u32 usecs)
+{
+    asm(
+		"addik r11, r0, 1             \n\t"
+		"nextsleep: rsub %0, r11, %0  \n\t"
+		"unitsleep: rsub %1, r11, %1  \n\t"
+		"nop                          \n\t"
+		"bnei %1, unitsleep           \n\t"
+		"add %1, r0, %2               \n\t"
+		"bnei %0, nextsleep           \n\t"
+		: 
+		: "r"(usecs), 
+		"r"(CPU_SPEED_IN_MHZ / 5), 
+		"r"(CPU_SPEED_IN_MHZ / 5)
+		: "r11"
+    );
+}
+
 
 int pmu_reset_proc(uint8_t proc_id)
 {
@@ -42,9 +62,9 @@ int pmu_reset_proc(uint8_t proc_id)
 	case P_OS:
 	case P_UNTRUSTED:
 	default:
+		reset_reg = 0;
 		printf("Error: %s: unexpected proc_id (%d)\n", __func__,
 		       proc_id);
-		return 0;
 	}
 
 	if (!reset_reg)
@@ -52,13 +72,13 @@ int pmu_reset_proc(uint8_t proc_id)
 
 	/* write reset command */
 	*reset_reg = RESET_BURN_VALUE_1;
+	octopos_usleep(1);
 	*reset_reg = RESET_BURN_VALUE_2;
+	octopos_usleep(1);
 
-	for (int i = 0; i++; i < RESET_WAIT_CYCLE) {
-		asm("nop");
-	}
+	// printf("ADDR: %08x, %08x\r\n", reset_reg, (reset_reg + 1));
 
-	status = *(RESET_MODULE_STATUS_OFFSET + reset_reg);
+	status = *(reset_reg + 1);
 
 	if (status == RESET_STATUS_SUCCESS) {
 		return 0;
@@ -66,6 +86,8 @@ int pmu_reset_proc(uint8_t proc_id)
 		printf("Error: %s: resource busy\r\n", __func__);
 		return ERR_AVAILABLE;
 	} else {
+		/* FIXME: incorrect return status. need to check hardware IP */
+		return 0;
 		printf("Error: %s: unexpected status (%08x)\r\n", 
 			__func__, status);
 		return ERR_FAULT;

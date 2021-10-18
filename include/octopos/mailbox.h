@@ -1,6 +1,8 @@
 #ifndef _OCTOPOS_MAILBOX_H_
 #define _OCTOPOS_MAILBOX_H_
 
+#include "stdint.h"
+
 #if !defined(UNTRUSTED_DOMAIN) && !defined(APPLICATION)
 #include <arch/defines.h>
 #endif
