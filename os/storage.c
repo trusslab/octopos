@@ -35,7 +35,7 @@ extern struct app untrusted_app;
 
 #ifdef ARCH_SEC_HW
 /* FIXME: sechw - how do we know storage is ready? */
-#define STORAGE_REBOOT_WAIT printf("-");sleep(3);printf("+")
+#define STORAGE_REBOOT_WAIT sleep(3)
 #endif
 
 static int query_number_partitions(void)
@@ -615,6 +615,12 @@ uint32_t initialize_storage(void)
 	current_app_with_storage_access = NULL;
 	boot_partition = NULL;
 
+/* Issue with ARCH_SEC_HW: the other bootloaders are busy 
+ * waiting on STORAGE_DATA_QUEUE, so that resetting the
+ * storage domain will distrube the bootloaders access to
+ * status register, which causes crash.
+ */
+#ifndef ARCH_SEC_HW
 #ifdef ROLE_OS
 	/* The bootloader has already used the partition. */
 	ret = reset_proc_simple(P_STORAGE);
@@ -623,11 +629,13 @@ uint32_t initialize_storage(void)
 		       __func__);
 		exit(-1);
 	}
-#endif
 
 #ifdef ARCH_SEC_HW
 	STORAGE_REBOOT_WAIT;
-#endif
+#endif /*ARCH_SEC_HW */
+
+#endif /* ROLE_OS */
+#endif /* ARCH_SEC_HW */
 
 	ret = query_storage_partitions();
 	if (ret) {

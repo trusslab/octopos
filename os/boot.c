@@ -119,8 +119,8 @@ void help_boot_procs(int boot_untrusted)
 	help_boot_runtime_proc(P_RUNTIME1);
 	help_boot_runtime_proc(P_RUNTIME2);
 //	help_boot_network_proc();
-	// if (boot_untrusted)
-	//  	help_boot_untrusted_proc();
+	if (boot_untrusted)
+	 	help_boot_untrusted_proc();
 #endif
 }
 
