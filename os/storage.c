@@ -620,7 +620,7 @@ uint32_t initialize_storage(void)
  * storage domain will distrube the bootloaders access to
  * status register, which causes crash.
  */
-#ifndef ARCH_SEC_HW
+// #ifndef ARCH_SEC_HW
 #ifdef ROLE_OS
 	/* The bootloader has already used the partition. */
 	ret = reset_proc_simple(P_STORAGE);
@@ -635,7 +635,7 @@ uint32_t initialize_storage(void)
 #endif /*ARCH_SEC_HW */
 
 #endif /* ROLE_OS */
-#endif /* ARCH_SEC_HW */
+// #endif /* ARCH_SEC_HW */
 
 	ret = query_storage_partitions();
 	if (ret) {

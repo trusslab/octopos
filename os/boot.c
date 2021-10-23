@@ -104,24 +104,17 @@ static void help_boot_untrusted_proc(void)
 
 void help_boot_procs(int boot_untrusted)
 {
-#ifndef ARCH_SEC_HW
 	help_boot_keyboard_proc();
 	help_boot_serial_out_proc();
+#ifndef ARCH_SEC_HW
 	help_boot_network_proc();
 	help_boot_bluetooth_proc();
+#endif
 	help_boot_runtime_proc(P_RUNTIME1);
 	help_boot_runtime_proc(P_RUNTIME2);
+	// DEBUG
 	if (boot_untrusted)
 		help_boot_untrusted_proc();
-#else
-	help_boot_serial_out_proc();
-	help_boot_keyboard_proc();
-	help_boot_runtime_proc(P_RUNTIME1);
-	help_boot_runtime_proc(P_RUNTIME2);
-//	help_boot_network_proc();
-	if (boot_untrusted)
-	 	help_boot_untrusted_proc();
-#endif
 }
 
 int reset_proc(uint8_t proc_id)

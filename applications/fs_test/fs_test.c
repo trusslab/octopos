@@ -74,10 +74,18 @@ void fs_test(struct runtime_api *api)
 
 	insecure_printf("Test 1 passed.\n");
 	insecure_printf("Test 2\n");
+#ifndef ARCH_SEC_HW
+	uint8_t block[STORAGE_BLOCK_SIZE * 100];
+#else
 	uint8_t block[STORAGE_BLOCK_SIZE * 2];
+#endif
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 
 	block[10] = 14;
+	// // DEBUG
+	// for (int j = 15; j<300; j++)
+	// 	block[j] = j % 255;
+
 	api->write_file_blocks(fd2, block, 0, 1);
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 	api->read_file_blocks(fd2, block, 0, 1);
@@ -91,20 +99,22 @@ void fs_test(struct runtime_api *api)
 /* sec_hw skip this test because 
  * block[STORAGE_BLOCK_SIZE * 100] is way too large 
  */
-//	insecure_printf("Test 3\n");
-//	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
-//
-//	index = (99 * STORAGE_BLOCK_SIZE) + 10;
-//	block[index] = 12;
-//	api->write_file_blocks(fd2, block, 1, 100);
-//	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
-//	api->read_file_blocks(fd2, block, 1, 100);
-//	insecure_printf("block[index] = %d\n", (int) block[index]);
-//	if (block[index] != 12) {
-//		insecure_printf("Test 3 failed\n");
-//		goto out;
-//	}
-//	insecure_printf("Test 3 passed.\n");
+#ifndef ARCH_SEC_HW
+	insecure_printf("Test 3\n");
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
+
+	index = (99 * STORAGE_BLOCK_SIZE) + 10;
+	block[index] = 12;
+	api->write_file_blocks(fd2, block, 1, 100);
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
+	api->read_file_blocks(fd2, block, 1, 100);
+	insecure_printf("block[index] = %d\n", (int) block[index]);
+	if (block[index] != 12) {
+		insecure_printf("Test 3 failed\n");
+		goto out;
+	}
+	insecure_printf("Test 3 passed.\n");
+#endif
 
 out:
 	api->close_file(fd1);

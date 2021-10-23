@@ -393,7 +393,15 @@ repeat:
 #ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
 #else
+		// //DEBUG
+		// #ifdef ARCH_SEC_HW_BOOT_KEYBOARD
+		// if (i==0) printf("BEFORE READ %08x\r\n", octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+		// #endif
 		_sem_retrieve_mailbox_message_blocking_buf_large(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+		// //DEBUG
+		// #ifdef ARCH_SEC_HW_BOOT_KEYBOARD
+		// if (i==0) printf("AFTER READ %08x\r\n", octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+		// #endif
 #endif
 		
 #ifndef ARCH_SEC_HW_BOOT

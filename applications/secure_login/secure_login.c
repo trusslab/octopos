@@ -102,6 +102,7 @@ void secure_login(struct runtime_api *api)
 
 	memset(line, 0x0, LINE_LENGTH);
 	api->read_from_file(fd, (uint8_t *) line, size, 50);
+	// api->read_from_file(fd, (uint8_t *) line, size, 50);
 	insecure_printf("Your secret phrase: %s (size = %d)\n", line, size);
 	api->close_file(fd);
 	

@@ -772,8 +772,8 @@ repeat:
 
 	wait_for_storage();
 
-/* FIXME: sec-hw storage misses an interrupt after reset,
- * causing this semaphore to be miscounted. Disable for now 
+/* FIXME (Issue 25): sec-hw storage misses an interrupt after reset,
+ * causing this semaphore to be miscounted. Disable for now.
  */
 #ifndef ARCH_SEC_HW
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);

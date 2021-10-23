@@ -751,6 +751,20 @@ static int read_char_from_secure_keyboard(char *buf)
 
 static int inform_os_of_termination(void)
 {
+	// DEBUG
+	_SEC_HW_ERROR("OUT %08x", *((unsigned int *) 0xF1860000));
+	_SEC_HW_ERROR("IN %08x", *((unsigned int *) 0xF1840000));
+
+#ifdef ARCH_SEC_HW
+	/* FIXME: Issue #26 */
+	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_KEYBOARD);
+	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
+#endif
+
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_TERMINATION)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
@@ -795,9 +809,6 @@ static int read_from_shell(char *data, int *data_size)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA(data)
 	*data_size = (int) _size;
-// #ifdef ARCH_SEC_HW
-// 	data[*data_size - 1] = '\0';
-// #endif
 	return (int) ret0;
 }
 
@@ -838,9 +849,16 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block,
 		return 0;
 	uint8_t queue_id = (uint8_t) ret0;
 
+	// DEBUG
+	_SEC_HW_ERROR("OUT before write %08x", *((unsigned int *) 0xF1860000));
+	_SEC_HW_ERROR("IN before write %08x", *((unsigned int *) 0xF1840000));
+
 	for (int i = 0; i < num_blocks; i++)
 		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE),
 						queue_id);
+	// DEBUG
+	_SEC_HW_ERROR("OUT after write %08x", *((unsigned int *) 0xF1860000));
+	_SEC_HW_ERROR("IN after write %08x", *((unsigned int *) 0xF1840000));
 
 	return num_blocks;
 }
@@ -857,11 +875,15 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block,
 		return 0;
 
 	uint8_t queue_id = (uint8_t) ret0;
-
+	// DEBUG
+	_SEC_HW_ERROR("OUT before read %08x", *((unsigned int *) 0xF1860000));
+	_SEC_HW_ERROR("IN before read %08x", *((unsigned int *) 0xF1840000));
 	for (int i = 0; i < num_blocks; i++)
 		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE),
 						  queue_id);
-
+	// DEBUG
+	_SEC_HW_ERROR("OUT after read %08x", *((unsigned int *) 0xF1860000));
+	_SEC_HW_ERROR("IN after read %08x", *((unsigned int *) 0xF1840000));
 	return num_blocks;
 }
 
