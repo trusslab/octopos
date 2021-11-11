@@ -58,7 +58,8 @@
 #define OP_MEASURE		0x01
 #define OP_READ			0x02
 #define OP_ATTEST		0x03
-#define OP_RESET		0x04
+#define OP_SEAL			0x04
+#define OP_RESET		0x05
 
 /* Copied macro from TPM2-TSS */
 #define SAFE_FREE(S) if((S) != NULL) {free((void*) (S)); (S)=NULL;}
@@ -67,29 +68,36 @@
 #define TPM2_ERROR_TEXT(r) "Error", "Code", r
 
 #define return_if_error(r,msg) \
-    if (r != TSS2_RC_SUCCESS) { \
-        fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        return r;  \
-    }
+	if (r != TSS2_RC_SUCCESS) { \
+		fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
+		return r;  \
+	}
 
 #define return_if_error_no_msg(r) \
-    if (r != 0) { \
-        return r;  \
-    }
+	if (r != 0) { \
+		return r;  \
+	}
 
 #define return_if_error_label(r, label) \
-    if (r != 0) { \
-        goto label;  \
-    }
+	if (r != 0) { \
+		goto label;  \
+	}
+
+#define return_if_error_label_msg(rc, msg, label) \
+	if (r != TSS2_RC_SUCCESS) { \
+    		fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
+		goto label;  \
+	}
 
 #define return_if_error_exception(r,msg,except) \
-    if (r != TSS2_RC_SUCCESS && r != except) { \
-        fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-        return r;  \
-    }
+	if (r != TSS2_RC_SUCCESS && r != except) { \
+		fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
+		return r;  \
+	}
 
 /* Hash support function */
 void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size);
+void print_digest_buffer(uint8_t *digest, size_t digest_size, char* buf, size_t buf_size);
 int hash_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *byte_buffer);
 int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value);
 
@@ -104,6 +112,8 @@ int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 	      uint32_t *pcr_list, size_t pcr_list_size,
 	      uint8_t **signature, size_t *signature_size, 
 	      char** quote_info, char **pcr_event_log);
+int tpm_seal_key(FAPI_CONTEXT *context, uint8_t *data, size_t data_size);
+int tpm_unseal_key(FAPI_CONTEXT *context, uint8_t **data, size_t *data_size);
 int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected);
 
 /* Top-level TPM API exposed for calling */
@@ -114,5 +124,9 @@ int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value);
 int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	       size_t pcr_list_size, uint8_t **signature,
 	       size_t *signature_size, char** quote_info);
+int tpm_encrypt(uint8_t *plain, size_t plain_size,
+		uint8_t *cipher, size_t *cipher_size);
+int tpm_decrypt(uint8_t *plain, size_t *plain_size,
+		uint8_t *cipher, size_t cipher_size);
 int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size);
 #endif

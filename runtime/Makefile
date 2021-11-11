@@ -54,6 +54,7 @@ RUNTIME_OBJS =  runtime.o 						\
 		../util/network/lib_obj.o				\
 		../util/tpm/hash.o					\
 		../util/tpm/tpm.o					\
+		../util/tpm/aes.o					\
 		../util/tpm/queue.o
 
 umode:runtime
@@ -77,4 +78,5 @@ clean:
 	rm -f ../util/network/lib_obj.o
 	rm -f ../util/tpm/hash.o
 	rm -f ../util/tpm/tpm.o
+	rm -f ../util/tpm/aes.o
 	rm -f ../util/tpm/queue.o

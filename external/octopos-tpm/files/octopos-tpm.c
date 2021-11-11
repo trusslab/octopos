@@ -30,7 +30,8 @@
 #define OP_MEASURE		0x01
 #define OP_READ			0x02
 #define OP_ATTEST		0x03
-#define OP_RESET		0x04
+#define OP_SEAL			0x04
+#define OP_RESET		0x05
 
 #define SHORT_BUFFER	0
 #define LARGE_BUFFER	1

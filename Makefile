@@ -12,7 +12,7 @@ umode:
 
 .PHONY: umode clean install
 
-install: 
+install:
 	$(MAKE) install -C $(EXTERNAL_DIR)
 
 clean:
@@ -23,3 +23,7 @@ clean:
 uninstall-local:
 	rm NVChip
 	$(MAKE) uninstall-local -C $(EXTERNAL_DIR)
+
+hard-reset:
+	rm NVChip
+	sudo rm -rf /usr/local/var/lib/tpm2-tss/system/keystore/*

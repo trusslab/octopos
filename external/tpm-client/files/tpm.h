@@ -57,7 +57,8 @@
 #define OP_MEASURE		0x01
 #define OP_READ			0x02
 #define OP_ATTEST		0x03
-#define OP_RESET		0x04
+#define OP_SEAL			0x04
+#define OP_RESET		0x05
 
 /* Copied macro from TPM2-TSS */
 #define SAFE_FREE(S) if((S) != NULL) {free((void*) (S)); (S)=NULL;}

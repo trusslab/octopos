@@ -1,11 +1,13 @@
 #include <tpm/tpm.h>
 #include <tpm/hash.h>
 #include <tpm/queue.h>
+#include <tpm/aes.h>
+#define ARCH_UMODE
 
 static uint8_t running_processor = 0;
 
 /* Driver support functions:
- *   write_to_driver
+ * 	write_to_driver
  */
 int write_to_driver(uint8_t *in_buf, uint8_t **out_buf, size_t *out_size)
 {
@@ -24,9 +26,10 @@ int write_to_driver(uint8_t *in_buf, uint8_t **out_buf, size_t *out_size)
 }
 
 /* Hash support functions:
- *   print_digest
- *   hash_to_byte_structure
- *   prepare_extend
+ * 	print_digest
+ * 	print_digest_buffer
+ * 	hash_to_byte_structure
+ * 	prepare_extend
  */
 void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size)
 {
@@ -36,12 +39,21 @@ void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size)
 	printf("\n");
 }
 
+void print_digest_buffer(uint8_t *digest, size_t digest_size, char* buf, size_t buf_size)
+{
+	if (digest_size * 2 + 1 != buf_size)
+		return;
+	for (size_t index = 0; index < digest_size; index++)
+		sprintf(buf + index * 2, "%02x", *(digest + index));
+	buf[buf_size - 1] = '\0';
+}
+
 int hash_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *byte_buffer)
 {
 	if (input_string == NULL || byte_length == NULL || byte_buffer == NULL) {
 		return -1;
 	}
-	
+
 	int str_length = strlen(input_string);
 	if (str_length % 2 || *byte_length < str_length / 2) {
 		return -1;
@@ -80,12 +92,14 @@ int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value)
 }
 
 /* Wrapper of FAPI and ESAPI
- *   tpm_set_locality
- *   tpm_initialize
- *   tpm_finalize
- *   tpm_read
- *   tpm_quote
- *   tpm_reset
+ * 	tpm_set_locality
+ * 	tpm_initialize
+ * 	tpm_finalize
+ * 	tpm_read
+ * 	tpm_quote
+ * 	tpm_seal
+ * 	tpm_unseal
+ * 	tpm_reset
  */
 int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor)
 {
@@ -94,7 +108,7 @@ int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor)
 
 	rc = Fapi_GetTcti(context, &tcti_ctx);
 	return_if_error(rc, "Get TCTI Error.");
-	
+
 	rc = Tss2_Tcti_SetLocality(tcti_ctx, PROC_LOCALITY(processor));
 	return_if_error(rc, "Change Locality Error.");
 
@@ -104,13 +118,13 @@ int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor)
 int tpm_initialize(FAPI_CONTEXT **context)
 {
 	TSS2_RC rc = TSS2_RC_SUCCESS;
-	
+
 	/* Hide all error and warning logs produced by TSS lib.
 	 * All errors and warnings should be handled manually.
 	 * Change TSS_LOG_LVL_NONE to TSS_LOG_LVL_DEBUG enables debug logs
 	 * including info and debug.
 	 */
-	setenv("TSS2_LOG", TSS_LOG_LVL_NONE, 1);
+	setenv("TSS2_LOG", TSS_LOG_LVL_ERROR, 1);
 
 	rc = Fapi_Initialize(context, NULL);
 	return_if_error(rc, "Fapi Initialization Error.");
@@ -159,11 +173,9 @@ int tpm_extend(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *hash_buf)
 	TPML_DIGEST_VALUES digests = {
 		.count = 1,
 		.digests = {{
-			.hashAlg = TPM2_ALG_SHA256,
-			.digest = {
-				.sha256 = { }
-			}
-		}}
+				    .hashAlg = TPM2_ALG_SHA256,
+				    .digest = {.sha256 = { }}
+			    }}
 	};
 
 	convert_hash_to_str(hash_buf, hash_str);
@@ -196,15 +208,129 @@ int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 	char *certificate = NULL;
 
 	/* Create attestation key (AK), if exists, ignore */
-	rc = Fapi_CreateKey(context, "HS/SRK/AK", "sign,noDa", "", NULL);
-	return_if_error_exception(rc, "Fapi Create Initial Key Error.", 
+	rc = Fapi_CreateKey(context, "/HS/SRK/AK", "sign,noDa",
+			    "", NULL);
+	return_if_error_exception(rc, "Fapi Create Initial Key Error.",
 				  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
 
 	rc = Fapi_Quote(context, pcr_list, pcr_list_size,
-			"HS/SRK/AK", "TPM-Quote", nonce,
+			"/HS/SRK/AK", "TPM-Quote", nonce,
 			TPM_AT_NONCE_LENGTH, quote_info, signature,
 			signature_size, pcr_event_log, &certificate);
 	return_if_error(rc, "Quote Error.");
+	return 0;
+}
+
+int tpm_seal_key(FAPI_CONTEXT *context, uint8_t *data, size_t data_size)
+{
+	TSS2_RC rc;
+	uint8_t pcr_buf[TPM_EXTEND_HASH_SIZE];
+	char pcr_str[TPM_EXTEND_HASH_SIZE*2 + 1];
+	const char* pcr_policy_template = "{"
+					  "\"description\":\"PCR POLICY\","
+					  "\"policy\":[{"
+					  "	\"type\":\"POLICYPCR\","
+					  "	\"pcrs\":[{"
+					  "		\"pcr\":%u,"
+					  "		\"hashAlg\":\"TPM2_ALG_SHA256\","
+					  "		\"digest\":\"%s\""
+					  "}]"
+					  "}]}";
+	char pcr_policy[strlen(pcr_policy_template) + TPM_EXTEND_HASH_SIZE * 2];
+	printf("RUNNING_PROCESSOR: %u\n", running_processor);
+
+	tpm_read(context, PROC_TO_PCR(running_processor), pcr_buf, NULL, 0);
+	print_digest_buffer(pcr_buf, TPM_EXTEND_HASH_SIZE,
+			    pcr_str, TPM_EXTEND_HASH_SIZE * 2 + 1);
+	snprintf(pcr_policy,
+		 strlen(pcr_policy_template) + TPM_EXTEND_HASH_SIZE * 2,
+		 pcr_policy_template, PROC_TO_PCR(running_processor), pcr_str);
+
+	rc = Fapi_Import(context, "/policy/seal_policy", pcr_policy);
+	return_if_error(rc, "Build policy Error.");
+
+	rc = Fapi_CreateSeal(context,
+			     "/HS/SRK/sealedKey", "noDa,0x81000010",
+			     data_size,
+			     "/policy/seal_policy", "",  data);
+	return_if_error(rc, "Seal Error.");
+
+	return 0;
+}
+
+int tpm_unseal_key(FAPI_CONTEXT *context, uint8_t **data, size_t *data_size)
+{
+	TSS2_RC rc;
+
+	/* Unseal the stored key, if the key is not set, then
+	 * create the key randomly and seal it.
+	 */
+	rc = Fapi_Unseal(context, "/HS/SRK/sealedKey", data,
+			 data_size);
+	if (rc == TSS2_FAPI_RC_KEY_NOT_FOUND) {
+		printf("TSS2_FAPI_RC_KEY_NOT_FOUND\n");
+		rc = tpm_seal_key(context, NULL, AES_GEN_SIZE);
+		return_if_error_no_msg(rc);
+
+		printf("Sealed\n");
+
+		rc = Fapi_Unseal(context, "/HS/SRK/sealedKey", data,
+				 data_size);
+	}
+	return_if_error(rc, "Unseal Error.");
+
+	return 0;
+}
+
+int tpm_encrypt_direct(FAPI_CONTEXT *context, uint8_t *plain, size_t plain_size,
+		       uint8_t **cipher, size_t *cipher_size)
+{
+	TSS2_RC rc;
+	uint8_t pcr_buf[TPM_EXTEND_HASH_SIZE];
+	char pcr_str[TPM_EXTEND_HASH_SIZE*2 + 1];
+	const char* pcr_policy_template = "{"
+					  "\"description\":\"PCR POLICY\","
+					  "\"policy\":[{"
+					  "	\"type\":\"POLICYPCR\","
+					  "	\"pcrs\":[{"
+					  "		\"pcr\":%u,"
+					  "		\"hashAlg\":\"TPM2_ALG_SHA256\","
+					  "		\"digest\":\"%s\""
+					  "}]"
+					  "}]}";
+	char pcr_policy[strlen(pcr_policy_template) + TPM_EXTEND_HASH_SIZE * 2];
+
+	tpm_read(context, PROC_TO_PCR(running_processor), pcr_buf, NULL, 0);
+	print_digest_buffer(pcr_buf, TPM_EXTEND_HASH_SIZE,
+			    pcr_str, TPM_EXTEND_HASH_SIZE * 2 + 1);
+	snprintf(pcr_policy,
+		 strlen(pcr_policy_template) + TPM_EXTEND_HASH_SIZE * 2,
+		 pcr_policy_template, PROC_TO_PCR(running_processor), pcr_str);
+
+	rc = Fapi_Import(context, "/policy/seal_policy", pcr_policy);
+	return_if_error(rc, "Build policy Error.");
+
+	rc = Fapi_CreateKey(context, "/HS/SRK/sealedKey", "decrypt,0x81000004",
+			    "/policy/seal_policy", NULL);
+	return_if_error_exception(rc, "Sealed Key Creation Error.",
+				  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
+
+	rc = Fapi_Encrypt(context, "/HS/SRK/sealedKey", plain, plain_size,
+			  cipher, cipher_size);
+	return_if_error(rc, "Encryption Error.");
+
+	return 0;
+}
+
+int tpm_decrypt_direct(FAPI_CONTEXT *context, uint8_t **plain, size_t *plain_size,
+		       uint8_t *cipher, size_t cipher_size)
+{
+	TSS2_RC rc;
+
+	rc = Fapi_Decrypt(context, "/HS/SRK/sealedKey", cipher, cipher_size,
+			  plain, plain_size);
+	return_if_error(rc, "Decryption Error.");
+
 	return 0;
 }
 
@@ -219,17 +345,19 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected)
 	rc = Esys_PCR_Reset(esys_context, pcr_selected,
 			    ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE);
 	return_if_error(rc, "PCR Reset Error.");
-	
+
 	return 0;
 }
 
 /* Top-level TPM API exposed for calling
- *   enforce_running_process
- *   cancel_running_process
- *   tpm_measure_service
- *   tpm_processor_read_pcr
- *   tpm_attest
- *   tpm_reset_pcrs
+ * 	enforce_running_process
+ * 	cancel_running_process
+ * 	tpm_measure_service
+ * 	tpm_processor_read_pcr
+ * 	tpm_attest
+ * 	tpm_encrypt
+ * 	tpm_decrypt
+ * 	tpm_reset_pcrs
  */
 int enforce_running_process(uint8_t processor)
 {
@@ -259,14 +387,14 @@ int tpm_measure_service(char* path)
 	FAPI_CONTEXT *context = NULL;
 
 	rc = tpm_initialize(&context);
-	return_if_error_label(rc, out_measure_service);
+	return_if_error_no_msg(rc);
 
 	rc = tpm_set_locality(context, running_processor);
 	return_if_error_label(rc, out_measure_service);
-	
+
 	rc = tpm_extend(context, PROC_TO_PCR(running_processor), hash_value);
 	return_if_error_label(rc, out_measure_service);
-	
+
 	rc = tpm_read(context, PROC_TO_PCR(running_processor), NULL, NULL, 1);
 	return_if_error_label(rc, out_measure_service);
 
@@ -290,30 +418,30 @@ int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value)
 	int rc = 0;
 
 #ifdef ARCH_UMODE
-        FAPI_CONTEXT *context = NULL;
+	FAPI_CONTEXT *context = NULL;
 
 	rc = tpm_initialize(&context);
 	return_if_error_no_msg(rc);
 
 	rc = tpm_set_locality(context, running_processor);
 	return_if_error_label(rc, out_processor_read_pcr);
-	
+
 	rc = tpm_read(context, pcr_index, pcr_value, NULL, 1);
 	return_if_error_label(rc, out_processor_read_pcr);
 
-out_processor_read_pcr:	
+out_processor_read_pcr:
 	tpm_finalize(&context);
 	return rc;
 #else
-        uint8_t in_buf[BUFFER_SIZE] = { 0 };
+	uint8_t in_buf[BUFFER_SIZE] = { 0 };
 	uint8_t *out_buf;
 	size_t size;
-        in_buf[0] = OP_READ;
+	in_buf[0] = OP_READ;
 	in_buf[1] = (uint8_t) (pcr_index & 0xFF);
-        rc = write_to_driver(in_buf, &out_buf, &size);
+	rc = write_to_driver(in_buf, &out_buf, &size);
 	memcpy(pcr_value, out_buf, TPM_EXTEND_HASH_SIZE);
 	free(out_buf);
-        return rc;
+	return rc;
 #endif
 }
 
@@ -324,42 +452,114 @@ int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	int rc = 0;
 
 #ifdef ARCH_UMODE
-        FAPI_CONTEXT *context = NULL;
+	FAPI_CONTEXT *context = NULL;
 	char *pcr_event_log = NULL;
 
 	rc = tpm_initialize(&context);
 	return_if_error_no_msg(rc);
 
 	rc = tpm_set_locality(context, running_processor);
-	return_if_error_no_msg(rc);
+	return_if_error_label(rc, out_attest);
 
 	rc = tpm_quote(context, nonce, pcr_list, pcr_list_size, signature,
 		       signature_size, quote_info, &pcr_event_log);
-	return_if_error_no_msg(rc);
-	
+	return_if_error_label(rc, out_attest);
+
+out_attest:
 	tpm_finalize(&context);
 	return rc;
 #else
-        uint8_t in_buf[BUFFER_SIZE] = { 0 };
+	uint8_t in_buf[BUFFER_SIZE] = { 0 };
 	uint8_t *out_buf;
 	size_t size;
-        in_buf[0] = OP_ATTEST;
-        memcpy(in_buf + 1, nonce, TPM_AT_NONCE_LENGTH);
+	in_buf[0] = OP_ATTEST;
+	memcpy(in_buf + 1, nonce, TPM_AT_NONCE_LENGTH);
 	in_buf[1 + TPM_AT_NONCE_LENGTH] = (uint8_t) (pcr_list_size & 0XFF);
-        for (size_t i = 0; i < pcr_list_size; i++) {
+	for (size_t i = 0; i < pcr_list_size; i++) {
 		in_buf[2 + TPM_AT_NONCE_LENGTH + i] = (uint8_t) (pcr_list[i] & 0xFF);
-        }
-        rc = write_to_driver(in_buf, &out_buf, &size);
+	}
+	rc = write_to_driver(in_buf, &out_buf, &size);
 	*signature_size = (out_buf[2] << 8) + out_buf[3];
 	*signature = (uint8_t *) malloc(*signature_size * sizeof(uint8_t));
 	memcpy(*signature, out_buf + 4, *signature_size);
-	
+
 	size_t quote_info_size = (out_buf[4 + *signature_size] << 8) + out_buf[5 + *signature_size];
 	*quote_info = (char *) malloc(quote_info_size * sizeof(char));
 	memcpy(quote_info, out_buf + 6 + *signature_size, quote_info_size);
 
 	free(out_buf);
-        return rc;
+	return rc;
+#endif
+}
+
+int tpm_encrypt(uint8_t *plain, size_t plain_size,
+		uint8_t *cipher, size_t *cipher_size)
+{
+	int rc = 0;
+
+#ifdef ARCH_UMODE
+	FAPI_CONTEXT *context = NULL;
+	uint8_t *key_iv = NULL;
+	size_t key_iv_size;
+
+	rc = tpm_initialize(&context);
+	return_if_error_no_msg(rc);
+
+	rc = tpm_set_locality(context, running_processor);
+	return_if_error_label(rc, out_encrypt);
+
+	rc = tpm_unseal_key(context, &key_iv, &key_iv_size);
+	return_if_error_label(rc, out_encrypt);
+	if (key_iv_size != AES_GEN_SIZE) {
+		return -1;
+	}
+
+	rc = aes_encrypt(key_iv, plain, plain_size, cipher, cipher_size);
+	return_if_error_label(rc, out_encrypt);
+
+out_encrypt:
+	tpm_finalize(&context);
+	return rc;
+#else
+	uint8_t in_buf[BUFFER_SIZE] = { 0 };
+	uint8_t *out_buf;
+	size_t size;
+	in_buf[0] = OP_SEAL;
+	rc = write_to_driver(in_buf, &out_buf, &size);
+	return rc;
+#endif
+}
+
+int tpm_decrypt(uint8_t *plain, size_t *plain_size,
+		uint8_t *cipher, size_t cipher_size)
+{
+	int rc = 0;
+
+#ifdef ARCH_UMODE
+	FAPI_CONTEXT *context = NULL;
+	uint8_t *key_iv = NULL;
+	size_t key_iv_size;
+
+	rc = tpm_initialize(&context);
+	return_if_error_no_msg(rc);
+
+	rc = tpm_set_locality(context, running_processor);
+	return_if_error_label(rc, out_decrypt);
+
+	rc = tpm_unseal_key(context, &key_iv, &key_iv_size);
+	return_if_error_label(rc, out_decrypt);
+	if (key_iv_size != AES_GEN_SIZE) {
+		return -1;
+	}
+
+	rc = aes_decrypt(key_iv, plain, plain_size, cipher, cipher_size);
+	return_if_error_label(rc, out_decrypt);
+
+out_decrypt:
+	tpm_finalize(&context);
+	return rc;
+#else
+	return rc;
 #endif
 }
 
@@ -368,32 +568,33 @@ int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size)
 	int rc = 0;
 
 #ifdef ARCH_UMODE
-        size_t pcr_index = 0;
+	size_t pcr_index = 0;
 	FAPI_CONTEXT *context = NULL;
 
 	rc = tpm_initialize(&context);
 	return_if_error_no_msg(rc);
 
 	rc = tpm_set_locality(context, running_processor);
-	return_if_error_no_msg(rc);
+	return_if_error_label(rc, out_reset_pcrs);
 
 	for (; pcr_index < pcr_list_size; pcr_index++) {
 		rc = tpm_reset(context, *(pcr_list + pcr_index));
-		return_if_error_no_msg(rc);
+		return_if_error_label(rc, out_reset_pcrs);
 	}
-	
+
+out_reset_pcrs:
 	tpm_finalize(&context);
 	return rc;
 #else
-        uint8_t in_buf[BUFFER_SIZE] = { 0 };
+	uint8_t in_buf[BUFFER_SIZE] = { 0 };
 	uint8_t *out_buf;
 	size_t size;
-        in_buf[0] = OP_RESET;
-        in_buf[1] = (uint8_t) (pcr_list_size & 0XFF);
-        for (size_t i = 0; i < pcr_list_size; i++) {
+	in_buf[0] = OP_RESET;
+	in_buf[1] = (uint8_t) (pcr_list_size & 0XFF);
+	for (size_t i = 0; i < pcr_list_size; i++) {
 		in_buf[2 + i] = (uint8_t)(pcr_list[i] & 0xFF);
-        }
-        rc = write_to_driver(in_buf, &out_buf, &size);
-        return rc;
+	}
+	rc = write_to_driver(in_buf, &out_buf, &size);
+	return rc;
 #endif
 }

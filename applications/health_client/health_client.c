@@ -21,6 +21,7 @@
 #include <tpm/tpm.h>
 #include <tpm/hash.h>
 #include <tpm/rsa.h>
+#include <tpm/aes.h>
 
 /* Must be smaller than each message size minus 1.
  * For secure print, the message is the same as the mailbox size.
@@ -316,8 +317,8 @@ static int perform_remote_attestation(void)
 	char success = 0;
 	char init_cmd = 1;
 	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
-	uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
-	uint8_t num_pcr_slots = 2;
+	uint32_t pcr_slots[] = {(uint32_t) PROC_TO_PCR(runtime_proc_id)};
+	uint8_t num_pcr_slots = 1;
 	int ret;
 
 	if (gapi->write_to_socket(sock, &init_cmd, 1) < 0) {
@@ -364,8 +365,14 @@ static int perform_remote_attestation(void)
 	
 	packet[0] = (uint8_t) sig_size;
 	memcpy(packet + 1, signature, sig_size);
-
 	memcpy(packet + 1 + sig_size, quote, quote_size);
+
+	for (size_t i = 0; i < sig_size; i++) {
+		printf("%02x, ", signature[i]);
+	}
+	printf("\n");
+	printf("%s\n", quote);
+	printf("%lu\n", quote_size);
 
 	send_large_packet(packet, 1 + sig_size + quote_size);
 	
@@ -506,6 +513,42 @@ context_not_found:
 	context.last_measurement_time = gapi->get_time();
 }
 
+static int decrypt_context(uint8_t *encrypted_context)
+{
+	uint8_t *decrypted_context = (uint8_t *) malloc(sizeof(struct app_context));
+	size_t decrypted_size;
+
+	tpm_decrypt(decrypted_context, &decrypted_size,
+		    encrypted_context, sizeof(struct app_context) + TAG_SIZE);
+	if (decrypted_size != sizeof(struct app_context)) {
+		free(decrypted_context);
+		return -1;
+	}
+
+	memcpy(&context, decrypted_context, sizeof(struct app_context));
+	free(decrypted_context);
+	return 0;
+}
+
+static int encrypt_context(uint8_t *encrypted_context)
+{
+	uint8_t *decrypted_context = (uint8_t *) malloc(sizeof(struct app_context));
+	size_t encrypted_size;
+
+	memcpy(decrypted_context, &context, sizeof(struct app_context));
+
+	tpm_encrypt(decrypted_context, sizeof(struct app_context),
+		    encrypted_context, &encrypted_size);
+	if (encrypted_size != sizeof(struct app_context) + TAG_SIZE) {
+		free(decrypted_context);
+		return -1;
+	}
+
+	free(decrypted_context);
+	return 0;
+}
+
+
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 {
@@ -536,6 +579,7 @@ void app_main(struct runtime_api *api)
 	uint8_t dose;
 	uint32_t num_bt_devices = 2;
 	uint8_t bt_device_names[BD_ADDR_LEN * 2];
+	uint8_t *encrypted_app_context = (uint8_t *) malloc(sizeof(app_context) + TAG_SIZE);
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
 		printf("Error: %s: BTPACKET_FIXED_DATA_SIZE must be 32 (%d)\n",
@@ -577,12 +621,17 @@ void app_main(struct runtime_api *api)
 			"monitor and insulin pump.\n");
 
 	/* Step 1 (including part of Step 0 to request access to storage) */
-	ret = api->set_up_context((void *) &context, sizeof(struct app_context),
+	ret = api->set_up_context((void *) encrypted_app_context,
+				  sizeof(struct app_context) + TAG_SIZE,
 				  0, &context_found, 100, 200, 100,
 				  queue_update_callback, NULL,
 				  measured_storage_pcr);
 	if (!ret && context_found) {
 		has_storage = 1;
+		if (decrypt_context(encrypted_app_context) != 0) {
+			insecure_printf("Decryption failed\n");
+			goto terminate;
+		}
 		if (!memcmp(context.signature, expected_context_signature,
 			    CONTEXT_SIGNATURE_SIZE)) {
 			insecure_printf("Found measurements from previous "
@@ -775,7 +824,12 @@ terminate:
 		 */
 		context_found = 0;
 		trustworthy_storage_service = 0;
-		gapi->write_context_to_storage(0);
+		if (encrypt_context(encrypted_app_context) != 0) {
+			insecure_printf("Encryption failed\n");
+		} else {
+			gapi->write_context_to_storage(0);
+		}
+		free(encrypted_app_context);
 	}
 
 	if (has_storage) {
@@ -795,5 +849,7 @@ terminate:
 		terminate_network_session();
 		gapi->yield_network_access();
 	}
+
+
 }
 #endif

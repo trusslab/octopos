@@ -353,11 +353,11 @@ static int init_context(FAPI_CONTEXT **context)
 	}
 
 	/* Create AK */
-	rc = Fapi_CreateKey(*context, "HS/SRK/AK", "sign,noDa", "", NULL);
+	rc = Fapi_CreateKey(*context, "/HS/SRK/AK", "sign,noDa", "", NULL);
 	if (rc == TSS2_FAPI_RC_PATH_ALREADY_EXISTS) {
-		fprintf(stdout, "INFO: Key HS/SRK/AK already exists.\n");
+		fprintf(stdout, "INFO: Key /HS/SRK/AK already exists.\n");
 	} else if (rc == TSS2_RC_SUCCESS) {
-		fprintf(stdout, "INFO: Key HS/SRK/AK created.\n");
+		fprintf(stdout, "INFO: Key /HS/SRK/AK created.\n");
 	} else {
 		fprintf(stderr, "ERROR: Fapi_CreateKey: %s.\n", Tss2_RC_Decode(rc));
 		return -1;

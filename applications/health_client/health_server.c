@@ -131,17 +131,14 @@ static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 	}
 
 	rc = Fapi_Provision(context, NULL, NULL, NULL);
-	if (rc == TSS2_FAPI_RC_ALREADY_PROVISIONED) {
-		fprintf(stdout, "INFO: Profile was provisioned.\n");
-	} else if (rc != TSS2_RC_SUCCESS) {
+	if (rc != TSS2_RC_SUCCESS && rc != TSS2_FAPI_RC_ALREADY_PROVISIONED) {
 		fprintf(stderr, "ERROR: Fapi_Provision: %s.\n", Tss2_RC_Decode(rc));
 		Fapi_Finalize(&context);
 		return -1;
 	}
 
-	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
-			      quote_info,
-			signature, size, NULL);
+	rc = Fapi_VerifyQuote(context, "/HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
+			      quote_info, signature, size, NULL);
 	if (rc != TSS2_RC_SUCCESS) {
 		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
 		Fapi_Finalize(&context);
@@ -348,6 +345,12 @@ int main(int argc, char *argv[])
 	char *quote_info = (char *) malloc(quote_size + 1);
 	bzero(quote_info, quote_size + 1);
 	memcpy(quote_info, quote_buf + 1 + sig_size, quote_size);
+	for (int i = 0; i < sig_size; i++) {
+		printf("%02x, ", signature[i]);
+	}
+	printf("\n");
+	printf("%s\n", quote_info);
+	printf("%d\n", quote_size);
 
 	ret = verify_quote(nonce, quote_info, signature, sig_size);
 	if (ret) {
@@ -355,6 +358,7 @@ int main(int argc, char *argv[])
 		write(newsockfd, buffer, 1);
 		error("ERROR quote verification failed");
 	}
+	free(quote_info);
 
 	/* Verification of the quote tells us that our app is running in one
 	 * of the runtimes. We can be sure that we're talking to that runtime

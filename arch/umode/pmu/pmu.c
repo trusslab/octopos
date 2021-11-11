@@ -751,7 +751,9 @@ int main(int argc, char **argv)
 	int ret, len, i;
 	int untrusted_init = 0;
 	pthread_t reboot_thread;
+#ifndef ARCH_UMODE
 	sem_t *sem;
+#endif
 
 	/*
 	 * put tty in raw mode.
@@ -767,13 +769,15 @@ int main(int argc, char **argv)
         now.c_cc[VMIN]=1;
         now.c_cc[VTIME]=2;
         tcsetattr(0, TCSANOW, &now);
-	
+
+#ifndef ARCH_UMODE
 	sem_unlink("/tpm_sem");
 	sem = sem_open("/tpm_sem", O_CREAT | O_EXCL, 0644, 1);
 	if (sem == SEM_FAILED) {
 		printf("Error: couldn't create tpm semaphore.\n");
 		exit(-1);
 	}
+#endif
 
 	enforce_running_process(P_PMU);
 
@@ -828,7 +832,9 @@ int main(int argc, char **argv)
 	}
 
 	start_all_procs();
+#ifndef ARCH_UMODE
 	sem_close(sem);
+#endif
 
 	while (1) {
 		int max_fd;
