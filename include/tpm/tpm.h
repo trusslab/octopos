@@ -59,7 +59,10 @@
 #define OP_READ			0x02
 #define OP_ATTEST		0x03
 #define OP_SEAL			0x04
-#define OP_RESET		0x05
+#define OP_RESET		0x06
+/* Deprecated OP  */
+#define OP_UNSEAL		0x05
+
 
 /* Copied macro from TPM2-TSS */
 #define SAFE_FREE(S) if((S) != NULL) {free((void*) (S)); (S)=NULL;}
@@ -119,14 +122,11 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected);
 /* Top-level TPM API exposed for calling */
 int enforce_running_process(uint8_t processor);
 int cancel_running_process();
-int tpm_measure_service(char* path);
+int tpm_measure_service(char* path, BOOL is_path);
 int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value);
-int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
+int tpm_attest(uint8_t *nonce, const uint32_t *pcr_list,
 	       size_t pcr_list_size, uint8_t **signature,
 	       size_t *signature_size, char** quote_info);
-int tpm_encrypt(uint8_t *plain, size_t plain_size,
-		uint8_t *cipher, size_t *cipher_size);
-int tpm_decrypt(uint8_t *plain, size_t *plain_size,
-		uint8_t *cipher, size_t cipher_size);
-int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size);
+int tpm_get_storage_key(uint8_t **key_iv);
+int tpm_reset_pcrs(const uint32_t *pcr_list, size_t pcr_list_size);
 #endif

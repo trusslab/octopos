@@ -149,7 +149,7 @@ void bootloader_close_file_system(void)
 void send_measurement_to_tpm(char *path)
 {
 	enforce_running_process(P_STORAGE);
-	tpm_measure_service(path);
+	tpm_measure_service(path, 1);
 	cancel_running_process();
 	close_mailbox();
 }

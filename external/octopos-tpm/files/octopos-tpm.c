@@ -33,13 +33,13 @@
 #define OP_SEAL			0x04
 #define OP_RESET		0x05
 
-#define SHORT_BUFFER	0
-#define LARGE_BUFFER	1
+#define SHORT_BUFFER		0
+#define LARGE_BUFFER		1
 #define BUFFER_SIZE		65
 #define QUEUE_SIZE		64
 
-#define E_FULL_QUEUE	0x01
-#define E_EMPTY_QUEUE	0x02
+#define E_FULL_QUEUE		0x01
+#define E_EMPTY_QUEUE		0x02
 
 struct queue_entry {
 	uint8_t proc_id;
@@ -58,7 +58,7 @@ void open_queue(void __iomem **in, void __iomem **out);
 int is_full(void __iomem *queues, uint8_t proc_id);
 int is_empty(void __iomem *queues, uint8_t proc_id);
 int enqueue(void __iomem *queues, uint8_t *buf, uint8_t proc_id);
-int dequeue(void __iomem *queues, uint8_t *buf, uint8_t proc_id);
+int dequeue(void __iomem *queues, uint8_t *buf, uint8_t proc_id, uint8_t *tag);
 uint8_t get_queue_size(void __iomem *queues, uint8_t proc_id);
 
 size_t queue_list_size = sizeof(struct queue_list);
@@ -155,7 +155,7 @@ int enqueue(void __iomem *queues, uint8_t *buf, uint8_t proc_id)
 	return 0;
 }
 
-int dequeue(void __iomem *queues, uint8_t *buf, uint8_t proc_id)
+int dequeue(void __iomem *queues, uint8_t *buf, uint8_t proc_id, uint8_t *tag)
 {
 	struct queue_entry q;
 	void __iomem *entry;
@@ -173,12 +173,11 @@ int dequeue(void __iomem *queues, uint8_t *buf, uint8_t proc_id)
 	iowrite8((head_value + 1) % QUEUE_SIZE, queues + head_offset + proc_id - 1);
 
 	entry = queues + queue_offset + ((proc_id - 1) * QUEUE_SIZE + head_value) * sizeof(struct queue_entry);
-	q.proc_id = ioread8(entry + proc_id_offset);
-	q.buffer_tag = ioread8(entry + buffer_tag_offset);
-	for (; i < BUFFER_SIZE; i++) {
+//	q.proc_id = ioread8(entry + proc_id_offset);
+//	q.buffer_tag = ioread8(entry + buffer_tag_offset);
+	*tag = ioread8(entry + buffer_tag_offset);
+	for (; i < BUFFER_SIZE; i++)
 		q.buf[i] = ioread8(entry + buf_offset + i);
-	}
-
 	memcpy(buf, q.buf, BUFFER_SIZE);
 
 	return 0;
@@ -196,10 +195,10 @@ static int does_proc_have_message(int proc_id)
 	return !is_empty(in_queues, proc_id);
 }
 
-static void recv_msg_from_proc(uint8_t *buf, uint8_t proc_id)
+static void recv_msg_from_proc(uint8_t *buf, uint8_t proc_id, uint8_t *tag)
 {
 	/* Determine the incoming queue of the proc and read */
-	dequeue(in_queues, buf, proc_id);
+	dequeue(in_queues, buf, proc_id, tag);
 }
 
 static void send_msg_to_proc(uint8_t *buf, uint8_t proc_id)
@@ -210,16 +209,21 @@ static void send_msg_to_proc(uint8_t *buf, uint8_t proc_id)
 
 int next_proc = 1;
 
-static void get_next_tpm_request(uint8_t *buf, uint8_t *proc_id)
+static void get_next_tpm_request(uint8_t *buf, uint8_t *proc_id, uint8_t *tag)
 {
 	int ret = 0;
 
-	/* get requests from queues in a round robin fashion. */
+	/* Get requests from queues in a round robin fashion.
+	 * If it's a long message, first receive whole message then
+	 * continue round robin.
+	 */
 	while (!ret) {
 		ret = does_proc_have_message(next_proc);
 		if (ret) {
-			recv_msg_from_proc(buf, next_proc);
+			recv_msg_from_proc(buf, next_proc, tag);
 			*proc_id = next_proc;
+			if (*tag == 1)
+				break;
 		}
 
 		next_proc++;
@@ -232,7 +236,7 @@ static void send_tpm_response(uint8_t *buf, uint8_t proc_id)
 {
 	send_msg_to_proc(buf, proc_id);
 }
-/************************************************/
+
 
 struct semaphore mutex;
 uint8_t current_proc;
@@ -247,20 +251,23 @@ static ssize_t otpm_dev_read(struct file *filp, char __user *buf, size_t size,
 {
 	uint8_t req_buf[MAILBOX_QUEUE_MSG_SIZE + 2];
 	int ret;
+	uint8_t tag = SHORT_BUFFER;
  
 	if (size != (MAILBOX_QUEUE_MSG_SIZE + 2))
 		return 0;
 
 	down(&mutex);
 
-	get_next_tpm_request(&req_buf[1], &current_proc);
+	get_next_tpm_request(&req_buf[1], &current_proc, &tag);
 	req_buf[0] = current_proc;
 
 	ret = copy_to_user(buf, req_buf, size);
 	if (ret != 0) {
-        printk("Failed to send characters to user.\n");
-        return -EFAULT;
-    }
+        	printk("Failed to send characters to user.\n");
+        	return -EFAULT;
+    	}
+	if (tag == LARGE_BUFFER)
+		up(&mutex);
 
 	return (size - ret);
 }
@@ -276,12 +283,11 @@ static ssize_t otpm_dev_write(struct file *filp, const char __user *buf,
 
 	memset(resp_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE + 2);
 
-
 	ret = copy_from_user(resp_buf, buf, size);
 	if (ret != 0) {
-        printk("Failed to read characters from user.\n");
-        return -EFAULT;
-    }
+        	printk("Failed to read characters from user.\n");
+        	return -EFAULT;
+    	}
 
 	send_tpm_response(resp_buf, current_proc);
 

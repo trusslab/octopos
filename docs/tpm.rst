@@ -38,8 +38,8 @@ On Ubuntu, you could use the following command:
 
 $ sudo apt -y install autoconf-archive libcmocka0 libcmocka-dev procps \
     iproute2 build-essential git pkg-config gcc libtool automake libssl-dev \
-    uthash-dev autoconf doxygen libjson-c-dev libini-config-dev libcurl4-openssl-dev \
-    libgcrypt-dev libglib2.0-dev
+    uthash-dev autoconf doxygen libjson-c-dev libini-config-dev \
+    libcurl4-openssl-dev libgcrypt-dev libglib2.0-dev
 
 Then use the following command to build and install the library:
 
@@ -51,15 +51,15 @@ Problem 1. Recipe for target 'tss' failed
 Solution: The library is linked by submodule. You can type
 
 $ git submodule update --init --recursive
-
 to pull the entire contents.
 
 Problem2. TPM is in DA lockout mode
-Solution: Execute the tpm_shutdown in tpm/tpm_shutdown/ folder
+Solution: Execute the tpm_shutdown in util/tpm/tools/ folder
 
-It was caused by abnormal shutdown of tpm that making the tpm don't receive TPM_SHUTDOWN
-signal.
+It was caused by abnormal shutdown of tpm that making the tpm don't receive
+TPM_SHUTDOWN signal.
 
 Update: tpm_shutdown does not always resolve the lockout problem.
 For now, a temporary hack was added to the simulator.
-To solve this issue correctly, we need to send the shutdown command to the TPM everytime we halt OctopOS.
+To solve this issue correctly, we need to send the shutdown command to the TPM
+everytime we halt OctopOS.

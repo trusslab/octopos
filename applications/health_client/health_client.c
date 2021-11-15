@@ -515,10 +515,18 @@ context_not_found:
 
 static int decrypt_context(uint8_t *encrypted_context)
 {
-	uint8_t *decrypted_context = (uint8_t *) malloc(sizeof(struct app_context));
+	int rc;
+	uint8_t *key_iv = NULL;
+	uint8_t *decrypted_context = NULL;
 	size_t decrypted_size;
 
-	tpm_decrypt(decrypted_context, &decrypted_size,
+	rc = tpm_get_storage_key(&key_iv);
+	if (rc != 0) {
+		return -1;
+	}
+
+	decrypted_context = (uint8_t *) malloc(sizeof(struct app_context));
+	aes_decrypt(key_iv,decrypted_context, &decrypted_size,
 		    encrypted_context, sizeof(struct app_context) + TAG_SIZE);
 	if (decrypted_size != sizeof(struct app_context)) {
 		free(decrypted_context);
@@ -532,12 +540,20 @@ static int decrypt_context(uint8_t *encrypted_context)
 
 static int encrypt_context(uint8_t *encrypted_context)
 {
-	uint8_t *decrypted_context = (uint8_t *) malloc(sizeof(struct app_context));
+	int rc;
+	uint8_t *key_iv = NULL;
+	uint8_t *decrypted_context;
 	size_t encrypted_size;
 
+	rc = tpm_get_storage_key(&key_iv);
+	if (rc != 0) {
+		return -1;
+	}
+
+	decrypted_context = (uint8_t *) malloc(sizeof(struct app_context));
 	memcpy(decrypted_context, &context, sizeof(struct app_context));
 
-	tpm_encrypt(decrypted_context, sizeof(struct app_context),
+	aes_encrypt(key_iv, decrypted_context, sizeof(struct app_context),
 		    encrypted_context, &encrypted_size);
 	if (encrypted_size != sizeof(struct app_context) + TAG_SIZE) {
 		free(decrypted_context);
@@ -630,6 +646,7 @@ void app_main(struct runtime_api *api)
 		has_storage = 1;
 		if (decrypt_context(encrypted_app_context) != 0) {
 			insecure_printf("Decryption failed\n");
+			has_storage = 0;
 			goto terminate;
 		}
 		if (!memcmp(context.signature, expected_context_signature,
