@@ -492,14 +492,14 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		 * We limit its usage to MAILBOX_DEFAULT_TIMEOUT_VAL per
 		 * request in order not to starve other domains.
 		 */
-		if (timeout > MAILBOX_DEFAULT_TIMEOUT_VAL) {
+		if (timeout > MAILBOX_MAX_LIMIT_VAL) {
 			printf("Error: %s: timeout (%d) too large for the "
 			       "untrusted domain\n", __func__, timeout);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			return;
 		}
 	} else {
-		if (timeout > 100) {
+		if (timeout > MAILBOX_MAX_LIMIT_VAL) {
 			printf("Error: %s: timeout (%d) too large\n", __func__,
 			       timeout);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)

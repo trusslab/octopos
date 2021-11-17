@@ -105,7 +105,7 @@ sechw:
 	${OCTOPOS_DIR}/installer_sec_hw/installer
 
 install_sechw_boot: 
-	rm ${BOOT_MEDIA}/*
+	rm -f ${BOOT_MEDIA}/*
 	cp ${PETALINUX_PRODUCTS}/boot.scr ${BOOT_MEDIA}/
 	cp ${OCTOPOS_DIR}/bin/BOOT.bin ${BOOT_MEDIA}/
 	cp ${PETALINUX_PRODUCTS}/image.ub ${BOOT_MEDIA}/
@@ -113,7 +113,7 @@ install_sechw_boot:
 	echo "Done. Please remove media."
 
 install_sechw_storage: 
-	rm ${SEC_STORAGE_MEDIA}/*
+	rm -f ${SEC_STORAGE_MEDIA}/*
 	cp ${OCTOPOS_DIR}/bin/rootfs.img ${SEC_STORAGE_MEDIA}/octopos_partition_1_data
 	echo -n "" > ${SEC_STORAGE_MEDIA}/octopos_partition_1_create
 	cp ${OCTOPOS_DIR}/storage/octopos_partition_0_* ${SEC_STORAGE_MEDIA}/

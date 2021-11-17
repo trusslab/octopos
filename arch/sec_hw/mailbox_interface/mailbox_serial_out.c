@@ -53,15 +53,15 @@ static void handle_mailbox_interrupts(void* callback_ref)
 	mask = OCTOPOS_XMbox_GetInterruptStatus(mbox_inst);
 
 	if (mask & OCTOPOS_XMB_IX_STA) {
-		_SEC_HW_ERROR("Invalid interrupt OCTOPOS_XMB_IX_STA");
+		_SEC_HW_DEBUG("Invalid interrupt OCTOPOS_XMB_IX_STA");
 	} else if (mask & OCTOPOS_XMB_IX_RTA) {
 		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_RTA");
 
 		sem_post(&interrupt_serial_out);
 	} else if (mask & OCTOPOS_XMB_IX_ERR) {
-		_SEC_HW_ERROR("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
+		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
 	} else {
-		_SEC_HW_ERROR("interrupt type unknown, mask %d, from %p", mask, callback_ref);
+		_SEC_HW_DEBUG("interrupt type unknown, mask %d, from %p", mask, callback_ref);
 	}
 
 	OCTOPOS_XMbox_ClearInterrupt(mbox_inst, mask);

@@ -637,9 +637,9 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&interrupts[Q_NETWORK_CMD_OUT]);
 		}
 	} else if (mask & OCTOPOS_XMB_IX_ERR) {
-		_SEC_HW_ERROR("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
+		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
 	} else {
-		_SEC_HW_ERROR("interrupt type unknown, mask %d, from %p", mask, callback_ref);
+		_SEC_HW_DEBUG("interrupt type unknown, mask %d, from %p", mask, callback_ref);
 	}
 
 	OCTOPOS_XMbox_ClearInterrupt(mbox_inst, mask);
@@ -653,6 +653,12 @@ static void handle_mailbox_interrupts(void* callback_ref)
 //          Xil_In32((mbox_inst->Config.BaseAddress) + (0x24)));
 //  _SEC_HW_DEBUG("IP register: (in decimal) %d",
 //          Xil_In32((mbox_inst->Config.BaseAddress) + (0x28)));
+}
+
+long long global_counter;
+static void handle_measurement_timer_interrupts(void* ignored)
+{
+	global_counter++;
 }
 
 static void handle_fixed_timer_interrupts(void* ignored)
@@ -1013,6 +1019,15 @@ int init_os_mailbox(void)
 		return XST_FAILURE;
 	}
 
+	Status = XIntc_Connect(&intc,
+			XPAR_OS_SUBSYS_MICROBLAZE_6_AXI_INTC_OS_SUBSYS_FIT_TIMER_0_INTERRUPT_INTR,
+		(XInterruptHandler)handle_measurement_timer_interrupts,
+		(void *)0);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+
 	Status = XIntc_Connect(&intc, 
 			OMboxIntrs[P_OS][Q_STORAGE_CMD_IN],
 		(XInterruptHandler)handle_mailbox_interrupts, 
@@ -1157,6 +1172,7 @@ int init_os_mailbox(void)
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_RUNTIME2]);
 	XIntc_Enable(&intc, OMboxIntrs[P_OS][Q_UNTRUSTED]);
 	XIntc_Enable(&intc, XPAR_OS_SUBSYS_MICROBLAZE_6_AXI_INTC_OS_SUBSYS_FIT_TIMER_2_INTERRUPT_INTR);
+	XIntc_Enable(&intc, XPAR_OS_SUBSYS_MICROBLAZE_6_AXI_INTC_OS_SUBSYS_FIT_TIMER_0_INTERRUPT_INTR);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_SERIAL_OUT]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_KEYBOARD]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_OS][Q_RUNTIME1]);
@@ -1253,6 +1269,8 @@ int init_os_mailbox(void)
 //	XGpio_SetDataDirection(&reset_gpio_0, 1, 0x0);
 //	XGpio_SetDataDirection(&reset_gpio_0, 2, 0x0);
 #endif
+
+	global_counter = 0;
 
 	return XST_SUCCESS;
 }

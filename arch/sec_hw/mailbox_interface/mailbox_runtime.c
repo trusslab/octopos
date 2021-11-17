@@ -175,6 +175,15 @@ void mailbox_force_ownership(uint8_t queue_id, uint8_t owner)
 	free(message_buffer);
 }
 
+#if RUNTIME_ID == 1
+/* Only Runtime 1 has measurement timer */
+long long global_counter;
+static void handle_measurement_timer_interrupts(void* ignored)
+{
+	global_counter++;
+}
+#endif
+
 void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 {
 	/* Threshold registers will need to be reinitialized
@@ -247,8 +256,13 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 }
 
 static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
-{ //FIXME: large queue
+{
 	sem_wait_impatient_receive_buf(&interrupts[queue_id], Mbox_regs[queue_id], (u8*) buf);
+}
+
+static void _runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+{
+	sem_wait_impatient_receive_buf_large(&interrupts[queue_id], Mbox_regs[queue_id], (u8*) buf);
 }
 
 static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
@@ -278,7 +292,7 @@ void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id)
 
 void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
 {
-	return _runtime_recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	return _runtime_recv_msg_from_queue_large(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id)
@@ -480,10 +494,10 @@ static void handle_mailbox_interrupts(void* callback_ref)
 					MBOX_PENDING_STA[Q_RUNTIME2] = FALSE;
 				}
 			} else {
-				_SEC_HW_ERROR("Error: invalid interrupt from %d", queue_id);
+				_SEC_HW_DEBUG("Error: invalid interrupt from %d", queue_id);
 			}
 		} else {
-			_SEC_HW_ERROR("Error: invalid interrupt from %d", queue_id);
+			_SEC_HW_DEBUG("Error: invalid interrupt from %d", queue_id);
 		}
 	} else if (mask & OCTOPOS_XMB_IX_RTA) {
 		if (queue_id == Q_KEYBOARD) {
@@ -512,13 +526,13 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			/* network cmd out queue */
 			sem_post(&interrupts[Q_NETWORK_CMD_OUT]);
 		} else {
-			_SEC_HW_ERROR("Error: invalid interrupt from %d", queue_id);
+			_SEC_HW_DEBUG("Error: invalid interrupt from %d", queue_id);
 		}
 	} else if (mask & OCTOPOS_XMB_IX_ERR) {
-		_SEC_HW_ERROR("interrupt type: OCTOPOS_XMB_IX_ERR, from %d", queue_id);
+		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_ERR, from %d", queue_id);
 		_SEC_HW_DEBUG("status register: %ld", OCTOPOS_XMbox_GetStatus(Mbox_regs[queue_id]));
 	} else {
-		_SEC_HW_ERROR("interrupt type unknown, mask %ld, from %d", mask, queue_id);
+		_SEC_HW_DEBUG("interrupt type unknown, mask %ld, from %d", mask, queue_id);
 	}
 }
 
@@ -758,6 +772,16 @@ int init_runtime(int runtime_id)
 		return XST_FAILURE;
 	}
 
+#if RUNTIME_ID == 1
+	Status = XIntc_Connect(&intc,
+			XPAR_ENCLAVE0_SUBSYS_MICROBLAZE_2_AXI_INTC_ENCLAVE0_SUBSYS_FIT_TIMER_1_INTERRUPT_INTR,
+		(XInterruptHandler)handle_measurement_timer_interrupts,
+		0);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+#endif
+
 	/* Connect the OctopOS mailbox interrupts */
 	Status = XIntc_Connect(&intc,
 		OMboxCtrlIntrs[p_runtime][Q_RUNTIME1],
@@ -926,6 +950,9 @@ int init_runtime(int runtime_id)
 		return XST_FAILURE;
 	}
 
+#if RUNTIME_ID == 1
+	XIntc_Enable(&intc, XPAR_ENCLAVE0_SUBSYS_MICROBLAZE_2_AXI_INTC_ENCLAVE0_SUBSYS_FIT_TIMER_1_INTERRUPT_INTR);
+#endif
 	XIntc_Enable(&intc, OMboxIntrs[p_runtime][Q_KEYBOARD]);
 	XIntc_Enable(&intc, OMboxIntrs[p_runtime][Q_SERIAL_OUT]);
 	XIntc_Enable(&intc, OMboxIntrs[p_runtime][Q_RUNTIME1]);
@@ -994,6 +1021,10 @@ int init_runtime(int runtime_id)
 #endif
 
 	runtime_inited = TRUE;
+
+#if RUNTIME_ID == 1
+	global_counter = 0;
+#endif
 
 	return XST_SUCCESS;
 }

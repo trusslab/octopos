@@ -701,10 +701,10 @@ static void storage_query_all_resources(uint8_t *buf)
 
 	STORAGE_GET_TWO_ARGS
 
-	//debug
-	printf("%s: %d\r\n", __FUNCTION__, arg0);
-	//debug
-	printf("\r\n%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8]);
+	// //debug
+	// printf("%s: %d\r\n", __FUNCTION__, arg0);
+	// //debug
+	// printf("\r\n%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8]);
 	if (arg0 == 0) {
 		/* query the number of partitions */
 		num_partitions = NUM_PARTITIONS;

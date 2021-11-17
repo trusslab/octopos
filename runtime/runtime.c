@@ -849,16 +849,16 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block,
 		return 0;
 	uint8_t queue_id = (uint8_t) ret0;
 
-	// DEBUG
-	_SEC_HW_ERROR("OUT before write %08x", *((unsigned int *) 0xF1860000));
-	_SEC_HW_ERROR("IN before write %08x", *((unsigned int *) 0xF1840000));
+	// // DEBUG
+	// _SEC_HW_ERROR("OUT before write %08x", *((unsigned int *) 0xF1860000));
+	// _SEC_HW_ERROR("IN before write %08x", *((unsigned int *) 0xF1840000));
 
 	for (int i = 0; i < num_blocks; i++)
 		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE),
 						queue_id);
-	// DEBUG
-	_SEC_HW_ERROR("OUT after write %08x", *((unsigned int *) 0xF1860000));
-	_SEC_HW_ERROR("IN after write %08x", *((unsigned int *) 0xF1840000));
+	// // DEBUG
+	// _SEC_HW_ERROR("OUT after write %08x", *((unsigned int *) 0xF1860000));
+	// _SEC_HW_ERROR("IN after write %08x", *((unsigned int *) 0xF1840000));
 
 	return num_blocks;
 }

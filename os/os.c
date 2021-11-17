@@ -76,7 +76,7 @@ int main()
 
 	initialize_shell();
 	initialize_scheduler();
-	printf("%s: OS [2]\r\n", __func__);
+
 	while (1) {
 		distribute_input();
 	}
