@@ -14,10 +14,10 @@ int main(int argc, char const *argv[])
 	}
 
 	rc = Esys_Shutdown(context, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, TPM2_SU_STATE);
-    if (rc != TPM2_RC_SUCCESS) {
+	if (rc != TPM2_RC_SUCCESS) {
 		fprintf(stderr, "Esys_Shutdown: %s\n", Tss2_RC_Decode(rc));
-        return -1;
-    }
+		return -1;
+	}
 
 	Esys_Finalize(&context);
 	return 0;

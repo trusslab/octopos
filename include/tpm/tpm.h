@@ -64,11 +64,11 @@
 #define OP_UNSEAL		0x05
 
 
-/* Copied macro from TPM2-TSS */
+/* Macros copied from TPM2-TSS */
 #define SAFE_FREE(S) if((S) != NULL) {free((void*) (S)); (S)=NULL;}
 
-#define TPM2_ERROR_FORMAT "%s%s (0x%08x)"
-#define TPM2_ERROR_TEXT(r) "Error", "Code", r
+#define TPM2_ERROR_FORMAT "(0x%08x), %s"
+#define TPM2_ERROR_TEXT(r) r, Tss2_RC_Decode(r)
 
 #define return_if_error(r,msg) \
 	if (r != TSS2_RC_SUCCESS) { \
@@ -86,12 +86,6 @@
 		goto label;  \
 	}
 
-#define return_if_error_label_msg(rc, msg, label) \
-	if (r != TSS2_RC_SUCCESS) { \
-    		fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
-		goto label;  \
-	}
-
 #define return_if_error_exception(r,msg,except) \
 	if (r != TSS2_RC_SUCCESS && r != except) { \
 		fprintf(stderr, "%s " TPM2_ERROR_FORMAT, msg, TPM2_ERROR_TEXT(r)); \
@@ -99,9 +93,11 @@
 	}
 
 /* Hash support function */
-void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size);
-void print_digest_buffer(uint8_t *digest, size_t digest_size, char* buf, size_t buf_size);
-int hash_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *byte_buffer);
+void print_digest(uint8_t pcr_index, const uint8_t *digest, size_t digest_size);
+void print_digest_buffer(const uint8_t *digest, size_t digest_size,
+			 char* buf, size_t buf_size);
+int hash_to_byte_structure(const char *input_string, UINT16 *byte_length,
+			   BYTE *byte_buffer);
 int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value);
 
 /* Wrapper of FAPI and ESAPI */
@@ -124,7 +120,7 @@ int enforce_running_process(uint8_t processor);
 int cancel_running_process();
 int tpm_measure_service(char* path, BOOL is_path);
 int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value);
-int tpm_attest(uint8_t *nonce, const uint32_t *pcr_list,
+int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	       size_t pcr_list_size, uint8_t **signature,
 	       size_t *signature_size, char** quote_info);
 int tpm_get_storage_key(uint8_t **key_iv);

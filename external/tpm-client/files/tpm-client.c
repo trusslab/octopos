@@ -108,12 +108,6 @@ int main(int argc, char const *argv[])
 	uint8_t *response;
 	size_t response_size;
 
-	char send[BUFFER_LENGTH] = {0};
-	char receive[BUFFER_LENGTH] = {0};
-	char *large_send;
-	size_t large_send_size = 0;
-
-
 	// Open the device with read/write access
 	fd = open("/dev/octopos_tpm", O_RDWR);
 	if (fd < 0) {

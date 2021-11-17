@@ -140,7 +140,7 @@ static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 		return -1;
 	}
 
-	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
+	rc = Fapi_VerifyQuote(context, "/HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
 			      quote_info,
 			signature, size, NULL);
 	if (rc != TSS2_RC_SUCCESS) {

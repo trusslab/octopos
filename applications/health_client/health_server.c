@@ -137,14 +137,14 @@ static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 		return -1;
 	}
 
-	rc = Fapi_VerifyQuote(context, "/HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
+	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
 			      quote_info, signature, size, NULL);
 	if (rc != TSS2_RC_SUCCESS) {
 		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
 		Fapi_Finalize(&context);
 		return -1;
 	}
-		
+
 	fprintf(stdout, "Quote is successfully verified.\n");
 
 	/* FIXME: verify the quote digest. */
@@ -156,6 +156,9 @@ static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 		Fapi_Finalize(&context);
 		return -1;
 	}
+
+	printf("pcr_digest: %s\n", pcr_digest);
+	printf("expected_pcr_digest_str: %s\n", expected_pcr_digest_str);
 
 	if (strcmp(pcr_digest, expected_pcr_digest_str)) {
 		printf("Error: %s: pcr_digest in the quote not verified\n",
@@ -209,11 +212,15 @@ static void generate_PCR_digests(void)
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, temp_hash);
+	convert_hash_to_str(temp_hash, expected_pcr_digest_str);
+	printf("expected: %s\n", expected_pcr_digest_str);
 	hash_file((char *) "applications/health_client/health_client.so",
 		  file_hash);
 	buffers[0] = temp_hash;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, app_pcr);
+	convert_hash_to_str(app_pcr, expected_pcr_digest_str);
+	printf("expected: %s\n", expected_pcr_digest_str);
 
 	/* Attestation quote pcr digest: PCR 0 (boot) and 14 (app) */
 	/* FIXME: for now, PCR 0 is just a zero buf since we don't extend it. */
@@ -336,21 +343,22 @@ int main(int argc, char *argv[])
 		package_size += n;
 	} while (n > 0 && count < 4);
 
-	int sig_size = quote_buf[0];
+	int sig_size = (quote_buf[0] << 8) | quote_buf[1];
 	uint8_t signature[256];
 	bzero(signature, 256);
-	memcpy(signature, quote_buf + 1, sig_size);
+	memcpy(signature, quote_buf + 2, sig_size);
 
-	int quote_size = package_size - 1 - sig_size;
+	int quote_size = package_size - 2 - sig_size;
 	char *quote_info = (char *) malloc(quote_size + 1);
 	bzero(quote_info, quote_size + 1);
-	memcpy(quote_info, quote_buf + 1 + sig_size, quote_size);
+	memcpy(quote_info, quote_buf + 2 + sig_size, quote_size);
+//	printf("%d\n", sig_size);
 	for (int i = 0; i < sig_size; i++) {
 		printf("%02x, ", signature[i]);
 	}
 	printf("\n");
-	printf("%s\n", quote_info);
-	printf("%d\n", quote_size);
+//	printf("%s\n", quote_info);
+//	printf("%d\n", quote_size);
 
 	ret = verify_quote(nonce, quote_info, signature, sig_size);
 	if (ret) {

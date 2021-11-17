@@ -28,18 +28,21 @@ int aes_encrypt(uint8_t *key_iv, uint8_t *plain, size_t plain_size,
         }
 
 	rc = EVP_EncryptInit_ex(aes_ctx, EVP_aes_256_gcm(), NULL, NULL, NULL);
-	aes_return_if_error(rc, "Encryption Initialization Error", encrypt_finalize);
+	aes_return_if_error(rc, "Encryption Initialization Error",
+			    encrypt_finalize);
 
 	rc = EVP_CIPHER_CTX_ctrl(aes_ctx, EVP_CTRL_GCM_SET_IVLEN, IV_SIZE, NULL);
 	aes_return_if_error(rc, "IV Length Setting Error", encrypt_finalize);
 
 	rc = EVP_EncryptInit_ex(aes_ctx, NULL, NULL, key, iv);
-	aes_return_if_error(rc, "Key and IV Initialization Error", encrypt_finalize);
+	aes_return_if_error(rc, "Key and IV Initialization Error",
+			    encrypt_finalize);
 
 	while ((size_t) result_size <= plain_size - 16) {
 		rc = EVP_EncryptUpdate(aes_ctx, cipher + result_size,
 				       &len, plain + result_size, 16);
-		aes_return_if_error(rc, "Encryption Update Error", encrypt_finalize);
+		aes_return_if_error(rc, "Encryption Update Error",
+				    encrypt_finalize);
 		result_size += len;
 	}
 
@@ -90,19 +93,22 @@ int aes_decrypt(uint8_t *key_iv, uint8_t *plain, size_t *plain_size,
 	}
 
 	rc = EVP_EncryptInit_ex(aes_ctx, EVP_aes_256_gcm(), NULL, NULL, NULL);
-	aes_return_if_error(rc, "Encryption Initialization Error", decrypt_finalize);
+	aes_return_if_error(rc, "Encryption Initialization Error",
+			    decrypt_finalize);
 
 	rc = EVP_CIPHER_CTX_ctrl(aes_ctx, EVP_CTRL_GCM_SET_IVLEN, IV_SIZE, NULL);
 	aes_return_if_error(rc, "IV Length Setting Error", decrypt_finalize);
 
 	rc = EVP_DecryptInit_ex(aes_ctx, NULL, NULL, key, iv);
-	aes_return_if_error(rc, "Key and IV Initialization Error", decrypt_finalize);
+	aes_return_if_error(rc, "Key and IV Initialization Error",
+			    decrypt_finalize);
 
 
 	while ((size_t) result_size <= cipher_size_real - 16) {
 		rc = EVP_DecryptUpdate(aes_ctx, plain + result_size,
 				       &len, cipher + result_size, 16);
-		aes_return_if_error(rc, "Decryption Update Error", decrypt_finalize);
+		aes_return_if_error(rc, "Decryption Update Error",
+				    decrypt_finalize);
 		result_size += len;
 	}
 

@@ -118,7 +118,7 @@ void verify_quote(uint8_t* nonce, char* quote_info, uint8_t* signature, int size
 		return;
 	}
 
-	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, NONCE_LENGTH, quote_info,
+	rc = Fapi_VerifyQuote(context, "/HS/SRK/AK", nonce, NONCE_LENGTH, quote_info,
 			signature, size, NULL);
 	if (rc != TSS2_RC_SUCCESS) {
 		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));

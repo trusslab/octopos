@@ -310,8 +310,8 @@ static int perform_remote_attestation(void)
 	char buf[MSG_LENGTH];
 	char uuid[TPM_AT_ID_LENGTH];
 	char nonce[TPM_AT_NONCE_LENGTH];
-	uint8_t *signature;
-	uint8_t *quote;
+	uint8_t *signature = NULL;
+	uint8_t *quote = NULL;
 	uint8_t *packet;
 	size_t sig_size, quote_size;
 	char success = 0;
@@ -348,6 +348,11 @@ static int perform_remote_attestation(void)
 	memcpy(uuid, buf + 1, TPM_AT_ID_LENGTH);
 	memcpy(nonce, buf + 1 + TPM_AT_ID_LENGTH, TPM_AT_NONCE_LENGTH);
 
+//	for (int i = 0; i < TPM_AT_NONCE_LENGTH; i++) {
+//		printf("%02x, ", nonce[i]);
+//	}
+//	printf("\n");
+
 	if (gapi->request_tpm_attestation_report(pcr_slots, num_pcr_slots, nonce,
 						 &signature, &sig_size, &quote,
 						 &quote_size)) {
@@ -356,25 +361,19 @@ static int perform_remote_attestation(void)
 		return -1;
 	}
 
-	packet = (uint8_t *) malloc(sig_size + quote_size + 1);
+	packet = (uint8_t *) malloc(sig_size + quote_size + 2);
 	if (!packet) { 
 		insecure_printf("Error: %s: couldn't allocate memory for "
 				"packet.\n", __func__);
 		return -1;
 	}
 	
-	packet[0] = (uint8_t) sig_size;
-	memcpy(packet + 1, signature, sig_size);
-	memcpy(packet + 1 + sig_size, quote, quote_size);
+	packet[0] = (sig_size >> 8) & 0xFF;
+	packet[1] = sig_size & 0xFF;
+	memcpy(packet + 2, signature, sig_size);
+	memcpy(packet + 2 + sig_size, quote, quote_size);
 
-	for (size_t i = 0; i < sig_size; i++) {
-		printf("%02x, ", signature[i]);
-	}
-	printf("\n");
-	printf("%s\n", quote);
-	printf("%lu\n", quote_size);
-
-	send_large_packet(packet, 1 + sig_size + quote_size);
+	send_large_packet(packet, 2 + sig_size + quote_size);
 	
 	free(packet);
 	free(quote);

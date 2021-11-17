@@ -2,7 +2,11 @@
 #include <tpm/hash.h>
 #include <tpm/queue.h>
 #include <tpm/aes.h>
-//#define ARCH_UMODE
+
+#define ARCH_UMODE
+#ifdef TPM_REMOTE
+#undef ARCH_UMODE
+#endif
 
 static uint8_t running_processor = 0;
 
@@ -48,7 +52,7 @@ int write_to_driver(uint8_t *in_buf, size_t in_size,
  * 	hash_to_byte_structure
  * 	prepare_extend
  */
-void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size)
+void print_digest(uint8_t pcr_index, const uint8_t *digest, size_t digest_size)
 {
 	printf("PCR %d: ", pcr_index);
 	for (size_t index = 0; index < digest_size; index++)
@@ -56,7 +60,7 @@ void print_digest(uint8_t pcr_index, uint8_t *digest, size_t digest_size)
 	printf("\n");
 }
 
-void print_digest_buffer(uint8_t *digest, size_t digest_size,
+void print_digest_buffer(const uint8_t *digest, size_t digest_size,
 			 char* buf, size_t buf_size)
 {
 	if (digest_size * 2 + 1 != buf_size)
@@ -143,7 +147,7 @@ int tpm_initialize(FAPI_CONTEXT **context)
 	 * Change TSS_LOG_LVL_NONE to TSS_LOG_LVL_DEBUG enables debug logs
 	 * including info and debug.
 	 */
-	setenv("TSS2_LOG", TSS_LOG_LVL_ERROR, 1);
+	setenv("TSS2_LOG", TSS_LOG_LVL_NONE, 1);
 
 	rc = Fapi_Initialize(context, NULL);
 	return_if_error(rc, "Fapi Initialization Error.");
@@ -225,18 +229,40 @@ int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 {
 	TSS2_RC rc;
 	char *certificate = NULL;
+	char *log = NULL;
 
 	/* Create attestation key (AK), if exists, ignore */
-	rc = Fapi_CreateKey(context, "/HS/SRK/AK", "sign,noDa",
-			    "", NULL);
-	return_if_error_exception(rc, "Fapi Create Initial Key Error.",
+	rc = Fapi_CreateKey(context, "HS/SRK/AK", "sign,noDa",
+			    NULL, NULL);
+	return_if_error_exception(rc, "Fapi Create Attestation Key Error.",
 				  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
 
+	for (size_t i = 0; i < pcr_list_size; i++) {
+		printf("%u ", pcr_list[i]);
+	}
+	printf("\n");
+
 	rc = Fapi_Quote(context, pcr_list, pcr_list_size,
-			"/HS/SRK/AK", "TPM-Quote", nonce,
+			"HS/SRK/AK", "TPM-Quote", nonce,
 			TPM_AT_NONCE_LENGTH, quote_info, signature,
 			signature_size, pcr_event_log, &certificate);
 	return_if_error(rc, "Quote Error.");
+
+	for (size_t i = 0; i < *signature_size; i++) {
+		printf("%02x, ", (*signature)[i]);
+	}
+	printf("\n");
+	printf("Sig Size: %lu\n", *signature_size);
+	printf("%s\n", *quote_info);
+
+	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
+			      *quote_info, *signature, *signature_size, log);
+	if (rc != TSS2_RC_SUCCESS) {
+		printf("\nVerifyQuote log: %s\n", log);
+		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
+		return rc;
+	}
+
 	return 0;
 }
 
@@ -260,7 +286,7 @@ int tpm_seal_key(FAPI_CONTEXT *context, uint8_t *data, size_t data_size)
 	char policy_name[strlen(policy_name_template) + 1];
 	char key_name[strlen(key_name_template) + 1];
 	char pcr_policy[strlen(pcr_policy_template) + TPM_EXTEND_HASH_SIZE * 2 + 1];
-	unsigned int nv_handle_base = 0x81000010;
+	unsigned int nv_handle_base = 0x81020000;
 	const char *nv_type_template = "noDa,0x%x";
 	char nv_type[strlen(nv_type_template) + 7];
 
@@ -332,8 +358,7 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected)
  * 	tpm_measure_service
  * 	tpm_processor_read_pcr
  * 	tpm_attest
- * 	tpm_encrypt
- * 	tpm_decrypt
+ * 	tpm_get_storage_key
  * 	tpm_reset_pcrs
  */
 int enforce_running_process(uint8_t processor)
@@ -374,6 +399,10 @@ int tpm_measure_service(char* path, BOOL is_path)
 	rc = tpm_set_locality(context, running_processor);
 	return_if_error_label(rc, out_measure_service);
 
+	rc = tpm_read(context, PROC_TO_PCR(running_processor),
+		      NULL, NULL, 1);
+	return_if_error_label(rc, out_measure_service);
+
 	rc = tpm_extend(context, PROC_TO_PCR(running_processor), hash_value);
 	return_if_error_label(rc, out_measure_service);
 
@@ -412,7 +441,7 @@ int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value)
 	rc = tpm_set_locality(context, running_processor);
 	return_if_error_label(rc, out_processor_read_pcr);
 
-	rc = tpm_read(context, pcr_index, pcr_value, NULL, 1);
+	rc = tpm_read(context, pcr_index, pcr_value, NULL, 0);
 	return_if_error_label(rc, out_processor_read_pcr);
 
 out_processor_read_pcr:
@@ -436,7 +465,7 @@ out_processor_read_pcr:
 #endif
 }
 
-int tpm_attest(uint8_t *nonce, const uint32_t *pcr_list,
+int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	       size_t pcr_list_size, uint8_t **signature,
 	       size_t *signature_size, char** quote_info)
 {
@@ -576,169 +605,6 @@ out_reset_pcrs:
 	return_if_error_label(rc, out_reset_pcrs);
 
 out_reset_pcrs:
-	free(request);
-	free(response);
-	return rc;
-#endif
-}
-
-
-/* Deprecated functions
- *	tpm_encrypt_direct
- *	tpm_decrypt_direct
- *	tpm_encrypt
- *	tpm_decrypt
- */
-int tpm_encrypt_direct(FAPI_CONTEXT *context, uint8_t *plain, size_t plain_size,
-		       uint8_t **cipher, size_t *cipher_size)
-{
-	TSS2_RC rc;
-	uint8_t pcr_buf[TPM_EXTEND_HASH_SIZE];
-	char pcr_str[TPM_EXTEND_HASH_SIZE*2 + 1];
-	const char* pcr_policy_template = "{"
-					  "\"description\":\"PCR POLICY\","
-					  "\"policy\":[{"
-					  "	\"type\":\"POLICYPCR\","
-					  "	\"pcrs\":[{"
-					  "		\"pcr\":%u,"
-					  "		\"hashAlg\":\"TPM2_ALG_SHA256\","
-					  "		\"digest\":\"%s\""
-					  "}]"
-					  "}]}";
-	char pcr_policy[strlen(pcr_policy_template) + TPM_EXTEND_HASH_SIZE * 2];
-
-	tpm_read(context, PROC_TO_PCR(running_processor), pcr_buf, NULL, 0);
-	print_digest_buffer(pcr_buf, TPM_EXTEND_HASH_SIZE,
-			    pcr_str, TPM_EXTEND_HASH_SIZE * 2 + 1);
-	snprintf(pcr_policy,
-		 strlen(pcr_policy_template) + TPM_EXTEND_HASH_SIZE * 2,
-		 pcr_policy_template, PROC_TO_PCR(running_processor), pcr_str);
-
-	rc = Fapi_Import(context, "/policy/seal_policy", pcr_policy);
-	return_if_error(rc, "Build policy Error.");
-
-	rc = Fapi_CreateKey(context, "/HS/SRK/sealedKey", "decrypt,0x81000004",
-			    "/policy/seal_policy", NULL);
-	return_if_error_exception(rc, "Sealed Key Creation Error.",
-				  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
-
-	rc = Fapi_Encrypt(context, "/HS/SRK/sealedKey", plain, plain_size,
-			  cipher, cipher_size);
-	return_if_error(rc, "Encryption Error.");
-
-	return 0;
-}
-
-int tpm_decrypt_direct(FAPI_CONTEXT *context, uint8_t **plain, size_t *plain_size,
-		       uint8_t *cipher, size_t cipher_size)
-{
-	TSS2_RC rc;
-
-	rc = Fapi_Decrypt(context, "/HS/SRK/sealedKey", cipher, cipher_size,
-			  plain, plain_size);
-	return_if_error(rc, "Decryption Error.");
-
-	return 0;
-}
-
-int tpm_encrypt(const uint8_t *plain, size_t plain_size,
-		uint8_t *cipher, size_t *cipher_size)
-{
-	int rc = 0;
-
-#ifdef ARCH_UMODE
-	FAPI_CONTEXT *context = NULL;
-	uint8_t *key_iv = NULL;
-	size_t key_iv_size;
-
-	rc = tpm_initialize(&context);
-	return_if_error_no_msg(rc);
-
-	rc = tpm_set_locality(context, running_processor);
-	return_if_error_label(rc, out_encrypt);
-
-	rc = tpm_unseal_key(context, &key_iv, &key_iv_size);
-	return_if_error_label(rc, out_encrypt);
-	if (key_iv_size != AES_GEN_SIZE) {
-		return -1;
-	}
-
-	rc = aes_encrypt(key_iv, plain, plain_size, cipher, cipher_size);
-	return_if_error_label(rc, out_encrypt);
-
-out_encrypt:
-	tpm_finalize(&context);
-	return rc;
-#else
-	uint8_t *request;
-	uint8_t *response;
-	size_t response_size;
-
-	request = (uint8_t *) malloc(3 + plain_size);
-	memset(request, 0, 3 + plain_size);
-	request[0] = OP_SEAL;
-	memcpy(request + 3, plain, plain_size);
-
-	rc = write_to_driver(request,3 + plain_size,
-			     &response, &response_size);
-	return_if_error_label(rc, out_encrypt);
-
-	*cipher_size = response_size - 3;
-	memcpy(cipher, response + 3, *cipher_size);
-
-out_encrypt:
-	free(request);
-	free(response);
-	return rc;
-#endif
-}
-
-int tpm_decrypt(uint8_t *plain, size_t *plain_size,
-		const uint8_t *cipher, size_t cipher_size)
-{
-	int rc = 0;
-
-#ifdef ARCH_UMODE
-	FAPI_CONTEXT *context = NULL;
-	uint8_t *key_iv = NULL;
-	size_t key_iv_size;
-
-	rc = tpm_initialize(&context);
-	return_if_error_no_msg(rc);
-
-	rc = tpm_set_locality(context, running_processor);
-	return_if_error_label(rc, out_decrypt);
-
-	rc = tpm_unseal_key(context, &key_iv, &key_iv_size);
-	return_if_error_label(rc, out_decrypt);
-	if (key_iv_size != AES_GEN_SIZE) {
-		return -1;
-	}
-
-	rc = aes_decrypt(key_iv, plain, plain_size, cipher, cipher_size);
-	return_if_error_label(rc, out_decrypt);
-
-out_decrypt:
-	tpm_finalize(&context);
-	return rc;
-#else
-	uint8_t *request;
-	uint8_t *response;
-	size_t response_size;
-
-	request = (uint8_t *) malloc(3 + cipher_size);
-	memset(request, 0, 3 + cipher_size);
-	request[0] = OP_UNSEAL;
-	memcpy(request + 3, cipher, cipher_size);
-
-	rc = write_to_driver(request,3 + cipher_size,
-			     &response, &response_size);
-	return_if_error_label(rc, out_decrypt);
-
-	*plain_size = response_size - 3;
-	memcpy(plain, response + 3, *plain_size);
-
-out_decrypt:
 	free(request);
 	free(response);
 	return rc;

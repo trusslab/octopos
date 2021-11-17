@@ -45,6 +45,15 @@ Then use the following command to build and install the library:
 
 $ make install
 
+Remote mode
+===========
+TPM module is also designed to work in remote mode. The message is generated
+and then sent to the mailbox. To enable remote mode, you need to set the
+
+-DTPM_REMOTE
+
+flag in the Makefile.
+
 Potential problems
 ==================
 Problem 1. Recipe for target 'tss' failed
