@@ -751,9 +751,9 @@ static int read_char_from_secure_keyboard(char *buf)
 
 static int inform_os_of_termination(void)
 {
-	// DEBUG
-	_SEC_HW_ERROR("OUT %08x", *((unsigned int *) 0xF1860000));
-	_SEC_HW_ERROR("IN %08x", *((unsigned int *) 0xF1840000));
+	// // DEBUG
+	// _SEC_HW_ERROR("OUT %08x", *((unsigned int *) 0xF1860000));
+	// _SEC_HW_ERROR("IN %08x", *((unsigned int *) 0xF1840000));
 
 #ifdef ARCH_SEC_HW
 	/* FIXME: Issue #26 */
@@ -875,15 +875,15 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block,
 		return 0;
 
 	uint8_t queue_id = (uint8_t) ret0;
-	// DEBUG
-	_SEC_HW_ERROR("OUT before read %08x", *((unsigned int *) 0xF1860000));
-	_SEC_HW_ERROR("IN before read %08x", *((unsigned int *) 0xF1840000));
+	// // DEBUG
+	// _SEC_HW_ERROR("OUT before read %08x", *((unsigned int *) 0xF1860000));
+	// _SEC_HW_ERROR("IN before read %08x", *((unsigned int *) 0xF1840000));
 	for (int i = 0; i < num_blocks; i++)
 		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE),
 						  queue_id);
-	// DEBUG
-	_SEC_HW_ERROR("OUT after read %08x", *((unsigned int *) 0xF1860000));
-	_SEC_HW_ERROR("IN after read %08x", *((unsigned int *) 0xF1840000));
+	// // DEBUG
+	// _SEC_HW_ERROR("OUT after read %08x", *((unsigned int *) 0xF1860000));
+	// _SEC_HW_ERROR("IN after read %08x", *((unsigned int *) 0xF1840000));
 	return num_blocks;
 }
 

@@ -121,11 +121,8 @@ void storage_event_loop(void)
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
 		OCTOPOS_XMbox_ReadBlocking(&Mbox_storage_cmd_in, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
-		printf("sel [0]\r\n");
 		process_request(buf, 0);
-		printf("sel [1]\r\n");
 		OCTOPOS_XMbox_WriteBlocking(&Mbox_storage_cmd_out, (u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
-		printf("sel [2]\r\n");
 	}
 }
 
