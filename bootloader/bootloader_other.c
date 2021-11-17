@@ -1,24 +1,39 @@
 /* OctopOS bootloader for processors other than storage and OS */
+#if !defined(ARCH_SEC_HW_BOOT) || defined(ARCH_SEC_HW_BOOT_OTHER)
 
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
+#include <semaphore.h>
+#include <arch/mailbox.h>
+#include <tpm/tpm.h>
+#else
+#include "xil_io.h"
+#include <arch/sec_hw.h>
+#include <arch/portab.h>
+#include <arch/srec_errors.h>
+#include <arch/srec.h>
+#include <arch/octopos_mbox.h>
+#include <arch/octopos_xmbox.h>
+#include "xmbox.h"
+#endif
 #include <stdint.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <sys/stat.h>
 #include <octopos/storage.h>
 #include <octopos/mailbox.h>
 #include <os/file_system.h>
 #include <os/storage.h>
-#include <tpm/tpm.h>
 #include <tpm/hash.h>
-#include <arch/mailbox.h>
 
+int need_repeat = 0, total_count = 0;
+
+#ifndef ARCH_SEC_HW_BOOT
 int fd_out, fd_in, fd_intr;
 pthread_t mailbox_thread;
 
@@ -29,8 +44,6 @@ sem_t availables[NUM_QUEUES + 1];
 int keyboard = 0, serial_out = 0, network = 0, bluetooth = 0, runtime1 = 0,
     runtime2 = 0, untrusted = 0;
 uint8_t processor = 0;
-
-int need_repeat = 0, total_count = 0;
 
 int file_copy_counter = 0;
 int reading_signature = 0;
@@ -253,6 +266,29 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 		exit(-1);
 	}
 }
+#else /* ARCH_SEC_HW_BOOT */
+
+#define P_PREVIOUS 0xff
+
+static srec_info_t srinfo;
+static uint8 sr_buf[SREC_MAX_BYTES];
+static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
+extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
+extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
+
+int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf);
+int get_srec_line(uint8 *line, uint8 *buf);
+
+/* FIXME: import headers */
+int init_runtime(int runtime_id);
+int init_keyboard(void);
+int init_serial_out(void);
+
+void prepare_bootloader(char *filename, int argc, char *argv[])
+{
+	/* no-op */
+}
+#endif /* ARCH_SEC_HW_BOOT */
 
 /*
  * @filename: the name of the file in the partition
@@ -263,10 +299,42 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
  */
 int copy_file_from_boot_partition(char *filename, char *path)
 {
+#ifndef ARCH_SEC_HW_BOOT
 	FILE *copy_filep;
-	uint8_t buf[STORAGE_BLOCK_SIZE];
-	int offset;
+#else /* ARCH_SEC_HW_BOOT */
 
+	u8 unpack_buf[1024] = {0};
+	u16 unpack_buf_head = 0;
+	int line_count;
+	void (*laddr)();
+
+	srinfo.sr_data = sr_data_buf;
+
+#ifdef ARCH_SEC_HW_BOOT_STORAGE
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_KEYBOARD)
+	init_keyboard();
+#elif defined(ARCH_SEC_HW_BOOT_SERIAL_OUT)
+	init_serial_out();
+#elif defined(ARCH_SEC_HW_BOOT_RUNTIME_1)
+	init_runtime(1);
+#elif defined(ARCH_SEC_HW_BOOT_RUNTIME_2)
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_OS)
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_NETWORK)
+	/* no-op */
+#elif defined(ARCH_SEC_HW_BOOT_LINUX)
+	/* no-op */
+#endif
+
+#endif /* ARCH_SEC_HW_BOOT */
+
+	uint8_t buf[STORAGE_BLOCK_SIZE + 1] = {0};
+	int offset = 0;
+
+/* FIXME: some code is disabled to reduce bootloader binary size */
+#ifndef ARCH_SEC_HW_BOOT
 	if (file_copy_counter) {
 		reading_signature = 1;
 	}
@@ -279,18 +347,37 @@ int copy_file_from_boot_partition(char *filename, char *path)
 		       __func__, path);
 		return -1;
 	}
+#endif /* ARCH_SEC_HW_BOOT */
 
 	offset = 0;
 repeat:
+#ifndef ARCH_SEC_HW_BOOT
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
 	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
+#else
+    /* unpack buffer is full, but still, haven't finish a line */
+    if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
+        SEC_HW_DEBUG_HANG();
+
+    /* wait for change queue access */
+    while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+    octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+
+	limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+
+	count = count / 16;
+#endif /* ARCH_SEC_HW_BOOT */
 
 	/*
 	 * When the file is very large, which is, for example, the case
 	 * for the untrusted domain kernel, the queue will need to be
 	 * delegated more than once.
 	 */ 
+#ifndef ARCH_SEC_HW_BOOT
 	if (count == MAILBOX_MAX_LIMIT_VAL)
+#else
+	if (count == MAILBOX_MAX_LIMIT_VAL / 16)
+#endif
 		need_repeat = 1;
 	else
 		need_repeat = 0;
@@ -298,23 +385,81 @@ repeat:
 	total_count += count;
 
 	for (int i = 0; i < (int) count; i++) {
+#ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
+#else
+		_sem_retrieve_mailbox_message_blocking_buf(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+#endif
 		
+#ifndef ARCH_SEC_HW_BOOT
 		fseek(copy_filep, offset, SEEK_SET);
 		/* FIXME: check the return val from fwrite */
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
+#else
+
+        /* copy into unpack buffer */
+        memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
+        unpack_buf_head += STORAGE_BLOCK_SIZE;
+
+        /* load lines until there is no complete line in unpack buffer */
+        while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
+            if (decode_srec_line(sr_buf, &srinfo) != 0)
+                SEC_HW_DEBUG_HANG();
+
+            switch (srinfo.type) {
+                case SREC_TYPE_0:
+                    break;
+                case SREC_TYPE_1:
+                case SREC_TYPE_2:
+                case SREC_TYPE_3:
+                    memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+                    break;
+                case SREC_TYPE_5:
+                    break;
+                case SREC_TYPE_7:
+                case SREC_TYPE_8:
+                case SREC_TYPE_9:
+
+                	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+
+                    laddr = (void (*)())srinfo.addr;
+
+                    /* jump to start vector of loaded program */
+                    (*laddr)();
+
+                    /* the old program is dead at this point */
+					SEC_HW_DEBUG_HANG();
+                    break;
+            }
+
+            /* after loading the line, remove the contents being loaded */
+            memcpy(&unpack_buf[0],
+                    &unpack_buf[line_count],
+                    unpack_buf_head - line_count);
+
+            unpack_buf_head -= line_count;
+            memset(&unpack_buf[unpack_buf_head], 0, line_count);
+        }
+#endif /* ARCH_SEC_HW_BOOT */
 
 		offset += STORAGE_BLOCK_SIZE;
 	}
 
+#ifdef ARCH_SEC_HW_BOOT
+	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+#endif /* ARCH_SEC_HW_BOOT */
+
 	if (need_repeat)
 		goto repeat;
 
+#ifndef ARCH_SEC_HW_BOOT
 	fclose(copy_filep);
+#endif /* ARCH_SEC_HW_BOOT */
 
 	return 0;
 }
 
+#ifndef ARCH_SEC_HW_BOOT
 void bootloader_close_file_system(void)
 {
 	/* no op */
@@ -327,3 +472,6 @@ void send_measurement_to_tpm(char *path)
 	cancel_running_process();
 	close_mailbox();
 }
+#endif /* ARCH_SEC_HW_BOOT */
+
+#endif 

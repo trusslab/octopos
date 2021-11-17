@@ -15,13 +15,15 @@
 
 #include "octopos/mailbox.h"
 
-OCTOPOS_XMbox	Mbox;
+OCTOPOS_XMbox	Mbox, Mbox_storage_data_out;
 XIntc			intc;
 uint32_t		recv_message;
 sem_t			interrupt_keyboard;
 
 cbuf_handle_t	cbuf_serial_in;
 
+OCTOPOS_XMbox*	Mbox_regs[NUM_QUEUES + 1];
+UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1] = {0};
 
 uint8_t read_char_from_keyboard(void)
 {
@@ -65,7 +67,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 int init_keyboard(void)
 {
 	int				Status;
-	OCTOPOS_XMbox_Config*	ConfigPtr;
+	OCTOPOS_XMbox_Config *ConfigPtr, *Config_storage_data_out;
 
 	init_platform();
 
@@ -79,6 +81,9 @@ int init_keyboard(void)
 	OCTOPOS_XMbox_SetSendThreshold(&Mbox, 0);
 	OCTOPOS_XMbox_SetInterruptEnable(&Mbox, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
+	Mbox_regs[Q_KEYBOARD] = &Mbox;
+
+#ifndef ARCH_SEC_HW_BOOT
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();
 
@@ -105,6 +110,23 @@ int init_keyboard(void)
 		_SEC_HW_ERROR("XIntc_Start failed");
 		return XST_FAILURE;
 	}
+#else
+	Config_storage_data_out = OCTOPOS_XMbox_LookupConfig(XPAR_KEYBOARD_STORAGE_DATA_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_data_out,
+		Config_storage_data_out, 
+		Config_storage_data_out->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_KEYBOARD_STORAGE_DATA_OUT_DEVICE_ID);
+		return XST_FAILURE;
+	}
+
+//	/* it doesn't matter because we are not using interrupt for booting */
+//	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_MAX_COMMAND_SIZE);
+//	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+
+	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_SERIAL_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
+#endif
 
 	setvbuf(stdin, NULL, _IONBF, 0);
 

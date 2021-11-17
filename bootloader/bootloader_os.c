@@ -1,21 +1,30 @@
 /* OctopOS bootloader for OS */
+#if !defined(ARCH_SEC_HW_BOOT) || defined(ARCH_SEC_HW_BOOT_OS)
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
-#include <stdint.h>
-#include <unistd.h>
 #include <semaphore.h>
+#include <unistd.h>
+#include <tpm/tpm.h>
+#else
+#include "xil_printf.h"
+#include "arch/sec_hw.h"
+#include "sleep.h"
+#include "xstatus.h"
+#endif
+#include <stdint.h>
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <os/file_system.h>
 #include <os/storage.h>
-#include <tpm/tpm.h>
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 
+#ifndef ARCH_SEC_HW_BOOT
 extern int fd_out;
 extern sem_t interrupts[];
 
@@ -95,3 +104,29 @@ void send_measurement_to_tpm(char *path)
 	cancel_running_process();
 	close_os_mailbox();
 }
+#else
+void os_request_boot_image_by_line(char *filename, char *path);
+
+void prepare_bootloader(char *filename, int argc, char *argv[])
+{
+	int ret = init_os_mailbox();
+	if (ret)
+		SEC_HW_DEBUG_HANG();
+
+	// FIXME: is there a better way to wait for storage boot?
+	sleep(2);
+
+	initialize_storage();
+
+	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
+}
+
+int copy_file_from_boot_partition(char *filename, char *path)
+{
+	os_request_boot_image_by_line(filename, path);
+	return 0;
+}
+
+#endif /* ARCH_SEC_HW_BOOT */
+
+#endif

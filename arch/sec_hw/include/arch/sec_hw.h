@@ -24,9 +24,36 @@ void init_platform();
 void cleanup_platform();
 
 #define printf 	xil_printf
+#if !defined(PROJ_CPP)
 #define true    1
 #define false   0
 #define bool    _Bool
+#endif
+
+#define QSPI_SECTOR_SIZE 128 * 1024
+
+/* image size measured in bytes. it must be a multiple of 512. 
+ * its okay to be bigger than actual size (ceiling to the next multiple of 512).
+ */
+#define MAX_ALLOWED_IMAGE_SIZE_IN_SECTOR 4
+#define UNTRUSTED_IMAGE_SIZE_IN_SECTOR 140
+#define STORAGE_IMAGE_SIZE 274432
+#define OS_IMAGE_SIZE 457728
+#define RUNTIME1_IMAGE_SIZE 464896
+#define KEYBOARD_IMAGE_SIZE 325120
+#define SERIALOUT_IMAGE_SIZE 320512
+#define UNTRUSTED_KERNEL_SIZE 18057216
+
+#define P_UNTRUSTED_BOOT_P0 100
+#define P_UNTRUSTED_BOOT_P1 101
+#define UNTRUSTED_KERNEL_P0_SIZE 13107200
+#define UNTRUSTED_KERNEL_P1_SIZE 4950016
+
+/* boot images store at this sector and beyond */
+#define BOOT_IMAGE_OFFSET 100
+
+/* special op code for boot image request */
+#define STORAGE_OP_BOOT_REQ 0xf
 
 /* This symbol is for debug only. It forces all mailbox to
  * wait on the queue until all expected bytes are delivered.

@@ -10,15 +10,20 @@
 #include <os/file_system.h>
 #include <os/syscall.h>
 #include <os/storage.h>
-#ifndef ARCH_SEC_HW
 #include <os/boot.h>
-#endif
-#include <tpm/tpm.h>
 #include <arch/mailbox_os.h>
 #ifndef ARCH_SEC_HW
+#include <tpm/tpm.h>
 #include <arch/pmu.h>
 #endif
 #include <arch/defines.h>
+
+/* Need to make sure msgs are big enough so that we don't overflow
+ * when processing incoming msgs and preparing outgoing ones.
+ */
+#if MAILBOX_QUEUE_MSG_SIZE < 64
+#error MAILBOX_QUEUE_MSG_SIZE is too small.
+#endif
 
 static void distribute_input(void)
 {
@@ -46,29 +51,19 @@ static void distribute_input(void)
 	}
 }
 
+#if (defined(ARCH_SEC_HW) && !defined(ARCH_SEC_HW_BOOT)) || !defined(ARCH_SEC_HW)
 int main()
 {
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s: OS init\n", __func__);
-
-	/* Need to make sure msgs are big enough so that we don't overflow
-	 * when processing incoming msgs and preparing outgoing ones.
-	 */
-	/* FIXME: find the smallest bound. 64 is conservative. */
-	if (MAILBOX_QUEUE_MSG_SIZE < 64) {
-		printf("Error: %s: MAILBOX_QUEUE_MSG_SIZE is too small (%d).\n",
-		       __func__, MAILBOX_QUEUE_MSG_SIZE);
-		return -1;
-	}
+	printf("%s: OS init\r\n", __func__);
 
 	int ret = init_os_mailbox();
 	if (ret)
 		return ret;
 
-	enforce_running_process(P_OS);
-
 #ifndef ARCH_SEC_HW
+	enforce_running_process(P_OS);
 	connect_to_pmu();
 #endif
 
@@ -78,12 +73,9 @@ int main()
 	initialize_file_system(partition_size);
 #endif
 
-#ifndef ARCH_SEC_HW
 	help_boot_procs(1);
-#endif
 
 	initialize_shell();
-
 	initialize_scheduler();
 
 	while (1) {
@@ -94,3 +86,5 @@ int main()
 
 	return 0;
 }
+
+#endif

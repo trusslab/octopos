@@ -1,3 +1,5 @@
+#ifndef ARCH_SEC_HW
+
 #ifndef TPM_H_
 #define TPM_H_
 
@@ -125,4 +127,6 @@ int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	       size_t *signature_size, char** quote_info);
 int tpm_get_storage_key(uint8_t **key_iv);
 int tpm_reset_pcrs(const uint32_t *pcr_list, size_t pcr_list_size);
+#endif
+
 #endif
