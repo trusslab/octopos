@@ -41,7 +41,31 @@ void app_main(struct runtime_api *api)
 void fs_test(struct runtime_api *api)
 #endif
 {
+	uint8_t block[STORAGE_BLOCK_SIZE * 31];
+	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
+	if (fd1 == 0) {
+		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
+		return;
+	}
+	
+	/* BENCHMARK: write to flash */
+	memset(block, 0xFE, STORAGE_BLOCK_SIZE * 31);
+	insecure_printf("Enter Write test");
+	global_counter = 0;
+	for (int i = 0; i < 65; i++) {
+		api->write_file_blocks(fd1, block, 0, 31);
+	}
+	insecure_printf("Write takes %lld", global_counter);
 
+	/* BENCHMARK: read from flash */
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * 31);
+	global_counter = 0;
+	for (int i = 0; i < 65; i++) {
+		api->read_file_blocks(fd1, block, 0, 31);
+	}
+	insecure_printf("Read takes %lld", global_counter);
+
+#ifdef MEASURE_STORAGE_ROUNDTRIP
 	int ret;
 	uint8_t block[STORAGE_BLOCK_SIZE];
 	memset(block, 0xfe, STORAGE_BLOCK_SIZE);
@@ -80,6 +104,7 @@ void fs_test(struct runtime_api *api)
 
 	insecure_printf("Read takes %lld", global_counter);
 	api->delete_and_yield_secure_storage();
+#endif
 
 //	uint32_t data = 0;
 //	int index = 0;

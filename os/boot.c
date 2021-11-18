@@ -113,8 +113,8 @@ void help_boot_procs(int boot_untrusted)
 	help_boot_runtime_proc(P_RUNTIME1);
 	help_boot_runtime_proc(P_RUNTIME2);
 	// DEBUG
-	if (boot_untrusted)
-		help_boot_untrusted_proc();
+	// if (boot_untrusted)
+	// 	help_boot_untrusted_proc();
 }
 
 int reset_proc(uint8_t proc_id)

@@ -77,6 +77,8 @@ UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 /* FIXME: this is not necessary. bl shouldn't use this global varible */
 _Bool			MBOX_PENDING_STA[NUM_QUEUES + 1] = {0};
 
+uint8_t syscall_buf[MAILBOX_QUEUE_MSG_SIZE];
+
 _Bool			runtime_inited;
 _Bool			runtime_terminated;
 _Bool			need_to_store_context;
@@ -397,31 +399,26 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	if(ret == 0) {
 		_SEC_HW_DEBUG("TCP Packet received");
 	}
-	// FIXME this calloc and free in most cases is a waste
-	uint8_t* buf = (uint8_t*) calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
-	bytes_read = sem_wait_one_time_receive_buf(&runtime_wakeup, Mbox_regs[q_runtime], buf);
-	if (bytes_read == 0) {
-		free(buf);
+	bytes_read = sem_wait_one_time_receive_buf(&runtime_wakeup, Mbox_regs[q_runtime], syscall_buf);
+	if (bytes_read == 0)
 		return;
-	}
 	
-	if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
+	if (syscall_buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG");
-		write_syscall_response(buf);
+		write_syscall_response(syscall_buf);
 		sem_post(&syscall_wakeup);
-	} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
+	} else if (syscall_buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_EXEC_APP_TAG");
-		memcpy(load_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
+		memcpy(load_buf, &syscall_buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
 		sem_post(&load_app_sem);
-	} else if (buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
+	} else if (syscall_buf[0] == RUNTIME_QUEUE_CONTEXT_SWITCH_TAG) {
 		_SEC_HW_DEBUG("RUNTIME_QUEUE_CONTEXT_SWITCH_TAG");
 		need_to_store_context = TRUE;
 		close_runtime();
 	} else {
-		_SEC_HW_ERROR("received invalid message (%d)", buf[0]);
+		_SEC_HW_ERROR("received invalid message (%d)", syscall_buf[0]);
 	}
-	free(buf);
 }
 
 static void handle_octopos_mailbox_interrupts(void* callback_ref)

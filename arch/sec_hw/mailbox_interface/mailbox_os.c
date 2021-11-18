@@ -312,10 +312,10 @@ int check_avail_and_send_msg_to_runtime(uint8_t runtime_proc_id, uint8_t *buf)
 		return ERR_INVALID;
 	}
 
-	int ret = is_queue_available(runtime_queue_id);
-	if (!ret) {
-		return ERR_AVAILABLE;
-	}
+	 int ret = is_queue_available(runtime_queue_id);
+	 if (!ret) {
+	 	return ERR_AVAILABLE;
+	 }
 
 	_SEC_HW_DEBUG("%02X %02X %02X %02X %02X %02X %02X %02X",
 			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
