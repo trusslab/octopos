@@ -73,7 +73,7 @@ void fs_test(struct runtime_api *api)
 
 	insecure_printf("Enter Read test");
 	global_counter = 0;
-	for (int i = 0; i < 20; i++) {
+	for (int i = 0; i < 31; i++) {
 		ret = api->read_from_secure_storage_block(block, 0, 0, 512);
 		// _SEC_HW_ERROR("Read %d (%d, %02x): %lld (%08x)(%08x)(%08x)(%08x)", i, ret, block[0], global_counter, Xil_In32(0xf1840000), Xil_In32(0xf1860000), Xil_In32(0xf1880000), Xil_In32(0xf1890000));
 	}
