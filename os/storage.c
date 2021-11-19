@@ -207,10 +207,10 @@ void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
 
-	ret = is_queue_available(Q_STORAGE_DATA_IN);
-	if (!ret) {
-		wait_for_queue_availability(Q_STORAGE_DATA_IN);
-	}
+//	ret = is_queue_available(Q_STORAGE_DATA_IN);
+//	if (!ret) {
+//		wait_for_queue_availability(Q_STORAGE_DATA_IN);
+//	}
 
 	ret = is_queue_available(Q_STORAGE_DATA_OUT);
 	if (!ret) {

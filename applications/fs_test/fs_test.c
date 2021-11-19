@@ -45,6 +45,7 @@ void app_main(struct runtime_api *api)
 void fs_test(struct runtime_api *api)
 #endif
 {
+#ifdef MEASURE_STORAGE_THROUGH_OS
 	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
 	if (fd1 == 0) {
 		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
@@ -61,13 +62,13 @@ void fs_test(struct runtime_api *api)
 		memset(block, 0xFE, STORAGE_BLOCK_SIZE * 25);
 		block[99] = i;
 		global_counter = 0;
-		api->write_file_blocks(fd1, block, 0, 25);
+		api->write_file_blocks(fd1, block, i, 25);
 		total_write += global_counter;
 
 		memset(block, 0x0, STORAGE_BLOCK_SIZE * 25);
 
 		global_counter = 0;
-		api->read_file_blocks(fd1, block, 0, 25);
+		api->read_file_blocks(fd1, block, i, 25);
 		total_read += global_counter;
 //		// <<<
 //		 mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
@@ -91,6 +92,11 @@ void fs_test(struct runtime_api *api)
 
 	api->close_file(fd1);
 	api->remove_file((char *) "test_file_1.txt");
+
+#endif
+
+	
+#define MEASURE_STORAGE_ROUNDTRIP
 #ifdef MEASURE_STORAGE_ROUNDTRIP
 	int ret;
 	uint8_t block[STORAGE_BLOCK_SIZE];
