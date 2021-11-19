@@ -34,7 +34,7 @@ extern long long global_counter;
 long long global_counter;
 #endif
 
-uint8_t block[STORAGE_BLOCK_SIZE * 25];
+uint8_t block[STORAGE_BLOCK_SIZE * 31];
 
 void mailbox_yield_to_previous_owner(uint8_t queue_id);
 
@@ -95,15 +95,18 @@ void fs_test(struct runtime_api *api)
 
 #endif
 
-	
+
 #define MEASURE_STORAGE_ROUNDTRIP
 #ifdef MEASURE_STORAGE_ROUNDTRIP
 	int ret;
-	uint8_t block[STORAGE_BLOCK_SIZE];
-	memset(block, 0xfe, STORAGE_BLOCK_SIZE);
+	// uint8_t block[STORAGE_BLOCK_SIZE];
+	memset(block, 0xf0, STORAGE_BLOCK_SIZE * 31);
 
 	insecure_printf("Benchmark start.");
 
+for (int ii = 0; ii < 65; ii++) {
+	insecure_printf("Enter Request test");
+	global_counter = 0;
 	ret = api->request_secure_storage_access(100, MAILBOX_MAX_LIMIT_VAL,
 						MAILBOX_MAX_LIMIT_VAL,
 						 NULL, NULL, NULL);
@@ -113,29 +116,25 @@ void fs_test(struct runtime_api *api)
 				"storage.\n");
 		return;
 	}
+	insecure_printf("Request (%d) takes %lld", ret, global_counter);
 
 	/* BENCHMARK: write to flash */
 	insecure_printf("Enter Write test");
 	global_counter = 0;
-	for (int i = 0; i < 31; i++) {
-		api->write_to_secure_storage_block((uint8_t *) block, 0, 0, 512);
-		// _SEC_HW_ERROR("Write %d: %lld (%08x)(%08x)(%08x)(%08x)", i, global_counter, Xil_In32(0xf1840000), Xil_In32(0xf1860000), Xil_In32(0xf1880000), Xil_In32(0xf1890000));
-	}
+	ret = api->write_secure_storage_blocks(block, 0, 31);
 
-	insecure_printf("Write takes %lld", global_counter);
+	insecure_printf("Write (%d) takes %lld", ret, global_counter);
 
 	/* BENCHMARK: read from flash */
-	memset(block, 0x0, STORAGE_BLOCK_SIZE);
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * 31);
 
 	insecure_printf("Enter Read test");
 	global_counter = 0;
-	for (int i = 0; i < 31; i++) {
-		ret = api->read_from_secure_storage_block(block, 0, 0, 512);
-		// _SEC_HW_ERROR("Read %d (%d, %02x): %lld (%08x)(%08x)(%08x)(%08x)", i, ret, block[0], global_counter, Xil_In32(0xf1840000), Xil_In32(0xf1860000), Xil_In32(0xf1880000), Xil_In32(0xf1890000));
-	}
+	ret = api->read_secure_storage_blocks(block, 0, 31);
 
-	insecure_printf("Read takes %lld", global_counter);
+	insecure_printf("Read (%d) takes %lld", ret, global_counter);
 	api->delete_and_yield_secure_storage();
+}
 #endif
 
 //	uint32_t data = 0;

@@ -600,8 +600,10 @@ int delete_and_yield_secure_storage(void)
 	secure_storage_created = false;
 	has_access_to_secure_storage = false;
 
-	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
-	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	// FIXME: sechw Q_STORAGE_DATA_IN is not delivering interrupt.
+	// Same issue causes another bug in OS storage.
+//	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+//	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
