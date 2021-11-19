@@ -851,12 +851,12 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 		printf("Error: %s: num_blocks is too large\n", __func__);
 		return 0;
 	}*/
-	ret = wait_for_storage_for_os_use();
-	if (ret) {
-		printf("Error: %s: couldn't get proper access to the storage "
-		       "service.\n", __func__);
-		return 0;
-	}
+	 ret = wait_for_storage_for_os_use();
+	 if (ret) {
+	 	printf("Error: %s: couldn't get proper access to the storage "
+	 	       "service.\n", __func__);
+	 	return 0;
+	 }
 
 repeat:
 #ifdef ARCH_SEC_HW

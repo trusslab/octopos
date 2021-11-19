@@ -34,6 +34,10 @@ extern long long global_counter;
 long long global_counter;
 #endif
 
+uint8_t block[STORAGE_BLOCK_SIZE * 25];
+
+void mailbox_yield_to_previous_owner(uint8_t queue_id);
+
 #ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
@@ -41,30 +45,52 @@ void app_main(struct runtime_api *api)
 void fs_test(struct runtime_api *api)
 #endif
 {
-	uint8_t block[STORAGE_BLOCK_SIZE * 31];
 	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
 	if (fd1 == 0) {
 		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
 		return;
 	}
-	
+
+	long long total_read = 0;
+	long long total_write = 0;
+
 	/* BENCHMARK: write to flash */
-	memset(block, 0xFE, STORAGE_BLOCK_SIZE * 31);
-	insecure_printf("Enter Write test");
-	global_counter = 0;
-	for (int i = 0; i < 65; i++) {
-		api->write_file_blocks(fd1, block, 0, 31);
+	insecure_printf("Enter test.");
+	for (int j = 0; j < 10; j++) {
+	for (int i = 0; i < 80; i++) {
+		memset(block, 0xFE, STORAGE_BLOCK_SIZE * 25);
+		block[99] = i;
+		global_counter = 0;
+		api->write_file_blocks(fd1, block, 0, 25);
+		total_write += global_counter;
+
+		memset(block, 0x0, STORAGE_BLOCK_SIZE * 25);
+
+		global_counter = 0;
+		api->read_file_blocks(fd1, block, 0, 25);
+		total_read += global_counter;
+//		// <<<
+//		 mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+		insecure_printf("%d-%d: w %lld r %lld (%02x, %02x)", j, i, total_write, total_read, block[99], block[199]);
+
+		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
 	}
-	insecure_printf("Write takes %lld", global_counter);
+	insecure_printf("Write takes %lld", total_write);
 
 	/* BENCHMARK: read from flash */
-	memset(block, 0x0, STORAGE_BLOCK_SIZE * 31);
-	global_counter = 0;
-	for (int i = 0; i < 65; i++) {
-		api->read_file_blocks(fd1, block, 0, 31);
+//	memset(block, 0x0, STORAGE_BLOCK_SIZE * 25);
+//	global_counter = 0;
+//	for (int i = 0; i < 65; i++) {
+//		api->read_file_blocks(fd1, block, 0, 25);
+//		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+////		insecure_printf("Read %i: %lld", i, global_counter);
+//	}
+	insecure_printf("Read takes %lld", total_read);
 	}
-	insecure_printf("Read takes %lld", global_counter);
 
+	api->close_file(fd1);
+	api->remove_file((char *) "test_file_1.txt");
 #ifdef MEASURE_STORAGE_ROUNDTRIP
 	int ret;
 	uint8_t block[STORAGE_BLOCK_SIZE];
@@ -123,14 +149,14 @@ void fs_test(struct runtime_api *api)
 // 		insecure_printf("Couldn't open second file (fd2 = %d)\n", fd2);
 // 		return;
 // 	}
-
+//
 // 	data = 13;
 // 	api->write_to_file(fd1, (uint8_t *) &data, 4, 0);
 // 	api->write_to_file(fd1, (uint8_t *) &data, 4, 4);
 // 	data = 15;
 // 	api->write_to_file(fd2, (uint8_t *) &data, 4, 0);
 // 	api->write_to_file(fd2, (uint8_t *) &data, 4, 4);
-
+//
 // 	api->read_from_file(fd1, (uint8_t *) &data, 4, 4);
 // 	insecure_printf("data (first file) = %d\n", data);
 // 	if (data != 13) {
@@ -143,7 +169,7 @@ void fs_test(struct runtime_api *api)
 // 		insecure_printf("Test 1 (2) failed\n");
 // 		goto out;
 // 	}
-
+//
 // 	insecure_printf("Test 1 passed.\n");
 // 	insecure_printf("Test 2\n");
 // #ifndef ARCH_SEC_HW
@@ -152,12 +178,12 @@ void fs_test(struct runtime_api *api)
 // 	uint8_t block[STORAGE_BLOCK_SIZE * 2];
 // #endif
 // 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
-
+//
 // 	block[10] = 14;
 // 	// // DEBUG
 // 	// for (int j = 15; j<300; j++)
 // 	// 	block[j] = j % 255;
-
+//
 // 	api->write_file_blocks(fd2, block, 0, 1);
 // 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 // 	api->read_file_blocks(fd2, block, 0, 1);
@@ -167,14 +193,14 @@ void fs_test(struct runtime_api *api)
 // 		goto out;
 // 	}
 // 	insecure_printf("Test 2 passed.\n");
-
-// /* sec_hw skip this test because 
-//  * block[STORAGE_BLOCK_SIZE * 100] is way too large 
+//
+// /* sec_hw skip this test because
+//  * block[STORAGE_BLOCK_SIZE * 100] is way too large
 //  */
 // #ifndef ARCH_SEC_HW
 // 	insecure_printf("Test 3\n");
 // 	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
-
+//
 // 	index = (99 * STORAGE_BLOCK_SIZE) + 10;
 // 	block[index] = 12;
 // 	api->write_file_blocks(fd2, block, 1, 100);
@@ -187,10 +213,10 @@ void fs_test(struct runtime_api *api)
 // 	}
 // 	insecure_printf("Test 3 passed.\n");
 // #endif
-
+//
 //out:
 //	api->close_file(fd1);
-//	api->remove_file((char *) "benchmark.txt");
-//	 api->close_file(fd2);
-//	 api->remove_file((char *) "test_file_2.txt");
+//	api->remove_file((char *) "test_file_1.txt");
+//	api->close_file(fd2);
+//	api->remove_file((char *) "test_file_2.txt");
 }
