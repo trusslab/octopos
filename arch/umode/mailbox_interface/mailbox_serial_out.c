@@ -9,11 +9,13 @@
 #include <semaphore.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <tpm/tpm.h>
 #include <arch/mailbox.h>
 
 int fd_out, fd_in, fd_intr;
 sem_t interrupt_serial_out;
 pthread_t mailbox_thread;
+int first_message = 1;
 
 static void *handle_mailbox_interrupts(void *data)
 {
@@ -24,7 +26,8 @@ static void *handle_mailbox_interrupts(void *data)
 		if (interrupt == Q_SERIAL_OUT) {
 			sem_post(&interrupt_serial_out);
 		} else {
-			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
+			printf("Error: interrupt from an invalid queue (%d)\n",
+			       interrupt);
 			exit(-1);
 		}
 	}
@@ -38,6 +41,15 @@ void get_chars_from_serial_out_queue(uint8_t *buf)
 	opcode[1] = Q_SERIAL_OUT;
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	sem_wait(&interrupt_serial_out);
+
+	/* This will allow a client domain verify whether this domain is
+	 * freshly reset or not */
+	if (first_message) {
+		enforce_running_process(P_SERIAL_OUT);
+		tpm_extend_null();
+		first_message = 0;
+	}
+
 	write(fd_out, opcode, 2), 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
@@ -60,7 +72,8 @@ int init_serial_out(void)
 	
 	sem_init(&interrupt_serial_out, 0, 0);
 
-	int ret = pthread_create(&mailbox_thread, NULL, handle_mailbox_interrupts, NULL);
+	int ret = pthread_create(&mailbox_thread, NULL,
+				 handle_mailbox_interrupts, NULL);
 	if (ret) {
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;

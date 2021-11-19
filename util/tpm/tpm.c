@@ -210,6 +210,7 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected)
  *   tpm_processor_read_pcr
  *   tpm_attest
  *   tpm_reset_pcrs
+ *   tpm_extend_null
  */
 int enforce_running_process(uint8_t processor)
 {
@@ -313,4 +314,27 @@ int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size)
 	
 	tpm_finalize(&context);
 	return rc; 
+}
+
+int tpm_extend_null(void)
+{
+	int rc = 0;
+	FAPI_CONTEXT *context = NULL;
+	uint8_t null_value[TPM_EXTEND_HASH_SIZE] = {0};
+
+	rc = tpm_initialize(&context);
+	return_if_error_label(rc, out_extend_null);
+
+	rc = tpm_set_locality(context, running_processor);
+	return_if_error_label(rc, out_extend_null);
+	
+	rc = tpm_extend(context, PROC_TO_PCR(running_processor), null_value);
+	return_if_error_label(rc, out_extend_null);
+	
+	rc = tpm_read(context, PROC_TO_PCR(running_processor), NULL, NULL, 1);
+	return_if_error_label(rc, out_extend_null);
+
+out_extend_null:
+	tpm_finalize(&context);
+	return rc;
 }

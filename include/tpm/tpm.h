@@ -89,6 +89,7 @@ int hash_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *
 int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value);
 
 /* Wrapper of FAPI and ESAPI */
+/* FIXME: move to a different header file? */
 int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor);
 int tpm_initialize(FAPI_CONTEXT **context);
 void tpm_finalize(FAPI_CONTEXT **context);
@@ -110,6 +111,7 @@ int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
 	       size_t pcr_list_size, uint8_t **signature,
 	       size_t *signature_size, char** quote_info);
 int tpm_reset_pcrs(uint32_t *pcr_list, size_t pcr_list_size);
+int tpm_extend_null(void);
 #endif
 
 #endif

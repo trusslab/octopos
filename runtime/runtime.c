@@ -461,6 +461,7 @@ int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 	uint8_t pcr_val[TPM_EXTEND_HASH_SIZE];
 	int ret;
 
+again:
 	ret = read_tpm_pcr_for_proc(proc_id, pcr_val);
 	if (ret) {
 		printf("Error: %s: read_tpm_pcr_for_proc failed\n", __func__);
@@ -469,6 +470,15 @@ int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 
 	ret = memcmp(pcr_val, expected_pcr, TPM_EXTEND_HASH_SIZE);
 	if (ret) {
+		uint8_t null_val[TPM_EXTEND_HASH_SIZE] = {0};
+		ret = memcmp(pcr_val, null_val, TPM_EXTEND_HASH_SIZE);
+		if (!ret) {
+			/* The domain is still booting. Let's try again. */
+			/* FIXME: should we wait a bit in order not to flood
+			 * the TPM with read requests? */
+			goto again;
+		}
+
 		printf("Error: %s: pcr val doesn't match the expected val\n",
 		       __func__);
 		return ERR_UNEXPECTED;
