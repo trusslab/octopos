@@ -405,7 +405,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	 */
 	for (i = 1; i < num_partitions; i++) {
 		if (!memcmp(app_key, partitions[i].key, TPM_EXTEND_HASH_SIZE)) {
-			printf("created %d\r\n", app->sec_partition_id);
+			// printf("created %d\r\n", app->sec_partition_id);
 			app->sec_partition_id = i;
 			app->sec_partition_created = true;
 			SYSCALL_SET_TWO_RETS(0, i)
