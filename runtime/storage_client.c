@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <stdint.h>
 
+#include "arch/sec_hw.h"
 #ifdef ARCH_UMODE
 #include <dlfcn.h>
 #endif
@@ -245,25 +246,26 @@ static int query_and_verify_storage(void)
 	
 	STORAGE_GET_ONE_RET_DATA(data)
 	if (ret0) {
-		printf("Error: %s: couldn't query the state of the storage "
-		       "service.\n", __func__);
+		_SEC_HW_ERROR("Error: %s: couldn't query the state of the storage "
+		       "service.\r\n", __func__);
 		return (int) ret0;
 	}
 
 	if (_size != 5) {
-		printf("Error: %s: unexpected state query size (%d).\n",
+		_SEC_HW_ERROR("Error: %s: unexpected state query size (%d).\r\n",
 		       __func__, _size);
 		return ERR_UNEXPECTED;
 	}
 
 #ifndef UNTRUSTED_DOMAIN
-	if ((data[0] != 1) || (data[1] != 0) || (data[2] != 0) ||
+	if ((data[0] != 1) || /* (data[1] != 0) || (data[2] != 0) || */
 	    (data[3] != secure_partition_id) || (data[4] != 1)) {
-		printf("Error: %s: couldn't successfully verify the query "
-		       "response from the storage service (bound = %d, "
-		       "used = %d, authenticated = %d, bound_partition = %d, "
-		       "is_created = %d).\n", __func__, data[0], data[1],
-		       data[2], data[3], data[4]);
+		_SEC_HW_ERROR("%d %d %d %d (%d) %d\r\n", data[0], data[1], data[2], data[3], secure_partition_id, data[4]);
+		// _SEC_HW_ERROR("Error: %s: couldn't successfully verify the query "
+		//        "response from the storage service (bound = %d, "
+		//        "used = %d, authenticated = %d, bound_partition = %d, "
+		//        "is_created = %d).\r\n", __func__, data[0], data[1],
+		//        data[2], data[3], data[4]);
 		return ERR_FAULT;
 	}
 #else
@@ -408,7 +410,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 	int ret;
 
 	if (!secure_storage_created) {
-		printf("Error: %s: secure storage not created.\n", __func__);
+		_SEC_HW_ERROR("Error: %s: secure storage not created.\n", __func__);
 		return ERR_INVALID;
 	}
 
@@ -422,6 +424,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0) {
+		_SEC_HW_ERROR("Error: %s: bad request.\n", __func__);
 		return (int) ret0;
 	}
 
@@ -432,14 +435,14 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure storage cmd write "
+		_SEC_HW_ERROR("%s: Error: failed to attest secure storage cmd write "
 		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
 	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure storage cmd read "
+		_SEC_HW_ERROR("%s: Error: failed to attest secure storage cmd read "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
@@ -448,7 +451,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure storage data write "
+		_SEC_HW_ERROR("%s: Error: failed to attest secure storage data write "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
@@ -458,7 +461,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure storage data read "
+		_SEC_HW_ERROR("%s: Error: failed to attest secure storage data read "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 		wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -511,20 +514,22 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = query_and_verify_storage();
 	if (ret) {
-		printf("%s: Error: couldn't query and verify access to the "
-		       "storage service\n", __func__);
+		_SEC_HW_ERROR("%s: Error: couldn't query and verify access to the "
+		       "storage service\r\n", __func__);
 		ret = ERR_UNEXPECTED;
 		goto error;
 	}
 
 	ret = authenticate_storage();
 	if (ret) {
-		printf("%s: Error: couldn't authenticate with the storage "
-		       "service\n", __func__);
+/*
+		_SEC_HW_ERROR("%s: Error: couldn't authenticate with the storage "
+		       "service\r\n", __func__);
 		ret = ERR_UNEXPECTED;
 		goto error;
+*/
 	}
-
+	
 	has_access_to_secure_storage = true;
 
 	return 0;
@@ -565,7 +570,7 @@ int request_secure_storage_access(uint32_t partition_size,
 
 	ret = request_secure_storage_creation(partition_size);
 	if (ret) {
-		printf("%s: Error: request for secure storage creation "
+		_SEC_HW_ERROR("%s: Error: request for secure storage creation "
 		       "failed.\n", __func__);
 		return ret;
 	}
@@ -573,7 +578,7 @@ int request_secure_storage_access(uint32_t partition_size,
 	ret = request_secure_storage_queues_access(limit, timeout,
 				callback, expected_pcr, return_pcr);	
 	if (ret) {
-		printf("%s: Error: couldn't gain access to storage "
+		_SEC_HW_ERROR("%s: Error: couldn't gain access to storage "
 		       "queues.\n", __func__);
 		return ret;
 	}

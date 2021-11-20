@@ -219,6 +219,8 @@ void wait_for_storage(void)
 }
 #endif
 
+extern long long global_counter;
+
 int wait_for_storage_for_os_use(void)
 {
 	int ret;
@@ -255,6 +257,7 @@ int wait_for_storage_for_os_use(void)
 				return ERR_UNEXPECTED;
 			}
 
+			global_counter = 0;
 			wait_for_storage();
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
@@ -267,6 +270,7 @@ int wait_for_storage_for_os_use(void)
 			STORAGE_REBOOT_WAIT;
 #endif
 			storage_status = OS_ACCESS;
+			printf("RESET (OS USE) %lld\r\n", global_counter);
 			
 			ret = bind_partition(boot_partition->partition_id);
 			if (ret) {
@@ -381,6 +385,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 
 	/* Let's see if the app already has a partition. */
 	if (app->sec_partition_created) {
+		// printf("already %d\r\n", app->sec_partition_id);
 		SYSCALL_SET_TWO_RETS(0, app->sec_partition_id)
 		return;
 	}
@@ -400,7 +405,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	 */
 	for (i = 1; i < num_partitions; i++) {
 		if (!memcmp(app_key, partitions[i].key, TPM_EXTEND_HASH_SIZE)) {
-			printf("Note: created[3]\r\n");
+			printf("created %d\r\n", app->sec_partition_id);
 			app->sec_partition_id = i;
 			app->sec_partition_created = true;
 			SYSCALL_SET_TWO_RETS(0, i)
@@ -409,6 +414,8 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	}
 
 	if (storage_status != OS_ACCESS) {
+		// printf("ACCESS %d\r\n", storage_status);
+		global_counter = 0;
 		if (storage_status == OS_USE) {
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
@@ -432,6 +439,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 #ifdef ARCH_SEC_HW
 		STORAGE_REBOOT_WAIT;
 #endif
+		printf("RESET (CREATION) %lld\r\n", global_counter);
 	}
 
 	ret = storage_create_secure_partition(app_key, runtime_proc_id,
@@ -509,6 +517,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	if ((storage_status == APP_ACCESS) &&
 	    (current_app_with_storage_access == app)) {
+#ifndef ARCH_SEC_HW
 		if (is_queue_available(Q_STORAGE_CMD_IN) &&
 		    is_queue_available(Q_STORAGE_CMD_OUT) &&
 		    is_queue_available(Q_STORAGE_DATA_IN) &&
@@ -534,10 +543,15 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			return;
 		}
+#else
+		no_reset = 1;
+#endif
 	}
 
 	// printf("Note[11]\r\n");
 	if ((storage_status != OS_ACCESS) && !no_reset) {
+		// printf("ACCESS %d\r\n", storage_status);
+		global_counter = 0;
 		if (storage_status == OS_USE) {
 	// printf("Note[12]\r\n");
 			ret = reset_proc_simple(P_STORAGE);
@@ -564,6 +578,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 #ifdef ARCH_SEC_HW
 		STORAGE_REBOOT_WAIT;
 #endif
+		printf("RESET (ACCESS) %lld\r\n", global_counter);
 	}
 	// printf("Note[15]\r\n");
 
@@ -622,6 +637,7 @@ uint32_t initialize_storage(void)
  */
 // #ifndef ARCH_SEC_HW
 #ifdef ROLE_OS
+	global_counter = 0;
 	/* The bootloader has already used the partition. */
 	ret = reset_proc_simple(P_STORAGE);
 	if (ret) {
@@ -632,6 +648,7 @@ uint32_t initialize_storage(void)
 
 #ifdef ARCH_SEC_HW
 	STORAGE_REBOOT_WAIT;
+	printf("RESET (BOOT) %lld\r\n", global_counter);
 #endif /*ARCH_SEC_HW */
 
 #endif /* ROLE_OS */
