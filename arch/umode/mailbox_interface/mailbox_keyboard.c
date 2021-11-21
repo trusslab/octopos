@@ -9,11 +9,13 @@
 #include <semaphore.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <tpm/tpm.h>
 #include <arch/mailbox.h>
 
 int fd_out, fd_intr;
 sem_t interrupt_keyboard;
 pthread_t mailbox_thread;
+int first_char = 1;
 
 static void *handle_mailbox_interrupts(void *data)
 {
@@ -33,6 +35,17 @@ static void *handle_mailbox_interrupts(void *data)
 uint8_t read_char_from_keyboard(void)
 {
 	char c = getchar();
+
+	/* This will allow a client domain verify whether this domain is
+	 * freshly reset or not */
+	/* FIXME: this is essential and should be implemented in keyboard.c,
+	 * not in the arch code. We need to restructure the code to ensure this.
+	 */
+	if (first_char) {
+		enforce_running_process(P_KEYBOARD);
+		tpm_extend_null();
+		first_char = 0;
+	}
 
 	/* A backspace key press is returned as a delete. We fix it here. */
 	if (c == 127)
