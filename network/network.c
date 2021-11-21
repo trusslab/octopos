@@ -377,9 +377,5 @@ int main(int argc, char **argv)
 	close(fd_in);
 	close(fd_intr);
 
-	remove(FIFO_NETWORK_OUT);
-	remove(FIFO_NETWORK_IN);
-	remove(FIFO_NETWORK_INTR);
-
 	net_stack_exit();
 }

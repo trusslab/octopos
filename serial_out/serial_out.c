@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 #include <octopos/mailbox.h>
 #include <arch/mailbox_serial_out.h>
 #include <arch/defines.h>
@@ -22,6 +23,14 @@ static int serial_out_core(void)
 	
 	while(1) {
 		get_chars_from_serial_out_queue(buf);
+
+		/* The client is asking us to stop processing messages,
+		 * which will force the OS to reset this domain after the
+		 * client yields.
+		 */
+		if (buf[0] == 0xFF)
+			break;
+
 		write_chars_to_serial_out(buf);
 	}
 
@@ -41,4 +50,11 @@ int main(int argc, char **argv)
 	serial_out_core();
 
 	close_serial_out();
+
+#ifdef ARCH_UMODE
+	/* Wait to be terminated by the OS. */
+	while(1) {
+		sleep(10);
+	}
+#endif
 }

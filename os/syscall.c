@@ -151,6 +151,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
 
+		/* FIXME: we should check witht the shell and only allow this
+		 * if the app is in the foreground.
+		 */
+
 #ifndef ARCH_SEC_HW
 		/* FIXME: arbitrary thresholds */
 		/* No more than 1000 characters; no more than 100 seconds */
@@ -187,6 +191,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		SYSCALL_GET_TWO_ARGS
 		uint32_t limit = arg0;
 		uint32_t timeout = arg1;
+
+		/* FIXME: we should check witht the shell and only allow this
+		 * if the app is in the foreground.
+		 */
 
 #ifndef ARCH_SEC_HW
 		/* FIXME: arbitrary thresholds */

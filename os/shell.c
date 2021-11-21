@@ -308,6 +308,11 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 	if (runtime_proc->app == foreground_app) {
 		shell_status = SHELL_STATE_WAITING_FOR_CMD;
 		foreground_app = NULL;
+		/* FIXME: we mainly need to reset if serial_out was delegated
+		 * to the app. Currently, however, we're resetting regardless,
+		 * which might not be a bad idea and does not hurt.
+		 */
+		reset_proc(P_SERIAL_OUT);
 		output_printf("octopos$> ");
 	}
 #ifdef ARCH_SEC_HW

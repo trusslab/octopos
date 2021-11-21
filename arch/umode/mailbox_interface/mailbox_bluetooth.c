@@ -150,7 +150,4 @@ void close_bluetooth(void)
 	close(fd_intr);
 	close(fd_in);
 	close(fd_out);
-	remove(FIFO_BLUETOOTH_INTR);
-	remove(FIFO_BLUETOOTH_IN);
-	remove(FIFO_BLUETOOTH_OUT);
 }

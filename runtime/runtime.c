@@ -623,25 +623,6 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 	return 0;
 }
 
-static int yield_secure_serial_out(void)
-{
-	if (!has_secure_serial_out_access) {
-		printf("Error: %s: does not have access to secure serial_out.\n",
-		       __func__);
-		return ERR_INVALID;
-	}
-
-	has_secure_serial_out_access = false;
-
-	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
-
-	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
-
-	reset_serial_out_queue_trackers();
-
-	return 0;
-}
-
 static int write_to_secure_serial_out(char *buf)
 {
 	if (!has_secure_serial_out_access) {
@@ -656,6 +637,35 @@ static int write_to_secure_serial_out(char *buf)
 
 	return 0;
 }
+
+static int yield_secure_serial_out(void)
+{
+	char buf[MAILBOX_QUEUE_MSG_SIZE];
+
+	if (!has_secure_serial_out_access) {
+		printf("Error: %s: does not have access to secure serial_out.\n",
+		       __func__);
+		return ERR_INVALID;
+	}
+
+	/* This will tell the serial_out service to stop processing messages,
+	 * which will force the OS to reset it after we yield.
+	 */
+	buf[0] = 0xFF;
+	write_to_secure_serial_out(buf);
+
+	has_secure_serial_out_access = false;
+
+	wait_until_empty(Q_SERIAL_OUT, MAILBOX_QUEUE_SIZE);
+
+	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
+
+	reset_serial_out_queue_trackers();
+
+	return 0;
+}
+
+
 
 static int read_char_from_secure_keyboard(char *buf)
 {

@@ -167,8 +167,4 @@ void close_storage(void)
 	close(fd_out);
 	close(fd_in);
 	close(fd_intr);
-
-	remove(FIFO_STORAGE_OUT);
-	remove(FIFO_STORAGE_IN);
-	remove(FIFO_STORAGE_INTR);
 }

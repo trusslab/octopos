@@ -47,12 +47,6 @@ static void close_channels(void)
 	close(fd_out);
 	close(fd_in);
 	close(fd_intr);
-
-#ifdef ROLE_OS
-	remove(FIFO_OS_OUT);
-	remove(FIFO_OS_IN);
-	remove(FIFO_OS_INTR);
-#endif
 }
 
 int is_queue_available(uint8_t queue_id)

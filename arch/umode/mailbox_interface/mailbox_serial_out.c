@@ -44,6 +44,9 @@ void get_chars_from_serial_out_queue(uint8_t *buf)
 
 	/* This will allow a client domain verify whether this domain is
 	 * freshly reset or not */
+	/* FIXME: this is essential and should be implemented in serial_out.c,
+	 * not in the arch code. We need to restructure the code to ensure this.
+	 */
 	if (first_message) {
 		enforce_running_process(P_SERIAL_OUT);
 		tpm_extend_null();
@@ -90,8 +93,4 @@ void close_serial_out(void)
 	close(fd_out);
 	close(fd_in);
 	close(fd_intr);
-
-	remove(FIFO_SERIAL_OUT_OUT);
-	remove(FIFO_SERIAL_OUT_IN);
-	remove(FIFO_SERIAL_OUT_INTR);
 }

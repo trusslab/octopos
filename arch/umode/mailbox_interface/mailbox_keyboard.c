@@ -79,7 +79,4 @@ void close_keyboard(void)
 
 	close(fd_intr);
 	close(fd_out);
-	remove(FIFO_KEYBOARD_INTR);
-	remove(FIFO_KEYBOARD_IN);
-	remove(FIFO_KEYBOARD_OUT);
 }

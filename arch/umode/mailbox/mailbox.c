@@ -1218,6 +1218,8 @@ int main(int argc, char **argv)
 		}
 	}	
 
+	/* FIXME: do we even execute the clean-up code here? */
+
 	pthread_cancel(timer_thread);
 	pthread_join(timer_thread, NULL);
 
