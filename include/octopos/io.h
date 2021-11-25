@@ -11,4 +11,6 @@
 #define IO_OP_DEAUTHENTICATE		8
 #define IO_OP_DESTROY_RESOURCE		9
 
+#define IO_OP_TERMINATE_DOMAIN		0xFF
+
 #endif

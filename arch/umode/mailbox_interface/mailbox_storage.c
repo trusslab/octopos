@@ -19,7 +19,8 @@ pthread_t mailbox_thread;
  /* Not all will be used */
 sem_t interrupts[NUM_QUEUES + 1];
 
-void process_request(uint8_t *buf, uint8_t proc_id);
+/* FIXME: move to a header file. */
+void process_request(uint8_t *buf, uint8_t proc_id, int *terminate);
 void initialize_storage_space(void);
 
 void send_response(uint8_t *buf, uint8_t queue_id)
@@ -124,10 +125,11 @@ void storage_event_loop(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	uint8_t proc_id;
+	int terminate = 0;
 
-	while(1) {
+	while (!terminate) {
 		proc_id = read_request_get_owner_from_queue(buf);
-		process_request(buf, proc_id);
+		process_request(buf, proc_id, &terminate);
 		send_response(buf, Q_STORAGE_CMD_OUT);
 	}
 }

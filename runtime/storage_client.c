@@ -298,6 +298,19 @@ static int destroy_storage(void)
 	return (int) ret0;
 }
 
+#ifndef UNTRUSTED_DOMAIN
+static int terminate_storage_domain(void)
+{
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	buf[0] = IO_OP_TERMINATE_DOMAIN;
+
+	send_msg_to_storage(buf);
+	
+	STORAGE_GET_ONE_RET
+	return (int) ret0;
+}
+#endif
+
 static int request_secure_storage_creation(uint32_t size)
 {
 	SYSCALL_SET_ONE_ARG(SYSCALL_REQUEST_SECURE_STORAGE_CREATION, size)
@@ -382,6 +395,15 @@ int yield_secure_storage_access(void)
 	}
 
 	has_access_to_secure_storage = false;
+
+#ifndef UNTRUSTED_DOMAIN
+	/* terminate the storage domain, forcing a reboot before reuse */
+	ret = terminate_storage_domain();
+	if (ret) {
+		printf("Error: %s: couldn't terminate the storage domain.\n",
+		       __func__);
+	}
+#endif
 
 	yield_secure_storage_queues_access();
 
@@ -599,6 +621,18 @@ int delete_and_yield_secure_storage(void)
 	secure_storage_created = false;
 	has_access_to_secure_storage = false;
 
+#ifndef UNTRUSTED_DOMAIN
+	/* terminate the storage domain, forcing a reboot before reuse */
+	ret = terminate_storage_domain();
+	if (ret) {
+		printf("Error: %s: couldn't terminate the storage domain.\n",
+		       __func__);
+	}
+#endif
+
+	/* FIXME: why not call yield_secure_storage_queues_access() instead
+	 * of the next couple of lines?
+	 */
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 

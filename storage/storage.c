@@ -1609,7 +1609,7 @@ static void storage_destroy_resource(uint8_t *buf)
 	STORAGE_SET_ONE_RET(0)
 }
 
-void process_request(uint8_t *buf, uint8_t proc_id)
+void process_request(uint8_t *buf, uint8_t proc_id, int *terminate)
 {
 	switch (buf[0]) {
 	case IO_OP_QUERY_ALL_RESOURCES:
@@ -1648,6 +1648,10 @@ void process_request(uint8_t *buf, uint8_t proc_id)
 		storage_destroy_resource(buf);
 		break;
 
+	case IO_OP_TERMINATE_DOMAIN:
+		*terminate = 1;
+		STORAGE_SET_ONE_RET(0)
+		break;
 	default:
 		/*
 		 * If global flag "used" not set, set it.
@@ -1674,5 +1678,12 @@ int main(int argc, char **argv)
 	init_storage();
 	storage_event_loop();
 	close_storage();
+
+#ifdef ARCH_UMODE
+	/* Wait to be terminated by the OS. */
+	while(1) {
+		sleep(10);
+	}
+#endif
 }
 #endif
