@@ -651,7 +651,7 @@ static int yield_secure_serial_out(void)
 	/* This will tell the serial_out service to stop processing messages,
 	 * which will force the OS to reset it after we yield.
 	 */
-	buf[0] = 0xFF;
+	buf[0] = IO_OP_TERMINATE_DOMAIN;
 	write_to_secure_serial_out(buf);
 
 	has_secure_serial_out_access = false;

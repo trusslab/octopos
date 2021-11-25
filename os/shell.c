@@ -66,6 +66,8 @@ static int repeat_num = 0;
 static bool repeat_cmd_exists = false;
 static int repeat_cmd_counter = 0;
 
+int serial_out_needs_reset = 0;
+
 /*
  * Handle commands separatly
  * input: return value from previous command (useful for pipe file descriptor)
@@ -308,11 +310,10 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 	if (runtime_proc->app == foreground_app) {
 		shell_status = SHELL_STATE_WAITING_FOR_CMD;
 		foreground_app = NULL;
-		/* FIXME: we mainly need to reset if serial_out was delegated
-		 * to the app. Currently, however, we're resetting regardless,
-		 * which might not be a bad idea and does not hurt.
-		 */
-		reset_proc(P_SERIAL_OUT);
+		if (serial_out_needs_reset) {
+			serial_out_needs_reset = 0;
+			reset_proc(P_SERIAL_OUT);
+		}
 		output_printf("octopos$> ");
 	}
 #ifdef ARCH_SEC_HW
@@ -360,6 +361,11 @@ int app_write_to_shell(struct app *app, uint8_t *data, int size)
 		return ERR_INVALID;
 	}
 
+	if (serial_out_needs_reset) {
+		serial_out_needs_reset = 0;
+		reset_proc(P_SERIAL_OUT);
+	}
+
 	/* FIXME: don't use output_buf here. It's a char array. */
 	memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	memcpy(output_buf, data, size);
@@ -403,6 +409,11 @@ int app_read_from_shell(struct app *app)
 	shell_status = SHELL_STATE_APP_WAITING_FOR_INPUT;
 	
 	return 0;
+}
+
+void shell_serial_out_needs_reset(void)
+{
+	serial_out_needs_reset = 1;
 }
 
 void initialize_shell(void)

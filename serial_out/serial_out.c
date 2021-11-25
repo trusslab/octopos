@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <octopos/mailbox.h>
+#include <octopos/io.h>
 #include <arch/mailbox_serial_out.h>
 #include <arch/defines.h>
 #ifdef ARCH_SEC_HW
@@ -28,7 +29,7 @@ static int serial_out_core(void)
 		 * which will force the OS to reset this domain after the
 		 * client yields.
 		 */
-		if (buf[0] == 0xFF)
+		if (buf[0] == IO_OP_TERMINATE_DOMAIN)
 			break;
 
 		write_chars_to_serial_out(buf);

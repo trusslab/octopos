@@ -337,6 +337,7 @@ static void *handle_mailbox_interrupts(void *data)
 			case Q_SERIAL_OUT:
 				sem_init(&interrupts[Q_SERIAL_OUT], 0,
 					 MAILBOX_QUEUE_SIZE);
+				shell_serial_out_needs_reset();
 				sem_post(&availables[Q_SERIAL_OUT]);
 				break;
 #endif
