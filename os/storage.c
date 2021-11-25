@@ -26,12 +26,14 @@
 #include <tpm/tpm.h>
 #include <arch/mailbox_os.h>
 
-struct partition *partitions;
+struct partition *partitions = NULL;
 uint32_t num_partitions = 0;
 uint8_t storage_status = OS_ACCESS;
 struct app *current_app_with_storage_access = NULL;
 struct partition *boot_partition = NULL;
 extern struct app untrusted_app;
+
+int storage_reset_on_create = 0;
 
 static int query_number_partitions(void)
 {
@@ -113,7 +115,7 @@ static int query_storage_partitions(void)
 		return ret;
 	}
 
-	/* FIXME: we never free(). */
+	/* FIXME: we don't free() on halt. */
 	partitions = (struct partition *) malloc(num_partitions *
 						 sizeof(struct partition));
 	if (!partitions) {
@@ -135,6 +137,21 @@ static int query_storage_partitions(void)
 
 	return 0;
 }
+
+#ifdef ROLE_OS
+static int re_query_storage_partitions(void)
+{
+	if (!partitions) {
+		printf("Error: %s: partitions is NULL!\n", __func__);
+		exit(-1);
+	}
+
+	free(partitions);
+	partitions = NULL;
+
+	return query_storage_partitions();
+}
+#endif
 
 /* boot partition is partition 0.
  * Here, we do a sanity check on its size.
@@ -385,9 +402,37 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	}
 #endif
 
-	/* The partition might have been created in previous runs. Therefore,
-	 * let's check the query data we received from the storage service too.
-	 */
+	if (runtime_proc_id != P_UNTRUSTED) {
+		/* There could have been updates in the partition list, e.g.,
+		 * if an app destroyed their partition. Therefore, we'll need
+		 * to query again.
+		 *
+		 * We don't re-query for the untruste domain as an optimization.
+		 * Re-query will force us to reset the storage domain, which
+		 * we would like to avoid for the untrusted domain. We can
+		 * help re-querying here since we know that the untrusted
+		 * domain doesn't destroy its partition.
+		 */
+		wait_for_storage();
+		ret = reset_proc_simple(P_STORAGE);
+		if (ret) {
+			printf("Error: %s: couldn't reset the storage service.\n",
+			       __func__);
+			SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
+			return;
+		}
+		
+		storage_reset_on_create = 1;
+
+		ret = re_query_storage_partitions();
+		if (ret) {
+			printf("Error: %s: couldn't re-query the storage "
+			       "service.\n", __func__);
+			SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
+			return;
+		}
+	}
+
 	for (i = 1; i < num_partitions; i++) {
 		if (!memcmp(app_key, partitions[i].key, TPM_EXTEND_HASH_SIZE)) {
 			app->sec_partition_id = i;
@@ -501,12 +546,23 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			 * change-of-ownership interrupts from these queues.
 			 */
 
-			/* This is an optimization so that we don't reset the
-			 * storage service again and again when it is being
-			 * used by the untrusted domain.
-			 */ 
-			if (app == &untrusted_app)
+			if (app == &untrusted_app) {
+				/* This is an optimization so that we don't
+				 * reset the storage service again and again
+				 * when it is being used by the untrusted domain.
+				 */ 
 				no_reset = 1;
+			} else {
+				/* If an app is requesting access right after
+				 * a create request, we don't need to reset
+				 * the storage domain again since it has been
+				 * reset while handling the create syscall.
+				 */ 
+				if (storage_reset_on_create) {
+					storage_reset_on_create = 0;
+					no_reset = 1;
+				}
+			}
 		} else {
 			printf("Error: %s: app already has access to the "
 			       "storage queues.\n", __func__);
