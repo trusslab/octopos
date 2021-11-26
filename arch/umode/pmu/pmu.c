@@ -379,6 +379,7 @@ static void start_all_procs(void)
 {
 	mailbox_pid = start_mailbox_proc();
 	tpm_server_pid = start_tpm_server_proc();
+	sleep(2);
 	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
 	os_pid = start_os_proc();
 	keyboard_pid = start_keyboard_proc();
@@ -751,9 +752,8 @@ int main(int argc, char **argv)
 	int ret, len, i;
 	int untrusted_init = 0;
 	pthread_t reboot_thread;
-#ifndef ARCH_UMODE
-	sem_t *sem;
-#endif
+	sem_t *tpm_sem;
+	sem_t *boot_sem;
 
 	/*
 	 * put tty in raw mode.
@@ -770,14 +770,20 @@ int main(int argc, char **argv)
         now.c_cc[VTIME]=2;
         tcsetattr(0, TCSANOW, &now);
 
-#ifndef ARCH_UMODE
 	sem_unlink("/tpm_sem");
-	sem = sem_open("/tpm_sem", O_CREAT | O_EXCL, 0644, 1);
-	if (sem == SEM_FAILED) {
+	tpm_sem = sem_open("/tpm_sem", O_CREAT | O_EXCL, 0644, 1);
+	if (tpm_sem == SEM_FAILED) {
 		printf("Error: couldn't create tpm semaphore.\n");
 		exit(-1);
 	}
-#endif
+	sem_close(tpm_sem);
+
+	sem_unlink("/boot_sem");
+	boot_sem = sem_open("/boot_sem", O_CREAT | O_EXCL, 0644, 1);
+	if (boot_sem == SEM_FAILED) {
+		printf("Error: couldn't create boot semaphore.\n");
+		exit(-1);
+	}
 
 	enforce_running_process(P_PMU);
 
@@ -832,9 +838,7 @@ int main(int argc, char **argv)
 	}
 
 	start_all_procs();
-#ifndef ARCH_UMODE
-	sem_close(sem);
-#endif
+	sem_close(boot_sem);
 
 	while (1) {
 		int max_fd;

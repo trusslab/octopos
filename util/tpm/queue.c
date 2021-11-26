@@ -33,6 +33,7 @@ void open_queue(struct queue_list **in_queues, struct queue_list **out_queues)
 						sizeof(struct queue_list),
 						PROT_READ | PROT_WRITE,
 						MAP_SHARED, fd, 0);
+	/* We initialize the queue per page. */
 	*out_queues = (struct queue_list *) mmap(NULL,
 						 sizeof(struct queue_list),
 						 PROT_READ | PROT_WRITE,
@@ -40,7 +41,7 @@ void open_queue(struct queue_list **in_queues, struct queue_list **out_queues)
 						 ((sizeof(struct queue_list) - 1) / PAGE_SIZE + 1) * PAGE_SIZE);
 	close(fd);
 	if (in_queues == MAP_FAILED || out_queues == MAP_FAILED) {
-		perror("mmap allocation error");
+		perror("Allocation error");
 		return;
 	}
 }
@@ -103,7 +104,7 @@ int enqueue(struct queue_list *queues, uint8_t proc_id,
 		/* If it's a small message, directly copy the size of the message,
 		 * or copy the BUFFER_SIZE.
 		 */
-		if ((buf_size - transferred_size - BUFFER_SIZE) > 0) {
+		if (buf_size > transferred_size + BUFFER_SIZE) {
 			entry.buffer_tag = LARGE_BUFFER;
 			trunk_size = BUFFER_SIZE;
 		} else {
@@ -161,7 +162,7 @@ int dequeue(struct queue_list *queues, uint8_t proc_id,
 			continue;
 		}
 
-		if ((*buf_size - retrieved_size - BUFFER_SIZE) > 0) {
+		if (*buf_size > retrieved_size + BUFFER_SIZE) {
 			trunk_size = BUFFER_SIZE;
 		} else {
 			trunk_size = *buf_size - retrieved_size;
@@ -172,4 +173,17 @@ int dequeue(struct queue_list *queues, uint8_t proc_id,
 	}
 
 	return 0;
+}
+
+void close_queue(struct queue_list *in_queues, struct queue_list *out_queues)
+{
+	if (munmap(in_queues, sizeof(struct queue_list)) == -1) {
+		perror("Unmapping in_queues failed\n");
+	}
+	if (munmap(out_queues, sizeof(struct queue_list)) == -1) {
+		perror("Unmapping out_queues failed\n");
+	}
+	if (shm_unlink("/ivshmem") == -1) {
+		perror("Unlink failed\n");
+	}
 }

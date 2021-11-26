@@ -2,7 +2,7 @@ install: tss abrmd emu
 
 tss:
 	cd tpm2-tss/files/tss && ./bootstrap
-	cd tpm2-tss/files/tss && ./configure
+	cd tpm2-tss/files/tss && ./configure --disable-doxygen-doc
 	make -j$(nproc) -C ./tpm2-tss/files/tss
 	sudo make install -C ./tpm2-tss/files/tss
 	sudo udevadm control --reload-rules && sudo udevadm trigger && sudo ldconfig
@@ -18,13 +18,13 @@ abrmd:
 	sudo ldconfig && sudo pkill -HUP dbus-daemon && sudo systemctl daemon-reload
 
 emu:
-	make -j$(nproc) -C ./ibmtpm/files
-	mv ./ibmtpm/files/tpm_server ./ibmtpm/tpm_server
+	make -j$(nproc) -C ./ibmtpm/files/emu
+	mv ./ibmtpm/files/emu/tpm_server ./ibmtpm/tpm_server
 
 clean:
 	make clean -C ./tpm2-tss/files/tss
 	make clean -C ./tpm2-abrmd/files/abrmd
-	make clean -C ./ibmtpm/files
+	make clean -C ./ibmtpm/files/emu
 
 uninstall:
 	make uninstall -C ./tpm2-abrmd/files/abrmd

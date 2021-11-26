@@ -44,3 +44,4 @@ int enqueue(struct queue_list *queues, uint8_t proc_id,
 	    uint8_t *buf, size_t buf_size);
 int dequeue(struct queue_list *queues, uint8_t proc_id,
 	    uint8_t **buf, size_t *buf_size);
+void close_queue(struct queue_list *in_queues, struct queue_list *out_queues);

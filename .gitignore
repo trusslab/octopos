@@ -35,4 +35,4 @@ installer/copy*
 installer/aligned*
 installer/*signature
 external/ibmtpm/tpm_server
-util/tpm/tpm_shutdown/tpm_shutdown
+util/tools/tpm_shutdown

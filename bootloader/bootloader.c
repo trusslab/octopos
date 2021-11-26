@@ -241,7 +241,7 @@ int main(int argc, char *argv[])
 #endif /* ARCH_SEC_HW_BOOT */
 
 #ifndef ARCH_SEC_HW_BOOT
-	sem = sem_open("/tpm_sem", O_CREAT, 0644, 1);
+	sem = sem_open("/boot_sem", O_CREAT, 0644, 1);
 	if (sem == SEM_FAILED) {
 		printf("Error: couldn't open tpm semaphore.\n");
 		exit(-1);

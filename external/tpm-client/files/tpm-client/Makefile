@@ -1,7 +1,7 @@
 APP = tpm-client
 
 # Add any other object files to this list below
-APP_OBJS = tpm-client.o tpm.o hash.o aes.o
+APP_OBJS = tpm-client.o tpm.o hash.o aes.o queue.o
 
 all: build
 

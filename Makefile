@@ -1,5 +1,5 @@
-DIRS := applications arch keyboard os runtime serial_out storage network bluetooth bootloader installer util/tpm/tpm_shutdown
-DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network bootloader installer util/tpm/tpm_shutdown
+DIRS := applications arch keyboard os runtime serial_out storage network bluetooth bootloader installer util/tpm/tools
+DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network bootloader installer util/tpm/tools
 
 EXTERNAL_DIR := ./external
 
@@ -25,5 +25,6 @@ uninstall-local:
 	$(MAKE) uninstall-local -C $(EXTERNAL_DIR)
 
 hard-reset:
-	rm NVChip
-	sudo rm -rf /usr/local/var/lib/tpm2-tss/system/keystore/*
+	rm -f NVChip
+	rm -f storage/octopos_partition_*
+	sudo rm -rf /usr/local/var/lib/tpm2-tss/system/keystore/

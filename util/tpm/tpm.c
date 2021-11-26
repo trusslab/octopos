@@ -2,6 +2,9 @@
 #include <tpm/hash.h>
 #include <tpm/queue.h>
 #include <tpm/aes.h>
+#include <fcntl.h>           /* For O_* constants */
+#include <sys/stat.h>
+#include <semaphore.h>
 
 #define ARCH_UMODE
 #ifdef TPM_REMOTE
@@ -9,6 +12,9 @@
 #endif
 
 static uint8_t running_processor = 0;
+static sem_t *sem;
+struct queue_list *in_queues = NULL;
+struct queue_list *out_queues = NULL;
 
 /* Driver support functions:
  * 	write_to_driver
@@ -17,9 +23,9 @@ int write_to_driver(uint8_t *in_buf, size_t in_size,
 		    uint8_t **out_buf, size_t *out_size)
 {
 	int rc = 0;
-	struct queue_list *in_queues;
-	struct queue_list *out_queues;
-	open_queue(&in_queues, &out_queues);
+	if (in_queues == NULL)
+		open_queue(&in_queues, &out_queues);
+
 
 	/* Attach the size of the message.
 	 * Occupy buf[1] and buf[2]
@@ -149,6 +155,14 @@ int tpm_initialize(FAPI_CONTEXT **context)
 	 */
 	setenv("TSS2_LOG", TSS_LOG_LVL_NONE, 1);
 
+	sem = sem_open("/tpm_sem", O_CREAT, 0644, 1);
+	if (sem == SEM_FAILED) {
+		fprintf(stderr, "Error: couldn't open tpm semaphore.\n");
+		return -1;
+	}
+
+	sem_wait(sem);
+
 	rc = Fapi_Initialize(context, NULL);
 	return_if_error(rc, "Fapi Initialization Error.");
 
@@ -162,6 +176,9 @@ int tpm_initialize(FAPI_CONTEXT **context)
 void tpm_finalize(FAPI_CONTEXT **context)
 {
 	Fapi_Finalize(context);
+
+	sem_post(sem);
+	sem_close(sem);
 }
 
 int tpm_read(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *buf,
@@ -196,9 +213,9 @@ int tpm_extend(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *hash_buf)
 	TPML_DIGEST_VALUES digests = {
 		.count = 1,
 		.digests = {{
-				    .hashAlg = TPM2_ALG_SHA256,
-				    .digest = {.sha256 = { }}
-			    }}
+			.hashAlg = TPM2_ALG_SHA256,
+			.digest = {.sha256 = { }}
+		}}
 	};
 
 	convert_hash_to_str(hash_buf, hash_str);
@@ -229,7 +246,6 @@ int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 {
 	TSS2_RC rc;
 	char *certificate = NULL;
-	char *log = NULL;
 
 	/* Create attestation key (AK), if exists, ignore */
 	rc = Fapi_CreateKey(context, "HS/SRK/AK", "sign,noDa",
@@ -237,31 +253,11 @@ int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
 	return_if_error_exception(rc, "Fapi Create Attestation Key Error.",
 				  TSS2_FAPI_RC_PATH_ALREADY_EXISTS);
 
-	for (size_t i = 0; i < pcr_list_size; i++) {
-		printf("%u ", pcr_list[i]);
-	}
-	printf("\n");
-
 	rc = Fapi_Quote(context, pcr_list, pcr_list_size,
 			"HS/SRK/AK", "TPM-Quote", nonce,
 			TPM_AT_NONCE_LENGTH, quote_info, signature,
 			signature_size, pcr_event_log, &certificate);
 	return_if_error(rc, "Quote Error.");
-
-	for (size_t i = 0; i < *signature_size; i++) {
-		printf("%02x, ", (*signature)[i]);
-	}
-	printf("\n");
-	printf("Sig Size: %lu\n", *signature_size);
-	printf("%s\n", *quote_info);
-
-	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
-			      *quote_info, *signature, *signature_size, log);
-	if (rc != TSS2_RC_SUCCESS) {
-		printf("\nVerifyQuote log: %s\n", log);
-		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
-		return rc;
-	}
 
 	return 0;
 }
@@ -389,7 +385,6 @@ int tpm_measure_service(char* path, BOOL is_path)
 		memcpy(hash_value, path, TPM_EXTEND_HASH_SIZE);
 	}
 
-
 #ifdef ARCH_UMODE
 	FAPI_CONTEXT *context = NULL;
 
@@ -399,15 +394,7 @@ int tpm_measure_service(char* path, BOOL is_path)
 	rc = tpm_set_locality(context, running_processor);
 	return_if_error_label(rc, out_measure_service);
 
-	rc = tpm_read(context, PROC_TO_PCR(running_processor),
-		      NULL, NULL, 1);
-	return_if_error_label(rc, out_measure_service);
-
 	rc = tpm_extend(context, PROC_TO_PCR(running_processor), hash_value);
-	return_if_error_label(rc, out_measure_service);
-
-	rc = tpm_read(context, PROC_TO_PCR(running_processor),
-		      NULL, NULL, 1);
 	return_if_error_label(rc, out_measure_service);
 
 out_measure_service:

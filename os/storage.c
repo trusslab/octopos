@@ -307,7 +307,7 @@ static int storage_create_secure_partition(uint8_t *app_key,
 			return ERR_EXIST;
 		}
 	} else {
-		for (i = 2; i < num_partitions; i++) { 
+		for (i = 2; i < num_partitions; i++) {
 			if ((partitions[i].size == partition_size) &&
 			    !partitions[i].is_created) {
 				_partition_id = i;

@@ -5,9 +5,11 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "tpm.h"
 #include "hash.h"
+#include "aes.h"
 
 #define MAILBOX_QUEUE_MSG_SIZE	64
 #define BUFFER_LENGTH		(MAILBOX_QUEUE_MSG_SIZE + 2)
@@ -26,9 +28,9 @@ int read_from_kernel(int fd, uint8_t *proc_id, uint8_t **buf, size_t *buf_size)
 	size_t retrieved_size = 0;
 	size_t trunk_size = 0;
 
-	memset(receive, 0, BUFFER_SIZE);
+	memset(receive, 0, BUFFER_LENGTH);
 	rc = read(fd, receive, BUFFER_LENGTH);
-	if (ret <= 0) {
+	if (rc <= 0) {
 		perror("Failed to read the message from the device.");
 		return -1;
 	}
@@ -38,26 +40,26 @@ int read_from_kernel(int fd, uint8_t *proc_id, uint8_t **buf, size_t *buf_size)
 	*buf = (uint8_t *) malloc(*buf_size);
 
 	/* If it's a small message, directly copy the size of the message,
-	 * or copy the BUFFER_SIZE.
+	 * or copy the BUFFER_LENGTH.
 	 */
-	trunk_size = (*buf_size > BUFFER_SIZE) ? BUFFER_SIZE : *buf_size;
+	trunk_size = (*buf_size > BUFFER_LENGTH) ? BUFFER_LENGTH : *buf_size;
 	memcpy(*buf, receive + 1, trunk_size);
 	retrieved_size += trunk_size;
 
 	while (retrieved_size != *buf_size) {
-		memset(receive, 0, BUFFER_SIZE);
+		memset(receive, 0, BUFFER_LENGTH);
 		rc = read(fd, receive, BUFFER_LENGTH);
-		if (ret <= 0) {
+		if (rc <= 0) {
 			perror("Failed to read the message from the device.");
 			free(*buf);
 			return -1;
 		}
 
-		if ((*buf_size - retrieved_size - BUFFER_SIZE) > 0) {
-			trunk_size = BUFFER_SIZE;
+		if (*buf_size > retrieved_size + BUFFER_LENGTH) {
+			trunk_size = BUFFER_LENGTH;
 		} else {
 			trunk_size = *buf_size - retrieved_size;
-		}proc_id
+		}
 		memcpy(*buf + retrieved_size, receive + 1, trunk_size);
 
 		retrieved_size += trunk_size;
@@ -75,7 +77,7 @@ int write_to_kernel(int fd, uint8_t *buf, size_t buf_size)
 
 	while (transferred_size != buf_size) {
 		memset(send, 0, BUFFER_LENGTH);
-		if ((buf_size - transferred_size - BUFFER_LENGTH + 1) > 0) {
+		if (buf_size > transferred_size + BUFFER_LENGTH - 1) {
 			send[0] = LARGE_BUFFER;
 			trunk_size = BUFFER_LENGTH - 1;
 		} else {
@@ -85,7 +87,7 @@ int write_to_kernel(int fd, uint8_t *buf, size_t buf_size)
 
 		memcpy(send + 1, buf + transferred_size, trunk_size);
 		rc = write(fd, send, BUFFER_LENGTH);
-		if (ret < 0) {
+		if (rc < 0) {
 			perror("Failed to write the message to the device.");
 			break;
 		}
@@ -95,7 +97,6 @@ int write_to_kernel(int fd, uint8_t *buf, size_t buf_size)
 
 	return 0;
 }
-
 
 int main(int argc, char const *argv[])
 {
@@ -107,6 +108,9 @@ int main(int argc, char const *argv[])
 	size_t request_size;
 	uint8_t *response;
 	size_t response_size;
+	struct timespec start_t;
+	struct timespec end_t;
+	struct timespec diff_t;
 
 	// Open the device with read/write access
 	fd = open("/dev/octopos_tpm", O_RDWR);
@@ -125,12 +129,13 @@ int main(int argc, char const *argv[])
 		if (rc < 0)
 			goto again;
 
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_t);
 		op = request[0];
 		if (op == OP_MEASURE) {
 			uint8_t hash_value[TPM_EXTEND_HASH_SIZE];
 			memcpy(hash_value, request + 3, TPM_EXTEND_HASH_SIZE);
 			rc = tpm_measure_service(hash_value, 0);
-			if (rc == TPM2_SUCCESS) {
+			if (rc == TPM2_RC_SUCCESS) {
 				response_size = 3;
 				response = (uint8_t *) malloc(response_size);
 				response[0] = RET_SUCCESS;
@@ -139,7 +144,7 @@ int main(int argc, char const *argv[])
 			uint32_t pcr_index = (uint32_t) request[3];
 			uint8_t send[TPM_EXTEND_HASH_SIZE] = {0};
 			rc = tpm_processor_read_pcr(pcr_index, send);
-			if (rc == TPM2_SUCCESS) {
+			if (rc == TPM2_RC_SUCCESS) {
 				response_size = 3 + TPM_EXTEND_HASH_SIZE;
 				response = (uint8_t *) malloc(response_size);
 				response[0] = RET_SUCCESS;
@@ -164,7 +169,7 @@ int main(int argc, char const *argv[])
 					&signature, &sig_size, &quote_info);
 			free(pcr_list);
 
-			if (rc == TPM2_SUCCESS) {
+			if (rc == TPM2_RC_SUCCESS) {
 				quote_size = strlen(quote_info);
 				response_size = sig_size + quote_size + 7;
 				response = (uint8_t *) malloc(response_size);
@@ -179,18 +184,14 @@ int main(int argc, char const *argv[])
 			}
 		} else if (op == OP_SEAL) {
 			uint8_t *key_iv = NULL;
-			size_t key_iv_size;
 
-			rc = tpm_get_storage_key(&key_iv, &key_iv_size);
-			if (key_iv_size != AES_GEN_SIZE)
-				rc = -1;
-
-			if (rc == TPM2_SUCCESS) {
-				response_size = 3 + 1 + key_iv_size;
+			rc = tpm_get_storage_key(&key_iv);
+			if (rc == TPM2_RC_SUCCESS) {
+				response_size = 3 + 1 + AES_GEN_SIZE;
 				response = (uint8_t *) malloc(response_size);
 				response[0] = RET_SUCCESS;
-				response[3] = key_iv_size & 0xFF;
-				memcpy(response + 4, key_iv, key_iv_size);
+				response[3] = AES_GEN_SIZE & 0xFF;
+				memcpy(response + 4, key_iv, AES_GEN_SIZE);
 			}
 		} else if (op == OP_RESET) {
 			size_t pcr_list_size;
@@ -203,7 +204,7 @@ int main(int argc, char const *argv[])
 
 			rc = tpm_reset_pcrs(pcr_list, pcr_list_size);
 			free(pcr_list);
-			if (rc == TPM2_SUCCESS) {
+			if (rc == TPM2_RC_SUCCESS) {
 				response_size = 3;
 				response = (uint8_t *) malloc(response_size);
 				response[0] = RET_SUCCESS;
@@ -213,7 +214,7 @@ int main(int argc, char const *argv[])
 			goto again;
 		}
 
-		if (rc != TPM2_SUCCESS) {
+		if (rc != TPM2_RC_SUCCESS) {
 			response_size = 7;
 			response = (uint8_t *) malloc(response_size);
 			response[0] = RET_FAILURE;
@@ -222,19 +223,25 @@ int main(int argc, char const *argv[])
 			response[5] = (rc >> 8) & 0xFF;
 			response[6] = rc & 0xFF;
 		}
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_t);
+		if ((end_t.tv_nsec - start_t.tv_nsec) < 0) {
+			diff_t.tv_sec = end_t.tv_sec-start_t.tv_sec-1;
+			diff_t.tv_nsec = 1000000000 + end_t.tv_nsec - start_t.tv_nsec;
+		} else {
+			diff_t.tv_sec = end_t.tv_sec-start_t.tv_sec;
+			diff_t.tv_nsec = end_t.tv_nsec-start_t.tv_nsec;
+		}
+		printf("%u, %ld.%ld, %u\n", op, diff_t.tv_sec, diff_t.tv_nsec, current_proc);
 
-		rc = write_to_kernel(fd, response, response_size);
+		write_to_kernel(fd, response, response_size);
 again:
-		if (request != NULL)
-			free(request);
-		if (response != NULL)
-			free(response);
+		SAFE_FREE(request);
+		SAFE_FREE(response);
 		cancel_running_process();
-		memset(send, 0, BUFFER_LENGTH);
 	}
 
 	rc = close(fd);
-	if (ret != 0) {
+	if (rc != 0) {
 		perror("Failed to close the device...");
 		return errno;
 	}
