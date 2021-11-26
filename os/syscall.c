@@ -177,7 +177,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 
 		mark_queue_unavailable(Q_SERIAL_OUT);
 
-		/* reset the serial_out domain before delegation */
+		/* reset serial_out domain before delegation */
 		reset_proc(P_SERIAL_OUT);
 
 		mailbox_delegate_queue_access(Q_SERIAL_OUT, runtime_proc_id,
@@ -214,9 +214,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 
 		mark_queue_unavailable(Q_KEYBOARD);
 
-		/* reset the keyboard domain before delegation */
-		reset_proc(P_KEYBOARD);
-		
 		mailbox_delegate_queue_access(Q_KEYBOARD, runtime_proc_id,
 					      (limit_t) limit,
 					      (timeout_t) timeout);
