@@ -859,6 +859,8 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 	 }
 
 repeat:
+/* Benchmark has no quota limit */
+/*
 #ifdef ARCH_SEC_HW
 	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL / 128) {
 #else
@@ -875,17 +877,27 @@ repeat:
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
 #endif
 	}
+*/
 
 	wait_for_storage();
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
+/*
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      next_num_blocks, 
 				      MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + 
 			     total_read_blocks, next_num_blocks)
+*/
+
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
+				      MAILBOX_NO_LIMIT_VAL, 
+				      MAILBOX_MAX_TIMEOUT_VAL);
+
+	STORAGE_SET_TWO_ARGS(file->start_block + start_block + 
+			     total_read_blocks, num_blocks)
 
 	buf[0] = IO_OP_RECEIVE_DATA;
 	send_msg_to_storage_no_response(buf);

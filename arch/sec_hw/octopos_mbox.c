@@ -47,9 +47,10 @@ void octopos_mailbox_deduct_and_set_owner(UINTPTR base, u8 owner)
 {
 	Xil_AssertVoid(base != 0);
 
-	u32 reg = octopos_mailbox_get_status_reg(base) - 0x1001;
-	reg = (OWNER_MASK & reg) | owner << 24;
-
+	// u32 reg = octopos_mailbox_get_status_reg(base) - 0x1001;
+	// reg = (OWNER_MASK & reg) | owner << 24;
+	u32 reg = 0xFF000000;
+	
 	octopos_mailbox_set_status_reg(base, reg);
 }
 

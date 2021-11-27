@@ -369,27 +369,28 @@ repeat:
     while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
     octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
-	limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
-	count = count / 128;
+	// limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+	// count = count / 128;
 #endif /* ARCH_SEC_HW_BOOT */
 
-	/*
-	 * When the file is very large, which is, for example, the case
-	 * for the untrusted domain kernel, the queue will need to be
-	 * delegated more than once.
-	 */ 
-#ifndef ARCH_SEC_HW_BOOT
-	if (count == MAILBOX_MAX_LIMIT_VAL)
-#else
-	if (count == MAILBOX_MAX_LIMIT_VAL / 128)
-#endif
-		need_repeat = 1;
-	else
-		need_repeat = 0;
+// 	/*
+// 	 * When the file is very large, which is, for example, the case
+// 	 * for the untrusted domain kernel, the queue will need to be
+// 	 * delegated more than once.
+// 	 */ 
+// #ifndef ARCH_SEC_HW_BOOT
+// 	if (count == MAILBOX_MAX_LIMIT_VAL)
+// #else
+// 	if (count == MAILBOX_MAX_LIMIT_VAL / 128)
+// #endif
+// 		need_repeat = 1;
+// 	else
+// 		need_repeat = 0;
 
-	total_count += count;
+// 	total_count += count;
 
-	for (int i = 0; i < (int) count; i++) {
+	// for (int i = 0; i < (int) count; i++) {
+    while(TRUE) {
 #ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
 #else

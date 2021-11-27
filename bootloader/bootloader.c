@@ -287,7 +287,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	printf("%s: passed secure boot.\n", __func__);
+	// printf("%s: passed secure boot.\n", __func__);
 	
 	bootloader_close_file_system();
 

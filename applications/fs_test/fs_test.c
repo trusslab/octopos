@@ -108,43 +108,25 @@ void fs_test(struct runtime_api *api)
 	int total_write = 0;
 	int total_req = 0;
 
-for (int ii = 0; ii <= 651; ii++) {
-	if (ii == 0) {
-		/* The first secure access involves Storage domain reset */
-		ret = api->request_secure_storage_access(100, MAILBOX_MAX_LIMIT_VAL,
-							MAILBOX_MAX_LIMIT_VAL,
-							 NULL, NULL, NULL);
-		if (ret) {
-			printf("Error: could not get secure access to storage.\n");
-			insecure_printf("Error: could not get secure access to "
-					"storage.\n %d", ret);
-			return;
-		}
-
-		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
-		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
-		mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
-		mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
-		continue;
-	} else {
-		global_counter = 0;
-		ret = api->request_secure_storage_access(100, MAILBOX_MAX_LIMIT_VAL,
-							MAILBOX_MAX_LIMIT_VAL,
-							 NULL, NULL, NULL);
-		total_req += global_counter;
-		if (ret) {
-			printf("Error: could not get secure access to storage.\n");
-			insecure_printf("Error: could not get secure access to "
-					"storage.\n %d", ret);
-			return;
-		}
+	global_counter = 0;
+	ret = api->request_secure_storage_access(100, MAILBOX_MAX_LIMIT_VAL,
+						MAILBOX_MAX_LIMIT_VAL,
+						 NULL, NULL, NULL);
+	total_req = global_counter;
+	if (ret) {
+		printf("Error: could not get secure access to storage.\n");
+		insecure_printf("Error: could not get secure access to "
+				"storage.\n %d", ret);
+		return;
 	}
+	// insecure_printf("request takes %d", total_req); 
 
 	/* BENCHMARK: write to flash */
 	// _SEC_HW_ERROR("Enter Write test");
 	global_counter = 0;
-	ret = api->write_secure_storage_blocks(block, 0, 31);
-	total_write += global_counter;
+	for (int jj = 0; jj < 33; jj++)
+		ret = api->write_secure_storage_blocks(block, 0, 31);
+	total_write = global_counter;
 	// _SEC_HW_ERROR("Write (%d) takes %lld", ret, global_counter);
 
 	/* BENCHMARK: read from flash */
@@ -152,7 +134,8 @@ for (int ii = 0; ii <= 651; ii++) {
 
 	// _SEC_HW_ERROR("Enter Read test");
 	global_counter = 0;
-	ret = api->read_secure_storage_blocks(block, 0, 31);
+	for (int jj = 0; jj < 33; jj++)
+		ret = api->read_secure_storage_blocks(block, 0, 31);
 	total_read += global_counter;
 	// _SEC_HW_ERROR("Read (%d %02x) takes %lld", ret, block[0], global_counter);
 
@@ -161,17 +144,11 @@ for (int ii = 0; ii <= 651; ii++) {
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 
-	if ((ii - 1) % 65 == 0 && (ii - 1) != 0) {
-		insecure_printf("Run %d: Write %d, Read %d, Req %d", 
-			(ii - 1) / 65,
-			total_write,
-			total_read,
-			total_req);
-		total_read = 0;
-		total_write = 0;
-		total_req = 0;
-	}
-}
+	insecure_printf("(verify %02x) Write %d, Read %d, Req %d", 
+		block[0],
+		total_write,
+		total_read,
+		total_req);
 #endif
 
 //	uint32_t data = 0;

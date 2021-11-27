@@ -382,10 +382,14 @@ void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
 	 *    a) every delegation must add 14 quotas;
 	 *    b) the reader must yield / eat these 14 quotas left.
 	 */
+	/* Benchmark has no quota limit */
+	/*
 	if (limit * factor + tail_offset > MAILBOX_MAX_LIMIT_VAL)
 		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
 	else
 		new_state.limit = limit * factor + tail_offset;
+	*/
+	new_state.limit = MAILBOX_NO_LIMIT_VAL;
 
 	if (timeout > MAILBOX_MAX_TIMEOUT_VAL)
 		new_state.timeout = MAILBOX_MAX_TIMEOUT_VAL;
