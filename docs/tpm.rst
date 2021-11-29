@@ -38,7 +38,7 @@ On Ubuntu, you could use the following command:
 
 $ sudo apt -y install autoconf-archive libcmocka0 libcmocka-dev procps \
     iproute2 build-essential git pkg-config gcc libtool automake libssl-dev \
-    uthash-dev autoconf doxygen libjson-c-dev libini-config-dev \
+    uthash-dev autoconf libjson-c-dev libini-config-dev \
     libcurl4-openssl-dev libgcrypt-dev libglib2.0-dev
 
 Then use the following command to build and install the library:

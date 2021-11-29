@@ -126,8 +126,8 @@ int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value)
  * 	tpm_finalize
  * 	tpm_read
  * 	tpm_quote
- * 	tpm_seal
- * 	tpm_unseal
+ * 	tpm_seal_key
+ * 	tpm_unseal_key
  * 	tpm_reset
  */
 int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor)
