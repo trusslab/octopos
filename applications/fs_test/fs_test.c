@@ -45,55 +45,55 @@ void app_main(struct runtime_api *api)
 void fs_test(struct runtime_api *api)
 #endif
 {
-#ifdef MEASURE_STORAGE_THROUGH_OS
-	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
-	if (fd1 == 0) {
-		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
-		return;
-	}
+// #ifdef MEASURE_STORAGE_THROUGH_OS
+// 	uint32_t fd1 = api->open_file((char *) "test_file_1.txt", FILE_OPEN_CREATE_MODE);
+// 	if (fd1 == 0) {
+// 		insecure_printf("Couldn't open first file (fd1 = %d)\n", fd1);
+// 		return;
+// 	}
 
-	long long total_read = 0;
-	long long total_write = 0;
+// 	long long total_read = 0;
+// 	long long total_write = 0;
 
-	/* BENCHMARK: write to flash */
-	insecure_printf("Enter test.");
-	for (int j = 0; j < 10; j++) {
-	for (int i = 0; i < 80; i++) {
-		memset(block, 0xFE, STORAGE_BLOCK_SIZE * 25);
-		block[99] = i;
-		global_counter = 0;
-		api->write_file_blocks(fd1, block, i, 25);
-		total_write += global_counter;
+// 	/* BENCHMARK: write to flash */
+// 	insecure_printf("Enter test.");
+// 	for (int j = 0; j < 10; j++) {
+// 	for (int i = 0; i < 80; i++) {
+// 		memset(block, 0xFE, STORAGE_BLOCK_SIZE * 25);
+// 		block[99] = i;
+// 		global_counter = 0;
+// 		api->write_file_blocks(fd1, block, i, 25);
+// 		total_write += global_counter;
 
-		memset(block, 0x0, STORAGE_BLOCK_SIZE * 25);
+// 		memset(block, 0x0, STORAGE_BLOCK_SIZE * 25);
 
-		global_counter = 0;
-		api->read_file_blocks(fd1, block, i, 25);
-		total_read += global_counter;
-//		// <<<
-//		 mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
-		insecure_printf("%d-%d: w %lld r %lld (%02x, %02x)", j, i, total_write, total_read, block[99], block[199]);
+// 		global_counter = 0;
+// 		api->read_file_blocks(fd1, block, i, 25);
+// 		total_read += global_counter;
+// //		// <<<
+// //		 mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+// 		insecure_printf("%d-%d: w %lld r %lld (%02x, %02x)", j, i, total_write, total_read, block[99], block[199]);
 
-		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
-		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
-	}
-	insecure_printf("Write takes %lld", total_write);
+// 		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+// 		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+// 	}
+// 	insecure_printf("Write takes %lld", total_write);
 
-	/* BENCHMARK: read from flash */
-//	memset(block, 0x0, STORAGE_BLOCK_SIZE * 25);
-//	global_counter = 0;
-//	for (int i = 0; i < 65; i++) {
-//		api->read_file_blocks(fd1, block, 0, 25);
-//		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
-////		insecure_printf("Read %i: %lld", i, global_counter);
-//	}
-	insecure_printf("Read takes %lld", total_read);
-	}
+// 	/* BENCHMARK: read from flash */
+// //	memset(block, 0x0, STORAGE_BLOCK_SIZE * 25);
+// //	global_counter = 0;
+// //	for (int i = 0; i < 65; i++) {
+// //		api->read_file_blocks(fd1, block, 0, 25);
+// //		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+// ////		insecure_printf("Read %i: %lld", i, global_counter);
+// //	}
+// 	insecure_printf("Read takes %lld", total_read);
+// 	}
 
-	api->close_file(fd1);
-	api->remove_file((char *) "test_file_1.txt");
+// 	api->close_file(fd1);
+// 	api->remove_file((char *) "test_file_1.txt");
 
-#endif
+// #endif
 
 
 #define MEASURE_STORAGE_ROUNDTRIP
@@ -124,7 +124,7 @@ void fs_test(struct runtime_api *api)
 	/* BENCHMARK: write to flash */
 	// _SEC_HW_ERROR("Enter Write test");
 	global_counter = 0;
-	for (int jj = 0; jj < 33; jj++)
+	for (int jj = 0; jj < 65; jj++)
 		ret = api->write_secure_storage_blocks(block, 0, 31);
 	total_write = global_counter;
 	// _SEC_HW_ERROR("Write (%d) takes %lld", ret, global_counter);
@@ -134,7 +134,7 @@ void fs_test(struct runtime_api *api)
 
 	// _SEC_HW_ERROR("Enter Read test");
 	global_counter = 0;
-	for (int jj = 0; jj < 33; jj++)
+	for (int jj = 0; jj < 65; jj++)
 		ret = api->read_secure_storage_blocks(block, 0, 31);
 	total_read += global_counter;
 	// _SEC_HW_ERROR("Read (%d %02x) takes %lld", ret, block[0], global_counter);

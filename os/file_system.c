@@ -790,12 +790,12 @@ repeat:
 	buf[0] = IO_OP_SEND_DATA;
 	send_msg_to_storage_no_response(buf);
 
-	if (num_blocks) {
-		get_response_from_storage(buf);
-		/* FIXME: check the response here */
-		total_written_blocks += next_num_blocks;
-		goto repeat;
-	}
+//	if (num_blocks) {
+//		get_response_from_storage(buf);
+//		/* FIXME: check the response here */
+//		total_written_blocks += next_num_blocks;
+//		goto repeat;
+//	}
 
 	return Q_STORAGE_DATA_IN;
 }
@@ -902,12 +902,12 @@ repeat:
 	buf[0] = IO_OP_RECEIVE_DATA;
 	send_msg_to_storage_no_response(buf);
 
-	if (num_blocks) {
-		get_response_from_storage(buf);
-		/* FIXME: check the response here */
-		total_read_blocks += next_num_blocks;
-		goto repeat;
-	}
+//	if (num_blocks) {
+//		get_response_from_storage(buf);
+//		/* FIXME: check the response here */
+//		total_read_blocks += next_num_blocks;
+//		goto repeat;
+//	}
 
 	return Q_STORAGE_DATA_OUT;
 }

@@ -306,10 +306,11 @@ static int storage_create_secure_partition(uint8_t *app_key,
 {
 	uint32_t i, _partition_id;
 
+	/* FIXME: sechw: why need to check rootfs is_created? */
 	if (runtime_proc_id == P_UNTRUSTED) {
 		if ((num_partitions >= 2) &&
-		    (partitions[1].size == partition_size) &&
-		    !partitions[1].is_created) {
+		    (partitions[1].size == partition_size)/* && 
+		    !partitions[1].is_created*/) {
 			_partition_id = 1;
 		} else {
 			printf("Error: %s: couldn't find the proper partition "
@@ -471,12 +472,15 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	// printf("Note[6.5] %d %d\r\n", limit, timeout);
 
+/*
+	Disable for infinite quota benchmark.
 	if (limit > MAILBOX_MAX_LIMIT_VAL) {
 		printf("Error[7]\r\n");
 		printf("Error: %s: limit (%d) too large\n", __func__, limit);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
+*/
 
 	runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
