@@ -687,10 +687,10 @@ int init_os_mailbox(void)
 
 	OMboxIds_init();
 
-#ifndef ARCH_SEC_HW_BOOT
-	/* Wait until all other PL cores are loaded */
-	sleep(1);
-#endif
+//#ifndef ARCH_SEC_HW_BOOT
+//	/* Wait until all other PL cores are loaded */
+//	sleep(1);
+//#endif
 
 	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_OS_MBOX_Q_SERIAL_OUT_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_output, ConfigPtr, ConfigPtr->BaseAddress);

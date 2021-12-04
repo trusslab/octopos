@@ -23,6 +23,8 @@
 extern OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
 extern UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
 
+extern long long global_counter;
+
 u32 octopos_mailbox_get_status_reg(UINTPTR base);
 #endif
 
@@ -104,16 +106,34 @@ static void help_boot_untrusted_proc(void)
 
 void help_boot_procs(int boot_untrusted)
 {
+	printf("init done\r\n");
+
+	global_counter = 0;
 	help_boot_keyboard_proc();
+	printf("keyboard %d\r\n", global_counter);
+
+	global_counter = 0;
 	help_boot_serial_out_proc();
+	printf("serial %d\r\n", global_counter);
+
+	global_counter = 0;
 	help_boot_network_proc();
+	printf("net %d\r\n", global_counter);
 #ifndef ARCH_SEC_HW
 	help_boot_bluetooth_proc();
 #endif
+	global_counter = 0;
 	help_boot_runtime_proc(P_RUNTIME1);
+	printf("enclave0 %d\r\n", global_counter);
+
+	global_counter = 0;
 	help_boot_runtime_proc(P_RUNTIME2);
+	printf("enclave1 %d\r\n", global_counter);
+
+	global_counter = 0;
 	if (boot_untrusted)
 		help_boot_untrusted_proc();
+	printf("linux %d\r\n", global_counter);
 }
 
 int reset_proc(uint8_t proc_id)

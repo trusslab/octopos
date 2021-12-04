@@ -193,6 +193,11 @@ static int secure_boot_check(char *path, char *signature_path)
 
 int main(int argc, char *argv[])
 {
+#if defined(ARCH_SEC_HW_BOOT_STORAGE) || defined(ARCH_SEC_HW_BOOT_OS)
+	/* BENCHMARK: measure clock time between prints */
+	printf("Bootloader\r\n");
+#endif
+
 #ifdef ARCH_SEC_HW_BOOT
 	/* Clear target memory contents */
 	memset((void*) RAM_BASE_ADDRESS, 0, RAM_RANGE + BOOT_STACK_HEAP_SIZE);
@@ -203,7 +208,7 @@ int main(int argc, char *argv[])
 	unsigned int * fuse2 = (unsigned int *) ROM_FUSE2;
 	*fuse1 = FUSE_BURN_VALUE;
 	*fuse2 = FUSE_BURN_VALUE;
-	printf("BL main\r\n");
+	// printf("BL main\r\n");
 	*boot_status_reg = 0;
 #endif /* ARCH_SEC_HW_BOOT */
 
