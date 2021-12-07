@@ -19,6 +19,7 @@ abrmd:
 
 emu:
 	make -j$(nproc) -C ./ibmtpm/
+	sudo cp ./ibmtpm/tpm_server /usr/local/bin/
 
 clean:
 	make clean -C ./tpm2-tss/
