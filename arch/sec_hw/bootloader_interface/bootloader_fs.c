@@ -50,6 +50,19 @@ int get_srec_line(uint8 *line, uint8 *buf)
 #error STORAGE_BOOT_BLOCK_SIZE cannot be bigger than STORAGE_BOOT_UNPACK_BUF_SIZE
 #endif
 
+#define uchar unsigned char // 8-bit byte
+typedef struct {
+   uchar data[64];
+   uint datalen;
+   uint bitlen[2];
+   uint state[8];
+} SHA256_CTX;
+unsigned char hash[32];
+SHA256_CTX ctx;
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
+void sha256_final(SHA256_CTX *ctx, uchar hash[]);
+
 // FIXME: Why bootloader_other has its own load_by_line implementation?
 // should merge into this function. Don't forget to add memset common_heap_and_stack
 void storage_request_boot_image_by_line(char *filename)
@@ -89,6 +102,11 @@ void storage_request_boot_image_by_line(char *filename)
 			break;
 		}
 
+		/* update hash */
+		if (offset == 0)
+			sha256_init(&ctx);
+		sha256_update(&ctx, &buf[0], STORAGE_BOOT_BLOCK_SIZE);
+
 		offset += _size;
 
 		/* copy into unpack buffer */
@@ -114,6 +132,14 @@ void storage_request_boot_image_by_line(char *filename)
 				case SREC_TYPE_8:
 				case SREC_TYPE_9:
 //					laddr = (void (*)())srinfo.addr;
+
+					/* finalize hash and verify with TPM */
+					sha256_final(&ctx, hash);
+					// DEBUG >>>
+					for (int idx = 0; idx < 32; idx++)
+						printf("%02x",hash[idx]);
+					printf("\r\n");
+					// DEBUG <<<
 
 					/* clean up before load program */
 					bootloader_close_file_system();

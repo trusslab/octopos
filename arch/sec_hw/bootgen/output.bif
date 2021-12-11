@@ -3,7 +3,7 @@ the_ROM_image:
 {
 	[bootloader]bin/linux/zynqmp_fsbl.elf
 	[pmufw_image]bin/linux/pmufw.elf
-	[destination_device = pl]bin/linux/system_mb6.bit
+	[destination_device = pl]bin/linux/system_mb7.bit
 	[destination_cpu = a53-0, exception_level = el-3, trustzone]bin/linux/bl31.elf
 	[destination_cpu = a53-0, exception_level = el-2]bin/linux/u-boot.elf
 }

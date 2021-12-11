@@ -75,6 +75,11 @@ sechw:
 	-data ${VITIS_BOOTLOADERS}/os_bootloader/Debug/os_bootloader.elf \
 	-proc design_1_i/OS_subsys/microblaze_6 \
 	-out ${PETALINUX_PRODUCTS}/system_mb6.bit -force
+	${VITIS_INSTALLATION}/2020.1/bin/updatemem -bit ${PETALINUX_PRODUCTS}/system_mb6.bit \
+	-meminfo ${HW_DESIGN_WITH_ARBITTER}/zcu102_octopos.runs/impl_1/design_1_wrapper.mmi \
+	-data ${VITIS_TPM}/tpm/Debug/tpm.elf \
+	-proc design_1_i/TPM_subsys/microblaze_7 \
+	-out ${PETALINUX_PRODUCTS}/system_mb7.bit -force
 
 	echo "Building final boot image..."
 	${VITIS_INSTALLATION}/2020.1/bin/bootgen \

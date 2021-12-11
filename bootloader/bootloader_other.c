@@ -37,6 +37,19 @@ int need_repeat = 0, total_count = 0;
 int need_repeat, total_count;
 #endif
 
+#define uchar unsigned char // 8-bit byte
+typedef struct {
+   uchar data[64];
+   uint datalen;
+   uint bitlen[2];
+   uint state[8];
+} SHA256_CTX;
+unsigned char hash[32];
+SHA256_CTX ctx;
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
+void sha256_final(SHA256_CTX *ctx, uchar hash[]);
+
 #ifndef ARCH_SEC_HW_BOOT
 int fd_out, fd_in, fd_intr;
 pthread_t mailbox_thread;
@@ -403,6 +416,11 @@ repeat:
 		// #ifdef ARCH_SEC_HW_BOOT_KEYBOARD
 		// if (i==0) printf("AFTER READ %08x\r\n", octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
 		// #endif
+
+		/* update hash */
+		if (offset == 0)
+			sha256_init(&ctx);
+		sha256_update(&ctx, &buf[0], STORAGE_BLOCK_SIZE);
 #endif
 		
 #ifndef ARCH_SEC_HW_BOOT
@@ -433,6 +451,14 @@ repeat:
                 case SREC_TYPE_7:
                 case SREC_TYPE_8:
                 case SREC_TYPE_9:
+
+					/* finalize hash and verify with TPM */
+					sha256_final(&ctx, hash);
+					// DEBUG >>>
+					for (int idx = 0; idx < 32; idx++)
+						printf("%02x",hash[idx]);
+					printf("\r\n");
+					// DEBUG <<<
 
                 	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
 
