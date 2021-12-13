@@ -96,8 +96,6 @@
 
 /* Hash support function */
 void print_digest(uint8_t pcr_index, const uint8_t *digest, size_t digest_size);
-void print_digest_buffer(const uint8_t *digest, size_t digest_size,
-			 char* buf, size_t buf_size);
 int hash_to_byte_structure(const char *input_string, UINT16 *byte_length,
 			   BYTE *byte_buffer);
 int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value);
@@ -109,24 +107,12 @@ void tpm_finalize(FAPI_CONTEXT **context);
 int tpm_read(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *buf,
 	     char **log, BOOL print);
 int tpm_extend(FAPI_CONTEXT *context, uint32_t pcr_index, uint8_t *hash_buf);
-int tpm_quote(FAPI_CONTEXT *context, uint8_t *nonce,
-	      uint32_t *pcr_list, size_t pcr_list_size,
-	      uint8_t **signature, size_t *signature_size, 
-	      char** quote_info, char **pcr_event_log);
-int tpm_seal_key(FAPI_CONTEXT *context, uint8_t *data, size_t data_size);
-int tpm_unseal_key(FAPI_CONTEXT *context, uint8_t **data, size_t *data_size);
-int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected);
 
 /* Top-level TPM API exposed for calling */
 int enforce_running_process(uint8_t processor);
 int cancel_running_process();
 int tpm_measure_service(char* path, BOOL is_path);
 int tpm_processor_read_pcr(uint32_t pcr_index, uint8_t *pcr_value);
-int tpm_attest(uint8_t *nonce, uint32_t *pcr_list,
-	       size_t pcr_list_size, uint8_t **signature,
-	       size_t *signature_size, char** quote_info);
-int tpm_get_storage_key(uint8_t **key_iv);
-int tpm_reset_pcrs(const uint32_t *pcr_list, size_t pcr_list_size);
 #endif
 
 #endif
