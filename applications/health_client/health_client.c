@@ -44,6 +44,16 @@ uint8_t measured_storage_pcr[TPM_EXTEND_HASH_SIZE];
 int trustworthy_storage_service = 0;
 uint8_t measured_bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
 
+/* FIXME: Implement key exchange algorithm to replace fixed encryption key */
+uint8_t transport_key[AES_GEN_SIZE] = {
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+	0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+	0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+	0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f
+};
+
 #define CONTEXT_SIGNATURE_SIZE	4
 /* Used to check if context returned from storage is valid or junk */
 uint8_t expected_context_signature[CONTEXT_SIGNATURE_SIZE] =
@@ -86,7 +96,7 @@ struct app_context context;
 		    fmt, ##args)
 
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
-#define MAX_PACK_SIZE 256
+#define MAX_PACK_SIZE (256 - TAG_SIZE)
 
 static struct socket *sock;
 static struct sock_addr skaddr;
@@ -126,6 +136,81 @@ static int _parse_ip_port(char *str, unsigned int *addr, unsigned short *nport)
 	if (port)
 		*port = ':';
 	return 0;
+}
+
+ssize_t write_with_enc(void *buf, size_t len)
+{
+	ssize_t n;
+	uint8_t *plain;
+	uint8_t *cipher;
+	size_t cipher_size = len + TAG_SIZE;
+
+	plain = (uint8_t *) malloc(len);
+	memcpy(plain, buf, len);
+
+	int packages = (int) (len - 1) / MAX_PACK_SIZE + 1;
+	for (int pack = 0; pack < packages; pack++) {
+		int pack_size = (pack == packages - 1) ?
+				((int) len - pack * MAX_PACK_SIZE) :
+				MAX_PACK_SIZE;
+
+		cipher = (uint8_t *) malloc(pack_size + TAG_SIZE);
+		aes_encrypt(transport_key, plain + pack * MAX_PACK_SIZE,
+			    pack_size, cipher, &cipher_size);
+		if ((int) cipher_size != pack_size + TAG_SIZE) {
+			printf("Error: %s: aes_encrypt failed.\n", __func__);
+			free(plain);
+			free(cipher);
+			return -1;
+		}
+
+		printf("%lu\n", cipher_size);
+
+		n = gapi->write_to_socket(sock, cipher, (int) cipher_size);
+		free(cipher);
+		if (n < 0)
+			break;
+	}
+
+	free(plain);
+	return n - TAG_SIZE;
+}
+
+ssize_t read_with_enc(void *buf, size_t len)
+{
+	ssize_t n;
+	uint8_t *plain;
+	size_t plain_size = 0;
+	uint8_t *cipher;
+
+	plain = (uint8_t *) malloc(len);
+
+	int packages = (int) (len - 1) / MAX_PACK_SIZE + 1;
+	for (int pack = 0; pack < packages; pack++) {
+		int pack_size = (pack == packages - 1) ?
+				((int) len - pack * MAX_PACK_SIZE) :
+				MAX_PACK_SIZE;
+
+		cipher = (uint8_t *) malloc(pack_size + TAG_SIZE);
+		n = gapi->read_from_socket(sock, cipher, pack_size + TAG_SIZE);
+		if (n < 0)
+			break;
+
+		aes_decrypt(transport_key, plain + pack * MAX_PACK_SIZE,
+			    &plain_size, cipher, n);
+		if ((int) plain_size != (n - TAG_SIZE)) {
+			printf("Error: %s: aes_decrypt failed.\n", __func__);
+			free(plain);
+			free(cipher);
+			return -1;
+		}
+
+		free(cipher);
+	}
+
+	memcpy(buf, plain, len);
+	free(plain);
+	return n - TAG_SIZE;
 }
 
 int exiting = 0;
@@ -276,12 +361,12 @@ static int connect_to_server(void)
 
 static int receive_bluetooth_devices_passwords(void)
 {
-	if (gapi->read_from_socket(sock, context.glucose_monitor_password, 32) < 0) {
+	if (read_with_enc(context.glucose_monitor_password, 32) < 0) {
 		insecure_printf("Error: couldn't read from socket (passwords:1)\n");
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, context.insulin_pump_password, 32) < 0) {
+	if (read_with_enc(context.insulin_pump_password, 32) < 0) {
 		insecure_printf("Error: couldn't read from socket (passwords:2)\n");
 		return -1;
 	}
@@ -289,51 +374,38 @@ static int receive_bluetooth_devices_passwords(void)
 	return 0;
 }
 
-static void send_large_packet(uint8_t* data, size_t size)
-{
-	int packages = size / MAX_PACK_SIZE + 1;
-	for (int pack = 0; pack < packages; pack++) {
-		int pack_size = ((pack == packages - 1) ?
-			(size - pack * MAX_PACK_SIZE) : MAX_PACK_SIZE);
-
-		if (gapi->write_to_socket(sock, data + pack * MAX_PACK_SIZE,
-					  pack_size) < 0) {
-			insecure_printf("Error: couldn't write to socket "
-					"(large packet)\n");
-			return;
-		}
-	}
-}
-
 static int perform_remote_attestation(void)
 {
+	int ret;
 	char buf[MSG_LENGTH];
 	char uuid[TPM_AT_ID_LENGTH];
 	char nonce[TPM_AT_NONCE_LENGTH];
 	uint8_t *signature = NULL;
 	uint8_t *quote = NULL;
 	uint8_t *packet;
-	size_t sig_size, quote_size;
-	char success = 0;
-	char init_cmd = 1;
-	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
-	uint32_t pcr_slots[] = {(uint32_t) PROC_TO_PCR(runtime_proc_id)};
-	uint8_t num_pcr_slots = 1;
-	int ret;
+	size_t sig_size;
+	size_t quote_size;
+	uint8_t success = 0;
+	uint8_t init_cmd = 1;
 
-	if (gapi->write_to_socket(sock, &init_cmd, 1) < 0) {
+	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
+	uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
+	uint8_t num_pcr_slots = 2;
+
+
+	if (write_with_enc(&init_cmd, 1) < 0) {
 		insecure_printf("Error: couldn't write to socket (remote "
 				"attestation)\n");
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, &success, 1) < 0) {
+	if (read_with_enc(&success, 1) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:1)\n");
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, buf, MSG_LENGTH) < 0) {
+	if (read_with_enc((uint8_t *)buf, MSG_LENGTH) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:2)\n");
 		return -1;
@@ -347,11 +419,6 @@ static int perform_remote_attestation(void)
 
 	memcpy(uuid, buf + 1, TPM_AT_ID_LENGTH);
 	memcpy(nonce, buf + 1 + TPM_AT_ID_LENGTH, TPM_AT_NONCE_LENGTH);
-
-//	for (int i = 0; i < TPM_AT_NONCE_LENGTH; i++) {
-//		printf("%02x, ", nonce[i]);
-//	}
-//	printf("\n");
 
 	if (gapi->request_tpm_attestation_report(pcr_slots, num_pcr_slots, nonce,
 						 &signature, &sig_size, &quote,
@@ -373,13 +440,13 @@ static int perform_remote_attestation(void)
 	memcpy(packet + 2, signature, sig_size);
 	memcpy(packet + 2 + sig_size, quote, quote_size);
 
-	send_large_packet(packet, 2 + sig_size + quote_size);
+	write_with_enc(packet, 2 + sig_size + quote_size);
 	
 	free(packet);
 	free(quote);
 	free(signature);
 
-	if (gapi->read_from_socket(sock, &success, 1) < 0) {
+	if (read_with_enc(&success, 1) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:3)\n");
 		return -1;
@@ -391,15 +458,13 @@ static int perform_remote_attestation(void)
 	}
 
 	/* Receieve I/O service PCRs and app signature */
-	if (gapi->read_from_socket(sock, context.bluetooth_pcr,
-				   TPM_EXTEND_HASH_SIZE) < 0) {
+	if (read_with_enc(context.bluetooth_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:4)\n");
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, storage_pcr,
-				   TPM_EXTEND_HASH_SIZE) < 0) {
+	if (read_with_enc(storage_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:5)\n");
 		return -1;
@@ -417,15 +482,13 @@ static int perform_remote_attestation(void)
 	else
 		trustworthy_storage_service = 1;
 
-	if (gapi->read_from_socket(sock, network_pcr,
-				   TPM_EXTEND_HASH_SIZE) < 0) {
+	if (read_with_enc(network_pcr, TPM_EXTEND_HASH_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:6)\n");
 		return -1;
 	}
 
-	if (gapi->read_from_socket(sock, context.app_signature,
-				   RSA_SIGNATURE_SIZE) < 0) {
+	if (read_with_enc(context.app_signature, RSA_SIGNATURE_SIZE) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:7)\n");
 		return -1;
@@ -434,7 +497,7 @@ static int perform_remote_attestation(void)
 	/* check the network PCR val */
 	ret = memcmp(measured_network_pcr, network_pcr, TPM_EXTEND_HASH_SIZE);
 	if (ret) {
-		printf("Error: %s: network PCR not verified.\n", __func__);
+		insecure_printf("Error: %s: network PCR not verified.\n", __func__);
 		success = 0;
 	} else {
 		success = 1;
@@ -450,7 +513,7 @@ static int perform_remote_attestation(void)
 	 * between the client are secure against side-channels on the client
 	 * device. The attestation of the network service tries to defeat that.
 	 */
-	if (gapi->write_to_socket(sock, &success, 1) < 0) {
+	if (write_with_enc(&success, 1) < 0) {
 		insecure_printf("Error: couldn't write to socket (remote "
 				"attestation:2)\n");
 		return -1;
@@ -597,8 +660,8 @@ void app_main(struct runtime_api *api)
 	uint8_t *encrypted_app_context = (uint8_t *) malloc(sizeof(app_context) + TAG_SIZE);
 
 	if (BTPACKET_FIXED_DATA_SIZE != 32) {
-		printf("Error: %s: BTPACKET_FIXED_DATA_SIZE must be 32 (%d)\n",
-		       __func__, BTPACKET_FIXED_DATA_SIZE);
+		insecure_printf("Error: %s: BTPACKET_FIXED_DATA_SIZE must be 32 (%d)\n",
+				__func__, BTPACKET_FIXED_DATA_SIZE);
 		return;
 	}
 

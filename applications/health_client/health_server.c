@@ -21,8 +21,10 @@
 #define APPLICATION
 #include <tpm/hash.h>
 #include <tpm/rsa.h>
+#include <tpm/aes.h>
 
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
+#define MAX_PACK_SIZE	(256 - TAG_SIZE)
 
 char glucose_monitor_password[32] = "glucose_monitor_password";
 char insulin_pump_password[32] = "insulin_pump_password";
@@ -33,6 +35,17 @@ uint8_t storage_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t expected_pcr_digest[TPM_EXTEND_HASH_SIZE];
 char expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
 uint8_t app_signature[RSA_SIGNATURE_SIZE];
+
+/* FIXME: Implement key exchange algorithm to replace fixed encryption key */
+uint8_t transport_key[AES_GEN_SIZE] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+    0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+    0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f
+};
+
 
 static void error(const char *msg)
 {
@@ -46,16 +59,16 @@ static void gen_random(char* buf, int size)
 	FILE* rand_handler = fopen("/dev/urandom", "r");
 	if (rand_handler) {
 		size_t ret = fread(buf, 1, size, rand_handler);
-		if (ret < 0) {
-			fprintf(stderr, "Error: Generate Random Error.\n");
-		}
+		if (ret < 0)
+			perror("Error: Generate Random Error.\n");
 	} else {
-		fprintf(stderr, "Error: Open uRandom Error.\n");
+		perror("Error: Open uRandom Error.\n");
 	}
 	fclose(rand_handler);
 
 	for (int i = 0; i < size; i++) {
-		if (buf[i] < 0)  buf[i] += 128;
+		if (buf[i] < 0)
+			buf[i] += 128;
 	}
 }
 
@@ -137,6 +150,12 @@ static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 		return -1;
 	}
 
+	for (int i=0; i<size; i++) {
+		printf("%02x ", signature[i]);
+	}
+	printf("\n");
+	printf("%s\n", quote_info);
+
 	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
 			      quote_info, signature, size, NULL);
 	if (rc != TSS2_RC_SUCCESS) {
@@ -157,10 +176,7 @@ static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
 		return -1;
 	}
 
-	printf("pcr_digest: %s\n", pcr_digest);
-	printf("expected_pcr_digest_str: %s\n", expected_pcr_digest_str);
-
-	if (strcmp(pcr_digest, expected_pcr_digest_str)) {
+	if (strcmp(pcr_digest, expected_pcr_digest_str) != 0) {
 		printf("Error: %s: pcr_digest in the quote not verified\n",
 		       __func__);
 		Fapi_Finalize(&context);
@@ -213,14 +229,12 @@ static void generate_PCR_digests(void)
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, temp_hash);
 	convert_hash_to_str(temp_hash, expected_pcr_digest_str);
-	printf("expected: %s\n", expected_pcr_digest_str);
 	hash_file((char *) "applications/health_client/health_client.so",
 		  file_hash);
 	buffers[0] = temp_hash;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, app_pcr);
 	convert_hash_to_str(app_pcr, expected_pcr_digest_str);
-	printf("expected: %s\n", expected_pcr_digest_str);
 
 	/* Attestation quote pcr digest: PCR 0 (boot) and 14 (app) */
 	/* FIXME: for now, PCR 0 is just a zero buf since we don't extend it. */
@@ -254,6 +268,80 @@ static int read_app_signature(void)
 	fclose(filep);
 
 	return 0;
+}
+
+ssize_t write_with_enc(int fd, void *buf, size_t len)
+{
+	ssize_t n;
+	uint8_t *plain;
+	uint8_t *cipher;
+	size_t cipher_size = len + TAG_SIZE;
+
+	plain = (uint8_t *) malloc(len);
+	memcpy(plain, buf, len);
+
+	int packages = (int) (len - 1) / MAX_PACK_SIZE + 1;
+	for (int pack = 0; pack < packages; pack++) {
+		int pack_size = (pack == packages - 1) ?
+				((int) len - pack * MAX_PACK_SIZE) :
+				MAX_PACK_SIZE;
+
+		cipher = (uint8_t *) malloc(pack_size + TAG_SIZE);
+		aes_encrypt(transport_key, plain + pack * MAX_PACK_SIZE,
+			    pack_size, cipher, &cipher_size);
+		if ((int) cipher_size != pack_size + TAG_SIZE) {
+			printf("Error: %s: aes_encrypt failed.\n", __func__);
+			free(plain);
+			free(cipher);
+			return -1;
+		}
+
+		printf("%lu\n", cipher_size);
+		n = write(fd, cipher,  (int) cipher_size);
+		free(cipher);
+		if (n < 0)
+			break;
+	}
+
+	free(plain);
+	return n - TAG_SIZE;
+}
+
+ssize_t read_with_enc(int fd, void *buf, size_t len)
+{
+	ssize_t n;
+	uint8_t *plain;
+	size_t plain_size = 0;
+	uint8_t *cipher;
+
+	plain = (uint8_t *) malloc(len);
+
+	int packages = (int) (len - 1) / MAX_PACK_SIZE + 1;
+	for (int pack = 0; pack < packages; pack++) {
+		int pack_size = (pack == packages - 1) ?
+				((int) len - pack * MAX_PACK_SIZE) :
+				MAX_PACK_SIZE;
+
+		cipher = (uint8_t *) malloc(pack_size + TAG_SIZE);
+		n = read(fd, cipher, pack_size + TAG_SIZE);
+		if (n < 0)
+			break;
+
+		aes_decrypt(transport_key, plain + pack * MAX_PACK_SIZE,
+			    &plain_size, cipher, n);
+		if ((int) plain_size != (n - TAG_SIZE)) {
+			printf("Error: %s: aes_decrypt failed.\n", __func__);
+			free(plain);
+			free(cipher);
+			return -1;
+		}
+
+		free(cipher);
+	}
+
+	memcpy(buf, plain, len);
+	free(plain);
+	return n - TAG_SIZE;
 }
 
 int main(int argc, char *argv[])
@@ -309,7 +397,7 @@ int main(int argc, char *argv[])
 	uint8_t nonce[TPM_AT_NONCE_LENGTH];
 
 	bzero(buffer, 1);
-	n = read(newsockfd, buffer, 1);
+	n = read_with_enc(newsockfd, buffer, 1);
 	if (n < 0)
 		error("ERROR reading from socket -- 1");
 
@@ -317,12 +405,13 @@ int main(int argc, char *argv[])
 		error("ERROR unexpected initial cmd");
 
 	buffer[0] = 1;
-	n = write(newsockfd, buffer, 1);
+	n = write_with_enc(newsockfd, buffer, 1);
 	if (n < 0)
 		error("ERROR writing to socket -- 1");
 
 	gen_attest_payload(msg, nonce);
-	n = write(newsockfd, msg, MSG_LENGTH);
+
+	n = write_with_enc(newsockfd, msg, MSG_LENGTH);
 	if (n < 0)
 		error("ERROR writing to socket -- 2");
 	
@@ -330,18 +419,18 @@ int main(int argc, char *argv[])
 	bzero(quote_buf, 4096);
 
 	int count = 0;
-	uint8_t packet[256];
+	uint8_t packet[240];
 	int package_size = 0;
 	do {
-		bzero(packet, 256);
-		n = read(newsockfd, packet, 256);
+		bzero(packet, 240);
+		n = read_with_enc(newsockfd, packet, 240);
 		if (n < 0)
 			error("ERROR reading from socket -- 2");
 
-		memcpy(quote_buf + count * 256, packet, 256);
+		memcpy(quote_buf + count * 240, packet, 240);
 		count += 1;
 		package_size += n;
-	} while (n > 0 && count < 4);
+	} while (n > 0 && count < 5);
 
 	int sig_size = (quote_buf[0] << 8) | quote_buf[1];
 	uint8_t signature[256];
@@ -352,18 +441,11 @@ int main(int argc, char *argv[])
 	char *quote_info = (char *) malloc(quote_size + 1);
 	bzero(quote_info, quote_size + 1);
 	memcpy(quote_info, quote_buf + 2 + sig_size, quote_size);
-//	printf("%d\n", sig_size);
-	for (int i = 0; i < sig_size; i++) {
-		printf("%02x, ", signature[i]);
-	}
-	printf("\n");
-//	printf("%s\n", quote_info);
-//	printf("%d\n", quote_size);
 
 	ret = verify_quote(nonce, quote_info, signature, sig_size);
 	if (ret) {
 		buffer[0] = 0;
-		write(newsockfd, buffer, 1);
+		write_with_enc(newsockfd, buffer, 1);
 		error("ERROR quote verification failed");
 	}
 	free(quote_info);
@@ -375,24 +457,24 @@ int main(int argc, char *argv[])
 	 */
 
 	buffer[0] = 1;
-	n = write(newsockfd, buffer, 1);
+	n = write_with_enc(newsockfd, buffer, 1);
 	if (n < 0)
 		error("ERROR writing to socket -- 3");
 
 	/* Send I/O service PCRs and app signature */
-	n = write(newsockfd, bluetooth_pcr, TPM_EXTEND_HASH_SIZE);
+	n = write_with_enc(newsockfd, bluetooth_pcr, TPM_EXTEND_HASH_SIZE);
 	if (n < 0)
 		error("ERROR writing to socket -- bluetooth_pcr");
 
-	n = write(newsockfd, storage_pcr, TPM_EXTEND_HASH_SIZE);
+	n = write_with_enc(newsockfd, storage_pcr, TPM_EXTEND_HASH_SIZE);
 	if (n < 0)
 		error("ERROR writing to socket -- storage_pcr");
 
-	n = write(newsockfd, network_pcr, TPM_EXTEND_HASH_SIZE);
+	n = write_with_enc(newsockfd, network_pcr, TPM_EXTEND_HASH_SIZE);
 	if (n < 0)
 		error("ERROR writing to socket -- network_pcr");
 
-	n = write(newsockfd, app_signature, RSA_SIGNATURE_SIZE);
+	n = write_with_enc(newsockfd, app_signature, RSA_SIGNATURE_SIZE);
 	if (n < 0)
 		error("ERROR writing to socket -- app_signature");
 
@@ -407,7 +489,7 @@ int main(int argc, char *argv[])
 	 * device. The attestation of the network service tries to defeat that.
 	 */
 	bzero(buffer, 1);
-	n = read(newsockfd, buffer, 1);
+	n = read_with_enc(newsockfd, buffer, 1);
 	if (n < 0)
 		error("ERROR reading from socket -- 3");
 
@@ -415,11 +497,11 @@ int main(int argc, char *argv[])
 		error("ERROR network service attestation failed on the device");
 
 	/* Send bluetooth device passwords */
-	n = write(newsockfd, glucose_monitor_password, 32);
+	n = write_with_enc(newsockfd, glucose_monitor_password, 32);
 	if (n < 0)
 		error("ERROR writing to socket -- glucose_monitor_password");
 
-	n = write(newsockfd, insulin_pump_password, 32);
+	n = write_with_enc(newsockfd, insulin_pump_password, 32);
 	if (n < 0)
 		error("ERROR writing to socket -- insulin_pump_password");
 

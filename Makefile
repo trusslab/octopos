@@ -28,3 +28,4 @@ hard-reset:
 	rm -f NVChip
 	rm -f storage/octopos_partition_*
 	sudo rm -rf /usr/local/var/lib/tpm2-tss/system/keystore/
+	sudo rm -rf /tmp/octopos_*
