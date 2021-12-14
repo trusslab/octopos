@@ -38,7 +38,7 @@ int aes_encrypt(uint8_t *key_iv, uint8_t *plain, size_t plain_size,
 	aes_return_if_error(rc, "Key and IV Initialization Error",
 			    encrypt_finalize);
 
-	while ((size_t) result_size <= plain_size - 16) {
+	while ((size_t) result_size + 16 <= plain_size) {
 		rc = EVP_EncryptUpdate(aes_ctx, cipher + result_size,
 				       &len, plain + result_size, 16);
 		aes_return_if_error(rc, "Encryption Update Error",
@@ -104,7 +104,7 @@ int aes_decrypt(uint8_t *key_iv, uint8_t *plain, size_t *plain_size,
 			    decrypt_finalize);
 
 
-	while ((size_t) result_size <= cipher_size_real - 16) {
+	while ((size_t) result_size + 16 <= cipher_size_real) {
 		rc = EVP_DecryptUpdate(aes_ctx, plain + result_size,
 				       &len, cipher + result_size, 16);
 		aes_return_if_error(rc, "Decryption Update Error",
