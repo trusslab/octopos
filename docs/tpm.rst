@@ -63,7 +63,7 @@ $ git submodule update --init --recursive
 to pull the entire contents.
 
 Problem2. TPM is in DA lockout mode
-Solution: Execute the tpm_shutdown in util/tpm/tools/ folder
+Solution: Execute the tpm_shutdown in util/tpm/tools/ folder.
 
 It was caused by abnormal shutdown of tpm that making the tpm don't receive
 TPM_SHUTDOWN signal.
@@ -72,3 +72,6 @@ Update: tpm_shutdown does not always resolve the lockout problem.
 For now, a temporary hack was added to the simulator.
 To solve this issue correctly, we need to send the shutdown command to the TPM
 everytime we halt OctopOS.
+
+Problem 3. Integrity check failed
+Solution: Execute the create_primary in util/tpm/tools/ folder.
