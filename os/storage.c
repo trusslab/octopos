@@ -35,7 +35,7 @@ extern struct app untrusted_app;
 
 #ifdef ARCH_SEC_HW
 /* FIXME: sechw - how do we know storage is ready? */
-#define STORAGE_REBOOT_WAIT sleep(3)
+#define STORAGE_REBOOT_WAIT sleep(4)
 #endif
 
 static int query_number_partitions(void)

@@ -85,18 +85,25 @@
 /* Mailbox data access parameters                              */
 /***************************************************************/
 #if defined ARCH_SEC_HW_OS
-#define XPAR_MBOX_NUM_INSTANCES 16U
+#define XPAR_MBOX_NUM_INSTANCES 17U
 #elif defined ARCH_SEC_HW_STORAGE
-#define XPAR_MBOX_NUM_INSTANCES 4U
-#elif defined ARCH_SEC_HW_RUNTIME
-#define XPAR_MBOX_NUM_INSTANCES 13U
-#elif defined ARCH_SEC_HW_KEYBOARD
-#define XPAR_MBOX_NUM_INSTANCES 2U
-#elif defined ARCH_SEC_HW_SERIAL_OUT
-#define XPAR_MBOX_NUM_INSTANCES 2U
-#elif defined ARCH_SEC_HW_NETWORK
 #define XPAR_MBOX_NUM_INSTANCES 5U
+#elif defined ARCH_SEC_HW_RUNTIME
+#define XPAR_MBOX_NUM_INSTANCES 14U
+#elif defined ARCH_SEC_HW_KEYBOARD
+#define XPAR_MBOX_NUM_INSTANCES 3U
+#elif defined ARCH_SEC_HW_SERIAL_OUT
+#define XPAR_MBOX_NUM_INSTANCES 3U
+#elif defined ARCH_SEC_HW_NETWORK
+#define XPAR_MBOX_NUM_INSTANCES 6U
 #endif
+
+/* TPM mailbox connected to each domain, which share the same address */
+#define XPAR_TPM_DEVICE_ID 99U
+#define XPAR_TPM_DEVICE_BASEADDRESS 0xF1990000U
+#define XPAR_TPM_DEVICE_USE_FSL 0U
+#define XPAR_TPM_DEVICE_SEND_FSL 0U
+#define XPAR_TPM_DEVICE_RECV_FSL 0U
 
 /* mailboxs connected to Serial out (Microblaze 0) */
 #define XPAR_SERIAL_OUT_SERIAL_OUT_DEVICE_ID 0U

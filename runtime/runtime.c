@@ -579,16 +579,16 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 	if (ret0)
 		return (int) ret0;
 
-	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
-	if (!ret) {
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-#else
-		printf("Error: %s: failed to attest secure keyboard access\n",
-		       __func__);
-#endif
-		return ERR_FAULT;
-	}
+// 	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
+// 	if (!ret) {
+// #ifdef ARCH_SEC_HW
+// 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+// #else
+// 		printf("Error: %s: failed to attest secure keyboard access\n",
+// 		       __func__);
+// #endif
+// 		return ERR_FAULT;
+// 	}
 
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr(). This is because that call issues a
@@ -657,16 +657,16 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 		return (int) ret0;
 	}
 
-	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
-	if (!ret) {
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-#else
-		printf("Error: %s: failed to attest secure keyboard access\n",
-		       __func__);
-#endif
-		return ERR_FAULT;
-	}
+// 	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
+// 	if (!ret) {
+// #ifdef ARCH_SEC_HW
+// 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+// #else
+// 		printf("Error: %s: failed to attest secure keyboard access\n",
+// 		       __func__);
+// #endif
+// 		return ERR_FAULT;
+// 	}
 
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr(). This is because that call issues a

@@ -50,6 +50,8 @@ void sha256_init(SHA256_CTX *ctx);
 void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
 void sha256_final(SHA256_CTX *ctx, uchar hash[]);
 
+OCTOPOS_XMbox Mbox_TPM;
+
 #ifndef ARCH_SEC_HW_BOOT
 int fd_out, fd_in, fd_intr;
 pthread_t mailbox_thread;
@@ -326,6 +328,19 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	void (*laddr)();
 	need_repeat = 0;
 	total_count = 0;
+	u32 tpm_response;
+	int Status;
+
+	/* init TPM mailbox */
+	/* FIXME: move to each domain's mailbox init */
+	OCTOPOS_XMbox_Config *TPM_config_ptr;
+	TPM_config_ptr = OCTOPOS_XMbox_LookupConfig(XPAR_TPM_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_TPM, TPM_config_ptr, TPM_config_ptr->BaseAddress);
+	if (Status != XST_SUCCESS)
+	{
+		while(1);
+		return;
+	}
 
 	srinfo.sr_data = sr_data_buf;
 
@@ -455,10 +470,16 @@ repeat:
 					/* finalize hash and verify with TPM */
 					sha256_final(&ctx, hash);
 					// DEBUG >>>
-					for (int idx = 0; idx < 32; idx++)
-						printf("%02x",hash[idx]);
-					printf("\r\n");
+					// for (int idx = 0; idx < 32; idx++)
+					// 	printf("%02x",hash[idx]);
+					// printf("\r\n");
 					// DEBUG <<<
+					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
+					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
+					if (tpm_response != 0xFFFFFFFF) {
+						printf("Secure boot abort.\r\n");
+						while(1);
+					}
 
                 	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
 

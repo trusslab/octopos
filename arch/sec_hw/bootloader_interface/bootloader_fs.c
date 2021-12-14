@@ -13,6 +13,8 @@
 #include <octopos/mailbox.h>
 #include <octopos/storage.h>
 #include <arch/mem_layout.h>
+#include <arch/octopos_mbox.h>
+#include <arch/octopos_xmbox.h>
 
 static srec_info_t srinfo;
 static uint8 sr_buf[SREC_MAX_BYTES];
@@ -62,6 +64,7 @@ SHA256_CTX ctx;
 void sha256_init(SHA256_CTX *ctx);
 void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
 void sha256_final(SHA256_CTX *ctx, uchar hash[]);
+OCTOPOS_XMbox Mbox_TPM;
 
 // FIXME: Why bootloader_other has its own load_by_line implementation?
 // should merge into this function. Don't forget to add memset common_heap_and_stack
@@ -76,6 +79,19 @@ void storage_request_boot_image_by_line(char *filename)
 	void (*laddr)();
 	int _size;
 	int offset = 0;
+	u32 tpm_response;
+	int Status;
+
+	/* init TPM mailbox */
+	/* FIXME: move to each domain's mailbox init */
+	OCTOPOS_XMbox_Config *TPM_config_ptr;
+	TPM_config_ptr = OCTOPOS_XMbox_LookupConfig(XPAR_TPM_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_TPM, TPM_config_ptr, TPM_config_ptr->BaseAddress);
+	if (Status != XST_SUCCESS)
+	{
+		while(1);
+		return;
+	}
 
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
@@ -136,10 +152,16 @@ void storage_request_boot_image_by_line(char *filename)
 					/* finalize hash and verify with TPM */
 					sha256_final(&ctx, hash);
 					// DEBUG >>>
-					for (int idx = 0; idx < 32; idx++)
-						printf("%02x",hash[idx]);
-					printf("\r\n");
+					// for (int idx = 0; idx < 32; idx++)
+					// 	printf("%02x",hash[idx]);
+					// printf("\r\n");
 					// DEBUG <<<
+					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
+					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
+					if (tpm_response != 0xFFFFFFFF) {
+						printf("Secure boot abort.\r\n");
+						while(1);
+					}
 
 					/* clean up before load program */
 					bootloader_close_file_system();
