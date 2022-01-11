@@ -26,6 +26,8 @@ int num_chars = 0;
 
 #endif
 
+extern long long global_counter;
+
 #ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
@@ -37,13 +39,15 @@ void secure_interact(struct runtime_api *api)
 	int i, size;
 	int ret;
 
-	insecure_printf("This is secure_interact speaking.\n");
-	insecure_printf("Provide an insecure phrase: \n");
+	// insecure_printf("This is secure_interact speaking.\n");
+	// insecure_printf("Provide an insecure phrase: \n");
 
-	api->read_from_shell(line, &size);
-	insecure_printf("Your insecure phrase: %s\n", line);
+	// api->read_from_shell(line, &size);
+	// insecure_printf("Your insecure phrase: %s\n", line);
 
-	insecure_printf("Switching to secure interaction mode now.\n");
+	// insecure_printf("Switching to secure interaction mode now.\n");
+
+	_SEC_HW_ERROR("load take %lld", global_counter);
 
 	ret = api->request_secure_keyboard(100, 100, NULL, NULL);
 	if (ret) {
@@ -52,7 +56,8 @@ void secure_interact(struct runtime_api *api)
 		return;
 	}
 
-	insecure_printf("keyboard switched");
+	// insecure_printf("keyboard switched");
+	_SEC_HW_ERROR("keyboard %lld", global_counter);
 
 	ret = api->request_secure_serial_out(200, 100, NULL, NULL);
 	if (ret) {
@@ -61,6 +66,7 @@ void secure_interact(struct runtime_api *api)
 		insecure_printf("Failed to switch.\n");
 		return;
 	}
+	_SEC_HW_ERROR("serialout %lld", global_counter);
 	
 	secure_printf("Please enter your secure phrase: \r\n");
 

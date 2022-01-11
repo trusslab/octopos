@@ -131,8 +131,8 @@ void help_boot_procs(int boot_untrusted)
 	printf("enclave1 %d\r\n", global_counter);
 
 	global_counter = 0;
-	if (boot_untrusted)
-		help_boot_untrusted_proc();
+	// if (boot_untrusted)
+	// 	help_boot_untrusted_proc();
 	printf("linux %d\r\n", global_counter);
 }
 

@@ -62,6 +62,8 @@ static int repeat_num = 0;
 static bool repeat_cmd_exists = false;
 static int repeat_cmd_counter = 0;
 
+extern long long global_counter;
+
 /*
  * Handle commands separatly
  * input: return value from previous command (useful for pipe file descriptor)
@@ -79,6 +81,7 @@ static int repeat_cmd_counter = 0;
 static int command(int input, int first, int last, int double_pipe, int bg)
 {
 	/* FIXME: add support for passing args to apps */
+	printf("command %lld\r\n", global_counter);
 
 	if (first == 1 && last == 0 && input == 0) {
 		// First command
