@@ -60,7 +60,7 @@ static _inline void arp_cache_unlock(void)
 }
 #endif	/* end DEBUG_ARPCACHE_LOCK */
 
-#else /*ARCH_SEC_HW_NETWORK*/
+#endif /*ARCH_SEC_HW_NETWORK*/
 static _inline void arp_cache_lock(void)
 {
 	//MJ: FIXME Disable interrupts here
@@ -70,8 +70,6 @@ static _inline void arp_cache_unlock(void)
 {
 	//MJ: FIXME Enable interrupts here
 }
-#endif /*ARCH_SEC_HW_NETWORK*/
-
 void arp_queue_send(struct arpentry *ae)
 {
 	struct pkbuf *pkb;

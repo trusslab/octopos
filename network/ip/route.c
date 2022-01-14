@@ -85,7 +85,7 @@ void rt_init(void)
 	rt_add(xileth->net_ipaddr, 0xffffffff, 0, 0, RT_LOCALHOST, loop);
 	/* local net */
 	rt_add(LOCALNET(xileth), xileth->net_mask, 0, 0, RT_NONE, xileth);
-	rt_add(0, 0, 0x101a8c0, 0, RT_DEFAULT, xileth);
+	rt_add(0, 0, 0x100a8c0, 0, RT_DEFAULT, xileth);
 #endif /*ARCH_SEC_HW_NETWORK*/
 
 	dbg("route table init");
