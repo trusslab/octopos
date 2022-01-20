@@ -39,16 +39,22 @@ void octopos_mailbox_set_owner(UINTPTR base, u8 owner)
 	octopos_mailbox_set_status_reg(base, reg);
 }
 
-/* Temporary owner of the mailbox cannot delegate full quota to another
- * owner (or switch back to the OS). So we must take one off from the
- * read limit and time limit quotas.
- */
 void octopos_mailbox_deduct_and_set_owner(UINTPTR base, u8 owner)
 {
 	Xil_AssertVoid(base != 0);
 
-	// u32 reg = octopos_mailbox_get_status_reg(base) - 0x1001;
-	// reg = (OWNER_MASK & reg) | owner << 24;
+/* Old mailbox hardware code
+ * 	
+ * Temporary owner of the mailbox cannot delegate full quota to another
+ * owner (or switch back to the OS). So we must take one off from the
+ * read limit and time limit quotas.
+ */
+
+/*
+	u32 reg = octopos_mailbox_get_status_reg(base) - 0x1001;
+	reg = (OWNER_MASK & reg) | owner << 24;
+*/
+	
 	u32 reg = 0xFF000000;
 	
 	octopos_mailbox_set_status_reg(base, reg);
