@@ -371,6 +371,8 @@ int rt_output(struct pkbuf *pkb)
 	exit(-1);
 	return 0;
 }
+extern bool has_network_access;
+extern int network_access_count;
 #ifndef ARCH_SEC_HW
 static void *tcp_receive(void *_data)
 {
@@ -410,8 +412,6 @@ static void *tcp_receive(void *_data)
 	}
 }
 #else /*ARCH_SEC_HW*/
-extern bool has_network_access;
-extern int network_access_count;
 bool had_network_access;
 #define NETWRORK_RECEIVE_INTR_WORK
 uint8_t net_buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
@@ -1119,11 +1119,11 @@ static void close_socket(struct socket *sock)
 	syscall_close_socket();
 }
 
-//static int bind_socket(struct socket *sock, struct sock_addr *skaddr)
-//{
-//	return bind_socket(sock, skaddr);
-//}
-//
+static int bind_socket(struct socket *sock, struct sock_addr *skaddr)
+{
+	return network_domain_bind_sport(skaddr->src_port);
+}
+
 //static struct socket *accept_connection(struct socket *sock, struct sock_addr *skaddr)
 //{
 //	return _accept(sock, skaddr);
@@ -1661,7 +1661,7 @@ static void load_application(char *msg)
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
 		.close_socket = close_socket,
-		//.bind_socket = bind_socket,
+		.bind_socket = bind_socket,
 		//.accept_connection = accept_connection,
 		.connect_socket = connect_socket,
 		.read_from_socket = read_from_socket,

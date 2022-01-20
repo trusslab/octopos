@@ -176,6 +176,7 @@ static int tcp_wait_connect(struct tcp_sock *tsk)
 {
 	int err;
 	err = sleep_on(tsk->wait_connect);
+
 	tsk->wait_connect = NULL;
 	return err;
 }
@@ -208,11 +209,12 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 	 */
 	tcp_pre_wait_connect(tsk);
 	tcp_send_syn(tsk, NULL);
+	print("in tcp_connect waiting for connection\n\r");
 
 #ifdef ARCH_SEC_HW
-	print("in tcp_connect waiting for connection\n\r");
-	for(int i=0; i<100;i++)
+	while(tsk->state != 5){
 		print(".");
+	}
 	print("\n\r");
 	err = 0;
 #else
