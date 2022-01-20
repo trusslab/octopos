@@ -1,7 +1,8 @@
-#if defined(ARCH_SEC_HW_BOOT_STORAGE)
+#ifdef ARCH_SEC_HW_BOOT_STORAGE
 
 /* Simple wrapper for OctopOS file system
- * To use the file system as a standalone component
+ * To use the file system as a standalone component.
+ * This wrapper is customized for sec_hw.
  */
 #include <stdio.h>
 #include <stdint.h>

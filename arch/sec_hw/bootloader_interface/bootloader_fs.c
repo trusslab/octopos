@@ -66,8 +66,6 @@ void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
 void sha256_final(SHA256_CTX *ctx, uchar hash[]);
 OCTOPOS_XMbox Mbox_TPM;
 
-// FIXME: Why bootloader_other has its own load_by_line implementation?
-// should merge into this function. Don't forget to add memset common_heap_and_stack
 void storage_request_boot_image_by_line(char *filename)
 {
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
@@ -147,15 +145,13 @@ void storage_request_boot_image_by_line(char *filename)
 				case SREC_TYPE_7:
 				case SREC_TYPE_8:
 				case SREC_TYPE_9:
-//					laddr = (void (*)())srinfo.addr;
-
 					/* finalize hash and verify with TPM */
 					sha256_final(&ctx, hash);
-					// DEBUG >>>
-					// for (int idx = 0; idx < 32; idx++)
-					// 	printf("%02x",hash[idx]);
-					// printf("\r\n");
-					// DEBUG <<<
+#ifdef SEC_HW_TPM_DEBUG
+					for (int idx = 0; idx < 32; idx++)
+						printf("%02x",hash[idx]);
+					printf("\r\n");
+#endif
 					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
 					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
 					if (tpm_response != 0xFFFFFFFF) {
@@ -191,6 +187,5 @@ void storage_request_boot_image_by_line(char *filename)
 	SEC_HW_DEBUG_HANG();
 	return;
 }
-
 
 #endif
