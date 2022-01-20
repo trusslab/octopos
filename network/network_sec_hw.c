@@ -1,5 +1,5 @@
-#ifdef ARCH_SEC_HW_NETWORK
 /* octopos network code */
+#ifdef ARCH_SEC_HW_NETWORK /*ARCH_SEC_HW_NETWORK*/
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -9,9 +9,9 @@
 #include <pthread.h>
 #ifndef ARCH_SEC_HW_NETWORK
 #include <semaphore.h>
-#else /*ARCH_SEC_HW_STORAGE*/
+#else /*ARCH_SEC_HW_NETWORK*/
 #include "arch/semaphore.h"
-#endif /*ARCH_SEC_HW_STORAGE*/
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
@@ -22,11 +22,15 @@
 #include <network/lib.h>
 #include <network/ip.h>
 #include <network/tcp.h>
+#include <octopos/io.h>
 #ifndef ARCH_SEC_HW_NETWORK
 #include <arch/mailbox.h>
-#endif /*ARCH_SEC_HW_STORAGE*/
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 #include "arch/mailbox_network.h"
+#include "arch/syscall.h"
+
+#define UNTRUSTED_DOMAIN_OWNER_ID 3
 
 #define NETWORK_SET_ONE_RET(ret0)	\
 	*((uint32_t *) &buf[0]) = ret0; \
@@ -83,18 +87,34 @@
 	}							\
 	data = &buf[2];
 
-#define NETWORK_GET_FOUR_ARGS			\
-	uint32_t arg0, arg1, arg2, arg3;	\
-	arg0 = *((uint32_t *) &buf[0]);		\
-	arg1 = *((uint32_t *) &buf[4]);		\
-	arg2 = *((uint32_t *) &buf[8]);		\
-	arg3 = *((uint32_t *) &buf[12]);	\
 
+#define NETWORK_GET_ONE_ARG		\
+	uint32_t arg0;			\
+	DESERIALIZE_32(&arg0, &buf[1])	\
 
+uint32_t bound_sport = 0; /* 0xFF is an invalid partition number. */
+uint8_t bound = 0;
+uint8_t used = 0;
 
 unsigned int net_debug = 0;
 
+#define ARBITER_UNTRUSTED 1
+#define ARBITER_UNTRUSTED_FLAG 0xF0F0F0F0
+#define ARBITER_TRUSTED 0
+#define ARBITER_TRUSTED_FLAG 0
+#define ARBITER_BASE_ADDRESS 0xF0880000
+#define TRUSTED_PORT_BOUNDARY 5000
 
+void network_arbiter_change(unsigned int trusted){
+	unsigned int * arbitter_base = (unsigned int *) ARBITER_BASE_ADDRESS;
+	if (trusted == ARBITER_TRUSTED){
+		printf("Arbiter changed to trusted\n\r");
+		*arbitter_base = ARBITER_TRUSTED_FLAG;
+	}else{
+		printf("Arbiter changed to untrusted\n\r");
+		*arbitter_base = ARBITER_UNTRUSTED_FLAG;
+	}
+}
 
 
 static int tcp_init_pkb(struct pkbuf *pkb)
@@ -149,33 +169,30 @@ void dump_packet(struct pkbuf *pkb)
 	if (dsize) printf("%s: data = %s\n", __func__, &tcphdr->data[dindex]);
 }
 
-
 unsigned int saddr = 0, daddr = 0;
 unsigned short sport = 0, dport = 0;
 int filter_set = 0;
 
 void send_packet(uint8_t *buf)
 {
-	if (!filter_set) {
-		printf("%s: Error: queue filter not set.\n", __func__);
+	if (!bound) {
+		printf("%s: Error: sport did not bound yet.\n", __func__);
 		return;
 	}
 
 	NETWORK_GET_ZERO_ARGS_DATA
 	struct pkbuf *pkb = (struct pkbuf *) data;
-//    dump_packet(pkb);
     pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
 	list_init(&pkb->pk_list);
-	/* FIXME: add */
-	//pkb_safe();
 	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
 		printf("%s: Error: packet size is not correct. data_size = %d, (pkb->pk_len + sizeof(*pkb)) = %d, pkb->pk_len=%d, sizeof(*pkb) =%d\n",
 				__func__, data_size,(pkb->pk_len + sizeof(*pkb)), pkb->pk_len,sizeof(*pkb));
 		return;
 	}
 
+struct ip *iphdr = pkb2ip(pkb);
+#ifdef PACKET_IP_FILTER
 	/* check the IP addresses */
-	struct ip *iphdr = pkb2ip(pkb);
 	if ((saddr != iphdr->ip_src) || (daddr != iphdr->ip_dst)) {
 		printf("%s: Error: invalid src or dst IP addresses.\n", __func__);
 		return;
@@ -187,6 +204,14 @@ void send_packet(uint8_t *buf)
 		printf("%s: Error: invalid src or dst port numbers.\n", __func__);
 		return;
 	}
+#else
+	/* check the port numbers */
+	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
+	if ((bound_sport != tcphdr->src)) {
+		printf("%s: Error: invalid src  port number bound_sport  = %d , tcphdr->src= %d.\n", __func__, bound_sport, tcphdr->src);
+		return;
+	}
+#endif
 	tcp_init_pkb(pkb);
 	ip_send_out(pkb);
 
@@ -197,30 +222,100 @@ void send_packet(uint8_t *buf)
 void network_stack_init(void)
 {
         netdev_init();
-//#ifndef ARCH_SEC_HW_NETWORK	
         arp_cache_init();
         rt_init();
     	//MJ FIXME remove the static ARP
     	unsigned char host_mac_ethernet_address[] = {
     		0xd0, 0x50, 0x99, 0x5e, 0x71, 0x0b };
     	arp_insert(xileth,0x0800,
-    			0x101a8c0, host_mac_ethernet_address);
-//#endif
+    			0x100a8c0, host_mac_ethernet_address);
 
 }
 
-
-void process_cmd(uint8_t *buf)
+/*
+ * Bound or not?
+ * Used or not?
+ * If bound, resouce name.
+ * If global flag "used" not set, set it.
+ * This is irreversible until reset.
+ */
+static void network_query_state(uint8_t *buf)
 {
-	NETWORK_GET_FOUR_ARGS
-	saddr = (unsigned int) arg0;
-	sport = (unsigned short) arg1;
-	daddr = (unsigned int) arg2;
-	dport = (unsigned short) arg3;
+	uint8_t state[3], sport;
+	uint32_t state_size = 3;
 
-	filter_set = 1;
-	xil_printf("saddr=%x , sport=%u,  daddr=%x dport =%u \n\r",saddr,sport,daddr,dport );
-	NETWORK_SET_ONE_RET((unsigned int) 0)
+	state[0] = bound;
+	state[1] = used;
+	used = 1;
+	state[2] = bound_sport;
+
+	NETWORK_SET_ONE_RET_DATA(0, state, state_size)
+}
+
+
+/*
+ * Return error if bound, or used is set.
+ * Return error if invalid resource name
+ * Bind the resource to the data queues.
+ * Set the global var "bound"
+ * This is irreversible until reset.
+ */
+static void network_bind_resource(uint8_t *buf, u8 owner_id)
+{
+	uint32_t sport;
+
+	if (bound || used) {
+		printf("Error: %s: the bind op is invalid if bound (%d), "
+		      " or used (%d) is set.\n", __func__,
+		       bound, used);
+		NETWORK_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	NETWORK_GET_ONE_ARG
+	sport = arg0;
+
+	printf("%s:  bound_sport  = %d .\n", __func__, sport);
+
+	if (sport >= TRUSTED_PORT_BOUNDARY) {
+		network_arbiter_change(ARBITER_TRUSTED);
+	} else {
+		if ( owner_id != UNTRUSTED_DOMAIN_OWNER_ID) {
+			print("trusted domains cannot bound port less than 50000\r\n");
+			NETWORK_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+		network_arbiter_change(ARBITER_UNTRUSTED);
+	}
+
+	bound_sport = sport;
+	bound = 1;
+
+	NETWORK_SET_ONE_RET(0)
+}
+
+void process_cmd(uint8_t *buf, u8 owner_id)
+{
+	switch (buf[0]) {
+	case IO_OP_BIND_RESOURCE:
+		network_bind_resource(buf, owner_id);
+		break;
+
+	case IO_OP_QUERY_STATE:
+		network_query_state(buf);
+		break;
+
+
+	default:
+		/*
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
+		 */
+		printf("Error: %s: unsupported op (%d)\n", __func__, buf[0]);
+		used = 1;
+		NETWORK_SET_ONE_RET(ERR_INVALID)
+		break;
+	}
 }
 
 
@@ -228,6 +323,7 @@ void tcp_in(struct pkbuf *pkb)
 {
 	/* check the IP addresses */
 	struct ip *iphdr = pkb2ip(pkb);
+#ifdef PACKET_IP_FILTER
 	if ((daddr != iphdr->ip_src) || (saddr != iphdr->ip_dst)) {
 		printf("%s: Error: invalid src or dst IP addresses. Dropping the packet\n", __func__);
 		return;
@@ -239,6 +335,12 @@ void tcp_in(struct pkbuf *pkb)
 		printf("%s: Error: invalid src or dst port numbers. Dropping the packet\n", __func__);
 		return;
 	}
+#endif
+	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
+	if (bound_sport != tcphdr->dst) {
+		printf("%s: Error: invalid src port number. Dropping the packet\n", __func__);
+		return;
+	}
 	
 	int size = pkb->pk_len + sizeof(*pkb);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
@@ -247,9 +349,10 @@ void tcp_in(struct pkbuf *pkb)
 
 }
 
+
+
 int main(int argc, char **argv)
 {
-
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: network init s\n", __func__);
@@ -259,4 +362,4 @@ int main(int argc, char **argv)
 	
 	
 }
-#endif /* ARCH_SEC_HW_NETWORK */
+#endif /*ARCH_SEC_HW_NETWORK*/

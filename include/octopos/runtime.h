@@ -100,7 +100,7 @@ struct runtime_api {
 					struct sock_addr *skaddr);
 	//int (*listen_on_socket)(struct socket *sock, int backlog);
 	void (*close_socket)(struct socket *sock);
-	//int (*bind_socket)(struct socket *sock, struct sock_addr *skaddr);
+	int (*bind_socket)(struct socket *sock, struct sock_addr *skaddr);
 	//struct socket *(*accept_connection)(struct socket *sock, struct sock_addr *skaddr);
 	int (*connect_socket)(struct socket *sock, struct sock_addr *skaddr);
 	int (*read_from_socket)(struct socket *sock, void *buf, int len);
@@ -110,7 +110,6 @@ struct runtime_api {
 				      queue_update_callback_t callback,
 				      uint8_t *expected_pcr, uint8_t *return_pcr);
 	int (*yield_network_access)(void);
-
 #ifndef ARCH_SEC_HW
 	/* bluetooth */
 	int (*request_secure_bluetooth_access)(uint8_t *device_names,

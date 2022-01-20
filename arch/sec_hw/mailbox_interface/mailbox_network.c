@@ -378,7 +378,6 @@ int init_network(void)
 		_SEC_HW_ERROR("XIntc_Start failed");
 		return XST_FAILURE;
 	}
-	network_stack_init();
 	/* Enable interrupts */
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_NETWORK][Q_NETWORK_DATA_OUT]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_NETWORK][Q_NETWORK_DATA_IN]);
@@ -401,6 +400,7 @@ int init_network(void)
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
 
+	network_stack_init();
 	printf("net init done\n\r");
 
 

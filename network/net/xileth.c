@@ -27,7 +27,7 @@ struct netdev *xileth;
 int hardware_ready = 0;
 int xil_netif_initialized =0;
 
-#define DEFAULT_IP_ADDRESS_HEX	0x0a01a8c0 // "192.168.1.10"
+#define DEFAULT_IP_ADDRESS_HEX	0x0a00a8c0 // "192.168.0.10"
 #define DEFAULT_IP_MASK_HEX		0x00ffffff // "255.255.255.0"
 
 
@@ -42,7 +42,7 @@ int initialize_network_hardware(struct xemac_s *xemac)
 
 	/* the mac address of the board. this should be unique per board */
 	unsigned char mac_ethernet_address[] = {
-		0x00, 0x0a, 0x35, 0x00, 0x01, 0x02 };
+			0x00, 0x0a, 0x35, 0x00, 0x22, 0x01 };
 	int i;
 	/* set mac address */
 	for (i = 0; i < 6; i++){
