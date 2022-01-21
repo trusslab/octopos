@@ -24,13 +24,12 @@
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 
-
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	init_os_mailbox();
 
 #ifdef ARCH_SEC_HW_BOOT
-	// FIXME: is there a better way to wait for storage boot?
+	/* FIXME: is there a better way to wait for storage boot? */
 	sleep(4);
 #endif
 

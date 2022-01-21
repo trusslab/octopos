@@ -614,7 +614,6 @@ static void storage_create_resource(uint8_t *buf)
 
 	STORAGE_GET_ONE_ARG_DATA
 	if (data_size != STORAGE_KEY_SIZE) {
-		while(1);
 		printf("Error: %s: incorrect key (TPM hash) size\n", __func__);
 		STORAGE_SET_ONE_RET(ERR_INVALID)
 		return;
@@ -623,7 +622,6 @@ static void storage_create_resource(uint8_t *buf)
 	partition_id = arg0;
 
 	if (partition_id >= NUM_PARTITIONS) {
-		while(1);
 		printf("Error: %s: invalid requested partition ID (%d)\n",
 		       __func__, partition_id);
 		STORAGE_SET_ONE_RET(ERR_INVALID)
@@ -638,7 +636,6 @@ static void storage_create_resource(uint8_t *buf)
 
 	filep = fop_open(partitions[partition_id].create_name, "w");
 	if (!filep) {
-		while(1);
 		printf("Error: %s: Couldn't open %s.\n", __func__,
 		       partitions[partition_id].create_name);
 		STORAGE_SET_ONE_RET(ERR_FAULT)
@@ -651,7 +648,6 @@ static void storage_create_resource(uint8_t *buf)
 	fop_close(filep);
 
 	if (size != 4) {
-		while(1);
 		STORAGE_SET_ONE_RET(ERR_FAULT)
 		if (size > 0) { /* partial write */
 			/* wipe the file */
@@ -701,10 +697,6 @@ static void storage_query_all_resources(uint8_t *buf)
 
 	STORAGE_GET_TWO_ARGS
 
-	// //debug
-	// printf("%s: %d\r\n", __FUNCTION__, arg0);
-	// //debug
-	// printf("\r\n%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8]);
 	if (arg0 == 0) {
 		/* query the number of partitions */
 		num_partitions = NUM_PARTITIONS;
@@ -970,8 +962,13 @@ int main(int argc, char **argv)
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: storage init\n", __func__);
 
-	Xil_Out32(XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40 ,0x0000000A);
-
+#ifdef ARCH_SEC_HW
+	Xil_Out32(
+		XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40,
+		0x0000000A
+		);
+#endif
+	
 #ifndef ARCH_SEC_HW
 	enforce_running_process(P_STORAGE);
 #endif

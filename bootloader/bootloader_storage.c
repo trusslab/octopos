@@ -93,7 +93,7 @@ void close_mailbox(void)
 	close(fd_out);
 	close(fd_intr);
 }
-#endif
+#endif /* ARCH_SEC_HW_BOOT */
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
@@ -115,7 +115,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	if (!filep) {
 		printf("Error: %s: Couldn't open the boot partition file.\n",
 		       __func__);
-		while(1);
+		exit(-1);
 	}
 
 	/* The added 1 is for the signature.
@@ -179,9 +179,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	file_system_close_file(fd);
 
 #else /* ARCH_SEC_HW_BOOT */
-
 	storage_request_boot_image_by_line(filename);
-
 #endif /* ARCH_SEC_HW_BOOT */
 
 	return 0;

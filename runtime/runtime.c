@@ -69,14 +69,9 @@
 #include "raw.h"
 #endif
 
-/* DISABLED UNTIL WE WORK ON RESET
 #ifdef ARCH_SEC_HW
-volatile int i = 0xDEADBEEF;
-extern unsigned char __datacopy;
-extern unsigned char __data_start;
-extern unsigned char __data_end;
+#define ARCH_SEC_HW_EVALUATION
 #endif
-*/
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -579,16 +574,15 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 	if (ret0)
 		return (int) ret0;
 
-// 	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
-// 	if (!ret) {
-// #ifdef ARCH_SEC_HW
-// 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-// #else
-// 		printf("Error: %s: failed to attest secure keyboard access\n",
-// 		       __func__);
-// #endif
-// 		return ERR_FAULT;
-// 	}
+#ifndef ARCH_SEC_HW
+	/* FIXME: fix sec_hw mailbox_attest_queue_access */
+	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
+	if (!ret) {
+		printf("Error: %s: failed to attest secure keyboard access\n",
+		       __func__);
+		return ERR_FAULT;
+	}
+#endif
 
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr(). This is because that call issues a
@@ -657,16 +651,15 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 		return (int) ret0;
 	}
 
-// 	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
-// 	if (!ret) {
-// #ifdef ARCH_SEC_HW
-// 		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-// #else
-// 		printf("Error: %s: failed to attest secure keyboard access\n",
-// 		       __func__);
-// #endif
-// 		return ERR_FAULT;
-// 	}
+#ifndef ARCH_SEC_HW
+	/* FIXME: fix sec_hw mailbox_attest_queue_access */
+	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
+	if (!ret) {
+		printf("Error: %s: failed to attest secure keyboard access\n",
+		       __func__);
+		return ERR_FAULT;
+	}
+#endif
 
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr(). This is because that call issues a
@@ -751,10 +744,6 @@ static int read_char_from_secure_keyboard(char *buf)
 
 static int inform_os_of_termination(void)
 {
-	// // DEBUG
-	// _SEC_HW_ERROR("OUT %08x", *((unsigned int *) 0xF1860000));
-	// _SEC_HW_ERROR("IN %08x", *((unsigned int *) 0xF1840000));
-
 #ifdef ARCH_SEC_HW
 	/* FIXME: Issue #26 */
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
@@ -849,16 +838,9 @@ static int write_file_blocks(uint32_t fd, uint8_t *data, int start_block,
 		return 0;
 	uint8_t queue_id = (uint8_t) ret0;
 
-	// // DEBUG
-	// _SEC_HW_ERROR("OUT before write %08x", *((unsigned int *) 0xF1860000));
-	// _SEC_HW_ERROR("IN before write %08x", *((unsigned int *) 0xF1840000));
-
 	for (int i = 0; i < num_blocks; i++)
 		runtime_send_msg_on_queue_large(data + (i * STORAGE_BLOCK_SIZE),
 						queue_id);
-	// // DEBUG
-	// _SEC_HW_ERROR("OUT after write %08x", *((unsigned int *) 0xF1860000));
-	// _SEC_HW_ERROR("IN after write %08x", *((unsigned int *) 0xF1840000));
 
 	return num_blocks;
 }
@@ -875,15 +857,11 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block,
 		return 0;
 
 	uint8_t queue_id = (uint8_t) ret0;
-	// // DEBUG
-	// _SEC_HW_ERROR("OUT before read %08x", *((unsigned int *) 0xF1860000));
-	// _SEC_HW_ERROR("IN before read %08x", *((unsigned int *) 0xF1840000));
+
 	for (int i = 0; i < num_blocks; i++)
 		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE),
 						  queue_id);
-	// // DEBUG
-	// _SEC_HW_ERROR("OUT after read %08x", *((unsigned int *) 0xF1860000));
-	// _SEC_HW_ERROR("IN after read %08x", *((unsigned int *) 0xF1840000));
+	
 	return num_blocks;
 }
 
@@ -1603,12 +1581,16 @@ int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 }
 #endif
 
+#ifdef ARCH_SEC_HW_EVALUATION
 extern long long global_counter;
+#endif
 
 #ifndef ARCH_SEC_HW_BOOT
 static void load_application(char *msg)
 {
+#ifdef ARCH_SEC_HW_EVALUATION
 	global_counter = 0;
+#endif
 
 	/* The bound is the length of load_buf minus one (for the null
 	 * terminator)
@@ -1766,7 +1748,6 @@ void *run_app(void *load_buf)
 	still_running = false;
 	inform_os_of_termination();
 
-
 	return NULL;
 }
 
@@ -1818,25 +1799,6 @@ int main(int argc, char **argv)
 int main()
 #endif
 {
-#ifdef ARCH_SEC_HW
-
-	/* DISABLED UNTIL WE WORK ON RESET
-	unsigned char *dataCopyStart = &__datacopy;
-	unsigned char *dataStart = &__data_start;
-	unsigned char *dataEnd = &__data_end;
-	if (i == 0xDEADBEEF) {
-		while(dataStart < dataEnd)
-			*dataCopyStart++ = *dataStart++;
-	} else {
-		while(dataStart < dataEnd)
-			*dataStart++ = *dataCopyStart++;
-		// _mb_restarted = TRUE;
-	}
-
-	i = 0;
-	*/
-#endif /* ARCH_SEC_HW */
-
 	int runtime_id = -1;
 
 	/* Non-buffering stdout */

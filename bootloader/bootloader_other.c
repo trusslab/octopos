@@ -32,11 +32,16 @@
 #include <tpm/hash.h>
 
 #ifndef ARCH_SEC_HW_BOOT
+/* sec_hw bootloader must not use initialize global 
+ * variable because it runs on rom 
+ */
 int need_repeat = 0, total_count = 0;
 #else
 int need_repeat, total_count;
 #endif
 
+#ifdef ARCH_SEC_HW_BOOT
+/* FIXME: move sha256 to a header */
 #define uchar unsigned char // 8-bit byte
 typedef struct {
    uchar data[64];
@@ -51,6 +56,7 @@ void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
 void sha256_final(SHA256_CTX *ctx, uchar hash[]);
 
 OCTOPOS_XMbox Mbox_TPM;
+#endif
 
 #ifndef ARCH_SEC_HW_BOOT
 int fd_out, fd_in, fd_intr;
@@ -295,7 +301,8 @@ static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
 extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
 
-int _sem_retrieve_mailbox_message_blocking_buf_large(OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
+int _sem_retrieve_mailbox_message_blocking_buf_large(
+	OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
 int get_srec_line(uint8 *line, uint8 *buf);
 
 /* FIXME: import headers */
@@ -331,11 +338,12 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	u32 tpm_response;
 	int Status;
 
-	/* init TPM mailbox */
+	/* Init TPM mailbox */
 	/* FIXME: move to each domain's mailbox init */
 	OCTOPOS_XMbox_Config *TPM_config_ptr;
 	TPM_config_ptr = OCTOPOS_XMbox_LookupConfig(XPAR_TPM_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_TPM, TPM_config_ptr, TPM_config_ptr->BaseAddress);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_TPM, 
+		TPM_config_ptr, TPM_config_ptr->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
 		while(1);
@@ -387,50 +395,36 @@ int copy_file_from_boot_partition(char *filename, char *path)
 repeat:
 #ifndef ARCH_SEC_HW_BOOT
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
-	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
+	limit_t count = 
+		mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
 #else
     /* unpack buffer is full, but still, haven't finish a line */
     if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
         SEC_HW_DEBUG_HANG();
 
     /* wait for change queue access */
-    while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+    while(0xdeadbeef == 
+    	octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
     octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
-	// limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
-	// count = count / 128;
 #endif /* ARCH_SEC_HW_BOOT */
 
-// 	/*
-// 	 * When the file is very large, which is, for example, the case
-// 	 * for the untrusted domain kernel, the queue will need to be
-// 	 * delegated more than once.
-// 	 */ 
-// #ifndef ARCH_SEC_HW_BOOT
-// 	if (count == MAILBOX_MAX_LIMIT_VAL)
-// #else
-// 	if (count == MAILBOX_MAX_LIMIT_VAL / 128)
-// #endif
-// 		need_repeat = 1;
-// 	else
-// 		need_repeat = 0;
-
-// 	total_count += count;
-
-	// for (int i = 0; i < (int) count; i++) {
     while(TRUE) {
 #ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
 #else
-		// //DEBUG
-		// #ifdef ARCH_SEC_HW_BOOT_KEYBOARD
-		// if (i==0) printf("BEFORE READ %08x\r\n", octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
-		// #endif
-		_sem_retrieve_mailbox_message_blocking_buf_large(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
-		// //DEBUG
-		// #ifdef ARCH_SEC_HW_BOOT_KEYBOARD
-		// if (i==0) printf("AFTER READ %08x\r\n", octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
-		// #endif
+#ifdef SEC_HW_TPM_DEBUG
+		printf("BEFORE READ %08x\r\n", 
+			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+#endif
+		_sem_retrieve_mailbox_message_blocking_buf_large(
+			Mbox_regs[Q_STORAGE_DATA_OUT], 
+			buf
+			);
+#ifdef SEC_HW_TPM_DEBUG
+		printf("AFTER READ %08x\r\n", 
+			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+#endif
 
 		/* update hash */
 		if (offset == 0)
@@ -459,7 +453,8 @@ repeat:
                 case SREC_TYPE_1:
                 case SREC_TYPE_2:
                 case SREC_TYPE_3:
-                    memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+                    memcpy ((void*)srinfo.addr, 
+                    	(void*)srinfo.sr_data, srinfo.dlen);
                     break;
                 case SREC_TYPE_5:
                     break;
@@ -469,11 +464,11 @@ repeat:
 
 					/* finalize hash and verify with TPM */
 					sha256_final(&ctx, hash);
-					// DEBUG >>>
-					// for (int idx = 0; idx < 32; idx++)
-					// 	printf("%02x",hash[idx]);
-					// printf("\r\n");
-					// DEBUG <<<
+#ifdef SEC_HW_TPM_DEBUG
+					for (int idx = 0; idx < 32; idx++)
+						printf("%02x",hash[idx]);
+					printf("\r\n");
+#endif
 					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
 					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
 					if (tpm_response != 0xFFFFFFFF) {
@@ -481,9 +476,10 @@ repeat:
 						while(1);
 					}
 
-                	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
-
-//                    laddr = (void (*)())srinfo.addr;
+                	octopos_mailbox_deduct_and_set_owner(
+                		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], 
+                		P_PREVIOUS
+                		);
 
 					*(boot_status_reg) = 1;
 
@@ -512,7 +508,10 @@ repeat:
 	}
 
 #ifdef ARCH_SEC_HW_BOOT
-	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+	octopos_mailbox_deduct_and_set_owner(
+		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], 
+		P_PREVIOUS
+		);
 #endif /* ARCH_SEC_HW_BOOT */
 
 	if (need_repeat)

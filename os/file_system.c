@@ -790,12 +790,15 @@ repeat:
 	buf[0] = IO_OP_SEND_DATA;
 	send_msg_to_storage_no_response(buf);
 
-//	if (num_blocks) {
-//		get_response_from_storage(buf);
-//		/* FIXME: check the response here */
-//		total_written_blocks += next_num_blocks;
-//		goto repeat;
-//	}
+#ifndef ARCH_SEC_HW
+/* FIXME (Issue 25) */
+	if (num_blocks) {
+		get_response_from_storage(buf);
+		/* FIXME: check the response here */
+		total_written_blocks += next_num_blocks;
+		goto repeat;
+	}
+#endif
 
 	return Q_STORAGE_DATA_IN;
 }
@@ -851,63 +854,58 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 		printf("Error: %s: num_blocks is too large\n", __func__);
 		return 0;
 	}*/
-	 ret = wait_for_storage_for_os_use();
-	 if (ret) {
-	 	printf("Error: %s: couldn't get proper access to the storage "
-	 	       "service.\n", __func__);
-	 	return 0;
-	 }
+	ret = wait_for_storage_for_os_use();
+	if (ret) {
+		printf("Error: %s: couldn't get proper access to the storage "
+		       "service.\n", __func__);
+		return 0;
+	}
 
 repeat:
-/* Benchmark has no quota limit */
-/*
-#ifdef ARCH_SEC_HW
-	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL / 128) {
-#else
+/* sec_hw has no quota limit */
+#ifndef ARCH_SEC_HW
 	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
-#endif
 		next_num_blocks = num_blocks;
 		num_blocks = 0;
 	} else {
-#ifdef ARCH_SEC_HW
-		next_num_blocks = MAILBOX_MAX_LIMIT_VAL / 128;
-		num_blocks -= MAILBOX_MAX_LIMIT_VAL / 128;
-#else
 		next_num_blocks = MAILBOX_MAX_LIMIT_VAL;
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
-#endif
 	}
-*/
+#endif
 
 	wait_for_storage();
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
-/*
+/* sec_hw has no quota limit */
+#ifndef ARCH_SEC_HW
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      next_num_blocks, 
 				      MAILBOX_DEFAULT_TIMEOUT_VAL);
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + 
 			     total_read_blocks, next_num_blocks)
-*/
-
+#else
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      MAILBOX_NO_LIMIT_VAL, 
 				      MAILBOX_MAX_TIMEOUT_VAL);
 
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + 
 			     total_read_blocks, num_blocks)
+#endif
 
 	buf[0] = IO_OP_RECEIVE_DATA;
 	send_msg_to_storage_no_response(buf);
 
-//	if (num_blocks) {
-//		get_response_from_storage(buf);
-//		/* FIXME: check the response here */
-//		total_read_blocks += next_num_blocks;
-//		goto repeat;
-//	}
+/* FIXME (Issue 25) */
+#ifndef ARCH_SEC_HW
+	if (num_blocks) {
+		get_response_from_storage(buf);
+		/* FIXME: check the response here */
+		total_read_blocks += next_num_blocks;
+		goto repeat;
+	}
+#endif
 
 	return Q_STORAGE_DATA_OUT;
 }
@@ -1111,7 +1109,6 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			dir_data_ptr += 4;
 #endif
 			
-			/* FIXME: Zephyr added this because it's not initialized to zero */
 			file->opened = 0;
 			add_file_to_list(file);
 		}

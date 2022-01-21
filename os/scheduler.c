@@ -13,6 +13,10 @@
 #include <arch/mailbox_os.h>
 #include <arch/defines.h>
 
+#ifdef ARCH_SEC_HW
+#define ARCH_SEC_HW_EVALUATION
+#endif
+
 #define MAX_NUM_APPS	64 /* must be divisible by 8 */
 uint8_t app_id_bitmap[MAX_NUM_APPS / 8];
 
@@ -110,7 +114,6 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 
 	/* Let's first see if any of the runtimes are idle */
 	for (int i = 0; i < NUM_RUNTIME_PROCS; i++) {
-		// printf("RT%d state%d\r\n", i, runtime_procs[i].state);
 		/* FIXME: this needs to be in a critical section */
 		if (runtime_procs[i].state == RUNTIME_PROC_IDLE) {
 			runtime_procs[i].state = RUNTIME_PROC_RESERVED;
@@ -143,10 +146,14 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	return NULL;
 }
 
+#ifdef ARCH_SEC_HW_EVALUATION
 extern long long global_counter;
+#endif
 static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtime_proc)
 {
+#ifdef ARCH_SEC_HW_EVALUATION
 	printf("schedule %lld\r\n", global_counter);
+#endif
 
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 

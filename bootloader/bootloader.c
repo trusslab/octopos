@@ -74,7 +74,8 @@ static uint8 load_exec()
 			case SREC_TYPE_1:
 			case SREC_TYPE_2:
 			case SREC_TYPE_3:
-				memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+				memcpy ((void*)srinfo.addr, 
+					(void*)srinfo.sr_data, srinfo.dlen);
 				break;
 			case SREC_TYPE_5:
 				break;
@@ -200,7 +201,8 @@ int main(int argc, char *argv[])
 
 #ifdef ARCH_SEC_HW_BOOT
 	/* Clear target memory contents */
-	memset((void*) RAM_BASE_ADDRESS, 0, RAM_RANGE + BOOT_STACK_HEAP_SIZE);
+	memset((void*) RAM_BASE_ADDRESS, 0, 
+		RAM_RANGE + BOOT_STACK_HEAP_SIZE);
 
 	/* lock ROM */
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
@@ -234,7 +236,10 @@ int main(int argc, char *argv[])
 #else /* ARCH_SEC_HW_BOOT */
 
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
-	Xil_Out32(XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40 ,0x0000000A);
+	Xil_Out32(
+		XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40,
+		0x0000000A
+		);
 	char *name = "storage";
 #elif defined(ARCH_SEC_HW_BOOT_KEYBOARD)
 	char *name = "keyboard";
@@ -292,7 +297,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	// printf("%s: passed secure boot.\n", __func__);
+	printf("%s: passed secure boot.\n", __func__);
 	
 	bootloader_close_file_system();
 

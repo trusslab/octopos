@@ -32,6 +32,10 @@
 #endif
 #include <arch/defines.h>
 
+#ifdef ARCH_SEC_HW
+#define ARCH_SEC_HW_EVALUATION
+#endif
+
 /* The array below will hold the arguments: args[0] is the command. */
 static char* args[512];
 pid_t pid;
@@ -62,7 +66,9 @@ static int repeat_num = 0;
 static bool repeat_cmd_exists = false;
 static int repeat_cmd_counter = 0;
 
+#ifdef ARCH_SEC_HW_EVALUATION
 extern long long global_counter;
+#endif
 
 /*
  * Handle commands separatly
@@ -81,8 +87,10 @@ extern long long global_counter;
 static int command(int input, int first, int last, int double_pipe, int bg)
 {
 	/* FIXME: add support for passing args to apps */
+#ifdef ARCH_SEC_HW_EVALUATION
 	printf("command %lld\r\n", global_counter);
-
+#endif
+	
 	if (first == 1 && last == 0 && input == 0) {
 		// First command
 		return sched_create_app(args[0]);

@@ -20,9 +20,10 @@
 #include "arch/sec_hw.h"
 #include "arch/octopos_xmbox.h"
 
-extern OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
-extern UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
+#define ARCH_SEC_HW_EVALUATION
 
+extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
+extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
 extern long long global_counter;
 
 u32 octopos_mailbox_get_status_reg(UINTPTR base);
@@ -45,9 +46,9 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	wait_for_storage();
 
 #ifdef ARCH_SEC_HW
-	// FIXME: Why do we need this wait and flush?
-	/* flush storage queue */
-	while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+	/* FIXME: unnecessary check */
+	while(0xdeadbeef == 
+		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
 	OCTOPOS_XMbox_Flush(Mbox_regs[Q_STORAGE_DATA_OUT]);
 #endif
 
@@ -106,34 +107,59 @@ static void help_boot_untrusted_proc(void)
 
 void help_boot_procs(int boot_untrusted)
 {
+#ifdef ARCH_SEC_HW_EVALUATION
 	printf("init done\r\n");
-
 	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_keyboard_proc();
+
+#ifdef ARCH_SEC_HW_EVALUATION
 	printf("keyboard %d\r\n", global_counter);
-
 	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_serial_out_proc();
-	printf("serial %d\r\n", global_counter);
 
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("serial %d\r\n", global_counter);
 	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_network_proc();
+
+#ifdef ARCH_SEC_HW_EVALUATION
 	printf("net %d\r\n", global_counter);
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 #ifndef ARCH_SEC_HW
 	help_boot_bluetooth_proc();
-#endif
+#endif /* ARCH_SEC_HW */
+
+#ifdef ARCH_SEC_HW_EVALUATION
 	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_runtime_proc(P_RUNTIME1);
+
+#ifdef ARCH_SEC_HW_EVALUATION
 	printf("enclave0 %d\r\n", global_counter);
-
 	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_runtime_proc(P_RUNTIME2);
-	printf("enclave1 %d\r\n", global_counter);
 
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("enclave1 %d\r\n", global_counter);
 	global_counter = 0;
-	// if (boot_untrusted)
-	// 	help_boot_untrusted_proc();
+#endif /* ARCH_SEC_HW_EVALUATION */
+
+	if (boot_untrusted)
+		help_boot_untrusted_proc();
+	
+#ifdef ARCH_SEC_HW_EVALUATION
 	printf("linux %d\r\n", global_counter);
+#endif /* ARCH_SEC_HW_EVALUATION */
 }
 
 int reset_proc(uint8_t proc_id)
@@ -196,13 +222,7 @@ int reset_proc_simple(uint8_t proc_id)
 
 int reboot_system(void)
 {
-	/* FIXME: newer compiler doesn't zero it out. */
-	/* this is ad hoc for SEC_HW */
-#ifdef ARCH_SEC_HW
 	int ret = 0;
-#else
-	int ret;
-#endif
 
 #ifndef ARCH_SEC_HW
 	/* send a reboot cmd to PMU */
@@ -213,13 +233,7 @@ int reboot_system(void)
 
 int halt_system(void)
 {
-	/* FIXME: newer compiler doesn't zero it out. */
-	/* this is ad hoc for SEC_HW */
-#ifdef ARCH_SEC_HW
 	int ret = 0;
-#else
-	int ret;
-#endif
 	
 #ifndef ARCH_SEC_HW
 	/* send a shutdown cmd to PMU */

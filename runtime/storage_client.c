@@ -257,9 +257,9 @@ static int query_and_verify_storage(void)
 	}
 
 #ifndef UNTRUSTED_DOMAIN
+	/* FIXME: This should be enabled, double check */
 	if ((data[0] != 1) || /* (data[1] != 0) || (data[2] != 0) || */
 	    (data[3] != secure_partition_id) || (data[4] != 1)) {
-		// printf("%d %d %d %d (%d) %d\r\n", data[0], data[1], data[2], data[3], secure_partition_id, data[4]);
 		printf("Error: %s: couldn't successfully verify the query "
 		       "response from the storage service (bound = %d, "
 		       "used = %d, authenticated = %d, bound_partition = %d, "
@@ -422,17 +422,16 @@ static int request_secure_storage_queues_access(limit_t limit,
 			     (uint32_t) limit, (uint32_t) timeout)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	if (ret0) {
-		printf("Error: %s: bad request.\n", __func__);
+	if (ret0)
 		return (int) ret0;
-	}
 
 	/* FIXME: wait for OS to switch the queue. Microblaze does not have this problem */
 #ifdef CONFIG_ARM64
 	udelay(100);
 #endif
 
-#ifdef FINITE_DELEGATION
+#ifndef ARCH_SEC_HW
+	/* FIXME: we should still enable attestation, fix attest code */
 	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, limit, timeout);
 	if (!ret) {
 		printf("%s: Error: failed to attest secure storage cmd write "
@@ -523,12 +522,13 @@ static int request_secure_storage_queues_access(limit_t limit,
 
 	ret = authenticate_storage();
 	if (ret) {
-/*
+#ifndef ARCH_SEC_HW
+		/* FIXME: why disabled? */
 		printf("%s: Error: couldn't authenticate with the storage "
 		       "service\r\n", __func__);
 		ret = ERR_UNEXPECTED;
 		goto error;
-*/
+#endif
 	}
 	
 	has_access_to_secure_storage = true;
@@ -606,11 +606,12 @@ int delete_and_yield_secure_storage(void)
 	secure_storage_created = false;
 	has_access_to_secure_storage = false;
 
-	// FIXME: sechw Q_STORAGE_DATA_IN is not delivering interrupt.
-	// Same issue causes another bug in OS storage.
-//	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
-//	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-
+	/* FIXME issue 25 sechw Q_STORAGE_DATA_IN is not delivering interrupt. */
+#ifndef ARCH_SEC_HW
+	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+#endif
+	
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
