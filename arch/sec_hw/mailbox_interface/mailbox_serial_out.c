@@ -59,9 +59,13 @@ static void handle_mailbox_interrupts(void* callback_ref)
 
 		sem_post(&interrupt_serial_out);
 	} else if (mask & OCTOPOS_XMB_IX_ERR) {
-		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
+		_SEC_HW_DEBUG(
+			"interrupt type: OCTOPOS_XMB_IX_ERR, from %p", 
+			callback_ref);
 	} else {
-		_SEC_HW_DEBUG("interrupt type unknown, mask %d, from %p", mask, callback_ref);
+		_SEC_HW_DEBUG(
+			"interrupt type unknown, mask %d, from %p", 
+			mask, callback_ref);
 	}
 
 	OCTOPOS_XMbox_ClearInterrupt(mbox_inst, mask);
@@ -74,18 +78,25 @@ int init_serial_out(void)
 	int Status;
 	OCTOPOS_XMbox_Config *ConfigPtr, *Config_storage_data_out;
 
-	ConfigPtr = OCTOPOS_XMbox_LookupConfig(XPAR_SERIAL_OUT_SERIAL_OUT_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox, ConfigPtr, ConfigPtr->BaseAddress);
+	ConfigPtr = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_SERIAL_OUT_SERIAL_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox, 
+		ConfigPtr, 
+		ConfigPtr->BaseAddress);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_SERIAL_OUT_SERIAL_OUT_DEVICE_ID);
+		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", 
+			XPAR_SERIAL_OUT_SERIAL_OUT_DEVICE_ID);
 		return XST_FAILURE;
 	}
 	
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();
 
-	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox, MAILBOX_MAX_COMMAND_SIZE);
-	OCTOPOS_XMbox_SetInterruptEnable(&Mbox, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox, 
+		MAILBOX_MAX_COMMAND_SIZE);
+	OCTOPOS_XMbox_SetInterruptEnable(&Mbox, 
+		OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
 	Mbox_regs[Q_SERIAL_OUT] = &Mbox;
 
@@ -98,7 +109,10 @@ int init_serial_out(void)
 
 	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("XIntc_Initialize %d failed", XPAR_INTC_SINGLE_DEVICE_ID);
+		_SEC_HW_ERROR(
+			"XIntc_Initialize %d failed", 
+			XPAR_INTC_SINGLE_DEVICE_ID
+			);
 		return XST_FAILURE;
 	}
 
@@ -120,21 +134,25 @@ int init_serial_out(void)
 		return XST_FAILURE;
 	}
 #else
-	Config_storage_data_out = OCTOPOS_XMbox_LookupConfig(XPAR_SERIAL_OUT_STORAGE_DATA_OUT_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_data_out,
+	Config_storage_data_out = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_SERIAL_OUT_STORAGE_DATA_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_storage_data_out,
 		Config_storage_data_out, 
-		Config_storage_data_out->BaseAddress);
+		Config_storage_data_out->BaseAddress
+		);
 	if (Status != XST_SUCCESS) {
-		_SEC_HW_ERROR("OCTOPOS_XMbox_CfgInitialize %d failed", XPAR_SERIAL_OUT_STORAGE_DATA_OUT_DEVICE_ID);
+		_SEC_HW_ERROR(
+			"OCTOPOS_XMbox_CfgInitialize %d failed", 
+			XPAR_SERIAL_OUT_STORAGE_DATA_OUT_DEVICE_ID
+			);
 		return XST_FAILURE;
 	}
 
-//	/* it doesn't matter because we are not using interrupt for booting */
-//	OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_MAX_COMMAND_SIZE);
-//	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
-
-	Mbox_regs[Q_STORAGE_DATA_OUT] = &Mbox_storage_data_out;
-	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = OCTOPOS_SERIAL_OUT_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
+	Mbox_regs[Q_STORAGE_DATA_OUT] = 
+		&Mbox_storage_data_out;
+	Mbox_ctrl_regs[Q_STORAGE_DATA_OUT] = 
+		OCTOPOS_SERIAL_OUT_MAILBOX_STORAGE_DATA_OUT_BASEADDR;
 #endif
 
 	sem_init(&interrupt_serial_out, 0, 0);

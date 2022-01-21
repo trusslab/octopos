@@ -1603,9 +1603,13 @@ int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 }
 #endif
 
+extern long long global_counter;
+
 #ifndef ARCH_SEC_HW_BOOT
 static void load_application(char *msg)
 {
+	global_counter = 0;
+
 	/* The bound is the length of load_buf minus one (for the null
 	 * terminator)
 	 */

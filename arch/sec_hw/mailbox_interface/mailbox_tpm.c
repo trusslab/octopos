@@ -1,8 +1,9 @@
+#ifdef ARCH_SEC_HW_TPM
+
 #include <stdio.h>
 #include "platform.h"
 #include "xil_printf.h"
 #include "xmbox.h"
-//#include "xintc.h"
 #include "xparameters.h"
 #include "sleep.h"
 
@@ -13,7 +14,6 @@ XMbox	Mbox_serial,
 		Mbox_storage,
 		Mbox_network,
 		Mbox_os;
-//XIntc intc;
 
 /* ported from tpm.h */
 #define LOCALITY_BASE		0x80
@@ -46,16 +46,20 @@ XMbox	Mbox_serial,
 #define P_PMU			10
 #define INVALID_PROCESSOR	11
 
+/* TPM mailbox uses poll mode */
+#define MBOX_TPM_SHA256_HASH_THRESHOLD 0
+
+/* enable TPM */
+#define USE_TPM
 
 /* return 1 char from serial */
 uint8_t get_tpm_response()
 {
-//	int i;
-//	for (i = 0; i < 64; i++) {
-//		buf[i] = (uint8_t) getchar();
-//	}
-//	return 0xFF;
+#ifdef USE_TPM
 	return (uint8_t) getchar();
+#else
+	return 0xFF;
+#endif
 }
 
 uint8_t get_locality_from_pid(int pid)
@@ -95,9 +99,9 @@ static void handle_mailbox_interrupts(void* callback_ref)
 	mask = XMbox_GetInterruptStatus(mbox_inst);
 
 	if (mask & XMB_IX_STA) {
-		// _SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
+		_SEC_HW_DEBUG("interrupt type: XMB_IX_STA");
 	} else if (mask & XMB_IX_RTA) {
-		// _SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
+		_SEC_HW_DEBUG("interrupt type: XMB_IX_RTA");
 		XMbox_ReadBlocking(mbox_inst, (u32*)(buf), 32);
 
 		if (callback_ref == &Mbox_serial) {
@@ -114,17 +118,16 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			pid = P_NETWORK;
 		} else if (callback_ref == &Mbox_os) {
 			pid = P_OS;
-		// } else if (callback_ref == &Mbox_bluetooth) {
-		// 	pid = P_BLUETOOTH;
-		// } else if (callback_ref == &Mbox_pmu) {
-		// 	pid = P_PMU;
 		} else {
 			while(1); /* Should never happen */
 		}
 	} else if (mask & XMB_IX_ERR) {
-		// _SEC_HW_DEBUG("interrupt type: XMB_IX_ERR, from %p", callback_ref);
+		_SEC_HW_DEBUG(
+			"interrupt type: XMB_IX_ERR, from %p", callback_ref);
 	} else {
-		// _SEC_HW_DEBUG("interrupt type unknown, mask %d, from %p", mask, callback_ref);
+		_SEC_HW_DEBUG(
+			"interrupt type unknown, mask %d, from %p",
+			mask, callback_ref);
 	}
 
 	if (pid >= 0) {
@@ -177,60 +180,73 @@ XMbox* sem_wait_impatient_receive_multiple(int mb_count, ...)
 
 int init_tpm_mailbox(void)
 {
-	int				Status;
+	int Status;
+	XMbox_Config *ConfigPtr, *ConfigPtr2, 
+		*ConfigPtr3, *ConfigPtr4,
+		*ConfigPtr5, *ConfigPtr6, *ConfigPtr7;
 
-	XMbox_Config	*ConfigPtr, *ConfigPtr2, *ConfigPtr3, *ConfigPtr4,
-					*ConfigPtr5, *ConfigPtr6, *ConfigPtr7;
-
-	ConfigPtr = XMbox_LookupConfig(XPAR_TPM_SUBSYS_MAILBOX_TPM_ENCLAVE0_IF_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_enclave0, ConfigPtr, ConfigPtr->BaseAddress);
+	ConfigPtr = XMbox_LookupConfig(
+		XPAR_TPM_SUBSYS_MAILBOX_TPM_ENCLAVE0_IF_1_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_enclave0, 
+		ConfigPtr, ConfigPtr->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
 		while(1);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr2 = XMbox_LookupConfig(XPAR_TPM_SUBSYS_MAILBOX_TPM_ENCLAVE1_IF_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_enclave1, ConfigPtr2, ConfigPtr2->BaseAddress);
+	ConfigPtr2 = XMbox_LookupConfig(
+		XPAR_TPM_SUBSYS_MAILBOX_TPM_ENCLAVE1_IF_1_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_enclave1, 
+		ConfigPtr2, ConfigPtr2->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
 		while(1);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr3 = XMbox_LookupConfig(XPAR_TPM_SUBSYS_MAILBOX_TPM_NET_IF_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_network, ConfigPtr3, ConfigPtr3->BaseAddress);
+	ConfigPtr3 = XMbox_LookupConfig(
+		XPAR_TPM_SUBSYS_MAILBOX_TPM_NET_IF_1_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_network, 
+		ConfigPtr3, ConfigPtr3->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
 		while(1);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr4 = XMbox_LookupConfig(XPAR_TPM_SUBSYS_MAILBOX_TPM_OS_IF_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_os, ConfigPtr4, ConfigPtr4->BaseAddress);
+	ConfigPtr4 = XMbox_LookupConfig(
+		XPAR_TPM_SUBSYS_MAILBOX_TPM_OS_IF_1_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_os, 
+		ConfigPtr4, ConfigPtr4->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
 		while(1);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr5 = XMbox_LookupConfig(XPAR_TPM_SUBSYS_MAILBOX_TPM_STORAGE_IF_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_storage, ConfigPtr5, ConfigPtr5->BaseAddress);
+	ConfigPtr5 = XMbox_LookupConfig(
+		XPAR_TPM_SUBSYS_MAILBOX_TPM_STORAGE_IF_1_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_storage,
+	 ConfigPtr5, ConfigPtr5->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
 		while(1);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr6 = XMbox_LookupConfig(XPAR_TPM_SUBSYS_MAILBOX_TPM_KEYBOARD_IF_1_DEVICE_ID);
-	Status = XMbox_CfgInitialize(&Mbox_keyboard, ConfigPtr6, ConfigPtr6->BaseAddress);
+	ConfigPtr6 = XMbox_LookupConfig(
+		XPAR_TPM_SUBSYS_MAILBOX_TPM_KEYBOARD_IF_1_DEVICE_ID);
+	Status = XMbox_CfgInitialize(&Mbox_keyboard,
+	 ConfigPtr6, ConfigPtr6->BaseAddress);
 	if (Status != XST_SUCCESS)
 	{
 		while(1);
 		return -XST_FAILURE;
 	}
 
-	ConfigPtr7 = XMbox_LookupConfig(XPAR_TPM_SUBSYS_MAILBOX_TPM_SERIAL_IF_1_DEVICE_ID);
+	ConfigPtr7 = XMbox_LookupConfig(
+		XPAR_TPM_SUBSYS_MAILBOX_TPM_SERIAL_IF_1_DEVICE_ID);
 	Status = XMbox_CfgInitialize(
 		&Mbox_serial,
 		ConfigPtr7,
@@ -242,8 +258,6 @@ int init_tpm_mailbox(void)
 		return -XST_FAILURE;
 	}
 
-////#define MBOX_TPM_SHA256_HASH_THRESHOLD 32 / 4 - 1
-#define MBOX_TPM_SHA256_HASH_THRESHOLD 0
 
 	XMbox_SetReceiveThreshold(&Mbox_serial, MBOX_TPM_SHA256_HASH_THRESHOLD);
 	XMbox_SetInterruptEnable(&Mbox_serial, XMB_IX_RTA | XMB_IX_ERR);
@@ -265,85 +279,6 @@ int init_tpm_mailbox(void)
 
 	XMbox_SetReceiveThreshold(&Mbox_storage, MBOX_TPM_SHA256_HASH_THRESHOLD);
 	XMbox_SetInterruptEnable(&Mbox_storage, XMB_IX_RTA | XMB_IX_ERR);
-
-//
-//	Xil_ExceptionInit();
-//	Xil_ExceptionEnable();
-//
-//	Status = XIntc_Initialize(&intc, XPAR_INTC_SINGLE_DEVICE_ID);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = XIntc_Connect(&intc,
-//		XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_SERIAL_INTERRUPT_1_INTR,
-//		(XInterruptHandler)handle_mailbox_interrupts,
-//		(void *)&Mbox_serial);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = XIntc_Connect(&intc,
-//		XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_KEYBOARD_INTERRUPT_1_INTR,
-//		(XInterruptHandler)handle_mailbox_interrupts,
-//		(void *)&Mbox_keyboard);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = XIntc_Connect(&intc,
-//		XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_ENCLAVE1_INTERRUPT_1_INTR,
-//		(XInterruptHandler)handle_mailbox_interrupts,
-//		(void *)&Mbox_enclave1);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = XIntc_Connect(&intc,
-//		XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_ENCLAVE0_INTERRUPT_1_INTR,
-//		(XInterruptHandler)handle_mailbox_interrupts,
-//		(void *)&Mbox_enclave0);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = XIntc_Connect(&intc,
-//		XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_NET_INTERRUPT_1_INTR,
-//		(XInterruptHandler)handle_mailbox_interrupts,
-//		(void *)&Mbox_network);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = XIntc_Connect(&intc,
-//		XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_STORAGE_INTERRUPT_1_INTR,
-//		(XInterruptHandler)handle_mailbox_interrupts,
-//		(void *)&Mbox_storage);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-//
-//	Status = XIntc_Connect(&intc,
-//		XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_OS_INTERRUPT_1_INTR,
-//		(XInterruptHandler)handle_mailbox_interrupts,
-//		(void *)&Mbox_os);
-//	if (Status != XST_SUCCESS) {
-//		return XST_FAILURE;
-//	}
-
-//	XIntc_Enable(&intc, XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_SERIAL_INTERRUPT_1_INTR);
-//	XIntc_Enable(&intc, XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_KEYBOARD_INTERRUPT_1_INTR);
-//	XIntc_Enable(&intc, XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_ENCLAVE1_INTERRUPT_1_INTR);
-//	XIntc_Enable(&intc, XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_ENCLAVE0_INTERRUPT_1_INTR);
-//	XIntc_Enable(&intc, XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_NET_INTERRUPT_1_INTR);
-//	XIntc_Enable(&intc, XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_STORAGE_INTERRUPT_1_INTR);
-//	XIntc_Enable(&intc, XPAR_TPM_SUBSYS_MICROBLAZE_0_AXI_INTC_TPM_SUBSYS_MAILBOX_TPM_OS_INTERRUPT_1_INTR);
-//
-//	Status = XIntc_Start(&intc, XIN_REAL_MODE);
-//	if (Status != XST_SUCCESS) {
-//		while(1);
-//		return XST_FAILURE;
-//	}
 
 	return XST_SUCCESS;
 }
@@ -371,13 +306,13 @@ int main()
 
 	while(1) {
 		mbox_inst = sem_wait_impatient_receive_multiple(7,
-						&Mbox_serial,
-						&Mbox_keyboard,
-						&Mbox_enclave0,
-						&Mbox_enclave1,
-						&Mbox_storage,
-						&Mbox_network,
-						&Mbox_os);
+			&Mbox_serial,
+			&Mbox_keyboard,
+			&Mbox_enclave0,
+			&Mbox_enclave1,
+			&Mbox_storage,
+			&Mbox_network,
+			&Mbox_os);
 
 		XMbox_ReadBlocking(mbox_inst, (u32*)(buf), 32);
 
@@ -413,3 +348,5 @@ int main()
     cleanup_platform();
     return 0;
 }
+
+#endif

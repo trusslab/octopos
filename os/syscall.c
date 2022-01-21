@@ -159,6 +159,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 			break;
 		}
 #endif
+		reset_proc(P_SERIAL_OUT);
 
 		int ret = is_queue_available(Q_SERIAL_OUT);
 		/* Or should we make this blocking? */
@@ -193,6 +194,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 			break;
 		}
 #endif
+		// reset_proc(P_KEYBOARD);
+		// sleep(4);
 
 		int ret = is_queue_available(Q_KEYBOARD);
 		/* Or should we make this blocking? */

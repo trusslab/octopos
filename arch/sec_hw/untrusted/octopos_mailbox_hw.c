@@ -326,10 +326,11 @@ static void octopos_mailbox_deduct_and_set_owner(
 	struct octopos_mbox_ctrl *mbox_ctrl, 
 	u8 owner)
 {
-	u32 reg = octopos_mailbox_get_status_reg(mbox_ctrl) - 0x1001;
-	reg = (OWNER_MASK & reg) | owner << 24;
+	//u32 reg = octopos_mailbox_get_status_reg(mbox_ctrl) - 0x1001;
+	//reg = (OWNER_MASK & reg) | owner << 24;
 
-	octopos_mailbox_set_status_reg(mbox_ctrl, reg);
+	//octopos_mailbox_set_status_reg(mbox_ctrl, reg);
+	octopos_mailbox_set_status_reg(mbox_ctrl, 0xFF000000);
 }
 
 int octopos_mailbox_attest_owner_fast_hw(struct octopos_mbox_ctrl *mbox_ctrl)
@@ -586,7 +587,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 
 		ret = devm_request_irq(&pdev->dev, mbox->irq, xilinx_mbox_interrupt, IRQF_SHARED,
 				  dev_name(mbox->dev), mbox);
-		dev_info(&pdev->dev, "[1] %d\n", ret);
+//		dev_info(&pdev->dev, "[1] %d\n", ret);
 
 		if (unlikely(ret)) {
 			dev_err(mbox->dev, 
@@ -597,7 +598,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 
 		/* prep and enable the clock */
 		clk_prepare_enable(mbox->clk);
-		dev_info(&pdev->dev, "[2]\n");
+//		dev_info(&pdev->dev, "[2]\n");
 
 		/* if fifo was full already, we won't get an interrupt */
 		if (unlikely(xilinx_mbox_pending(mbox))) {
@@ -605,11 +606,11 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 			while (xilinx_mbox_pending(mbox))
 				xilinx_mbox_receiver_and_clear_data(mbox);
 		}
-		dev_info(&pdev->dev, "[3]\n");
+//		dev_info(&pdev->dev, "[3]\n");
 
 		/* read queue type and id based on dev name */
 		queue_id = find_mbox_by_name(dev_name(mbox->dev));
-		dev_info(&pdev->dev, "[4] %d\n", queue_id);
+//		dev_info(&pdev->dev, "[4] %d\n", queue_id);
 		if (unlikely(queue_id == 0)) {
 			dev_err(mbox->dev, "Invalid device name.\n");
 			return -ENXIO;
@@ -617,12 +618,12 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		mbox->qid = queue_id;
 
 		init_mbox_thresholds(mbox, queue_id);
-		dev_info(&pdev->dev, "[5]\n");
+//		dev_info(&pdev->dev, "[5]\n");
 		
 		/* save device info */
 		mbox_map[queue_id] = mbox;
 		platform_set_drvdata(pdev, mbox);
-		dev_info(&pdev->dev, "[6]\n");
+//		dev_info(&pdev->dev, "[6]\n");
 		break;
 	case OCTOPOS_MAILBOX_V1_0:
 		mbox_ctrl = devm_kzalloc(&pdev->dev, sizeof(*mbox_ctrl), GFP_KERNEL);
@@ -632,7 +633,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		mbox = devm_kzalloc(&pdev->dev, sizeof(*mbox), GFP_KERNEL);
 		if (!mbox)
 			return -ENOMEM;
-		dev_info(&pdev->dev, "[1]\n");
+//		dev_info(&pdev->dev, "[1]\n");
 
 		/* get clk and enable */
 		mbox_ctrl->clk = devm_clk_get(&pdev->dev, "s_ctrl3_axi_aclk");
@@ -646,7 +647,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Couldn't get clk.\n");
 			return PTR_ERR(mbox->clk);
 		}
-		dev_info(&pdev->dev, "[2]\n");
+//		dev_info(&pdev->dev, "[2]\n");
 
 		/* get and map mbox ctrl register */
 		regs_ctrl = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -654,8 +655,8 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		mbox_ctrl->ctrl_base = devm_ioremap_resource(&pdev->dev, regs_ctrl);
 		if (IS_ERR(mbox_ctrl->ctrl_base))
 			return PTR_ERR(mbox_ctrl->ctrl_base);
-		dev_info(&pdev->dev, "[3] %08x\n", regs_ctrl->start);
-		dev_info(&pdev->dev, "-> %08x\n", mbox_ctrl->ctrl_base);
+//		dev_info(&pdev->dev, "[3] %08x\n", regs_ctrl->start);
+//		dev_info(&pdev->dev, "-> %08x\n", mbox_ctrl->ctrl_base);
 
 		/* get and map mbox data register */
 		regs_data = platform_get_resource(pdev, IORESOURCE_MEM, 1);
@@ -663,13 +664,13 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		mbox->mbox_base = devm_ioremap_resource(&pdev->dev, regs_data);
 		if (IS_ERR(mbox->mbox_base))
 			return PTR_ERR(mbox->mbox_base);
-		dev_info(&pdev->dev, "[4] %08x\n", regs_data->start);
-		dev_info(&pdev->dev, "-> %08x\n", mbox->mbox_base);
+//		dev_info(&pdev->dev, "[4] %08x\n", regs_data->start);
+//		dev_info(&pdev->dev, "-> %08x\n", mbox->mbox_base);
 
 		/* get and config mbox ctrl irq */
 		mbox_ctrl->id = &pdev->id;
 		mbox_ctrl->irq = platform_get_irq(pdev, 0);
-		dev_info(&pdev->dev, "ctrl IRQ = %d\n", mbox_ctrl->irq);
+//		dev_info(&pdev->dev, "ctrl IRQ = %d\n", mbox_ctrl->irq);
 
 		if (mbox_ctrl->irq <= 0) {
 			dev_err(&pdev->dev, "IRQ not found.\n");
@@ -679,7 +680,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		/* get and config mbox data irq */
 		mbox->id = &pdev->id; 
 		mbox->irq = platform_get_irq(pdev, 1);
-		dev_info(&pdev->dev, "data IRQ = %d\n", mbox->irq);
+//		dev_info(&pdev->dev, "data IRQ = %d\n", mbox->irq);
 
 		if (mbox->irq <= 0) {
 			dev_err(&pdev->dev, "IRQ not found.\n");
@@ -698,7 +699,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 				ret);
 			return ret;
 		}
-		dev_info(&pdev->dev, "[5]\n");
+//		dev_info(&pdev->dev, "[5]\n");
 
 		ret = devm_request_irq(&pdev->dev, mbox->irq, xilinx_mbox_interrupt, IRQF_SHARED,
 				  dev_name(mbox->dev), mbox);
@@ -709,7 +710,7 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 				ret);
 			return ret;
 		}
-		dev_info(&pdev->dev, "[6]\n");
+//		dev_info(&pdev->dev, "[6]\n");
 
 		/* prep and enable the clock */
 		clk_prepare_enable(mbox_ctrl->clk);
@@ -724,13 +725,13 @@ static int xilinx_mbox_probe(struct platform_device *pdev)
 		mbox_ctrl->qid = queue_id;
 		mbox->qid = queue_id;
 
-		dev_info(&pdev->dev, "[7] %d\n", queue_id);
+//		dev_info(&pdev->dev, "[7] %d\n", queue_id);
 
-		dev_info(&pdev->dev, "%08x", 
-			octopos_mailbox_get_status_reg(mbox_ctrl));
+//		dev_info(&pdev->dev, "%08x", 
+//			octopos_mailbox_get_status_reg(mbox_ctrl));
 
 		init_mbox_thresholds(mbox, queue_id);
-		dev_info(&pdev->dev, "[9]\n");
+//		dev_info(&pdev->dev, "[9]\n");
 
 		/* save device info */
 		mbox_ctrl_map[queue_id] = mbox_ctrl;

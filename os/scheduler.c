@@ -143,8 +143,11 @@ static struct runtime_proc *get_idle_runtime_proc(void)
 	return NULL;
 }
 
+extern long long global_counter;
 static void run_app_on_runtime_proc(struct app *app, struct runtime_proc *runtime_proc)
 {
+	printf("schedule %lld\r\n", global_counter);
+
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 
 	if (!runtime_proc)

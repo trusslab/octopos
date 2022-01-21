@@ -81,11 +81,4 @@
 
 #endif /* ARCH_SEC_HW_BOOT_STORAGE */
 
-
-
-
-
-
-
-
 #endif /* __SEC_HW_RAM_LAYOUT_H */

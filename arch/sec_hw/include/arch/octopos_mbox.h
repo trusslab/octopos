@@ -71,7 +71,6 @@
 #define OCTOPOS_STORAGE_Q_STORAGE_IN_2_BASEADDR 0xF08B0000
 #define OCTOPOS_STORAGE_Q_STORAGE_OUT_2_BASEADDR 0xF08C0000
 
-
 /* mailbox ctrl register addresses mapped to Microblaze 5 (network domain) */
 #define OCTOPOS_NETWORK_Q_NETWORK_DATA_IN_BASEADDR 0xF08A0000
 #define OCTOPOS_NETWORK_Q_NETWORK_DATA_OUT_BASEADDR 0xF08B0000
@@ -79,7 +78,6 @@
 #define OCTOPOS_NETWORK_Q_NETWORK_OUT_2_BASEADDR 0xF1800000
 #define OCTOPOS_NETWORK_Q_NETWORK_ARBITTER_BASEADDR 0xF0880000
 #define OCTOPOS_NETWORK_Q_STORAGE_DATA_OUT_BASEADDR 0xF1820000U
-
 
 /***************************************************************/
 /* Mailbox data access parameters                              */
@@ -132,7 +130,6 @@
 #define XPAR_KEYBOARD_STORAGE_DATA_OUT_RECV_FSL 0U
 
 /* mailboxs connected to Runtime (Microblaze 2,3) */
-// FIXME: set the same addresses for MB 2 and 3
 #if RUNTIME_ID == 1
 #define XPAR_RUNTIME_KEYBOARD_DEVICE_ID 0U
 #define XPAR_RUNTIME_KEYBOARD_BASEADDR 0xF08F0000U
@@ -211,8 +208,6 @@
 #define XPAR_RUNTIME_NETWORK_CMD_OUT_USE_FSL 0U
 #define XPAR_RUNTIME_NETWORK_CMD_OUT_SEND_FSL 0U
 #define XPAR_RUNTIME_NETWORK_CMD_OUT_RECV_FSL 0U
-
-
 
 #elif RUNTIME_ID == 2
 #define XPAR_RUNTIME_KEYBOARD_DEVICE_ID 0U

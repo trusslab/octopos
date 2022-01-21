@@ -26,12 +26,12 @@ int num_chars = 0;
 #define insecure_printf(fmt, args...) {memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args);\
 				     api->write_to_shell(output_buf, num_chars);}				 \
 
+#endif /* ARCH_SEC_HW */
+
+#ifndef ARCH_SEC_HW
 #define LINE_LENGTH 1024
-
 #else /* ARCH_SEC_HW */
-
 #define LINE_LENGTH 64
-
 #endif/* ARCH_SEC_HW */
 
 #ifndef ARCH_SEC_HW
@@ -102,7 +102,6 @@ void secure_login(struct runtime_api *api)
 
 	memset(line, 0x0, LINE_LENGTH);
 	api->read_from_file(fd, (uint8_t *) line, size, 50);
-	// api->read_from_file(fd, (uint8_t *) line, size, 50);
 	insecure_printf("Your secret phrase: %s (size = %d)\n", line, size);
 	api->close_file(fd);
 	

@@ -33,9 +33,9 @@
 #endif
 
 #ifdef ARCH_SEC_HW_BOOT
-int		p_runtime;
-int		q_runtime;
-int		q_os;
+int				p_runtime;
+int				q_runtime;
+int				q_os;
 #else
 extern int		p_runtime;
 extern int		q_runtime;
@@ -95,7 +95,10 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
-	_SEC_HW_DEBUG("Before yield: queue%d:%08x", queue_id, octopos_mailbox_get_status_reg(queue_ptr));
+	_SEC_HW_DEBUG(
+		"Before yield: queue%d:%08x", 
+		queue_id, 
+		octopos_mailbox_get_status_reg(queue_ptr));
 	/* This delay waits for the receiver to finish reading */
 	/* FIXME: replace with a reliable waiting mechanism */
 	usleep(100);
@@ -143,7 +146,8 @@ int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
 
 	UINTPTR queue_ptr = Mbox_ctrl_regs[queue_id];
 
-	return octopos_mailbox_attest_owner(queue_ptr, OMboxIds[queue_id][owner]);
+	return octopos_mailbox_attest_owner(queue_ptr, 
+		OMboxIds[queue_id][owner]);
 }
 
 u8 mailbox_get_queue_owner(uint8_t queue_id)
@@ -164,7 +168,8 @@ void mailbox_force_ownership(uint8_t queue_id, uint8_t owner)
 	_SEC_HW_ASSERT_VOID(queue_id <= NUM_QUEUES + 1)
 
 	u32 bytes_read;
-	uint8_t *message_buffer = calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
+	uint8_t *message_buffer = 
+		calloc(MAILBOX_QUEUE_MSG_SIZE, sizeof(uint8_t));
 
 	while(!mailbox_attest_queue_owner(q_runtime, P_OS)){
 		usleep(10);
@@ -193,63 +198,107 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 	 */
 	switch (queue_id) {
 		case Q_KEYBOARD:
-			OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_keyboard, MAILBOX_DEFAULT_RX_THRESHOLD);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_keyboard, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(
+				&Mbox_keyboard, MAILBOX_DEFAULT_RX_THRESHOLD);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_keyboard, 
+				OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_SERIAL_OUT:
-			OCTOPOS_XMbox_SetSendThreshold(&Mbox_out, 0);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_out, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(
+				&Mbox_out, 0);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_out, 
+				OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_RUNTIME1:
-			OCTOPOS_XMbox_SetSendThreshold(&Mbox_Runtime1, 0);
-			OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_Runtime1, MAILBOX_DEFAULT_RX_THRESHOLD);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_Runtime1, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(
+				&Mbox_Runtime1, 0);
+			OCTOPOS_XMbox_SetReceiveThreshold(
+				&Mbox_Runtime1, 
+				MAILBOX_DEFAULT_RX_THRESHOLD);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_Runtime1, 
+				OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_RUNTIME2:
-			OCTOPOS_XMbox_SetSendThreshold(&Mbox_Runtime2, 0);
-			OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_Runtime2, MAILBOX_DEFAULT_RX_THRESHOLD);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_Runtime2, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(
+				&Mbox_Runtime2, 0);
+			OCTOPOS_XMbox_SetReceiveThreshold(
+				&Mbox_Runtime2, 
+				MAILBOX_DEFAULT_RX_THRESHOLD);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_Runtime2, 
+				OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_STORAGE_DATA_OUT:
-			OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(
+				&Mbox_storage_data_out, 
+				MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_storage_data_out, 
+				OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_STORAGE_DATA_IN:
-			OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_data_in, 0);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_data_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(
+				&Mbox_storage_data_in, 0);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_storage_data_in, 
+				OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_STORAGE_CMD_OUT:
-			OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_storage_cmd_out, MAILBOX_DEFAULT_RX_THRESHOLD);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_cmd_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(
+				&Mbox_storage_cmd_out, 
+				MAILBOX_DEFAULT_RX_THRESHOLD);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_storage_cmd_out, 
+				OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_STORAGE_CMD_IN:
-			OCTOPOS_XMbox_SetSendThreshold(&Mbox_storage_cmd_in, 0);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_storage_cmd_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(
+				&Mbox_storage_cmd_in, 0);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_storage_cmd_in, 
+				OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 			break;
 		case Q_NETWORK_DATA_OUT:
-			OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_network_data_out, MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_network_data_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(
+				&Mbox_network_data_out, 
+				MAILBOX_DEFAULT_RX_THRESHOLD_LARGE);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_network_data_out, 
+				OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_NETWORK_DATA_IN:
-			OCTOPOS_XMbox_SetSendThreshold(&Mbox_network_data_in, 0);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_network_data_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(
+				&Mbox_network_data_in, 0);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_network_data_in, 
+				OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 			break;
 		case Q_NETWORK_CMD_OUT:
-			OCTOPOS_XMbox_SetReceiveThreshold(&Mbox_network_cmd_out, MAILBOX_DEFAULT_RX_THRESHOLD);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_network_cmd_out, OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetReceiveThreshold(
+				&Mbox_network_cmd_out, 
+				MAILBOX_DEFAULT_RX_THRESHOLD);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_network_cmd_out, 
+				OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		case Q_NETWORK_CMD_IN:
-			OCTOPOS_XMbox_SetSendThreshold(&Mbox_network_cmd_in, 0);
-			OCTOPOS_XMbox_SetInterruptEnable(&Mbox_network_cmd_in, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+			OCTOPOS_XMbox_SetSendThreshold(
+				&Mbox_network_cmd_in, 0);
+			OCTOPOS_XMbox_SetInterruptEnable(
+				&Mbox_network_cmd_in, 
+				OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 			break;
 
 		default:
@@ -271,29 +320,47 @@ int send_cmd_to_network(uint8_t *buf)
 	printf("%s: resp received from network\n\r",__func__);
 	return 0;
 }
-static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+
+static void _runtime_recv_msg_from_queue(uint8_t *buf, 
+	uint8_t queue_id, int queue_msg_size)
 {
-	sem_wait_impatient_receive_buf(&interrupts[queue_id], Mbox_regs[queue_id], (u8*) buf);
+	sem_wait_impatient_receive_buf(
+		&interrupts[queue_id], 
+		Mbox_regs[queue_id], 
+		(u8*) buf);
 }
 
-static void _runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+static void _runtime_recv_msg_from_queue_large(uint8_t *buf, 
+	uint8_t queue_id, int queue_msg_size)
 {
-	sem_wait_impatient_receive_buf_large(&interrupts[queue_id], Mbox_regs[queue_id], (u8*) buf);
+	sem_wait_impatient_receive_buf_large(
+		&interrupts[queue_id], 
+		Mbox_regs[queue_id], 
+		(u8*) buf);
 }
 
-static void _runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+static void _runtime_send_msg_on_queue(uint8_t *buf, 
+	uint8_t queue_id, int queue_msg_size)
 {
-	sem_wait_impatient_send(&interrupts[queue_id], Mbox_regs[queue_id], (u32*) buf);
+	sem_wait_impatient_send(
+		&interrupts[queue_id], 
+		Mbox_regs[queue_id], 
+		(u32*) buf);
 }
 
-static void _runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+static void _runtime_send_msg_on_queue_large(uint8_t *buf, 
+	uint8_t queue_id, int queue_msg_size)
 {
-	sem_wait_impatient_send_large(&interrupts[queue_id], Mbox_regs[queue_id], (u32*) buf);
+	sem_wait_impatient_send_large(&interrupts[queue_id], 
+		Mbox_regs[queue_id], 
+		(u32*) buf);
 }
 
 void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id)
 {
-	return _runtime_recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
+	return _runtime_recv_msg_from_queue(buf, 
+		queue_id, 
+		MAILBOX_QUEUE_MSG_SIZE);
 }
 
 void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id)
@@ -303,17 +370,20 @@ void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id)
 	 * sem_posts in the interrupt handler. 
 	 */
 	MBOX_PENDING_STA[queue_id] = TRUE;
-	return _runtime_send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
+	return _runtime_send_msg_on_queue(buf, 
+		queue_id, MAILBOX_QUEUE_MSG_SIZE);
 }
 
 void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
 {
-	return _runtime_recv_msg_from_queue_large(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	return _runtime_recv_msg_from_queue_large(buf, 
+		queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id)
 {
-	return _runtime_send_msg_on_queue_large(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+	return _runtime_send_msg_on_queue_large(buf, 
+		queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void is_ownership_change(int *is_change)
@@ -358,7 +428,8 @@ void load_application_arch(char *msg, struct runtime_api *api)
 		_SEC_HW_DEBUG("app %s does not exist", msg);
 		
 		memset(output_buf, 0x0, 64);                                        
-		num_chars = snprintf(output_buf, 61, "app %s does not exist\r\n", msg);        
+		num_chars = snprintf(output_buf, 61, 
+			"app %s does not exist\r\n", msg);        
 		write_to_shell(output_buf, num_chars);
 
 		return;
@@ -408,13 +479,16 @@ static void handle_fixed_timer_interrupts(void* ignored)
 	if (q_runtime == 0 || !runtime_inited) {
 		return;
 	}
-	XIntc_Disable(&intc, XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
+	XIntc_Disable(&intc, 
+		XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
 	ret = tcp_receive();
 	if(ret == 0) {
 		_SEC_HW_DEBUG("TCP Packet received");
 	}
-	XIntc_Enable(&intc, XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
-	bytes_read = sem_wait_one_time_receive_buf(&runtime_wakeup, Mbox_regs[q_runtime], syscall_buf);
+	XIntc_Enable(&intc, 
+		XPAR_COMMON_AXI_INTC_FIT_TIMER_INTERRUPT_INTR);
+	bytes_read = sem_wait_one_time_receive_buf(
+		&runtime_wakeup, Mbox_regs[q_runtime], syscall_buf);
 	if (bytes_read == 0)
 		return;
 	
@@ -452,7 +526,8 @@ static void handle_mailbox_interrupts(void* callback_ref)
 	u32			mask = 0;
 	u8			queue_id = (int) callback_ref;
 
-	if (Mbox_ctrl_regs[queue_id] && Xil_In32(Mbox_ctrl_regs[queue_id]) == 0xdeadbeef)
+	if (Mbox_ctrl_regs[queue_id] && 
+		Xil_In32(Mbox_ctrl_regs[queue_id]) == 0xdeadbeef)
 		/* Runtime may have lost access to the OctopOS mailbox */
 		return;
 	mask = OCTOPOS_XMbox_GetInterruptStatus(Mbox_regs[queue_id]);
@@ -494,13 +569,15 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			/* IPC to other runtime */
 			if (queue_id == Q_RUNTIME1) {
 				if (MBOX_PENDING_STA[Q_RUNTIME1]) {
-					sem_init(&interrupts[Q_RUNTIME1], 0, MAILBOX_QUEUE_SIZE - 1);
+					sem_init(&interrupts[Q_RUNTIME1], 
+						0, MAILBOX_QUEUE_SIZE - 1);
 					sem_post(&interrupts[Q_RUNTIME1]);
 					MBOX_PENDING_STA[Q_RUNTIME1] = FALSE;
 				}
 			} else if (queue_id == Q_RUNTIME2) {
 				if (MBOX_PENDING_STA[Q_RUNTIME2]) {
-					sem_init(&interrupts[Q_RUNTIME2], 0, MAILBOX_QUEUE_SIZE - 1);
+					sem_init(&interrupts[Q_RUNTIME2], 
+						0, MAILBOX_QUEUE_SIZE - 1);
 					sem_post(&interrupts[Q_RUNTIME2]);
 					MBOX_PENDING_STA[Q_RUNTIME2] = FALSE;
 				}
@@ -537,13 +614,22 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			/* network cmd out queue */
 			sem_post(&interrupts[Q_NETWORK_CMD_OUT]);
 		} else {
-			_SEC_HW_DEBUG("Error: invalid interrupt from %d", queue_id);
+			_SEC_HW_DEBUG(
+				"Error: invalid interrupt from %d", 
+				queue_id);
 		}
 	} else if (mask & OCTOPOS_XMB_IX_ERR) {
-		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_ERR, from %d", queue_id);
-		_SEC_HW_DEBUG("status register: %ld", OCTOPOS_XMbox_GetStatus(Mbox_regs[queue_id]));
+		_SEC_HW_DEBUG(
+			"interrupt type: OCTOPOS_XMB_IX_ERR, from %d", 
+			queue_id);
+		_SEC_HW_DEBUG(
+			"status register: %ld", 
+			OCTOPOS_XMbox_GetStatus(Mbox_regs[queue_id]));
 	} else {
-		_SEC_HW_DEBUG("interrupt type unknown, mask %ld, from %d", mask, queue_id);
+		_SEC_HW_DEBUG(
+			"interrupt type unknown, mask %ld, from %d", 
+			mask, 
+			queue_id);
 	}
 }
 
@@ -591,77 +677,119 @@ int init_runtime(int runtime_id)
 		return -1;
 	}
 
-	ConfigPtr_sys = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_OS_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_sys, ConfigPtr_sys, ConfigPtr_sys->BaseAddress);
+	ConfigPtr_sys = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_OS_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_sys, ConfigPtr_sys, ConfigPtr_sys->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	ConfigPtr_keyboard = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_KEYBOARD_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_keyboard, ConfigPtr_keyboard, ConfigPtr_keyboard->BaseAddress);
+	ConfigPtr_keyboard = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_KEYBOARD_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_keyboard, ConfigPtr_keyboard, ConfigPtr_keyboard->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
-	ConfigPtr_out = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_SERIAL_OUT_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_out, ConfigPtr_out, ConfigPtr_out->BaseAddress);
+	ConfigPtr_out = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_SERIAL_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_out, ConfigPtr_out, ConfigPtr_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
-	ConfigPtr_Runtime1 = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_RUNTIME1_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_Runtime1, ConfigPtr_Runtime1, ConfigPtr_Runtime1->BaseAddress);
+	ConfigPtr_Runtime1 = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_RUNTIME1_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_Runtime1, ConfigPtr_Runtime1, ConfigPtr_Runtime1->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
-	ConfigPtr_Runtime2 = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_RUNTIME2_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_Runtime2, ConfigPtr_Runtime2, ConfigPtr_Runtime2->BaseAddress);
-	if (Status != XST_SUCCESS) {
-		return XST_FAILURE;
-	}
-
-	Config_storage_data_in = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_STORAGE_DATA_IN_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_data_in, Config_storage_data_in, Config_storage_data_in->BaseAddress);
-	if (Status != XST_SUCCESS) {
-		return XST_FAILURE;
-	}
-
-	Config_storage_data_out = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_STORAGE_DATA_OUT_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_data_out, Config_storage_data_out, Config_storage_data_out->BaseAddress);
+	ConfigPtr_Runtime2 = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_RUNTIME2_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_Runtime2, ConfigPtr_Runtime2, ConfigPtr_Runtime2->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Config_storage_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_STORAGE_CMD_IN_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_cmd_in, Config_storage_cmd_in, Config_storage_cmd_in->BaseAddress);
+	Config_storage_data_in = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_STORAGE_DATA_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_storage_data_in, 
+		Config_storage_data_in, 
+		Config_storage_data_in->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Config_storage_cmd_out = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_STORAGE_CMD_OUT_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_cmd_out, Config_storage_cmd_out, Config_storage_cmd_out->BaseAddress);
+	Config_storage_data_out = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_STORAGE_DATA_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_storage_data_out, 
+		Config_storage_data_out, 
+		Config_storage_data_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Config_network_data_in = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_NETWORK_DATA_IN_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_network_data_in, Config_network_data_in, Config_network_data_in->BaseAddress);
+	Config_storage_cmd_in = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_STORAGE_CMD_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_storage_cmd_in, 
+		Config_storage_cmd_in, 
+		Config_storage_cmd_in->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Config_network_data_out = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_NETWORK_DATA_OUT_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_network_data_out, Config_network_data_out, Config_network_data_out->BaseAddress);
+	Config_storage_cmd_out = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_STORAGE_CMD_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_storage_cmd_out, 
+		Config_storage_cmd_out, 
+		Config_storage_cmd_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Config_network_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_NETWORK_CMD_IN_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_network_cmd_in, Config_network_cmd_in, Config_network_cmd_in->BaseAddress);
+	Config_network_data_in = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_NETWORK_DATA_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_network_data_in, 
+		Config_network_data_in, 
+		Config_network_data_in->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
-	Config_network_cmd_out = OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_NETWORK_CMD_OUT_DEVICE_ID);
-	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_network_cmd_out, Config_network_cmd_out, Config_network_cmd_out->BaseAddress);
+	Config_network_data_out = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_NETWORK_DATA_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_network_data_out, 
+		Config_network_data_out, 
+		Config_network_data_out->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Config_network_cmd_in = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_NETWORK_CMD_IN_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_network_cmd_in, 
+		Config_network_cmd_in, 
+		Config_network_cmd_in->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Config_network_cmd_out = 
+		OCTOPOS_XMbox_LookupConfig(XPAR_RUNTIME_NETWORK_CMD_OUT_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(
+		&Mbox_network_cmd_out, 
+		Config_network_cmd_out, 
+		Config_network_cmd_out->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
@@ -716,11 +844,18 @@ int init_runtime(int runtime_id)
 	/* OctopOS mailbox maps must be initialized before setting up interrupts. */
 	OMboxIds_init();
 
-	OCTOPOS_XMbox_SetReceiveThreshold(Mbox_regs[q_runtime], MAILBOX_MAX_COMMAND_SIZE);
-	OCTOPOS_XMbox_SetInterruptEnable(Mbox_regs[q_runtime], OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
+	OCTOPOS_XMbox_SetReceiveThreshold(
+		Mbox_regs[q_runtime], 
+		MAILBOX_MAX_COMMAND_SIZE);
+	OCTOPOS_XMbox_SetInterruptEnable(
+		Mbox_regs[q_runtime], 
+		OCTOPOS_XMB_IX_RTA | OCTOPOS_XMB_IX_ERR);
 
-	OCTOPOS_XMbox_SetSendThreshold(&Mbox_sys, 0);
-	OCTOPOS_XMbox_SetInterruptEnable(&Mbox_sys, OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
+	OCTOPOS_XMbox_SetSendThreshold(
+		&Mbox_sys, 0);
+	OCTOPOS_XMbox_SetInterruptEnable(
+		&Mbox_sys, 
+		OCTOPOS_XMB_IX_STA | OCTOPOS_XMB_IX_ERR);
 
 #ifndef ARCH_SEC_HW_BOOT
 
@@ -998,9 +1133,7 @@ int init_runtime(int runtime_id)
 #endif
 
 	sem_init(&interrupts[q_os], 0, MAILBOX_QUEUE_SIZE);
-	/* Q_RUNTIME semaphores are not used directly because there is
-	 * an indirection layer on top of it.
-	 *
+	/* 
 	 * Below is a list of event semaphores:
 	 * 
 	 * runtime_wakeup: runtime queue (non secure ipc mode) receives 

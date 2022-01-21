@@ -1,6 +1,9 @@
+/* Public domain implementation by Brad Conte (brad@bradconte.com)
+ * https://github.com/MinfonTsai/SHA256_embedded
+ */
+
 #include <stdio.h> 
 #include <string.h>
-// https://github.com/MinfonTsai/SHA256_embedded
 
 #define uchar unsigned char // 8-bit byte
 #define uint unsigned int // 32-bit word
