@@ -257,6 +257,20 @@ void mailbox_change_queue_access_bottom_half(uint8_t queue_id)
 	}
 }
 
+int send_cmd_to_network(uint8_t *buf)
+{
+	sem_wait_impatient_send(
+		&interrupts[Q_NETWORK_CMD_IN],
+		Mbox_regs[Q_NETWORK_CMD_IN],
+		(u32*) buf);
+	printf("%s: req send to network wait for resp\n\r",__func__);
+	sem_wait_impatient_receive_buf(
+		&interrupts[Q_NETWORK_CMD_OUT],
+		Mbox_regs[Q_NETWORK_CMD_OUT],
+		(uint8_t*) buf);
+	printf("%s: resp received from network\n\r",__func__);
+	return 0;
+}
 static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
 {
 	sem_wait_impatient_receive_buf(&interrupts[queue_id], Mbox_regs[queue_id], (u8*) buf);
