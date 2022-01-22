@@ -55,7 +55,9 @@ static void send_receive(struct runtime_api *api)
 	char buf[32];
 	int len;
 	if (api->connect_socket(sock, &skaddr) < 0) {
+#ifdef ARCH_SEC_HW
 		print("send_receive [0.5]\n\r");
+#endif /* ARCH_SEC_HW */
 		printf("%s: Error: _connect\n", __func__);
 		return;
 	}
@@ -74,6 +76,7 @@ static void send_receive(struct runtime_api *api)
 	}
 }
 
+#ifdef ARCH_SEC_HW
 static void latency_test(struct runtime_api *api)
 {
 	char buf[32] = "1";
@@ -101,7 +104,6 @@ static void latency_test(struct runtime_api *api)
 static void throughput_test(struct runtime_api *api)
 {
 	char buf[32] = "1";
-	char buf2[32] = "2";
 	int len;
 	len = strlen(buf);
 	if (api->connect_socket(sock, &skaddr) < 0) {
@@ -126,8 +128,8 @@ static void throughput_test(struct runtime_api *api)
 			return;
 		}
 	}
-
 }
+#endif /* ARCH_SEC_HW */
 
 
 #ifndef ARCH_SEC_HW

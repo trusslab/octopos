@@ -409,34 +409,46 @@ repeat:
 
 #endif /* ARCH_SEC_HW_BOOT */
 
-    while(TRUE) {
+	/*
+	 * When the file is very large, which is, for example, the case
+	 * for the untrusted domain kernel, the queue will need to be
+	 * delegated more than once.
+	 */ 
 #ifndef ARCH_SEC_HW_BOOT
+	if (count == MAILBOX_MAX_LIMIT_VAL)
+		need_repeat = 1;
+	else
+		need_repeat = 0;
+
+	total_count += count;
+
+	for (int i = 0; i < (int) count; i++) {
 		read_from_storage_data_queue(buf);
-#else
+		
+#else /* ARCH_SEC_HW_BOOT */
+    while(TRUE) {
 #ifdef SEC_HW_TPM_DEBUG
 		printf("BEFORE READ %08x\r\n", 
 			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
-#endif
+#endif /* SEC_HW_TPM_DEBUG */
 		_sem_retrieve_mailbox_message_blocking_buf_large(
-			Mbox_regs[Q_STORAGE_DATA_OUT], 
-			buf
-			);
+			Mbox_regs[Q_STORAGE_DATA_OUT], buf);
 #ifdef SEC_HW_TPM_DEBUG
 		printf("AFTER READ %08x\r\n", 
 			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
-#endif
+#endif /* SEC_HW_TPM_DEBUG */
 
 		/* update hash */
 		if (offset == 0)
 			sha256_init(&ctx);
 		sha256_update(&ctx, &buf[0], STORAGE_BLOCK_SIZE);
-#endif
+#endif /* ARCH_SEC_HW_BOOT */
 		
 #ifndef ARCH_SEC_HW_BOOT
 		fseek(copy_filep, offset, SEEK_SET);
 		/* FIXME: check the return val from fwrite */
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
-#else
+#else /* ARCH_SEC_HW_BOOT */
 
         /* copy into unpack buffer */
         memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
@@ -468,7 +480,7 @@ repeat:
 					for (int idx = 0; idx < 32; idx++)
 						printf("%02x",hash[idx]);
 					printf("\r\n");
-#endif
+#endif /* SEC_HW_TPM_DEBUG */
 					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
 					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
 					if (tpm_response != 0xFFFFFFFF) {

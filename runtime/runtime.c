@@ -73,6 +73,8 @@
 #define ARCH_SEC_HW_EVALUATION
 #endif
 
+int network_domain_bind_sport(unsigned short sport);
+
 int p_runtime = 0;
 int q_runtime = 0;
 int q_os = 0;
