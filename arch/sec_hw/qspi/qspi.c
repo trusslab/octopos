@@ -1,4 +1,4 @@
-#ifdef ARCH_SEC_HW_STORAGE
+#ifdef ARCH_SEC_HW_STORAGE_QSPI
 
 #if defined(PROJ_CPP)
 #define _Bool bool

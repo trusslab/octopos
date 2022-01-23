@@ -1,4 +1,3 @@
-#ifndef ARCH_SEC_HW
 /* octopos network client */
 #ifndef CONFIG_UML /* Linux UML */
 #include <arch/defines.h>
@@ -31,7 +30,12 @@
 #include <octopos/error.h>
 #ifndef UNTRUSTED_DOMAIN
 #include <arch/mailbox_runtime.h> 
+#ifndef ARCH_SEC_HW
+#include <network/ip.h>
 #endif
+#endif
+#include <os/network.h>
+#include <octopos/io.h>
 
 #ifdef UNTRUSTED_DOMAIN
 #define printf printk
@@ -54,19 +58,29 @@ void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
 #endif
 
-#ifndef ARCH_SEC_HW
+#ifndef CONFIG_UML /* Linux UML */
+int send_cmd_to_network(uint8_t *buf);
+#else /* Linux UML */
+int send_cmd_to_network(uint8_t *buf)
+{
+	return 0;
+}
+#endif /* Linux UML */
+
 // TODO: missing pkbuf definition
 void ip_send_out(struct pkbuf *pkb)
 {
 	int size = pkb->pk_len + sizeof(*pkb);
+
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size)
 	runtime_send_msg_on_queue_large(buf, Q_NETWORK_DATA_IN);
 
 #ifndef UNTRUSTED_DOMAIN
+#ifndef ARCH_SEC_HW
 	report_queue_usage(Q_NETWORK_DATA_IN);
 #endif
-}
 #endif
+}
 
 uint8_t *ip_receive(uint8_t *buf, uint16_t *size)
 {
@@ -133,8 +147,11 @@ int yield_network_access(void)
 	 * Yielding the queue resets the queues therefore there is no concern
 	 * about the leaking of the leftover messages.
 	 */
-	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-
+	wait_until_empty(Q_NETWORK_CMD_IN, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_NETWORK_DATA_IN,
+			 MAILBOX_QUEUE_SIZE_LARGE);
+	mailbox_yield_to_previous_owner(Q_NETWORK_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_NETWORK_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
 
@@ -143,6 +160,21 @@ int yield_network_access(void)
 #endif
 	
 	return 0;
+}
+
+static int bind_sport(uint32_t sport)
+{
+	NETWORK_SET_ONE_ARG(sport)
+	buf[0] = IO_OP_BIND_RESOURCE;
+	send_cmd_to_network(buf);
+	NETWORK_GET_ONE_RET
+
+	return (int) ret0;
+}
+
+
+int network_domain_bind_sport(unsigned short sport) {
+	return bind_sport((uint32_t) sport);
 }
 
 /*
@@ -167,9 +199,13 @@ int request_network_access(limit_t limit, timeout_t timeout,
 		printf("%s: Error: already has network access\n", __func__);
 		return ERR_INVALID;
 	}
+	reset_queue_sync(Q_NETWORK_CMD_IN, MAILBOX_QUEUE_MSG_SIZE);
+	reset_queue_sync(Q_NETWORK_CMD_OUT, 0);
 
 	reset_queue_sync(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	reset_queue_sync(Q_NETWORK_DATA_OUT, 0);
+
+
 
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_NETWORK_ACCESS, (uint32_t) limit,
 			     (uint32_t) timeout)
@@ -178,10 +214,29 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	if (ret0)
 		return (int) ret0;
 
+	ret = mailbox_attest_queue_access(Q_NETWORK_CMD_IN, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure network cmd write "
+		       "access\n", __func__);
+		return ERR_FAULT;
+	}
+
+	ret = mailbox_attest_queue_access(Q_NETWORK_CMD_OUT, limit, timeout);
+	if (!ret) {
+		printf("%s: Error: failed to attest secure storage cmd read "
+		       "access\n", __func__);
+		wait_until_empty(Q_NETWORK_CMD_IN, MAILBOX_QUEUE_SIZE);
+		mailbox_yield_to_previous_owner(Q_NETWORK_CMD_IN);
+		return ERR_FAULT;
+	}
+
 	ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN, limit, timeout);
 	if (!ret) {
 		printf("%s: Error: failed to attest network write access\n",
 		       __func__);
+		wait_until_empty(Q_NETWORK_CMD_IN, MAILBOX_QUEUE_SIZE);
+		mailbox_yield_to_previous_owner(Q_NETWORK_CMD_IN);
+		mailbox_yield_to_previous_owner(Q_NETWORK_CMD_OUT);
 		return ERR_FAULT;
 	}
 
@@ -189,12 +244,16 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	if (!ret) {
 		printf("%s: Error: failed to attest network read access\n",
 		       __func__);
+		wait_until_empty(Q_NETWORK_CMD_IN, MAILBOX_QUEUE_SIZE);
 		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+		mailbox_yield_to_previous_owner(Q_NETWORK_CMD_IN);
+		mailbox_yield_to_previous_owner(Q_NETWORK_CMD_OUT);
 		mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 		return ERR_FAULT;
 	}
 
 #ifndef UNTRUSTED_DOMAIN
+#ifndef ARCH_SEC_HW
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr() or read_tpm_pcr_for_proc().
 	 * This is because those calls issue syscalls, which might take
@@ -239,12 +298,16 @@ int request_network_access(limit_t limit, timeout_t timeout,
 		}
 	}
 #endif
+#endif
 
 	ret = net_start_receive();
 	if (ret) {
 		printf("Error: set_up_receive failed\n");
+			wait_until_empty(Q_NETWORK_CMD_IN, MAILBOX_QUEUE_SIZE);
 			wait_until_empty(Q_NETWORK_DATA_IN,
 					 MAILBOX_QUEUE_SIZE_LARGE);
+			mailbox_yield_to_previous_owner(Q_NETWORK_CMD_IN);
+			mailbox_yield_to_previous_owner(Q_NETWORK_CMD_OUT);
 			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
 			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
 
@@ -253,6 +316,11 @@ int request_network_access(limit_t limit, timeout_t timeout,
 			queue_timeouts[Q_NETWORK_DATA_IN] = 0;
 			queue_limits[Q_NETWORK_DATA_OUT] = 0;
 			queue_timeouts[Q_NETWORK_DATA_OUT] = 0;
+			queue_limits[Q_NETWORK_CMD_IN] = 0;
+			queue_timeouts[Q_NETWORK_CMD_IN] = 0;
+			queue_limits[Q_NETWORK_CMD_OUT] = 0;
+			queue_timeouts[Q_NETWORK_CMD_OUT] = 0;
+
 #endif
 		return ERR_FAULT;
 	}
@@ -273,4 +341,3 @@ void syscall_close_socket(void)
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_CLOSE_SOCKET)
 	issue_syscall(buf);
 }
-#endif

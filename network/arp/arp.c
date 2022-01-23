@@ -1,7 +1,14 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "netif.h"
 #include "ether.h"
 #include "arp.h"
 #include "lib.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/arp.h>
+#include <network/lib.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 #define BRD_HWADDR ((unsigned char *)"\xff\xff\xff\xff\xff\xff")
 
@@ -97,6 +104,7 @@ free_pkb:
  */
 void arp_in(struct netdev *dev, struct pkbuf *pkb)
 {
+#ifndef ARCH_SEC_HW_NETWORK
 	struct ether *ehdr = (struct ether *)pkb->pk_data;
 	struct arp *ahdr = (struct arp *)ehdr->eth_data;
 
@@ -134,4 +142,9 @@ void arp_in(struct netdev *dev, struct pkbuf *pkb)
 	return;
 err_free_pkb:
 	free_pkb(pkb);
+#else /*ARCH_SEC_HW_NETWORK*/
+//	just drop arp packets for now
+	free(pkb->pk_data);
+	free_pkb(pkb);
+#endif/*ARCH_SEC_HW_NETWORK*/	
 }
