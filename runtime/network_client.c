@@ -58,7 +58,14 @@ void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
 #endif
 
-
+#ifndef CONFIG_UML /* Linux UML */
+int send_cmd_to_network(uint8_t *buf);
+#else /* Linux UML */
+int send_cmd_to_network(uint8_t *buf)
+{
+	return 0;
+}
+#endif /* Linux UML */
 
 // TODO: missing pkbuf definition
 void ip_send_out(struct pkbuf *pkb)
@@ -154,6 +161,7 @@ int yield_network_access(void)
 	
 	return 0;
 }
+
 static int bind_sport(uint32_t sport)
 {
 	NETWORK_SET_ONE_ARG(sport)
@@ -166,7 +174,7 @@ static int bind_sport(uint32_t sport)
 
 
 int network_domain_bind_sport(unsigned short sport) {
-	bind_sport((uint32_t) sport);
+	return bind_sport((uint32_t) sport);
 }
 
 /*

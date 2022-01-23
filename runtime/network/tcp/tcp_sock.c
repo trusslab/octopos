@@ -209,9 +209,9 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 	 */
 	tcp_pre_wait_connect(tsk);
 	tcp_send_syn(tsk, NULL);
-	print("in tcp_connect waiting for connection\n\r");
 
 #ifdef ARCH_SEC_HW
+	print("in tcp_connect waiting for connection\n\r");
 	while(tsk->state != 5){
 		print(".");
 	}

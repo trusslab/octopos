@@ -18,7 +18,7 @@
 #include <network/ip.h>
 #include <network/tcp.h>
 #include <arch/mailbox.h>
-#include <ocopos/io.h>
+#include <octopos/io.h>
 #include <arch/syscall.h> 
 
 /* Need to make sure msgs are big enough so that we don't overflow
@@ -91,8 +91,6 @@
 uint32_t bound_sport = 0; /* 0xFF is an invalid partition number. */
 uint8_t bound = 0;
 uint8_t used = 0;
-
-unsigned int net_debug = 0;
 
 #define ARBITER_UNTRUSTED 1
 #define ARBITER_UNTRUSTED_FLAG 0xF0F0F0F0
@@ -276,7 +274,7 @@ void network_arbiter_change(unsigned int trusted){
  */
 static void network_query_state(uint8_t *buf)
 {
-	uint8_t state[3], sport;
+	uint8_t state[3];
 	uint32_t state_size = 3;
 
 	state[0] = bound;
@@ -286,6 +284,7 @@ static void network_query_state(uint8_t *buf)
 
 	NETWORK_SET_ONE_RET_DATA(0, state, state_size)
 }
+
 /*
  * Return error if bound, or used is set.
  * Return error if invalid resource name
@@ -293,7 +292,7 @@ static void network_query_state(uint8_t *buf)
  * Set the global var "bound"
  * This is irreversible until reset.
  */
-static void network_bind_resource(uint8_t *buf, u8 owner_id)
+static void network_bind_resource(uint8_t *buf, uint8_t owner_id)
 {
 	uint32_t sport;
 
@@ -327,7 +326,7 @@ static void network_bind_resource(uint8_t *buf, u8 owner_id)
 
 	NETWORK_SET_ONE_RET(0)
 }
-void process_cmd(uint8_t *buf, u8 owner_id)
+void process_cmd(uint8_t *buf, uint8_t owner_id)
 {
 	switch (buf[0]) {
 	case IO_OP_BIND_RESOURCE:
@@ -337,7 +336,6 @@ void process_cmd(uint8_t *buf, u8 owner_id)
 	case IO_OP_QUERY_STATE:
 		network_query_state(buf);
 		break;
-
 
 	default:
 		/*
@@ -408,12 +406,10 @@ void tcp_in(struct pkbuf *pkb)
 
 }
 
-
-
+pthread_t mailbox_thread;
 
 int init_network(void)
 {
-	pthread_t mailbox_thread;
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, 0);
@@ -471,7 +467,7 @@ void network_event_loop(void)
 			opcode[1] = Q_NETWORK_CMD_IN;
 			write(fd_out, opcode, 2), 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			process_cmd(buf,1);
+			process_cmd(buf, 1);
 			send_response(buf, Q_NETWORK_CMD_OUT);
 		} else {
 			uint8_t *dbuf = malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);

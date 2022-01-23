@@ -141,6 +141,14 @@ void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id)
 	return _runtime_send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
 }
 
+int send_cmd_to_network(uint8_t *buf)
+{
+	runtime_send_msg_on_queue(buf, Q_NETWORK_CMD_IN);
+	runtime_recv_msg_from_queue(buf, Q_NETWORK_CMD_IN);
+
+	return 0;
+}
+
 void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
 {
 	return _runtime_recv_msg_from_queue(buf, queue_id,
