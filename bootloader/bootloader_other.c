@@ -404,7 +404,9 @@ repeat:
 
     /* wait for change queue access */
     while(0xdeadbeef == 
-    	octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+    	octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])) {
+    	octopos_usleep(1);
+    }
     octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
 #endif /* ARCH_SEC_HW_BOOT */

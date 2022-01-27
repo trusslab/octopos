@@ -27,6 +27,8 @@ void cleanup_platform();
 
 #define CPU_SPEED_IN_MHZ (XPAR_MICROBLAZE_CORE_CLOCK_FREQ_HZ/1000000)										
 
+void octopos_usleep(u32 usecs);
+
 #ifndef ROLE_INSTALLER
 #define printf 	xil_printf
 #endif

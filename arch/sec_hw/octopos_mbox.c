@@ -8,6 +8,27 @@
 
 #define OCTOPOS_MAILBOX_INTR_OFFSET 4
 
+/* "unitsleep: rsub %1, r11, %1" <- 1 clk cycle */
+/* "nop                        " <- 1 clk cycle */
+/* "bnei %1, unitsleep         " <- 3 clk cycle */	
+void octopos_usleep(u32 usecs)
+{
+    asm(
+		"addik r11, r0, 1             \n\t"
+		"nextsleep: rsub %0, r11, %0  \n\t"
+		"unitsleep: rsub %1, r11, %1  \n\t"
+		"nop                          \n\t"
+		"bnei %1, unitsleep           \n\t"
+		"add %1, r0, %2               \n\t"
+		"bnei %0, nextsleep           \n\t"
+		: 
+		: "r"(usecs), 
+		"r"(CPU_SPEED_IN_MHZ / 5), 
+		"r"(CPU_SPEED_IN_MHZ / 5)
+		: "r11"
+    );
+}
+
 u32 octopos_mailbox_get_status_reg(UINTPTR base)
 {
 	Xil_AssertNonvoid(base != 0);
