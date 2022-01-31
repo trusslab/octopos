@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "netif.h"
 #include "ether.h"
 #include "arp.h"
@@ -6,6 +7,15 @@
 #include "icmp.h"
 #include "route.h"
 #include "lib.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/arp.h>
+#include <network/ip.h>
+#include <network/icmp.h>
+#include <network/route.h>
+#include <network/lib.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 /* Assert pkb is net-order */
 void ip_forward(struct pkbuf *pkb)
@@ -14,6 +24,13 @@ void ip_forward(struct pkbuf *pkb)
 	struct rtentry *rt = pkb->pk_rtdst;
 	struct netdev *indev = pkb->pk_indev;
 	unsigned int dst;
+
+#ifdef ARCH_SEC_HW_NETWORK
+//	printf("%s:host doesnt support forward,droping message!\r\n",__func__);
+//	free(pkb->pk_data);
+	free_pkb(pkb);
+	return;
+#endif
 #ifdef CONFIG_TOP1
 	ipdbg("host doesnt support forward!");
 	goto drop_pkb;

@@ -1,13 +1,22 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "ether.h"
 #include "arp.h"
 #include "lib.h"
 #include "list.h"
 #include "compile.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/list.h>
+#include <network/ether.h>
+#include <network/arp.h>
+#include <network/lib.h>
+#include <network/compile.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 #define arp_cache_head (&arp_cache[0])
 #define arp_cache_end (&arp_cache[ARP_CACHE_SZ])
 static struct arpentry arp_cache[ARP_CACHE_SZ];
 
+#ifndef ARCH_SEC_HW_NETWORK
 /* Lock Definition */
 #ifdef STATIC_MUTEX
 pthread_mutex_t arp_cache_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -39,6 +48,7 @@ static _inline void arp_cache_lock_init(void)
 #define arp_cache_lock() do { dbg("lock"); pthread_mutex_lock(&arp_cache_mutex); } while(0)
 #define arp_cache_unlock() do { dbg("unlock"); pthread_mutex_unlock(&arp_cache_mutex); } while(0)
 #else
+
 static _inline void arp_cache_lock(void)
 {
 	pthread_mutex_lock(&arp_cache_mutex);
@@ -49,6 +59,18 @@ static _inline void arp_cache_unlock(void)
 	pthread_mutex_unlock(&arp_cache_mutex);
 }
 #endif	/* end DEBUG_ARPCACHE_LOCK */
+
+#else	/* ARCH_SEC_HW_NETWORK */
+static _inline void arp_cache_lock(void)
+{
+	//MJ: FIXME Disable interrupts here
+}
+
+static _inline void arp_cache_unlock(void)
+{
+	//MJ: FIXME Enable interrupts here
+}
+#endif /* ARCH_SEC_HW_NETWORK */
 
 void arp_queue_send(struct arpentry *ae)
 {
@@ -182,8 +204,12 @@ void arp_cache_init(void)
 	for (i = 0; i < ARP_CACHE_SZ; i++)
 		arp_cache[i].ae_state = ARP_FREE;
 	dbg("ARP CACHE INIT");
+#ifndef ARCH_SEC_HW_NETWORK
 	arp_cache_lock_init();
 	dbg("ARP CACHE SEMAPHORE INIT");
+#endif
+
+
 }
 
 static const char *__arpstate[] = {

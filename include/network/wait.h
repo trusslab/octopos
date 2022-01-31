@@ -5,6 +5,16 @@
 #include "compile.h"
 #include <pthread.h>
 
+#ifdef ARCH_SEC_HW
+#define pthread_cond_signal(x)
+#define pthread_mutex_lock(x)
+#define pthread_mutex_unlock(x)
+#define pthread_cond_wait(x,y)
+#define pthread_mutex_init(x,y)
+#define pthread_cond_init(x,y)
+#define pthread_cond_broadcast(x)
+#endif
+
 /* simulating thread blocking(used for _accept(), _read(), _recv()) */
 struct tapip_wait {
 	pthread_mutex_t mutex;

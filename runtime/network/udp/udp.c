@@ -6,7 +6,15 @@
 #include "icmp.h"
 #include "ip.h"
 #include "udp.h"
-
+#else /*ARCH_SEC_HW*/
+#include <network/netif.h>
+#include <network/sock.h>
+#include <network/list.h>
+#include <network/ether.h>
+#include <network/icmp.h>
+#include <network/ip.h>
+#include <network/udp.h>
+#endif /*ARCH_SEC_HW*/
 static void udp_recv(struct pkbuf *pkb, struct ip *iphdr, struct udp *udphdr)
 {
 	struct sock *sk;
@@ -56,4 +64,3 @@ void udp_in(struct pkbuf *pkb)
 drop_pkb:
 	free_pkb(pkb);
 }
-#endif

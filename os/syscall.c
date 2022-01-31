@@ -160,6 +160,10 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		}
 #endif
 
+#ifdef ARCH_SEC_HW
+		reset_proc(P_SERIAL_OUT);
+#endif
+		
 		int ret = is_queue_available(Q_SERIAL_OUT);
 		/* Or should we make this blocking? */
 		if (!ret) {
@@ -456,7 +460,6 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 			SYSCALL_SET_ONE_RET(0)
 		break;
 	}
-#ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		handle_allocate_socket_syscall(runtime_proc_id, buf);
 		break;
@@ -469,6 +472,7 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		handle_close_socket_syscall(runtime_proc_id, buf);
 		break;
 	}
+#ifdef ARCH_UMODE
 
 	case SYSCALL_REQUEST_BLUETOOTH_ACCESS: {
 		SYSCALL_GET_THREE_ARGS_DATA
@@ -643,11 +647,9 @@ void process_system_call(uint8_t *buf, uint8_t runtime_proc_id)
 			file_system_write_file_blocks_late();
 		else if (late_processing == SYSCALL_READ_FILE_BLOCKS)
 			file_system_read_file_blocks_late();
-#ifndef ARCH_SEC_HW
 		else if (late_processing == SYSCALL_INFORM_OS_OF_TERMINATION ||
 			 late_processing == SYSCALL_INFORM_OS_OF_PAUSE)
 			reset_proc(runtime_proc_id);
-#endif
 	} else if (runtime_proc_id == P_UNTRUSTED) {
 		handle_untrusted_syscall(buf);
 		send_cmd_to_untrusted(buf);

@@ -1,0 +1,176 @@
+static err_t low_level_init(struct netif *netif)
+{
+	unsigned mac_address = (unsigned)(UINTPTR)(netif->state);
+	struct xemac_s *xemac;
+	xaxiemacif_s *xaxiemacif;
+	XAxiEthernet_Config *mac_config;
+
+	xaxiemacif = mem_malloc(sizeof *xaxiemacif);
+	if (xaxiemacif == NULL) {
+		LWIP_DEBUGF(NETIF_DEBUG, ("xaxiemacif_init: out of memory\r\n"));
+		return ERR_MEM;
+	}
+
+	xemac = mem_malloc(sizeof *xemac);
+	if (xemac == NULL) {
+		LWIP_DEBUGF(NETIF_DEBUG, ("xaxiemacif_init: out of memory\r\n"));
+		return ERR_MEM;
+	}
+
+	xemac->state = (void *)xaxiemacif;
+	xemac->topology_index = xtopology_find_index(mac_address);
+	xemac->type = xemac_type_axi_ethernet;
+
+	xaxiemacif->send_q = NULL;
+	xaxiemacif->recv_q = pq_create_queue();
+	if (!xaxiemacif->recv_q)
+		return ERR_MEM;
+
+	/* maximum transfer unit */
+#ifdef USE_JUMBO_FRAMES
+	netif->mtu = XAE_JUMBO_MTU - XAE_HDR_SIZE;
+#else
+	netif->mtu = XAE_MTU - XAE_HDR_SIZE;
+#endif
+
+#if LWIP_IGMP
+	netif->igmp_mac_filter = xaxiemacif_mac_filter_update;
+#endif
+
+#if LWIP_IPV6 && LWIP_IPV6_MLD
+ netif->mld_mac_filter = xaxiemacif_mld6_mac_filter_update;
+#endif
+
+	netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP |
+				   NETIF_FLAG_LINK_UP;
+
+#if LWIP_IPV6 && LWIP_IPV6_MLD
+	netif->flags |= NETIF_FLAG_MLD6;
+#endif
+
+#if LWIP_IGMP
+	netif->flags |= NETIF_FLAG_IGMP;
+#endif
+
+#if !NO_SYS
+	sys_sem_new(&xemac->sem_rx_data_available, 0);
+#endif
+
+	/* obtain config of this emac */
+	mac_config = xaxiemac_lookup_config((unsigned)(UINTPTR)netif->state);
+
+	XAxiEthernet_Initialize(&xaxiemacif->axi_ethernet, mac_config,
+				mac_config->BaseAddress);
+
+	/* figure out if the system has DMA */
+	if (XAxiEthernet_IsDma(&xaxiemacif->axi_ethernet)) {
+#ifdef XLWIP_CONFIG_INCLUDE_AXI_ETHERNET_DMA
+		/* initialize the DMA engine */
+		init_axi_dma(xemac);
+#endif
+	} else if (XAxiEthernet_IsFifo(&xaxiemacif->axi_ethernet)) {
+#ifdef XLWIP_CONFIG_INCLUDE_AXI_ETHERNET_FIFO
+		/* initialize the locallink FIFOs */
+		init_axi_fifo(xemac);
+#endif
+	} else if (XAxiEthernet_IsMcDma(&xaxiemacif->axi_ethernet)) {
+#ifdef XLWIP_CONFIG_INCLUDE_AXI_ETHERNET_MCDMA
+		/* Initialize MCDMA engine */
+		init_axi_mcdma(xemac);
+#endif
+	} else {
+		/* should not occur */
+		LWIP_DEBUGF(NETIF_DEBUG, ("xaxiemacif_init: mac is not configured with DMA, MCDMA or FIFO\r\n"));
+		return ERR_IF;
+	}
+
+	/* initialize the mac */
+	init_axiemac(xaxiemacif, netif);
+
+	/* replace the state in netif (currently the emac baseaddress)
+	 * with the mac instance pointer.
+	 */
+	netif->state = (void *)xemac;
+
+	return ERR_OK;
+}
+
+/*
+ * low_level_output():
+ *
+ * Should do the actual transmission of the packet. The packet is
+ * contained in the pbuf that is passed to the function. This pbuf
+ * might be chained.
+ *
+ */
+
+static err_t low_level_output(struct netif *netif, struct pbuf *p)
+{
+        SYS_ARCH_DECL_PROTECT(lev);
+        err_t err;
+        struct xemac_s *xemac = (struct xemac_s *)(netif->state);
+        xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
+
+#ifdef XLWIP_CONFIG_INCLUDE_AXI_ETHERNET_DMA
+	/*
+	 * With AXI Ethernet on Zynq, we observed unexplained delays for
+	 * BD Status update. As a result, we are hitting a condition where
+	 * there are no BDs free to transmit packets. So, we have added
+	 * this logic where we look for the status update in a definite
+	 * loop.
+	 */
+	XAxiDma_BdRing *txring = XAxiDma_GetTxRing(&xaxiemacif->axidma);
+#endif
+        int count = 100;
+
+        SYS_ARCH_PROTECT(lev);
+
+        while (count) {
+
+		/* check if space is available to send */
+		if (is_tx_space_available(xaxiemacif)) {
+			_unbuffered_low_level_output(xaxiemacif, p);
+			err = ERR_OK;
+			break;
+		} else {
+#if LINK_STATS
+			lwip_stats.link.drop++;
+#endif
+#ifdef XLWIP_CONFIG_INCLUDE_AXI_ETHERNET_DMA
+			process_sent_bds(txring);
+#endif
+			count--;
+		}
+        }
+
+	if (count == 0) {
+		print("pack dropped, no space\r\n");
+		err = ERR_MEM;
+	}
+
+        SYS_ARCH_UNPROTECT(lev);
+        return err;
+}
+
+
+static err_t xaxiemacif_output(struct netif *netif, struct pbuf *p,
+		ip_addr_t *ipaddr)
+{
+	/* resolve hardware address, then send (or queue) packet */
+	return etharp_output(netif, p, ipaddr);
+}
+
+err_t
+xaxiemacif_init(struct netif *netif)
+{
+
+	netif->name[0] = IFNAME0;
+	netif->name[1] = IFNAME1;
+	netif->output = xaxiemacif_output;
+	netif->linkoutput = low_level_output;
+
+
+	low_level_init(netif);
+
+	return ERR_OK;
+}

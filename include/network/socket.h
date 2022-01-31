@@ -1,4 +1,3 @@
-#ifndef ARCH_SEC_HW
 #ifndef __SOCKET_H
 #define __SOCKET_H
 
@@ -63,4 +62,3 @@ extern struct pkbuf *_recv(struct socket *);
 extern void socket_init(void);
 
 #endif	/* socket.h */
-#endif
