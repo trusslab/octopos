@@ -128,12 +128,12 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t count,
 
 	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
 
-	if (count * factor + tail_offset > MAILBOX_MAX_LIMIT_VAL)
-		result &= octopos_mailbox_attest_quota_limit(queue_ptr,
-				MAILBOX_MAX_LIMIT_VAL);
-	else
-		result &= octopos_mailbox_attest_quota_limit(queue_ptr,
-				count * factor + tail_offset);
+//	if (count * factor + tail_offset > MAILBOX_MAX_LIMIT_VAL)
+//		result &= octopos_mailbox_attest_quota_limit(queue_ptr,
+//				MAILBOX_MAX_LIMIT_VAL);
+//	else
+//		result &= octopos_mailbox_attest_quota_limit(queue_ptr,
+//				count * factor + tail_offset);
 
 	/* FIXME: implement timeout attestation */
 

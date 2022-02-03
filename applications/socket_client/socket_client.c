@@ -71,9 +71,15 @@ static void send_receive(struct runtime_api *api)
 		printf("%s: Error: _write\n", __func__);
 		return;
 	}
+#ifdef ARCH_SEC_HW
+	for (int i=0 ; i<200; i++)
+		printf("!");
+	printf("\r\n");
+#endif
 	while ((len = api->read_from_socket(sock, buf, 512)) > 0) {
 		insecure_printf("%.*s\n", len, buf);
 	}
+	print("read done\n\r");
 }
 
 #ifdef ARCH_SEC_HW

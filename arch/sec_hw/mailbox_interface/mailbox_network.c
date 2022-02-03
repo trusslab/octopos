@@ -130,7 +130,6 @@ void send_received_packet(uint8_t *buf, uint8_t queue_id)
 {
 
         sem_wait(&interrupts[queue_id]);
-
 	switch(queue_id) {
         case Q_NETWORK_DATA_OUT:
 		OCTOPOS_XMbox_WriteBlocking(&Mbox_network_data_out,
@@ -215,7 +214,7 @@ int init_network(void)
 					*Config_Data_in,
 					*Config_Storage_Data_out;
 
-	init_platform();
+//	init_platform();
 #ifndef ARCH_SEC_HW_BOOT
 
 	/* Initialize OCTOPOS_XMbox */
@@ -421,7 +420,7 @@ int init_network(void)
 }
 void close_network(void)
 {
-        cleanup_platform();
+ //       cleanup_platform();
 }
 
 #endif

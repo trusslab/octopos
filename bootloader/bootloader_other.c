@@ -337,7 +337,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	total_count = 0;
 	u32 tpm_response;
 	int Status;
-
+#ifdef MJ_TPM
 	/* Init TPM mailbox */
 	/* FIXME: move to each domain's mailbox init */
 	OCTOPOS_XMbox_Config *TPM_config_ptr;
@@ -349,7 +349,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 		while(1);
 		return;
 	}
-
+#endif
 	srinfo.sr_data = sr_data_buf;
 
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
@@ -483,13 +483,14 @@ repeat:
 						printf("%02x",hash[idx]);
 					printf("\r\n");
 #endif /* SEC_HW_TPM_DEBUG */
+#ifdef MJ_TPM
 					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
 					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
 					if (tpm_response != 0xFFFFFFFF) {
 						printf("Secure boot abort.\r\n");
 						while(1);
 					}
-
+#endif
                 	octopos_mailbox_deduct_and_set_owner(
                 		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], 
                 		P_PREVIOUS

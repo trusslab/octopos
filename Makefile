@@ -75,11 +75,11 @@ sechw:
 	-data ${VITIS_BOOTLOADERS}/os_bootloader/Debug/os_bootloader.elf \
 	-proc design_1_i/OS_subsys/microblaze_6 \
 	-out ${PETALINUX_PRODUCTS}/system_mb6.bit -force
-	${VITIS_INSTALLATION}/2020.1/bin/updatemem -bit ${PETALINUX_PRODUCTS}/system_mb6.bit \
-	-meminfo ${HW_DESIGN_WITH_ARBITTER}/zcu102_octopos.runs/impl_1/design_1_wrapper.mmi \
-	-data ${VITIS_TPM}/tpm/Debug/tpm.elf \
-	-proc design_1_i/TPM_subsys/microblaze_7 \
-	-out ${PETALINUX_PRODUCTS}/system_mb7.bit -force
+	#${VITIS_INSTALLATION}/2020.1/bin/updatemem -bit ${PETALINUX_PRODUCTS}/system_mb6.bit \
+	#-meminfo ${HW_DESIGN_WITH_ARBITTER}/zcu102_octopos.runs/impl_1/design_1_wrapper.mmi \
+	#-data ${VITIS_TPM}/tpm/Debug/tpm.elf \
+	#-proc design_1_i/TPM_subsys/microblaze_7 \
+	#-out ${PETALINUX_PRODUCTS}/system_mb7.bit -force
 
 	echo "Building final boot image..."
 	${VITIS_INSTALLATION}/2020.1/bin/bootgen \
@@ -95,6 +95,29 @@ sechw:
 	sudo mount ${OCTOPOS_DIR}/bin/rootfs.img ${OCTOPOS_DIR}/bin/rootfs_mount
 	cd ${OCTOPOS_DIR}/bin/rootfs_mount && sudo -s pax -rvf ${PETALINUX_PRODUCTS}/rootfs.cpio
 	sudo umount ${OCTOPOS_DIR}/bin/rootfs_mount
+
+	echo "Building all PL domains..."
+	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
+	-O srec ${VITIS_DOMAINS}/storage/Debug/storage.elf ${OCTOPOS_DIR}/storage/storage.srec
+	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
+	-O srec ${VITIS_DOMAINS}/oss/Debug/oss.elf ${OCTOPOS_DIR}/os/os.srec
+	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
+	-O srec ${VITIS_DOMAINS}/serialout/Debug/serialout.elf ${OCTOPOS_DIR}/serial_out/serial_out.srec
+	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
+	-O srec ${VITIS_DOMAINS}/keyboard/Debug/keyboard.elf ${OCTOPOS_DIR}/keyboard/keyboard.srec
+	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
+	-O srec ${VITIS_DOMAINS}/enclave0/Debug/enclave0.elf ${OCTOPOS_DIR}/runtime/runtime1.srec
+	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
+	-O srec ${VITIS_DOMAINS}/enclave1/Debug/enclave1.elf ${OCTOPOS_DIR}/runtime/runtime2.srec
+	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
+	-O srec ${VITIS_DOMAINS}/network/Debug/network.elf ${OCTOPOS_DIR}/network/network.srec
+
+
+	echo "Installing binaries into local octopos filesystem..."
+	cd ${OCTOPOS_DIR}/installer_sec_hw && make
+	${OCTOPOS_DIR}/installer_sec_hw/installer
+
+sechw_storage:
 
 	echo "Building all PL domains..."
 	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
