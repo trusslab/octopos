@@ -752,6 +752,10 @@ static int inform_os_of_termination(void)
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_NETWORK_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_NETWORK_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_KEYBOARD);
 	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
 #endif

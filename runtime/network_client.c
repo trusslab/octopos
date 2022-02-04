@@ -141,15 +141,19 @@ int yield_network_access(void)
 	network_access_count = 0;
 
 	net_stop_receive();
-
 	/* FIXME: we should have a bounded wait here in case the network service
 	 * does not read all messages off the queue.
 	 * Yielding the queue resets the queues therefore there is no concern
 	 * about the leaking of the leftover messages.
 	 */
+#ifndef ARCH_SEC_HW
+	/* FIXME: I disable it because wait_until_empty never returns
+	 * left=64, queue_size=4
+	 */
 	wait_until_empty(Q_NETWORK_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_NETWORK_DATA_IN,
 			 MAILBOX_QUEUE_SIZE_LARGE);
+#endif
 	mailbox_yield_to_previous_owner(Q_NETWORK_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_NETWORK_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
