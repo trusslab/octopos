@@ -106,7 +106,9 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 		return;
 	}
-
+#ifdef ARCH_SEC_HW
+		reset_proc(P_NETWORK);
+#endif
 	struct app *app = runtime_proc->app;
 	if (!app->socket_created) {
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)

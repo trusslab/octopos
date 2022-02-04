@@ -35,7 +35,12 @@ static int _str2ip(char *str, unsigned int *ip)
 	*ip = a | (b << 8) | (c << 16) | (d << 24);
 	return 0;
 }
-
+static void delay_print(int num)
+{
+	for (int i=0 ; i<num; i++)
+		printf("!");
+	printf("\r\n");
+}
 static int _parse_ip_port(char *str, unsigned int *addr, unsigned short *nport)
 {
 	char *port;
@@ -72,9 +77,7 @@ static void send_receive(struct runtime_api *api)
 		return;
 	}
 #ifdef ARCH_SEC_HW
-	for (int i=0 ; i<200; i++)
-		printf("!");
-	printf("\r\n");
+	delay_print(200);
 #endif
 	while ((len = api->read_from_socket(sock, buf, 512)) > 0) {
 		insecure_printf("%.*s\n", len, buf);
@@ -97,9 +100,7 @@ static void latency_test(struct runtime_api *api)
 		printf("%s: Error: _write\n", __func__);
 		return;
 	}
-	for (int i=0 ; i<20; i++)
-		printf("!");
-	printf("\r\n");
+	delay_print(20);
 	len = api->read_from_socket(sock, buf, 512);
 	len = strlen(buf2);
 	if (api->write_to_socket(sock, buf2, len) < 0) {
@@ -121,8 +122,7 @@ static void throughput_test(struct runtime_api *api)
 		printf("%s: Error: _write\n", __func__);
 		return;
 	}
-	for (int i=0 ; i<20; i++)
-		printf("!");
+	delay_print(20);
 	len = api->read_from_socket(sock, buf, 512);
 	printf("... %.*s\n\r",len,buf);
 	len = strlen(througput_test_buf);
@@ -175,6 +175,9 @@ void socket_client(struct runtime_api *api)
 		return;
 	}
 	api->bind_socket(sock, &skaddr);
+#ifdef ARCH_SEC_HW
+	delay_print(500);
+#endif
 	send_receive(api);
 //	latency_test(api);
 //	throughput_test(api);
