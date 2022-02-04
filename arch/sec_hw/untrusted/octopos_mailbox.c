@@ -365,15 +365,6 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 	mailbox_state_reg_t state;
 	unsigned long flags;
 	u32 raw_state;
-	u8 factor, tail_offset;
-
-	if (queue_id == Q_STORAGE_DATA_OUT || queue_id == Q_STORAGE_DATA_IN) {
-		factor = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4;
-		tail_offset = MAILBOX_QUEUE_MSG_SIZE_LARGE / 4 - 2;
-	} else {
-		factor = MAILBOX_QUEUE_MSG_SIZE / 4;
-		tail_offset = MAILBOX_QUEUE_MSG_SIZE / 4 - 2;
-	}
 
 	spin_lock_irqsave(&mailbox_lock, flags);
 	if (octopos_mailbox_attest_owner_fast_hw(mbox_ctrl_map[queue_id])) {
@@ -388,14 +379,13 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 
 	if (state.limit && (state.limit != MAILBOX_NO_LIMIT_VAL))
-		queue_limits[queue_id] = state.limit / factor;
+		queue_limits[queue_id] = state.limit;
 
 	if (state.timeout && (state.timeout != MAILBOX_NO_TIMEOUT_VAL))
 		queue_timeouts[queue_id] = state.timeout;
 
-	if (state.limit / factor == limit || 
-			(limit == MAILBOX_MAX_LIMIT_VAL && state.limit == MAILBOX_MAX_LIMIT_VAL)
-		)
+	if (state.limit == MAILBOX_NO_LIMIT_VAL &&
+		state.timeout == timeout)
 		return 1;
 	else
 		return 0;
