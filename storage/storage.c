@@ -677,7 +677,6 @@ static void storage_query_all_resources(uint8_t *buf)
 	uint8_t partition_id;
 
 /* FIXME: sec_hw doesn't support storage domain reboot. */
-#ifndef ARCH_SEC_HW_STORAGE
 	if (bound) {
 		printf("Error: %s: the query_all_resources op cannot be used "
 		       "when some partition is bound\n", __func__);
@@ -685,15 +684,6 @@ static void storage_query_all_resources(uint8_t *buf)
 		STORAGE_SET_ONE_RET_DATA(ERR_INVALID, &dummy, 0)
 		return;
 	}
-#else
-	if (bound) {
-		/* if bound, simulate a reset */
-		used = 0;
-		bound = 0;
-		authenticated = 0;
-		bound_partition = 0xFF;
-	}
-#endif
 
 	STORAGE_GET_TWO_ARGS
 

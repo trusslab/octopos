@@ -258,7 +258,7 @@ static int query_and_verify_storage(void)
 
 #ifndef UNTRUSTED_DOMAIN
 	/* FIXME: This should be enabled, double check */
-	if ((data[0] != 1) || /* (data[1] != 0) || (data[2] != 0) || */
+	if ((data[0] != 1) || (data[1] != 0) || (data[2] != 0) || 
 	    (data[3] != secure_partition_id) || (data[4] != 1)) {
 		printf("Error: %s: couldn't successfully verify the query "
 		       "response from the storage service (bound = %d, "
@@ -430,8 +430,6 @@ static int request_secure_storage_queues_access(limit_t limit,
 	udelay(100);
 #endif
 
-#ifndef ARCH_SEC_HW
-	/* FIXME: we should still enable attestation, fix attest code */
 	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, limit, timeout);
 	if (!ret) {
 		printf("%s: Error: failed to attest secure storage cmd write "
@@ -469,7 +467,6 @@ static int request_secure_storage_queues_access(limit_t limit,
 		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 		return ERR_FAULT;
 	}
-#endif
 	
 #ifndef UNTRUSTED_DOMAIN
 	/* Note: we set the limit/timeout values right after attestation and
