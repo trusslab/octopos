@@ -14,6 +14,7 @@
 #endif
 
 #define printf printk
+#define assert(cond) BUG_ON(!(cond))
 #endif
 
 /* syscall numbers */
@@ -47,178 +48,132 @@
 #define TCP_SOCKET	0
 
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
+	ALLOC_MAILBOX_MESSAGE_BUF			\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);		\
 	SERIALIZE_16(syscall_nr, &buf[0])		\
 
 #define SYSCALL_SET_ONE_ARG(syscall_nr, arg0)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
+	ALLOC_MAILBOX_MESSAGE_BUF			\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);		\
 	SERIALIZE_16(syscall_nr, &buf[0])		\
-	SERIALIZE_32(arg0, &buf[2])			\
+	SET_MAILBOX_MESSAGE_ONE_ARG(2, arg0)		\
 
 #define SYSCALL_SET_TWO_ARGS(syscall_nr, arg0, arg1)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
+	ALLOC_MAILBOX_MESSAGE_BUF			\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);		\
 	SERIALIZE_16(syscall_nr, &buf[0])		\
-	SERIALIZE_32(arg0, &buf[2])			\
-	SERIALIZE_32(arg1, &buf[6])			\
+	SET_MAILBOX_MESSAGE_TWO_ARGS(2, arg0, arg1)	\
 
 #define SYSCALL_SET_THREE_ARGS(syscall_nr, arg0, arg1, arg2)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];			\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);		\
+	ALLOC_MAILBOX_MESSAGE_BUF				\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);			\
 	SERIALIZE_16(syscall_nr, &buf[0])			\
-	SERIALIZE_32(arg0, &buf[2])				\
-	SERIALIZE_32(arg1, &buf[6])				\
-	SERIALIZE_32(arg2, &buf[10])				\
+	SET_MAILBOX_MESSAGE_THREE_ARGS(2, arg0, arg1, arg2)	\
 
 #define SYSCALL_SET_FOUR_ARGS(syscall_nr, arg0, arg1, arg2, arg3)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];				\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);			\
+	ALLOC_MAILBOX_MESSAGE_BUF					\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);				\
 	SERIALIZE_16(syscall_nr, &buf[0])				\
-	SERIALIZE_32(arg0, &buf[2])					\
-	SERIALIZE_32(arg1, &buf[6])					\
-	SERIALIZE_32(arg2, &buf[10])					\
-	SERIALIZE_32(arg3, &buf[14])					\
+	SET_MAILBOX_MESSAGE_FOUR_ARGS(2, arg0, arg1, arg2, arg3)	\
 
-#define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)			\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 3;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	SERIALIZE_16(syscall_nr, &buf[0])					\
-	buf[2] = size;								\
-	memcpy(&buf[3], (uint8_t *) data, size);				\
+#define SYSCALL_SET_ZERO_ARGS_DATA(syscall_nr, data, size)	\
+	ALLOC_MAILBOX_MESSAGE_BUF				\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);			\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SET_MAILBOX_MESSAGE_ZERO_ARGS_DATA(2, data, size,	\
+					   return ERR_INVALID)	\
 
-#define SYSCALL_SET_ONE_ARG_DATA(syscall_nr, arg0, data, size)			\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 7;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	SERIALIZE_16(syscall_nr, &buf[0])					\
-	SERIALIZE_32(arg0, &buf[2])						\
-	buf[6] = size;								\
-	memcpy(&buf[7], (uint8_t *) data, size);				\
+#define SYSCALL_SET_ONE_ARG_DATA(syscall_nr, arg0, data, size)	\
+	ALLOC_MAILBOX_MESSAGE_BUF				\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);			\
+	SERIALIZE_16(syscall_nr, &buf[0])			\
+	SET_MAILBOX_MESSAGE_ONE_ARG_DATA(2, arg0, data, size,	\
+					 return ERR_INVALID)	\
 
-#define SYSCALL_SET_TWO_ARGS_DATA(syscall_nr, arg0, arg1, data, size)		\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 11;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	SERIALIZE_16(syscall_nr, &buf[0])					\
-	SERIALIZE_32(arg0, &buf[2])						\
-	SERIALIZE_32(arg1, &buf[6])						\
-	buf[10] = size;								\
-	memcpy(&buf[11], (uint8_t *) data, size);				\
+#define SYSCALL_SET_TWO_ARGS_DATA(syscall_nr, arg0, arg1, data, size)	\
+	ALLOC_MAILBOX_MESSAGE_BUF					\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);				\
+	SERIALIZE_16(syscall_nr, &buf[0])				\
+	SET_MAILBOX_MESSAGE_TWO_ARGS_DATA(2, arg0, arg1, data, size,	\
+					  return ERR_INVALID)		\
 
 #define SYSCALL_SET_THREE_ARGS_DATA(syscall_nr, arg0, arg1, arg2, data, size)	\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 15;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
+	ALLOC_MAILBOX_MESSAGE_BUF						\
+	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);					\
 	SERIALIZE_16(syscall_nr, &buf[0])					\
-	SERIALIZE_32(arg0, &buf[2])						\
-	SERIALIZE_32(arg1, &buf[6])						\
-	SERIALIZE_32(arg2, &buf[10])						\
-	buf[14] = size;								\
-	memcpy(&buf[15], (uint8_t *) data, size);				\
+	SET_MAILBOX_MESSAGE_THREE_ARGS_DATA(2, arg0, arg1, arg2, data, size,	\
+					  return ERR_INVALID)			\
+	
+#define SYSCALL_SET_ONE_RET(ret0)				\
+	assert(5 <= MAILBOX_QUEUE_MSG_SIZE);			\
+	SERIALIZE_8(RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG, &buf[0])\
+	SET_MAILBOX_MESSAGE_ONE_ARG(1, ret0)			\
 
-#define SYSCALL_SET_ONE_RET(ret0)			\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
-	SERIALIZE_32(ret0, &buf[1])			\
+#define SYSCALL_SET_TWO_RETS(ret0, ret1)			\
+	assert(9 <= MAILBOX_QUEUE_MSG_SIZE);			\
+	SERIALIZE_8(RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG, &buf[0])\
+	SET_MAILBOX_MESSAGE_TWO_ARGS(1, ret0, ret1)		\
 
-#define SYSCALL_SET_TWO_RETS(ret0, ret1)		\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;	\
-	SERIALIZE_32(ret0, &buf[1])			\
-	SERIALIZE_32(ret1, &buf[5])			\
-
-/* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
-/* FIXME: use SERIALIZE_XXX */
 #define SYSCALL_SET_ONE_RET_DATA(ret0, data, size)		\
-	buf[0] = RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG;		\
-	SERIALIZE_32(ret0, &buf[1])				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 6;		\
-	if (max_size < 256 && size <= ((int) max_size)) {	\
-		buf[5] = (uint8_t) size;			\
-		memcpy(&buf[6], data, size);			\
-	} else {						\
-		printf("Error: invalid max_size or size\n");	\
-		buf[5] = 0;					\
-	}							\
+	assert(1 <= MAILBOX_QUEUE_MSG_SIZE);			\
+	SERIALIZE_8(RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG, &buf[0])\
+	SET_MAILBOX_MESSAGE_ONE_ARG_DATA(1, ret0, data, size,)	\
 
-#define SYSCALL_GET_ONE_ARG		\
-	uint32_t arg0;			\
-	DESERIALIZE_32(&arg0, &buf[2]);	\
+#define SYSCALL_GET_ONE_ARG			\
+	uint32_t arg0;				\
+	GET_MAILBOX_MESSAGE_ONE_ARG(2, arg0)	\
 
-#define SYSCALL_GET_TWO_ARGS		\
-	uint32_t arg0, arg1;		\
-	DESERIALIZE_32(&arg0, &buf[2]);	\
-	DESERIALIZE_32(&arg1, &buf[6]);	\
+#define SYSCALL_GET_TWO_ARGS				\
+	uint32_t arg0, arg1;				\
+	GET_MAILBOX_MESSAGE_TWO_ARGS(2, arg0, arg1)	\
 
-#define SYSCALL_GET_THREE_ARGS		\
-	uint32_t arg0, arg1, arg2;	\
-	DESERIALIZE_32(&arg0, &buf[2]);	\
-	DESERIALIZE_32(&arg1, &buf[6]);	\
-	DESERIALIZE_32(&arg2, &buf[10]);	\
+#define SYSCALL_GET_THREE_ARGS					\
+	uint32_t arg0, arg1, arg2;				\
+	GET_MAILBOX_MESSAGE_THREE_ARGS(2, arg0, arg1, arg2)	\
 
-#define SYSCALL_GET_FOUR_ARGS			\
-	uint32_t arg0, arg1, arg2, arg3;	\
-	DESERIALIZE_32(&arg0, &buf[2]);	\
-	DESERIALIZE_32(&arg1, &buf[6]);	\
-	DESERIALIZE_32(&arg2, &buf[10]);	\
-	DESERIALIZE_32(&arg3, &buf[14]);	\
+#define SYSCALL_GET_FOUR_ARGS						\
+	uint32_t arg0, arg1, arg2, arg3;				\
+	GET_MAILBOX_MESSAGE_FOUR_ARGS(2, arg0, arg1, arg2, arg3)	\
+
+#define SYSCALL_GET_ZERO_ARGS_DATA					\
+	uint8_t data_size, *data;					\
+	GET_MAILBOX_MESSAGE_ZERO_ARGS_DATA(2, data, data_size,		\
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+			break)						\
+
+#define SYSCALL_GET_ONE_ARG_DATA					\
+	uint32_t arg0;							\
+	uint8_t data_size, *data;					\
+	GET_MAILBOX_MESSAGE_ONE_ARG_DATA(2, arg0, data, data_size,	\
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+			break)						\
+
+#define SYSCALL_GET_TWO_ARGS_DATA						\
+	uint32_t arg0, arg1;							\
+	uint8_t data_size, *data;						\
+	GET_MAILBOX_MESSAGE_TWO_ARGS_DATA(2, arg0, arg1, data, data_size,	\
+			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)		\
+			break)							\
+
+#define SYSCALL_GET_THREE_ARGS_DATA						\
+	uint32_t arg0, arg1, arg2;						\
+	uint8_t data_size, *data;						\
+	GET_MAILBOX_MESSAGE_THREE_ARGS_DATA(2, arg0, arg1, arg2, data,		\
+			data_size, SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)	\
+			break)							\
 
 #define SYSCALL_GET_ONE_RET				\
 	uint32_t ret0;					\
-	DESERIALIZE_32(&ret0, &buf[1]);			\
+	GET_MAILBOX_MESSAGE_ONE_ARG(1, ret0)		\
 
 #define SYSCALL_GET_TWO_RETS				\
 	uint32_t ret0, ret1;				\
-	DESERIALIZE_32(&ret0, &buf[1]);			\
-	DESERIALIZE_32(&ret1, &buf[5]);			\
+	GET_MAILBOX_MESSAGE_TWO_ARGS(1, ret0, ret1)	\
 
-/* FIXME: are we sure data is big enough for the memcpy here? */
-#define SYSCALL_GET_ONE_RET_DATA(data)						\
-	uint32_t ret0;								\
-	uint8_t _size, _max_size = MAILBOX_QUEUE_MSG_SIZE - 6;			\
-	ret0 = *((uint32_t *) &buf[1]);						\
-	if (_max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	_size = buf[5];								\
-	if (_size > _max_size) {						\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	memcpy(data, &buf[6], _size);						\
+#define SYSCALL_GET_ONE_RET_DATA				\
+	uint32_t ret0;						\
+	uint8_t _size, *_data;					\
+	GET_MAILBOX_MESSAGE_ONE_ARG_DATA(1, ret0, _data, _size,	\
+					 return ERR_INVALID)	\
 
 #endif /* OCTOPOS_SYSCALL_H_ */

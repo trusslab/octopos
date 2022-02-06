@@ -108,4 +108,144 @@ void register_timeout_update_callback(uint8_t queue_id,
 				      void (*callback)(uint8_t, timeout_t));
 #endif
 
+/* Macros for sending/receiving mailbox messages. */
+#define SET_MAILBOX_MESSAGE_ONE_ARG(start, arg0)	\
+	assert((start + 4) <= MAILBOX_QUEUE_MSG_SIZE);	\
+	SERIALIZE_32(arg0, &buf[start])			\
+
+#define SET_MAILBOX_MESSAGE_TWO_ARGS(start, arg0, arg1)	\
+	assert((start + 8) <= MAILBOX_QUEUE_MSG_SIZE);	\
+	SERIALIZE_32(arg0, &buf[start])			\
+	SERIALIZE_32(arg1, &buf[start + 4])		\
+
+#define SET_MAILBOX_MESSAGE_THREE_ARGS(start, arg0, arg1, arg2)	\
+	assert((start + 12) <= MAILBOX_QUEUE_MSG_SIZE);		\
+	SERIALIZE_32(arg0, &buf[start])				\
+	SERIALIZE_32(arg1, &buf[start + 4])			\
+	SERIALIZE_32(arg2, &buf[start + 8])			\
+
+#define SET_MAILBOX_MESSAGE_FOUR_ARGS(start, arg0, arg1, arg2, arg3)	\
+	assert((start + 16) <= MAILBOX_QUEUE_MSG_SIZE);			\
+	SERIALIZE_32(arg0, &buf[start])					\
+	SERIALIZE_32(arg1, &buf[start + 4])				\
+	SERIALIZE_32(arg2, &buf[start + 8])				\
+	SERIALIZE_32(arg3, &buf[start + 12])				\
+
+#define SET_MAILBOX_MESSAGE_ZERO_ARGS_DATA(start, data, size, error)		\
+	if (!(((uint8_t) size) <= MAILBOX_QUEUE_MSG_SIZE) &&			\
+	    ((((uint8_t) size) + start + 1) <= MAILBOX_QUEUE_MSG_SIZE)) {	\
+		printf("Error (%s): size not supported\n", __func__);		\
+		error;								\
+	}									\
+	SERIALIZE_8(size, &buf[start])						\
+	memcpy(&buf[start + 1], (uint8_t *) data, (uint8_t) size);		\
+
+#define SET_MAILBOX_MESSAGE_ONE_ARG_DATA(start, arg0, data, size, error)	\
+	if (!(((uint8_t) size) <= MAILBOX_QUEUE_MSG_SIZE) &&			\
+	    ((((uint8_t) size) + start + 5) <= MAILBOX_QUEUE_MSG_SIZE)) {	\
+		printf("Error (%s): size not supported\n", __func__);		\
+		error;								\
+	}									\
+	SERIALIZE_32(arg0, &buf[start])						\
+	SERIALIZE_8(size, &buf[start + 4])					\
+	memcpy(&buf[start + 5], (uint8_t *) data, (uint8_t) size);		\
+
+#define SET_MAILBOX_MESSAGE_TWO_ARGS_DATA(start, arg0, arg1, data, size, error)	\
+	if (!(((uint8_t) size) <= MAILBOX_QUEUE_MSG_SIZE) &&			\
+	    ((((uint8_t) size) + start + 9) <= MAILBOX_QUEUE_MSG_SIZE)) {	\
+		printf("Error (%s): size not supported\n", __func__);		\
+		error;								\
+	}									\
+	SERIALIZE_32(arg0, &buf[start])						\
+	SERIALIZE_32(arg1, &buf[start + 4])					\
+	SERIALIZE_8(size, &buf[start + 8])					\
+	memcpy(&buf[start + 9], (uint8_t *) data, (uint8_t) size);		\
+
+#define SET_MAILBOX_MESSAGE_THREE_ARGS_DATA(start, arg0, arg1, arg2, data, size,\
+					    error)				\
+	if (!(((uint8_t) size) <= MAILBOX_QUEUE_MSG_SIZE) &&			\
+	    ((((uint8_t) size) + start + 13) <= MAILBOX_QUEUE_MSG_SIZE)) {	\
+		printf("Error (%s): size not supported\n", __func__);		\
+		error;								\
+	}									\
+	SERIALIZE_32(arg0, &buf[start])						\
+	SERIALIZE_32(arg1, &buf[start + 4])					\
+	SERIALIZE_32(arg2, &buf[start + 8])					\
+	SERIALIZE_8(size, &buf[start + 12])					\
+	memcpy(&buf[start + 13], (uint8_t *) data, (uint8_t) size);		\
+
+#define GET_MAILBOX_MESSAGE_ONE_ARG(start, arg0)	\
+	assert((start + 4) <= MAILBOX_QUEUE_MSG_SIZE);	\
+	DESERIALIZE_32(&arg0, &buf[start]);		\
+
+#define GET_MAILBOX_MESSAGE_TWO_ARGS(start, arg0, arg1)	\
+	assert((start + 8) <= MAILBOX_QUEUE_MSG_SIZE);	\
+	DESERIALIZE_32(&arg0, &buf[start]);		\
+	DESERIALIZE_32(&arg1, &buf[start + 4]);		\
+
+#define GET_MAILBOX_MESSAGE_THREE_ARGS(start, arg0, arg1, arg2)	\
+	assert((start + 12) <= MAILBOX_QUEUE_MSG_SIZE);		\
+	DESERIALIZE_32(&arg0, &buf[start]);			\
+	DESERIALIZE_32(&arg1, &buf[start + 4]);			\
+	DESERIALIZE_32(&arg2, &buf[start + 8]);			\
+
+#define GET_MAILBOX_MESSAGE_FOUR_ARGS(start, arg0, arg1, arg2, arg3)	\
+	assert((start + 16) <= MAILBOX_QUEUE_MSG_SIZE);			\
+	DESERIALIZE_32(&arg0, &buf[start]);				\
+	DESERIALIZE_32(&arg1, &buf[start + 4]);				\
+	DESERIALIZE_32(&arg2, &buf[start + 8]);				\
+	DESERIALIZE_32(&arg3, &buf[start + 12]);			\
+
+#define GET_MAILBOX_MESSAGE_ZERO_ARGS_DATA(start, data, size, error)	\
+	assert(start <= MAILBOX_QUEUE_MSG_SIZE);			\
+	DESERIALIZE_8(&size, &buf[start]);				\
+	if (!(size <= MAILBOX_QUEUE_MSG_SIZE) &&			\
+	    ((size + start + 1) <= MAILBOX_QUEUE_MSG_SIZE)) {		\
+		printf("Error: size not supported\n");			\
+		error;							\
+	}								\
+	data = &buf[start + 1];						\
+
+#define GET_MAILBOX_MESSAGE_ONE_ARG_DATA(start, arg0, data, size, error)\
+	assert(start + 5 <= MAILBOX_QUEUE_MSG_SIZE);			\
+	DESERIALIZE_32(&arg0, &buf[start]);				\
+	DESERIALIZE_8(&size, &buf[start + 4]);				\
+	if (!(size <= MAILBOX_QUEUE_MSG_SIZE) &&			\
+	    ((size + start + 5) <= MAILBOX_QUEUE_MSG_SIZE)) {		\
+		printf("Error: size not supported\n");			\
+		error;							\
+	}								\
+	data = &buf[start + 5];						\
+
+#define GET_MAILBOX_MESSAGE_TWO_ARGS_DATA(start, arg0, arg1, data, size, error)	\
+	assert(start + 9 <= MAILBOX_QUEUE_MSG_SIZE);				\
+	DESERIALIZE_32(&arg0, &buf[start]);					\
+	DESERIALIZE_32(&arg1, &buf[start + 4]);					\
+	DESERIALIZE_8(&size, &buf[start + 8]);					\
+	if (!(size <= MAILBOX_QUEUE_MSG_SIZE) &&				\
+	    ((size + start + 9) <= MAILBOX_QUEUE_MSG_SIZE)) {			\
+		printf("Error: size not supported\n");				\
+		error;								\
+	}									\
+	data = &buf[start + 9];							\
+
+#define GET_MAILBOX_MESSAGE_THREE_ARGS_DATA(start, arg0, arg1, arg2, data, size,\
+					    error)				\
+	assert(start + 13 <= MAILBOX_QUEUE_MSG_SIZE);				\
+	DESERIALIZE_32(&arg0, &buf[start]);					\
+	DESERIALIZE_32(&arg1, &buf[start + 4]);					\
+	DESERIALIZE_32(&arg2, &buf[start + 8]);					\
+	DESERIALIZE_8(&size, &buf[start + 12]);					\
+	if (!(size <= MAILBOX_QUEUE_MSG_SIZE) &&				\
+	    ((size + start + 13) <= MAILBOX_QUEUE_MSG_SIZE)) {			\
+		printf("Error: size not supported\n");				\
+		error;								\
+	}									\
+	data = &buf[start + 13];						\
+
+/* FIXME: buf should be aligned with cache lines */
+#define ALLOC_MAILBOX_MESSAGE_BUF			\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
+
 #endif /* _OCTOPOS_MAILBOX_H_ */

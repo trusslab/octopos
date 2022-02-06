@@ -727,10 +727,11 @@ static int write_to_shell(char *data, int size)
 
 static int read_from_shell(char *data, int *data_size)
 {
-	/* FIXME: check the data buf to make sure it is allocated. */
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_READ_FROM_SHELL)
 	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET_DATA(data)
+	SYSCALL_GET_ONE_RET_DATA
+	/* FIXME: check the data buf to make sure it is allocated. */
+	memcpy(data, _data, _size);
 	*data_size = (int) _size;
 #ifdef ARCH_SEC_HW
 	data[*data_size - 1] = '\0';
@@ -759,7 +760,9 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 {
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FROM_FILE, fd, size, offset)
 	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET_DATA(data)
+	SYSCALL_GET_ONE_RET_DATA
+	/* FIXME: check the data buf to make sure it is allocated. */
+	memcpy(data, _data, _size);
 	return (int) ret0;
 }
 
@@ -1176,9 +1179,11 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 				  num_devices, device_names,
 				  num_devices * BD_ADDR_LEN)
 	issue_syscall(buf);
-	SYSCALL_GET_ONE_RET_DATA(ret_data)
+	SYSCALL_GET_ONE_RET_DATA
 	if (ret0)
 		return (int) ret0;
+
+	memcpy(ret_data, _data, _size);
 
 	if (((uint32_t) _size) != num_devices) {
 		printf("Error: %s: invalid response from the OS\n", __func__);

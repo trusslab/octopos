@@ -1,12 +1,19 @@
 #ifndef OCTOPOS_UMODE_SYSCALL_SERIALIZER_H_
 #define OCTOPOS_UMODE_SYSCALL_SERIALIZER_H_
 
+#define SERIALIZE_8(arg, buf_lr)				\
+	*((uint8_t *) buf_lr) = (uint8_t) arg;				
 
 #define SERIALIZE_16(arg, buf_lr)				\
-	*((uint16_t *) buf_lr) = arg;				
+	*((uint16_t *) buf_lr) = (uint16_t) arg;				
 
 #define SERIALIZE_32(arg, buf_lr)				\
-	*((uint32_t *) buf_lr) = arg;				
+	*((uint32_t *) buf_lr) = (uint32_t) arg;				
+
+#define DESERIALIZE_8(arg_ptr, buf_lr)				\
+	{							\
+	*((uint8_t *) arg_ptr) = *((uint8_t *) buf_lr);		\
+	}
 
 #define DESERIALIZE_16(arg_ptr, buf_lr)				\
 	{							\
