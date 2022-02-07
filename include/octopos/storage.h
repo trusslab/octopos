@@ -23,7 +23,7 @@
 #define STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE	4000000
 #endif
 
-/* Macros for sending/receiving syscall messages and their responses. */
+/* Macros for sending/receiving storage messages and their responses. */
 #define STORAGE_SET_ONE_ARG(arg0)		\
 	ALLOC_MAILBOX_MESSAGE_BUF		\
 	SET_MAILBOX_MESSAGE_ONE_ARG(1, arg0)	\
