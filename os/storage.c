@@ -49,7 +49,8 @@ static int query_number_partitions(void)
 	send_msg_to_storage_no_response(buf);
 	get_response_from_storage(buf);
 	
-	STORAGE_GET_ONE_RET_DATA(data)
+	STORAGE_GET_ONE_RET_DATA
+	memcpy(data, _data, _size);
 	
 	if (!ret0) {
 		if (_size == 4) {
@@ -78,7 +79,8 @@ static int query_partition(uint32_t partition_id, struct partition *partition)
 	send_msg_to_storage_no_response(buf);
 	get_response_from_storage(buf);
 	
-	STORAGE_GET_ONE_RET_DATA(data)
+	STORAGE_GET_ONE_RET_DATA
+	memcpy(data, _data, _size);
 	
 	if (ret0)
 		return (int) ret0;

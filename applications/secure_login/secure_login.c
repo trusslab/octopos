@@ -11,9 +11,9 @@
 #include "arch/app_utilities.h"
 #endif
 
+#define APPLICATION
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
-#define APPLICATION
 #include <octopos/mailbox.h>
 
 /* FIXME: how does the app know the size of the buf? */

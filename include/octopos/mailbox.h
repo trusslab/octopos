@@ -1,8 +1,13 @@
 #ifndef _OCTOPOS_MAILBOX_H_
 #define _OCTOPOS_MAILBOX_H_
 
-#if !defined(UNTRUSTED_DOMAIN) && !defined(APPLICATION)
+#ifndef UNTRUSTED_DOMAIN
+#include <assert.h>
+
+#ifndef APPLICATION
 #include <arch/defines.h>
+#endif
+
 #endif
 
 /* mailbox opcodes */

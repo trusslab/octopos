@@ -2,8 +2,10 @@
 #define OCTOPOS_SYSCALL_H_
 
 #include <octopos/runtime.h>
+#include <octopos/mailbox.h>
 #include <octopos/error.h>
 #ifndef UNTRUSTED_DOMAIN
+#include <assert.h>
 #include "arch/syscall.h"
 #else
 
@@ -47,6 +49,7 @@
 /* defines for SYSCALL_ALLOCATE_SOCKET_PORT */
 #define TCP_SOCKET	0
 
+/* Macros for sending/receiving syscall messages and their responses. */
 #define SYSCALL_SET_ZERO_ARGS(syscall_nr)		\
 	ALLOC_MAILBOX_MESSAGE_BUF			\
 	assert(2 <= MAILBOX_QUEUE_MSG_SIZE);		\
@@ -105,12 +108,12 @@
 					  return ERR_INVALID)			\
 	
 #define SYSCALL_SET_ONE_RET(ret0)				\
-	assert(5 <= MAILBOX_QUEUE_MSG_SIZE);			\
+	assert(1 <= MAILBOX_QUEUE_MSG_SIZE);			\
 	SERIALIZE_8(RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG, &buf[0])\
 	SET_MAILBOX_MESSAGE_ONE_ARG(1, ret0)			\
 
 #define SYSCALL_SET_TWO_RETS(ret0, ret1)			\
-	assert(9 <= MAILBOX_QUEUE_MSG_SIZE);			\
+	assert(1 <= MAILBOX_QUEUE_MSG_SIZE);			\
 	SERIALIZE_8(RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG, &buf[0])\
 	SET_MAILBOX_MESSAGE_TWO_ARGS(1, ret0, ret1)		\
 

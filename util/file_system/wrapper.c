@@ -8,17 +8,6 @@
 #include <octopos/io.h>
 #include <arch/syscall.h>
 
-/* FIXME: copied from storage/storage.c */
-#define STORAGE_SET_TWO_RETS(ret0, ret1)	\
-	SERIALIZE_32(ret0, &buf[0])		\
-	SERIALIZE_32(ret1, &buf[4])		\
-
-/* FIXME: copied from storage/storage.c */
-#define STORAGE_GET_TWO_ARGS		\
-	uint32_t arg0, arg1;		\
-	arg0 = *((uint32_t *) &buf[1]); \
-	arg1 = *((uint32_t *) &buf[5]); \
-
 uint32_t start_block;
 uint32_t num_blocks;
 uint32_t size;

@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#define APPLICATION
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
 #include <network/sock.h>

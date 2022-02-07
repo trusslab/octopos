@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#define APPLICATION
 #include <octopos/runtime.h>
 
 #ifdef ARCH_SEC_HW_RUNTIME
