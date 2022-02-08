@@ -25,6 +25,7 @@
 #include "network_client.h"
 #endif /* CONFIG_UML */
 #include <octopos/mailbox.h>
+#include <octopos/network.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
 #include <octopos/storage.h>
@@ -72,7 +73,7 @@ uint8_t *ip_receive(uint8_t *buf, uint16_t *size)
 {
 	runtime_recv_msg_from_queue_large(buf, Q_NETWORK_DATA_OUT);
 	*size = 0;
-	NETWORK_GET_ZERO_ARGS_DATA
+	NETWORK_GET_ZERO_RETS_DATA
 	*size = data_size;
 
 #ifndef UNTRUSTED_DOMAIN

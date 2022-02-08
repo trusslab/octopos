@@ -9,6 +9,7 @@
 #include <semaphore.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <octopos/network.h>
 #include <octopos/error.h>
 #include <network/netif.h>
 #include <network/route.h>
@@ -17,6 +18,7 @@
 #include <network/ip.h>
 #include <network/tcp.h>
 #include <arch/mailbox.h>
+#include <arch/syscall.h>
 
 /* Need to make sure msgs are big enough so that we don't overflow
  * when processing incoming msgs and preparing outgoing ones.
@@ -24,68 +26,6 @@
 #if MAILBOX_QUEUE_MSG_SIZE < 64
 #error MAILBOX_QUEUE_MSG_SIZE is too small.
 #endif
-
-#define NETWORK_SET_ONE_RET(ret0)	\
-	*((uint32_t *) &buf[0]) = ret0; \
-
-#define NETWORK_SET_TWO_RETS(ret0, ret1)	\
-	*((uint32_t *) &buf[0]) = ret0;		\
-	*((uint32_t *) &buf[4]) = ret1;		\
-
-/* FIXME: when calling this one, we need to allocate a ret_buf. Can we avoid that? */
-#define NETWORK_SET_ONE_RET_DATA(ret0, data, size)		\
-	*((uint32_t *) &buf[0]) = ret0;				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 5;		\
-	if (max_size < 256 && size <= ((int) max_size)) {	\
-		buf[4] = (uint8_t) size;			\
-		memcpy(&buf[5], data, size);			\
-	} else {						\
-		printf("Error: invalid max_size or size\n");	\
-		buf[4] = 0;					\
-	}
-
-/* FIXME: the first check on max size is always false */
-#define NETWORK_SET_ZERO_ARGS_DATA(data, size)					\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];				\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);				\
-	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;			\
-	if (max_size >= 65536) {						\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return;								\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return;								\
-	}									\
-	*((uint16_t *) &buf[0]) = size;						\
-	memcpy(&buf[2], (uint8_t *) data, size);				\
-
-
-#define NETWORK_GET_ZERO_ARGS_DATA				\
-	uint8_t *data;						\
-	uint16_t data_size;					\
-	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;	\
-	if (max_size >= 65536) {				\
-		printf("Error: max_size not supported\n");	\
-		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)	\
-		exit(-1);					\
-		return;						\
-	}							\
-	data_size = *((uint16_t *) &buf[0]);			\
-	if (data_size > max_size) {				\
-		printf("Error: size not supported\n");		\
-		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)	\
-		exit(-1);					\
-		return;						\
-	}							\
-	data = &buf[2];
-
-#define NETWORK_GET_FOUR_ARGS			\
-	uint32_t arg0, arg1, arg2, arg3;	\
-	arg0 = *((uint32_t *) &buf[0]);		\
-	arg1 = *((uint32_t *) &buf[4]);		\
-	arg2 = *((uint32_t *) &buf[8]);		\
-	arg3 = *((uint32_t *) &buf[12]);	\
 
 int fd_out, fd_in, fd_intr;
 
@@ -304,7 +244,7 @@ void tcp_in(struct pkbuf *pkb)
 	}
 	
 	int size = pkb->pk_len + sizeof(*pkb);
-	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
+	NETWORK_SET_ZERO_RETS_DATA(pkb, size);
 	send_received_packet(buf, Q_NETWORK_DATA_OUT);
 }
 

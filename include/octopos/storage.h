@@ -1,5 +1,5 @@
-#ifndef __STORAGE_OCTOPOS_CORE_H_
-#define __STORAGE_OCTOPOS_CORE_H_
+#ifndef _OCTOPOS_STORAGE_H_
+#define _OCTOPOS_STORAGE_H_
 
 #include <octopos/mailbox.h>
 
@@ -94,4 +94,4 @@
 	GET_MAILBOX_MESSAGE_ONE_ARG_DATA(0, ret0, _data, _size,	\
 					 return ERR_INVALID)	\
 
-#endif /* __STORAGE_OCTOPOS_CORE_H_ */
+#endif /* _OCTOPOS_STORAGE_H_ */

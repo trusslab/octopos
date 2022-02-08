@@ -1,6 +1,10 @@
 #ifndef OCTOPOS_UMODE_SYSCALL_SERIALIZER_H_
 #define OCTOPOS_UMODE_SYSCALL_SERIALIZER_H_
 
+/* FIXME: move these to arch/mailbox.h and get rid of this file.
+ * These macros are not used for syscalls only.
+ */
+
 #define SERIALIZE_8(arg, buf_lr)				\
 	*((uint8_t *) buf_lr) = (uint8_t) arg;				
 

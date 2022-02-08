@@ -11,6 +11,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <octopos/mailbox.h>
+#include <octopos/network.h>
 #include <octopos/storage.h>
 #include <octopos/syscall.h>
 #include <octopos/error.h>

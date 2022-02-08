@@ -1,5 +1,5 @@
-#ifndef OCTOPOS_SYSCALL_H_
-#define OCTOPOS_SYSCALL_H_
+#ifndef _OCTOPOS_SYSCALL_H_
+#define _OCTOPOS_SYSCALL_H_
 
 #include <octopos/runtime.h>
 #include <octopos/mailbox.h>
@@ -179,4 +179,4 @@
 	GET_MAILBOX_MESSAGE_ONE_ARG_DATA(1, ret0, _data, _size,	\
 					 return ERR_INVALID)	\
 
-#endif /* OCTOPOS_SYSCALL_H_ */
+#endif /* _OCTOPOS_SYSCALL_H_ */

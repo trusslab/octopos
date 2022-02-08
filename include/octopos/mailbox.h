@@ -145,6 +145,15 @@ void register_timeout_update_callback(uint8_t queue_id,
 	SERIALIZE_8(size, &buf[start])						\
 	memcpy(&buf[start + 1], (uint8_t *) data, (uint8_t) size);		\
 
+#define SET_MAILBOX_MESSAGE_LARGE_ZERO_ARGS_DATA(start, data, size, error)	\
+	if (!(((uint16_t) size) <= MAILBOX_QUEUE_MSG_SIZE_LARGE) &&		\
+	    ((((uint16_t) size) + start + 2) <= MAILBOX_QUEUE_MSG_SIZE_LARGE)) {\
+		printf("Error (%s): size not supported\n", __func__);		\
+		error;								\
+	}									\
+	SERIALIZE_16(size, &buf[start])						\
+	memcpy(&buf[start + 2], (uint8_t *) data, (uint16_t) size);		\
+
 #define SET_MAILBOX_MESSAGE_ONE_ARG_DATA(start, arg0, data, size, error)	\
 	if (!(((uint8_t) size) <= MAILBOX_QUEUE_MSG_SIZE) &&			\
 	    ((((uint8_t) size) + start + 5) <= MAILBOX_QUEUE_MSG_SIZE)) {	\
@@ -211,6 +220,16 @@ void register_timeout_update_callback(uint8_t queue_id,
 	}								\
 	data = &buf[start + 1];						\
 
+#define GET_MAILBOX_MESSAGE_LARGE_ZERO_ARGS_DATA(start, data, size, error)	\
+	assert(start <= MAILBOX_QUEUE_MSG_SIZE_LARGE);				\
+	DESERIALIZE_16(&size, &buf[start]);					\
+	if (!(size <= MAILBOX_QUEUE_MSG_SIZE_LARGE) &&				\
+	    ((size + start + 2) <= MAILBOX_QUEUE_MSG_SIZE_LARGE)) {		\
+		printf("Error: size not supported\n");				\
+		error;								\
+	}									\
+	data = &buf[start + 2];							\
+
 #define GET_MAILBOX_MESSAGE_ONE_ARG_DATA(start, arg0, data, size, error)\
 	assert(start + 5 <= MAILBOX_QUEUE_MSG_SIZE);			\
 	DESERIALIZE_32(&arg0, &buf[start]);				\
@@ -252,5 +271,10 @@ void register_timeout_update_callback(uint8_t queue_id,
 #define ALLOC_MAILBOX_MESSAGE_BUF			\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];		\
 	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
+
+/* FIXME: buf should be aligned with cache lines */
+#define ALLOC_MAILBOX_MESSAGE_BUF_LARGE			\
+	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];	\
+	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);	\
 
 #endif /* _OCTOPOS_MAILBOX_H_ */

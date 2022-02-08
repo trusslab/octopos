@@ -1,37 +1,5 @@
 #include <octopos/runtime.h>
 
-/* FIXME: there are a lot of repetition in these macros (also see include/os/storage.h) */
-/* FIXME: the first check on max size is always false */
-#define NETWORK_SET_ZERO_ARGS_DATA(data, size)					\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];				\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);				\
-	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;			\
-	if (max_size >= 65536) {						\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return;								\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return;								\
-	}									\
-	*((uint16_t *) &buf[0]) = size;						\
-	memcpy(&buf[2], (uint8_t *) data, size);				\
-
-#define NETWORK_GET_ZERO_ARGS_DATA							\
-	uint8_t *data;									\
-	uint16_t data_size;								\
-	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;				\
-	if (max_size >= 65536) {							\
-		printf("Error (%s): max_size not supported\n", __func__);		\
-		return NULL;								\
-	}										\
-	data_size = *((uint16_t *) &buf[0]);						\
-	if (data_size > max_size) {							\
-		printf("Error (%s): size not supported (%d)\n", __func__, data_size);	\
-		return NULL;								\
-	}										\
-	data = &buf[2];
-
 #ifdef CONFIG_UML
 /* FIXME: copied from include/network/list.h */
 /* list head */
