@@ -106,11 +106,16 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 		return;
 	}
+
 #ifdef ARCH_SEC_HW
 		reset_proc(P_NETWORK);
 #endif
 	struct app *app = runtime_proc->app;
+#ifdef ARCH_SEC_HW
+	if ((runtime_proc_id != P_UNTRUSTED)&&(!app->socket_created)) {
+#else
 	if (!app->socket_created) {
+#endif
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
@@ -154,6 +159,7 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 				      (limit_t) limit, (timeout_t) timeout);
 	mailbox_delegate_queue_access(Q_NETWORK_CMD_OUT, runtime_proc_id,
 				      (limit_t) limit, (timeout_t) timeout);
+
 	SYSCALL_SET_ONE_RET((uint32_t) 0)
 }
 

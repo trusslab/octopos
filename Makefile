@@ -117,6 +117,29 @@ sechw:
 	cd ${OCTOPOS_DIR}/installer_sec_hw && make
 	${OCTOPOS_DIR}/installer_sec_hw/installer
 
+
+
+sechw_peta:
+	mkdir -p ${OCTOPOS_DIR}/bin
+	bash ${OCTOPOS_DIR}/arch/sec_hw/bootgen/cp_petalinux_bin.sh
+
+	echo "Building final boot image..."
+	${VITIS_INSTALLATION}/2020.1/bin/bootgen \
+	-image ${OCTOPOS_DIR}/arch/sec_hw/bootgen/output.bif \
+	-arch zynqmp -o ${OCTOPOS_DIR}/bin/BOOT.bin -w on
+
+	echo "Building Untrusted domain rootfs..."
+	rm -f ${OCTOPOS_DIR}/bin/rootfs.img
+	rm -rf ${OCTOPOS_DIR}/bin/rootfs_mount
+	dd if=/dev/zero of=${OCTOPOS_DIR}/bin/rootfs.img bs=512 count=65536
+	mkfs.ext4 -F ${OCTOPOS_DIR}/bin/rootfs.img
+	mkdir ${OCTOPOS_DIR}/bin/rootfs_mount
+	sudo mount ${OCTOPOS_DIR}/bin/rootfs.img ${OCTOPOS_DIR}/bin/rootfs_mount
+	cd ${OCTOPOS_DIR}/bin/rootfs_mount && sudo -s pax -rvf ${PETALINUX_PRODUCTS}/rootfs.cpio
+	sudo umount ${OCTOPOS_DIR}/bin/rootfs_mount
+
+
+
 sechw_storage:
 
 	echo "Building all PL domains..."

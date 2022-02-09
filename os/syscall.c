@@ -608,13 +608,13 @@ static void handle_untrusted_syscall(uint8_t *buf)
 		handle_request_secure_storage_access_syscall(P_UNTRUSTED, buf);
 		break;
 	}
+	case SYSCALL_REQUEST_NETWORK_ACCESS: {
+		handle_request_network_access_syscall(P_UNTRUSTED, buf);
+		break;
+	}
 #ifdef ARCH_UMODE
 	case SYSCALL_ALLOCATE_SOCKET: {
 		handle_allocate_socket_syscall(P_UNTRUSTED, buf);
-		break;
-	}
-	case SYSCALL_REQUEST_NETWORK_ACCESS: {
-		handle_request_network_access_syscall(P_UNTRUSTED, buf);
 		break;
 	}
 	case SYSCALL_CLOSE_SOCKET: {

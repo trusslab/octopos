@@ -174,6 +174,9 @@ void socket_client(struct runtime_api *api)
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}
+#ifdef ARCH_SEC_HW
+	delay_print(20);
+#endif
 	api->bind_socket(sock, &skaddr);
 #ifdef ARCH_SEC_HW
 	delay_print(500);

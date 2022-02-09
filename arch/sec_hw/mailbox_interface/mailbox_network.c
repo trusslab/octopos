@@ -170,11 +170,15 @@ void send_response(uint8_t *buf, uint8_t queue_id)
      }
 }
 
-
+extern void process_cmd(uint8_t *buf, u8 owner_id);
 void network_event_loop(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	int is_data_queue = 0;
+
+	u32 status_reg = 0;
+	u32 owner_id = 0;
+	UINTPTR qptr = Mbox_ctrl_regs[Q_NETWORK_CMD_IN];
 
 	while(1) {
 	printf("%s: in while loop waiting to receive\n\r", __func__);
@@ -184,7 +188,10 @@ void network_event_loop(void)
         	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 			OCTOPOS_XMbox_ReadBlocking(&Mbox_network_cmd_in,
 				       	(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
-			process_cmd(buf);
+			status_reg = octopos_mailbox_get_status_reg(qptr);
+			owner_id = (status_reg & 0xFF000000)>>24;
+			printf("status_reg is : %x ; owenr_id = %x\n\r",status_reg, owner_id);
+			process_cmd(buf, owner_id);
 			OCTOPOS_XMbox_WriteBlocking(&Mbox_network_cmd_out,
 			       	(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 
