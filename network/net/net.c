@@ -63,7 +63,6 @@ void net_in(struct netdev *dev, struct pkbuf *pkb)
 //		rarp_in(dev, pkb);
 		break;
 	case ETH_P_ARP:
-
 		arp_in(dev, pkb);
 		break;
 	case ETH_P_IP:
@@ -71,8 +70,10 @@ void net_in(struct netdev *dev, struct pkbuf *pkb)
 		break;
 	default:
 		l2dbg("drop unkown-type packet");
+#ifdef ARCH_SEC_HW		
 		printf("%s:drop unkown-type packet  \n\r",__func__);
 		free(pkb->pk_data);
+#endif		
 		free_pkb(pkb);
 		break;
 	}
