@@ -911,13 +911,14 @@ static void yield_queue_access(uint8_t queue_id, uint8_t requester)
 		       __func__, queue_id);
 		return;
 	}
-
+//FIXME proper handling of proc infinite qouta	
+#ifdef UNLIMITED_QUOTA_IS_NOT_SUPPORTED
 	if (queues[queue_id].LIMIT == MAILBOX_NO_LIMIT_VAL) {
 		printf("Error: %s: unexpected limit val (%d, %d).\n",
 		       __func__, queue_id, queues[queue_id].LIMIT);
 		return;
 	}
-
+#endif
 	if (queues[queue_id].TIMEOUT == MAILBOX_NO_TIMEOUT_VAL) {
 		printf("Error: %s: unexpected timeout val (%d, %d).\n",
 		       __func__, queue_id, queues[queue_id].TIMEOUT);
