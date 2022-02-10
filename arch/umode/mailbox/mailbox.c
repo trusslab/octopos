@@ -581,6 +581,9 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_CMD_IN].OWNER = P_OS;
 	/* FIXME: use a SIMPLE queue if only one connection */
 	queues[Q_NETWORK_CMD_IN].connections[P_OS] = 1;
+	queues[Q_NETWORK_CMD_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_NETWORK_CMD_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_NETWORK_CMD_IN].connections[P_UNTRUSTED] = 1;
 	queues[Q_NETWORK_CMD_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
 	queues[Q_NETWORK_CMD_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_NETWORK_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
@@ -595,6 +598,9 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_CMD_OUT].OWNER = P_OS;
 	/* FIXME: use a SIMPLE queue if only one connection */
 	queues[Q_NETWORK_CMD_OUT].connections[P_OS] = 1;
+	queues[Q_NETWORK_CMD_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_NETWORK_CMD_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_NETWORK_CMD_OUT].connections[P_UNTRUSTED] = 1;
 	queues[Q_NETWORK_CMD_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
 	queues[Q_NETWORK_CMD_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_NETWORK_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
