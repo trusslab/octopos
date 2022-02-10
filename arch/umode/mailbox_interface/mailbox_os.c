@@ -378,6 +378,15 @@ static void *handle_mailbox_interrupts(void *data)
 				sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_NETWORK_DATA_OUT]);
 				break;
+			case Q_NETWORK_CMD_IN:
+				sem_init(&interrupts[Q_NETWORK_CMD_IN], 0,
+					 MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_NETWORK_CMD_IN]);
+				break;
+			case Q_NETWORK_CMD_OUT:
+				sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, 0);
+				sem_post(&availables[Q_NETWORK_CMD_OUT]);
+				break;
 			case Q_BLUETOOTH_CMD_IN:
 				sem_init(&interrupts[Q_BLUETOOTH_CMD_IN], 0,
 					 MAILBOX_QUEUE_SIZE);
