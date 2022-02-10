@@ -35,6 +35,36 @@ on petalinux run:
 telnet 192.168.0.1 12345
 
 
+## How to reproduce performance experiments reported in paper:
+1) Untrusted latency:
+   ### run on petalinux after setting up and testing the connectivity: 
+      ping 192.168.0.1
+2) Untrusted throughput:
+   ### run on your host machine:
+   iperf3 -s
+   ### run on petalinux after setting up and testing the connectivity:
+   iperf3 -c 192.168.0.1
+3) Trusted latency:
+   ### on your host compile and run:
+      applications/socket_client/socket_server_test_latency.c
+   ### in socket_client.c application
+   comment out:   send_receive(api);
+   and uncomment: latency_test(api);
+   compile run octopos and run socker_client
+   (you might need to fine-tune the delay between read and write to prevent the test from failing,
+   it is because our implementation of the network in sec_hw is single threaded and signaling between threads is not available.
+   the amount of delay in the repo has fine tuned to its minimum to get the round-trip messages working with minimum delay on the testing set-up)
+
+4) Trusted throughput:
+   ### on your host compile and run:
+      applications/socket_client/socket_server_test_throughput.c
+   ### in socket_client.c application
+   comment out:   send_receive(api);
+   and uncomment: throuput_test(api);
+   compile run octopos and run socker_client
+
+
+
 
 
 
