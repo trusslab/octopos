@@ -252,11 +252,13 @@ void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
 	mailbox_state_reg_t new_state;
 
 	new_state.owner = proc_id;
-
-	if (limit > MAILBOX_MAX_LIMIT_VAL)
-		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
-	else
-		new_state.limit = limit;
+//FIXME : consider infinit delegation
+//	if (limit > MAILBOX_MAX_LIMIT_VAL)
+//		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
+//	else
+//		new_state.limit = limit;
+//
+	new_state.limit = limit;
 
 	if (timeout > MAILBOX_MAX_TIMEOUT_VAL)
 		new_state.timeout = MAILBOX_MAX_TIMEOUT_VAL;
