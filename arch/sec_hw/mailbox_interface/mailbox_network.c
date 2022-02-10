@@ -110,6 +110,7 @@ static void handle_mailbox_interrupts(void* callback_ref)
 			sem_post(&interrupts[Q_NETWORK_DATA_IN]);
 			//Based on the behaviour of
 			//handle_mailbox_interrupts in mailbox_network.c of umode
+			sem_post(&interrupts[Q_NETWORK_CMD_IN]);
 		}
 	} else if (mask & OCTOPOS_XMB_IX_ERR) {
 		_SEC_HW_DEBUG("interrupt type: OCTOPOS_XMB_IX_ERR, from %p", callback_ref);
