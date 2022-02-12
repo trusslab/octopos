@@ -9,7 +9,6 @@ cp runtime/storage_client.c arch/umode/untrusted_linux/drivers/block/octopos_blk
 cp include/runtime/network_client.h arch/umode/untrusted_linux/drivers/net/network_client.h
 cp runtime/network_client.c arch/umode/untrusted_linux/drivers/net/network_client.c
 cp untrusted/octopos_mailbox.c arch/umode/untrusted_linux/arch/um/drivers/octopos_mailbox.c
-cp untrusted/octopos_mailbox_interface_user.c arch/umode/untrusted_linux/arch/um/os-Linux/drivers/octopos_mailbox_interface_user.c
 cp untrusted/octopos_blk_drv.c arch/umode/untrusted_linux/drivers/block/octopos_blk/octopos_blk_drv.c
 cp untrusted/octopos_net.c arch/umode/untrusted_linux/drivers/net/octopos_net.c
 cp untrusted/octopos_net.h arch/umode/untrusted_linux/include/net/octopos_net.h

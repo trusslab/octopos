@@ -302,6 +302,9 @@ static int read_queue(struct queue *queue, int in_handle)
 	return 0;
 }
 
+/* FIXME: we never release the memory allocated for the queues.
+ * Look at runtime.c for a free function for the queue.
+ */
 static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 {
 	uint8_t **messages = (uint8_t **) malloc(queue_size * sizeof(uint8_t *));

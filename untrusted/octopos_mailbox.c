@@ -25,20 +25,12 @@
 /* check include/linux/miscdevice.h to make sure this is not taken. */
 #define OM_MINOR		243
 
-/* FIXME: move to a header file */
-void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size);
-void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size);
-int handle_mailbox_interrupts(void *data);
-int init_octopos_mailbox_interface(void);
-void close_octopos_mailbox_interface(void);
-
 int fd_out, fd_in, fd_intr;
 struct semaphore interrupts[NUM_QUEUES + 1];
 
 struct semaphore cmd_sem;
 uint8_t cmd_buf[MAILBOX_QUEUE_MSG_SIZE - 1];
 
-/* FIXME: very similar to the same queue in runtime.c */
 uint8_t **syscall_resp_queue;
 int srq_size;
 int srq_msg_size;
@@ -58,6 +50,70 @@ void (*queue_timeout_update_callbacks[NUM_QUEUES + 1])(uint8_t queue_id,
 
 static struct timer_list timer;
 
+static void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id,
+				int queue_msg_size)
+{
+	uint8_t opcode[2];
+	unsigned long flags;
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = queue_id;
+	/* wait for message */
+	down(&interrupts[queue_id]);
+	spin_lock_irqsave(&mailbox_lock, flags);
+	os_write_file(fd_out, opcode, 2), 
+	os_read_file(fd_in, buf, queue_msg_size);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
+}
+
+static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id,
+					int queue_msg_size)
+{
+	uint8_t opcode[2];
+	unsigned long flags;
+
+	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
+	opcode[1] = queue_id;
+	spin_lock_irqsave(&mailbox_lock, flags);
+	os_write_file(fd_out, opcode, 2), 
+	os_read_file(fd_in, buf, queue_msg_size);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
+}
+
+void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
+{
+	uint8_t opcode[2];
+	unsigned long flags;
+
+	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
+	opcode[1] = queue_id;
+	down(&interrupts[queue_id]);
+	spin_lock_irqsave(&mailbox_lock, flags);
+	os_write_file(fd_out, opcode, 2);
+	os_write_file(fd_out, buf, queue_msg_size);
+	spin_unlock_irqrestore(&mailbox_lock, flags);
+}
+
+void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id)
+{
+	return recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
+}
+
+void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id)
+{
+	return send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
+}
+
+void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
+{
+	return recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
+void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id)
+{
+	return send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+}
+
 void callback_timer(struct timer_list *_timer)
 {
 	int i;
@@ -69,7 +125,8 @@ void callback_timer(struct timer_list *_timer)
 		    (queue_timeouts[i] != MAILBOX_NO_TIMEOUT_VAL)) {
 			queue_timeouts[i]--;
 			if (queue_timeout_update_callbacks[i])
-				(*queue_timeout_update_callbacks[i])(i, queue_timeouts[i]);
+				(*queue_timeout_update_callbacks[i])(i,
+							queue_timeouts[i]);
 		}
 	}
 
@@ -84,15 +141,14 @@ void register_timeout_update_callback(uint8_t queue_id,
 	}
 
 	if (queue_timeout_update_callbacks[queue_id]) {
-		printk("Error: %s: queue timeout update callback for queue %d is already "
-		       "registered\n", __func__, queue_id);
+		printk("Error: %s: queue timeout update callback for queue %d "
+		       "is already registered\n", __func__, queue_id);
 		return;
 	}
 
 	queue_timeout_update_callbacks[queue_id] = callback;
 }
 
-/* FIXME: modified from the same functin in runtime.c */
 int write_syscall_response(uint8_t *buf)
 {
 	down(&srq_sem);
@@ -109,7 +165,6 @@ int write_syscall_response(uint8_t *buf)
 	return 0;
 }
 
-/* FIXME: modified from the same functin in runtime.c */
 static int read_syscall_response(uint8_t *buf)
 {
 	if (srq_counter <= 0) {
@@ -189,8 +244,8 @@ static ssize_t om_dev_read(struct file *filp, char __user *buf, size_t size,
 	return (datasize - ret);
 }
 
-static ssize_t om_dev_write(struct file *filp, const char __user *buf, size_t size,
-			    loff_t *offp)
+static ssize_t om_dev_write(struct file *filp, const char __user *buf,
+			    size_t size, loff_t *offp)
 {
 	char data[MAILBOX_QUEUE_MSG_SIZE];
 	int ret;
@@ -219,7 +274,8 @@ static ssize_t om_dev_write(struct file *filp, const char __user *buf, size_t si
 		total_size += (per_msg_size - ret);
 
 		if (ret) {
-			printk("Error: %s: copy_from_user failed to fully copy. Won't continue.\n", __func__);
+			printk("Error: %s: copy_from_user failed to fully "
+			       "copy. Won't continue.\n", __func__);
 			break;
 		}
 	}
@@ -242,89 +298,12 @@ static struct miscdevice om_miscdev = {
 	&om_chrdev_ops,
 };
 
-void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
-{
-	uint8_t opcode[2];
-	unsigned long flags;
-
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = queue_id;
-	/* wait for message */
-	down(&interrupts[queue_id]);
-	spin_lock_irqsave(&mailbox_lock, flags);
-	os_write_file(fd_out, opcode, 2), 
-	os_read_file(fd_in, buf, queue_msg_size);
-	spin_unlock_irqrestore(&mailbox_lock, flags);
-}
-
-static void recv_msg_from_queue_no_wait(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
-{
-	uint8_t opcode[2];
-	unsigned long flags;
-
-	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
-	opcode[1] = queue_id;
-	spin_lock_irqsave(&mailbox_lock, flags);
-	os_write_file(fd_out, opcode, 2), 
-	os_read_file(fd_in, buf, queue_msg_size);
-	spin_unlock_irqrestore(&mailbox_lock, flags);
-}
-
-void send_msg_on_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)
-{
-	uint8_t opcode[2];
-	unsigned long flags;
-
-	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
-	opcode[1] = queue_id;
-	down(&interrupts[queue_id]);
-	spin_lock_irqsave(&mailbox_lock, flags);
-	os_write_file(fd_out, opcode, 2);
-	os_write_file(fd_out, buf, queue_msg_size);
-	spin_unlock_irqrestore(&mailbox_lock, flags);
-}
-
-/* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
- * Rename and consolidate.
- */
-void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id)
-{
-	return recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
-}
-
-/* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
- * Rename and consolidate.
- */
-void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id)
-{
-	return send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE);
-}
-
-/* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
- * Rename and consolidate.
- */
-void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id)
-{
-	return recv_msg_from_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-}
-
-/* FIXME: modified from arch/umode/mailbox_interface/mailbox_runtime.c 
- * Rename and consolidate.
- */
-void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id)
-{
-	return send_msg_on_queue(buf, queue_id, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-}
-
-/* FIXME: adapted from the same func in mailbox_runtime.c */
 void queue_sync_getval(uint8_t queue_id, int *val)
 {
 	*val = interrupts[queue_id].count;
 }
 
-/* FIXME: copied with no changes from the same func in runtime.c */
-/* Only to be used for queues that runtime writes to */
-/* FIXME: busy-waiting */
+/* Only to be used for queues that the untrusted domain writes to */
 void wait_until_empty(uint8_t queue_id, int queue_size)
 {
 	int left;
@@ -336,7 +315,6 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 	}
 }
 
-/* FIXME: adapted from the same func in mailbox_runtime.c */
 void mailbox_yield_to_previous_owner(uint8_t queue_id)
 {
 	uint8_t opcode[2];
@@ -352,7 +330,6 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
-/* FIXME: adapted from the same func in mailbox_runtime.c */
 int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 				timeout_t timeout)
 {
@@ -376,7 +353,6 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 	return ((state.limit == limit) && (state.timeout == timeout));
 }
 
-/* FIXME: adapted from the same func in mailbox_runtime.c */
 void reset_queue_sync(uint8_t queue_id, int init_val)
 {
 	sema_init(&interrupts[queue_id], init_val);
@@ -421,39 +397,46 @@ static irqreturn_t om_interrupt(int irq, void *data)
 		if (n != 1)
 			break;
 		if (interrupt == Q_UNTRUSTED) {
-			recv_msg_from_queue_no_wait(buf, Q_UNTRUSTED, MAILBOX_QUEUE_MSG_SIZE);
+			recv_msg_from_queue_no_wait(buf, Q_UNTRUSTED,
+						    MAILBOX_QUEUE_MSG_SIZE);
 			if (buf[0] == RUNTIME_QUEUE_SYSCALL_RESPONSE_TAG) {
 				write_syscall_response(buf);
 				up(&interrupts[Q_UNTRUSTED]);
 			} else if (buf[0] == RUNTIME_QUEUE_EXEC_APP_TAG) {
-				memcpy(cmd_buf, &buf[1], MAILBOX_QUEUE_MSG_SIZE - 1);
+				memcpy(cmd_buf, &buf[1],
+				       MAILBOX_QUEUE_MSG_SIZE - 1);
 				up(&cmd_sem);
 			} else {
-				printk("Error: %s: received invalid message (%d).\n", __func__, buf[0]);
+				printk("Error: %s: received invalid message "
+				       "(%d).\n", __func__, buf[0]);
 				BUG();
 			}
 		} else if (interrupt == Q_OSU ||
-		    interrupt == Q_STORAGE_CMD_IN || interrupt == Q_STORAGE_CMD_OUT ||
-		    interrupt == Q_STORAGE_DATA_IN || interrupt == Q_STORAGE_DATA_OUT ||
-		    interrupt == Q_NETWORK_DATA_IN || interrupt == Q_NETWORK_DATA_OUT) {
+			   interrupt == Q_STORAGE_CMD_IN ||
+			   interrupt == Q_STORAGE_CMD_OUT ||
+			   interrupt == Q_STORAGE_DATA_IN ||
+			   interrupt == Q_STORAGE_DATA_OUT ||
+			   interrupt == Q_NETWORK_DATA_IN ||
+			   interrupt == Q_NETWORK_DATA_OUT) {
 			if (interrupt == Q_NETWORK_DATA_OUT)
 				schedule_work(&net_wq);
 			up(&interrupts[interrupt]);
 		} else if (interrupt > NUM_QUEUES && interrupt <= (2 * NUM_QUEUES)) {
 			/* ignore the ownership change interrupts */
 		} else {
-			printk("Error: interrupt from an invalid queue (%d)\n", interrupt);
+			printk("Error: interrupt from an invalid queue (%d)\n",
+			       interrupt);
 			BUG();
 		}
 	}
 	return IRQ_HANDLED;
 }
 
-/* FIXME: modified from runtime.c */
 static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 {
 	int i;
-	uint8_t **messages = (uint8_t **) kmalloc(queue_size * sizeof(uint8_t *), GFP_KERNEL);
+	uint8_t **messages = (uint8_t **) kmalloc(queue_size * sizeof(uint8_t *),
+						  GFP_KERNEL);
 	if (!messages) {
 		printk("Error: couldn't allocate memory for a queue\n");
 		BUG();
@@ -469,16 +452,22 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
+static void free_queue_memory(uint8_t **messages, int queue_size)
+{
+	int i;
+
+	for (i = 0; i < queue_size; i++) {
+		kfree(messages[i]);
+		messages[i] = NULL;
+	}
+
+	kfree(messages);
+	messages = NULL;
+}
+
 static int __init om_init(void)
 {
 	int err;
-
-	err = init_octopos_mailbox_interface();
-	if (err) {
-		printk(KERN_ERR OM_MODULE_NAME ": initializing mailbox interface "
-		       "failed\n");
-		return err;
-	}
 
 	fd_out = os_open_file(FIFO_UNTRUSTED_OUT, of_write(OPENFLAGS()), 0);
 	if (fd_out < 0) {
@@ -510,18 +499,13 @@ static int __init om_init(void)
 		return err;
 	}
 
-	/* FIXME: is this needed? */
-	//sigio_broken(fd_intr, 1);
-
 	sema_init(&interrupts[Q_OSU], MAILBOX_QUEUE_SIZE);
 	sema_init(&interrupts[Q_UNTRUSTED], 0);
 	
 	sema_init(&cmd_sem, 0);
 
-	/* FIXME: very similar to runtime.c */
-	/* initialize syscall response queue */
-	/* FIXME: release memory on exit */
-	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE, MAILBOX_QUEUE_MSG_SIZE);
+	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
+						       MAILBOX_QUEUE_MSG_SIZE);
 	srq_size = MAILBOX_QUEUE_SIZE;
 	srq_msg_size = MAILBOX_QUEUE_MSG_SIZE;
 	srq_counter = 0;
@@ -536,7 +520,8 @@ static int __init om_init(void)
 
 	memset(queue_limits, 0x0, sizeof(queue_limits));
 	memset(queue_timeouts, 0x0, sizeof(queue_timeouts));
-	memset(queue_timeout_update_callbacks, 0x0, sizeof(queue_timeout_update_callbacks));
+	memset(queue_timeout_update_callbacks, 0x0,
+	       sizeof(queue_timeout_update_callbacks));
 
 	timer_setup(&timer, callback_timer, 0);
 	mod_timer(&timer, jiffies + msecs_to_jiffies(1000));	
@@ -567,9 +552,9 @@ static void __exit om_cleanup(void)
 	os_close_file(fd_in);
 	os_close_file(fd_intr);
 
-	close_octopos_mailbox_interface();
-	
 	misc_deregister(&om_miscdev);
+
+	free_queue_memory(syscall_resp_queue, MAILBOX_QUEUE_SIZE);
 }
 
 module_init(om_init);

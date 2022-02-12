@@ -144,7 +144,6 @@ int write_syscall_response(uint8_t *buf)
 	if (srq_counter >= srq_size) {
 		printf("Error: syscall response queue is full\n");
 		_exit(-1);
-		/* FIXME: dead code */
 		return -1;
 	}
 
@@ -161,7 +160,6 @@ static int read_syscall_response(uint8_t *buf)
 	if (srq_counter <= 0) {
 		printf("Error: syscall response queue is empty\n");
 		exit(-1);
-		/* FIXME: dead code */
 		return -1;
 	}
 
@@ -443,7 +441,6 @@ void net_stack_exit(void)
 #endif
 
 /* Only to be used for queues that runtime writes to */
-/* FIXME: busy-waiting */
 void wait_until_empty(uint8_t queue_id, int queue_size)
 {
 	int left;
@@ -1704,6 +1701,19 @@ static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 	return messages;
 }
 
+static void free_queue_memory(uint8_t **messages, int queue_size)
+{
+	int i;
+
+	for (i = 0; i < queue_size; i++) {
+		free(messages[i]);
+		messages[i] = NULL;
+	}
+
+	free(messages);
+	messages = NULL;
+}
+
 void *store_context(void *data)
 {
 	int ret;
@@ -1822,6 +1832,8 @@ int main()
 #ifdef ARCH_UMODE
 	net_stack_exit();
 #endif
+
+	free_queue_memory(syscall_resp_queue, MAILBOX_QUEUE_SIZE);
 
 	close_runtime();
 
