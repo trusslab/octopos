@@ -12,7 +12,7 @@
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_rc.h>
 
-/* FIX: duplicate define */
+/* FIXME: duplicate define */
 #define INVALID_PROCESSOR	11
 
 #define TSS_LOG_LVL_NONE	"ALL+none"

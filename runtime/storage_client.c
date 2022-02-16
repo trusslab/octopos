@@ -692,6 +692,9 @@ int set_up_context(void *addr, uint32_t size, int do_yield, int *context_found,
 		   uint8_t *return_pcr)
 {
 	uint8_t context_block[STORAGE_BLOCK_SIZE];
+	int ret = -1;
+	uint32_t rret = 0;
+
 	if (size > (STORAGE_BLOCK_SIZE - CONTEXT_TAG_SIZE)) {
 		printf("Error (%s): context size is too big.\n", __func__);
 		return ERR_INVALID;
@@ -703,7 +706,7 @@ int set_up_context(void *addr, uint32_t size, int do_yield, int *context_found,
 	if (context_found)
 		*context_found = 0;
 	/* Now, let's retrieve the context. */
-	int ret = request_secure_storage_access(partition_size, limit, timeout,
+	ret = request_secure_storage_access(partition_size, limit, timeout,
 						callback, expected_pcr,
 						return_pcr);
 	if (ret) {
@@ -712,7 +715,7 @@ int set_up_context(void *addr, uint32_t size, int do_yield, int *context_found,
 		return ret;
 	}
 
-	uint32_t rret = read_from_secure_storage_block(context_block, 0, 0,
+	rret = read_from_secure_storage_block(context_block, 0, 0,
 						context_size + CONTEXT_TAG_SIZE);
 	if (rret != (context_size + CONTEXT_TAG_SIZE)) {
 		printf("%s: Couldn't read from secure storage.\n", __func__);
@@ -738,6 +741,7 @@ no_context:
 int write_context_to_storage(int do_yield)
 {
 	uint8_t context_block[STORAGE_BLOCK_SIZE];
+	uint32_t wret = 0;
 
 	if (!has_access_to_secure_storage || !context_set) {
 		printf("%s: Error: either the secure storage key or context "
@@ -753,7 +757,7 @@ int write_context_to_storage(int do_yield)
 	memcpy(context_block, &context_tag, CONTEXT_TAG_SIZE);
 	memcpy(&context_block[CONTEXT_TAG_SIZE], context_addr, context_size);
 
-	uint32_t wret = write_to_secure_storage_block(context_block, 0, 0,
+	wret = write_to_secure_storage_block(context_block, 0, 0,
 						context_size + CONTEXT_TAG_SIZE);
 	if (wret != (context_size + CONTEXT_TAG_SIZE))
 		printf("Error: couldn't write the context to secure storage.\n");

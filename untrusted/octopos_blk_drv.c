@@ -274,8 +274,6 @@ out:
 
 static int __init obd_init(void)
 {
-	int i;
-
 	if (register_blkdev(OCTOPOS_BLK_MAJOR, "octopos_blk"))
 		return -EIO;
 

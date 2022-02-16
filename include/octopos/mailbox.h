@@ -112,6 +112,9 @@ void decrement_queue_limit(uint8_t queue_id, limit_t count);
 void register_timeout_update_callback(uint8_t queue_id,
 				      void (*callback)(uint8_t, timeout_t));
 #endif
+uint8_t get_runtime_queue_id(uint8_t runtime_proc_id);
+int is_valid_runtime_queue_id(int queue_id);
+uint8_t get_runtime_proc_id(uint8_t runtime_queue_id);
 
 /* Macros for sending/receiving mailbox messages. */
 #define SET_MAILBOX_MESSAGE_ONE_ARG(start, arg0)	\

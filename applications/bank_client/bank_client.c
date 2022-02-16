@@ -295,7 +295,7 @@ static int perform_remote_attestation(void)
 	size_t sig_size, quote_size;
 	char success = 0;
 	char init_cmd = 1;
-	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
+	uint8_t runtime_proc_id = gapi->get_own_runtime_proc_id();
 	uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
 	uint8_t num_pcr_slots = 2;
 	int ret;

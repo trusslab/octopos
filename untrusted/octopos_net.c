@@ -38,6 +38,9 @@
 #include <linux/ip.h>
 #include <net/tcp.h>
 
+struct work_struct net_wq;
+static struct work_struct close_socket_wq;
+
 /* FIXME: modified from octopos/util/network/pkb.c */
 static struct pkbuf *alloc_pkb(int size)
 {
@@ -169,10 +172,13 @@ struct my_tcp {
 	unsigned char data[0];
 } __attribute__((packed));
 
-void *ond_tcp_receive(void)
+void ond_tcp_receive(void)
 {
 	uint8_t *data;
 	uint16_t data_size;
+	struct pkbuf *pkb = NULL;
+	struct sk_buff *skb = NULL;
+	int len = 0;
 
 	data = ip_receive(net_buf, &data_size);
 	if (!data_size) {
@@ -180,9 +186,9 @@ void *ond_tcp_receive(void)
 		BUG();
 	}
 
-	struct pkbuf *pkb = (struct pkbuf *) data;
-	int len = pkb->pk_len - 14;
-	struct sk_buff *skb = alloc_skb(len, GFP_KERNEL);
+	pkb = (struct pkbuf *) data;
+	len = pkb->pk_len - 14;
+	skb = alloc_skb(len, GFP_KERNEL);
 	if (!skb)
 		BUG();
 	skb->len = len - 20; /* 20 being the IP header size */
@@ -212,7 +218,7 @@ void *ond_tcp_receive(void)
 	dst_hold(&g_dst_entry);
 	skb_dst_set(skb, &g_dst_entry);
 	
-	int ret = tcp_v4_rcv(skb);
+	tcp_v4_rcv(skb);
 }
 
 bool octopos_net_access = false;
@@ -243,6 +249,11 @@ int octopos_open_socket(__be32 daddr, __be32 saddr, __be16 dport, __be16 sport)
 	return 0;
 }
 
+static void net_receive_wq(struct work_struct *work)
+{
+	ond_tcp_receive();
+}
+
 static void octopos_close_socket(struct work_struct *work)
 {
 	if (octopos_net_access) {
@@ -252,8 +263,6 @@ static void octopos_close_socket(struct work_struct *work)
 
 	syscall_close_socket();
 }
-
-static struct work_struct close_socket_wq;
 
 void octopos_close_socket_atomic(struct sock *sk)
 {
@@ -326,11 +335,7 @@ static int ond_set_iff(void)
 	int err;
 
 	char *name = "octopos_net";
-	unsigned long flags = 0;
 	int queues = 1;
-
-	/* TUN device */
-	//flags |= IFF_TUN;
 
 	dev = alloc_netdev_mqs(0, name,
 			       NET_NAME_UNKNOWN, ond_setup, queues,
@@ -392,6 +397,7 @@ static int __init ond_init(void)
 
 	rtnl_unlock();
 
+	INIT_WORK(&net_wq, net_receive_wq);
 	INIT_WORK(&close_socket_wq, octopos_close_socket);
 
 	net_buf = (uint8_t *) kmalloc(MAILBOX_QUEUE_MSG_SIZE_LARGE, GFP_KERNEL);

@@ -92,7 +92,8 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 
 	state = mailbox_read_state_register(queue_id);
 
-	return ((state.limit == limit) && (state.timeout == timeout));
+	return ((state.owner == p_runtime) && (state.limit == limit) &&
+		(state.timeout == timeout));
 }
 
 int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
@@ -102,6 +103,17 @@ int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
 	state = mailbox_read_state_register(queue_id);
 
 	return (state.owner == owner);
+}
+
+int mailbox_attest_own_queue_access(uint8_t proc_id, limit_t limit,
+				    timeout_t timeout)
+{
+	mailbox_state_reg_t state;
+
+	state = mailbox_read_state_register(q_runtime);
+
+	return ((state.owner == proc_id) && (state.limit == limit) &&
+		(state.timeout == timeout));
 }
 
 static void _runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id, int queue_msg_size)

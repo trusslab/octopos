@@ -36,7 +36,7 @@ void ipc_sender(struct runtime_api *api)
 	char line[1024];
 	int size;
 	uint8_t target_qid = 0;
-	uint8_t own_qid = api->get_runtime_queue_id();
+	uint8_t own_qid = api->get_own_runtime_queue_id();
 
 #ifdef ARCH_SEC_HW
 	_SEC_HW_ERROR("own_qid = %d", own_qid);

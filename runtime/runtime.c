@@ -52,10 +52,8 @@
 #include "arch/sec_hw.h"
 #include "xil_cache.h"
 #endif
-/* FIXME: remove */
 #ifdef ARCH_UMODE
 #include "tcp.h"
-#include "ip.h"
 #include "raw.h"
 #endif
 
@@ -96,35 +94,15 @@ extern sem_t interrupt_change;
 _Bool async_syscall_mode = FALSE;
 #endif
 
-/* FIXME: there are a lot of repetition in these macros */
-#define IPC_SET_ZERO_ARGS_DATA(data, size)					\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];					\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;				\
-	if (max_size >= 256) {							\
-		printf("Error (%s): max_size not supported\n", __func__);	\
-		return ERR_INVALID;						\
-	}									\
-	if (size > max_size) {							\
-		printf("Error (%s): size not supported\n", __func__);		\
-		return ERR_INVALID;						\
-	}									\
-	buf[1] = size;								\
-	memcpy(&buf[2], (uint8_t *) data, size);				\
+#define IPC_SET_ZERO_ARGS_DATA(data, size)			\
+	ALLOC_MAILBOX_MESSAGE_BUF				\
+	SET_MAILBOX_MESSAGE_ZERO_ARGS_DATA(1, data, size,	\
+					   return ERR_INVALID)	\
 
 #define IPC_GET_ZERO_ARGS_DATA					\
 	uint8_t data_size, *data;				\
-	uint8_t max_size = MAILBOX_QUEUE_MSG_SIZE - 2;		\
-	if (max_size >= 256) {					\
-		printf("Error: max_size not supported\n");	\
-		return ERR_INVALID;				\
-	}							\
-	data_size = buf[1];					\
-	if (data_size > max_size) {				\
-		printf("Error: size not supported\n");		\
-		return ERR_INVALID;				\
-	}							\
-	data = &buf[2];
+	GET_MAILBOX_MESSAGE_ZERO_ARGS_DATA(1, data, data_size,	\
+					   return ERR_INVALID)	\
 
 int change_queue = 0;
 
@@ -136,7 +114,6 @@ pthread_t tcp_threads[2];
 /* FIXME: move to header file. */
 extern void tcp_timer(void);
 
-/* FIXME: very similar to write_queue() in mailbox.c */
 int write_syscall_response(uint8_t *buf)
 {
 	sem_wait(&srq_sem);
@@ -154,7 +131,6 @@ int write_syscall_response(uint8_t *buf)
 	return 0;
 }
 
-/* FIXME: very similar to read_queue() in mailbox.c */
 static int read_syscall_response(uint8_t *buf)
 {
 	if (srq_counter <= 0) {
@@ -212,7 +188,7 @@ static void issue_syscall_response_or_change(uint8_t *buf, bool *no_response)
 
 static void reset_keyboard_queue_trackers(void)
 {
-	/* FIXME: redundant when called from yield_secure_keyboard() */
+	/* redundant when called from yield_secure_keyboard() */
 	has_secure_keyboard_access = false;
 
 	queue_limits[Q_KEYBOARD] = 0;
@@ -222,7 +198,7 @@ static void reset_keyboard_queue_trackers(void)
 
 static void reset_serial_out_queue_trackers(void)
 {
-	/* FIXME: redundant when called from yield_secure_serial_out() */
+	/* redundant when called from yield_secure_serial_out() */
 	has_secure_serial_out_access = false;
 
 	queue_limits[Q_SERIAL_OUT] = 0;
@@ -232,7 +208,7 @@ static void reset_serial_out_queue_trackers(void)
 
 static void reset_ipc_queue_trackers(void)
 {
-	/* FIXME: redundant when called from yield_secure_ipc() */
+	/* redundant when called from yield_secure_ipc() */
 	secure_ipc_mode = false;
 
 	queue_limits[secure_ipc_target_queue] = 0;
@@ -242,7 +218,7 @@ static void reset_ipc_queue_trackers(void)
 
 static void reset_bluetooth_queues_trackers(void)
 {
-	/* FIXME: redundant when called from yield_secure_bluetooth_access() */
+	/* redundant when called from yield_secure_bluetooth_access() */
 	has_secure_bluetooth_access = false;
 
 	queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
@@ -401,7 +377,8 @@ int net_start_receive(void)
 {
 	/* tcp receive */
 	/* FIXME: process received message on the main thread */
-	int ret = pthread_create(&tcp_threads[1], NULL, (pfunc_t) tcp_receive, NULL);
+	int ret = pthread_create(&tcp_threads[1], NULL, (pfunc_t) tcp_receive,
+				 NULL);
 	if (ret) {
 		printf("Error: couldn't launch tcp_threads[1]\n");
 		return ret;
@@ -727,7 +704,6 @@ static int read_from_shell(char *data, int *data_size)
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_READ_FROM_SHELL)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA
-	/* FIXME: check the data buf to make sure it is allocated. */
 	memcpy(data, _data, _size);
 	*data_size = (int) _size;
 #ifdef ARCH_SEC_HW
@@ -758,7 +734,6 @@ static int read_from_file(uint32_t fd, uint8_t *data, int size, int offset)
 	SYSCALL_SET_THREE_ARGS(SYSCALL_READ_FROM_FILE, fd, size, offset)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA
-	/* FIXME: check the data buf to make sure it is allocated. */
 	memcpy(data, _data, _size);
 	return (int) ret0;
 }
@@ -831,6 +806,9 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 			      timeout_t timeout, queue_update_callback_t callback)
 {
 	bool no_response;
+	uint8_t target_proc_id;
+	int ret;
+
 	reset_queue_sync(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
 	SYSCALL_SET_THREE_ARGS(SYSCALL_REQUEST_SECURE_IPC,
 			       target_runtime_queue_id, (uint32_t) limit,
@@ -843,26 +821,31 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 		return (int) ret0;
 	}
 
-	/* FIXME: if any of the attetations fail, we should yield the other one */
-	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
+	ret = is_valid_runtime_queue_id(target_runtime_queue_id);
+	if (!ret) {
+		printf("Error: %s: invalid runtime queue id (%d).\n", __func__,
+		       target_runtime_queue_id);
+		return ERR_INVALID;
+	}
+
+	ret = mailbox_attest_queue_access(target_runtime_queue_id,
 						     limit, timeout);
-	if (!attest_ret) {
+	if (!ret) {
 		printf("Error: %s: failed to attest secure ipc send queue "
 		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
-/* ARCH_SEC_HW */
-#ifndef ARCH_SEC_HW 
-	/* FIXME: 
-	attest_ret = mailbox_attest_queue_access(q_runtime,
-					WRITE_ACCESS, count, other runtime);
-	if (!attest_ret) {
-		printf("Error: %s: failed to attest secure ipc recv queue access\n", __func__);
-		return ERR_FAULT;
-	}*/
-#endif
+	target_proc_id = get_runtime_proc_id(target_runtime_queue_id);
 
+	ret = mailbox_attest_own_queue_access(target_proc_id, limit, timeout);
+	if (!ret) {
+		printf("Error: %s: failed to attest secure ipc recv queue "
+		       "access\n", __func__);
+		wait_until_empty(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
+		mailbox_yield_to_previous_owner(target_runtime_queue_id);
+		return ERR_FAULT;
+	}
 
 	queue_limits[target_runtime_queue_id] = limit;
 	queue_timeouts[target_runtime_queue_id] = timeout;
@@ -938,12 +921,12 @@ static int recv_msg_on_secure_ipc(char *msg, int *size)
 	return 0;
 }
 
-static uint8_t get_runtime_proc_id(void)
+static uint8_t get_own_runtime_proc_id(void)
 {
 	return (uint8_t) p_runtime;
 }
 
-static uint8_t get_runtime_queue_id(void)
+static uint8_t get_own_runtime_queue_id(void)
 {
 	return (uint8_t) q_runtime;
 }
@@ -1566,8 +1549,8 @@ static void load_application(char *msg)
 #ifndef ARCH_SEC_HW
 		.request_tpm_attestation_report = request_tpm_attestation_report,
 #endif
-		.get_runtime_proc_id = get_runtime_proc_id,
-		.get_runtime_queue_id = get_runtime_queue_id,
+		.get_own_runtime_proc_id = get_own_runtime_proc_id,
+		.get_own_runtime_queue_id = get_own_runtime_queue_id,
 		.terminate_app = terminate_app,
 #ifndef ARCH_SEC_HW
 		.schedule_func_execution = schedule_func_execution,

@@ -50,6 +50,8 @@ void (*queue_timeout_update_callbacks[NUM_QUEUES + 1])(uint8_t queue_id,
 
 static struct timer_list timer;
 
+extern struct work_struct net_wq;
+
 static void recv_msg_from_queue(uint8_t *buf, uint8_t queue_id,
 				int queue_msg_size)
 {
@@ -376,16 +378,6 @@ void decrement_queue_limit(uint8_t queue_id, limit_t count)
 		queue_limits[queue_id] -= count;
 }
 
-/* FIXME: move somewhere else */
-void *ond_tcp_receive(void);
-
-static struct work_struct net_wq;
-
-static void net_receive_wq(struct work_struct *work)
-{
-	ond_tcp_receive();
-}
-
 static irqreturn_t om_interrupt(int irq, void *data)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
@@ -514,7 +506,7 @@ static int __init om_init(void)
 
 	sema_init(&srq_sem, MAILBOX_QUEUE_SIZE);
 
-	INIT_WORK(&net_wq, net_receive_wq);
+	//INIT_WORK(&net_wq, net_receive_wq);
 
 	spin_lock_init(&mailbox_lock);
 

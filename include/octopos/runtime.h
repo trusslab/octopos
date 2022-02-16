@@ -87,8 +87,8 @@ struct runtime_api {
 					      uint8_t **quote, size_t *quote_size);
 
 	/* Local API */
-	uint8_t (*get_runtime_proc_id)(void);
-	uint8_t (*get_runtime_queue_id)(void);
+	uint8_t (*get_own_runtime_proc_id)(void);
+	uint8_t (*get_own_runtime_queue_id)(void);
 	void (*terminate_app)(void);
 	int (*schedule_func_execution)(void *(*func)(void *), void *data);
 	uint32_t (*get_random_uint)(void);

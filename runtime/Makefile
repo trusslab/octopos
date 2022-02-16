@@ -52,8 +52,9 @@ RUNTIME_OBJS =  runtime.o 						\
 		network/udp/udp_obj.o					\
 		network/tcp/tcp_obj.o					\
 		../util/network/lib_obj.o				\
-		../util/tpm/hash.o				\
-		../util/tpm/tpm.o
+		../util/tpm/hash.o					\
+		../util/tpm/tpm.o					\
+		../util/mailbox/mailbox.c
 
 umode:runtime
 
