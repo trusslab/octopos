@@ -212,31 +212,15 @@ int request_network_access(limit_t limit, timeout_t timeout,
 		if (ret) {
 			/* FIXME: the next three error blocks are identical. */
 			printf("%s: Error: unexpected PCR\n", __func__);
-			wait_until_empty(Q_NETWORK_DATA_IN,
-					 MAILBOX_QUEUE_SIZE_LARGE);
-			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
-			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
-
-			queue_limits[Q_NETWORK_DATA_IN] = 0;
-			queue_timeouts[Q_NETWORK_DATA_IN] = 0;
-			queue_limits[Q_NETWORK_DATA_OUT] = 0;
-			queue_timeouts[Q_NETWORK_DATA_OUT] = 0;
-			return ERR_UNEXPECTED;
+			ret = ERR_UNEXPECTED;
+			goto error;
 		}
 	} else if (return_pcr) {
 		ret = read_tpm_pcr_for_proc(P_NETWORK, return_pcr);
 		if (ret) {
 			printf("%s: Error: couldn't read PCR\n", __func__);
-			wait_until_empty(Q_NETWORK_DATA_IN,
-					 MAILBOX_QUEUE_SIZE_LARGE);
-			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
-			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
-
-			queue_limits[Q_NETWORK_DATA_IN] = 0;
-			queue_timeouts[Q_NETWORK_DATA_IN] = 0;
-			queue_limits[Q_NETWORK_DATA_OUT] = 0;
-			queue_timeouts[Q_NETWORK_DATA_OUT] = 0;
-			return ERR_FAULT;
+			ret = ERR_FAULT;
+			goto error;
 		}
 	}
 #endif
@@ -244,18 +228,8 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	ret = net_start_receive();
 	if (ret) {
 		printf("Error: set_up_receive failed\n");
-			wait_until_empty(Q_NETWORK_DATA_IN,
-					 MAILBOX_QUEUE_SIZE_LARGE);
-			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
-			mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
-
-#ifndef UNTRUSTED_DOMAIN
-			queue_limits[Q_NETWORK_DATA_IN] = 0;
-			queue_timeouts[Q_NETWORK_DATA_IN] = 0;
-			queue_limits[Q_NETWORK_DATA_OUT] = 0;
-			queue_timeouts[Q_NETWORK_DATA_OUT] = 0;
-#endif
-		return ERR_FAULT;
+		ret = ERR_FAULT;
+		goto error;
 	}
 
 #ifndef UNTRUSTED_DOMAIN
@@ -267,6 +241,20 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	network_access_count = limit;
 
 	return 0;
+
+error:
+	wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
+
+#ifndef UNTRUSTED_DOMAIN
+	queue_limits[Q_NETWORK_DATA_IN] = 0;
+	queue_timeouts[Q_NETWORK_DATA_IN] = 0;
+	queue_limits[Q_NETWORK_DATA_OUT] = 0;
+	queue_timeouts[Q_NETWORK_DATA_OUT] = 0;
+#endif
+
+	return ret;
 }
 
 void syscall_close_socket(void)

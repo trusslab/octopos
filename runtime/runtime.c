@@ -1259,52 +1259,16 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_BLUETOOTH, expected_pcr);
 		if (ret) {
-			/* FIXME: the next three error blocks are almost
-			 * identical.
-			 */
-			/* FIXME: also, has a lot in common with the yield func.
-			 * (the same for other I/Os)
-			 */
 			printf("Error: %s: unexpected PCR\n", __func__);
-			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
-			wait_until_empty(Q_BLUETOOTH_DATA_IN,
-					 MAILBOX_QUEUE_SIZE_LARGE);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
-
-			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
-			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
-			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
-			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
-			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
-			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
-			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
-			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
-			return ERR_UNEXPECTED;
+			ret = ERR_UNEXPECTED;
+			goto error;
 		}
 	} else if (return_pcr) {
 		ret = read_tpm_pcr_for_proc(P_BLUETOOTH, return_pcr);
 		if (ret) {
 			printf("Error: %s: couldn't read PCR\n", __func__);
-			wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
-			wait_until_empty(Q_BLUETOOTH_DATA_IN,
-					 MAILBOX_QUEUE_SIZE_LARGE);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
-			mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
-
-			queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
-			queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
-			queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
-			queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
-			queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
-			queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
-			queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
-			queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
-			return ERR_FAULT;
+			ret = ERR_FAULT;
+			goto error;
 		}
 	}
 
@@ -1314,23 +1278,7 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	if (ret) {
 		printf("Error: %s: invalid state sent from the bluetooth "
 		       "service.\n", __func__);
-		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
-		wait_until_empty(Q_BLUETOOTH_DATA_IN,
-				 MAILBOX_QUEUE_SIZE_LARGE);
-		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
-		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
-		mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
-		mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
-
-		queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
-		queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
-		queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
-		queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
-		queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
-		queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
-		queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
-		queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
-		return ret;
+		goto error;
 	}
 
 	queue_update_callbacks[Q_BLUETOOTH_CMD_IN] = callback;
@@ -1342,6 +1290,25 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	has_secure_bluetooth_access = true;
 
 	return 0;
+
+error:
+	wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
+	wait_until_empty(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_BLUETOOTH_DATA_OUT);
+
+	queue_limits[Q_BLUETOOTH_CMD_IN] = 0;
+	queue_timeouts[Q_BLUETOOTH_CMD_IN] = 0;
+	queue_limits[Q_BLUETOOTH_CMD_OUT] = 0;
+	queue_timeouts[Q_BLUETOOTH_CMD_OUT] = 0;
+	queue_limits[Q_BLUETOOTH_DATA_IN] = 0;
+	queue_timeouts[Q_BLUETOOTH_DATA_IN] = 0;
+	queue_limits[Q_BLUETOOTH_DATA_OUT] = 0;
+	queue_timeouts[Q_BLUETOOTH_DATA_OUT] = 0;
+
+	return ret;
 }
 
 static int authenticate_with_bluetooth_service(uint8_t *app_signature)
@@ -1520,13 +1487,9 @@ static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_si
 	return 0;
 }
 
-/* FIXME: why do we need this func? Why not just directly use
- * tpm_processor_read_pcr()?
- */
 int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 {
-	tpm_processor_read_pcr(PROC_TO_PCR(proc_id), pcr_val);
-	return 0;
+	return tpm_processor_read_pcr(PROC_TO_PCR(proc_id), pcr_val);
 }
 #endif
 
@@ -1692,7 +1655,6 @@ void *run_app(void *load_buf)
 	return NULL;
 }
 
-/* FIXME: copied from mailbox.c */
 static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
 {
 	uint8_t **messages = (uint8_t **) malloc(queue_size * sizeof(uint8_t *));
@@ -1812,7 +1774,6 @@ int main()
 #endif
 
 	/* initialize syscall response queue */
-	/* FIXME: release memory on exit */
 	syscall_resp_queue = allocate_memory_for_queue(MAILBOX_QUEUE_SIZE,
 						       MAILBOX_QUEUE_MSG_SIZE);
 	srq_size = MAILBOX_QUEUE_SIZE;
