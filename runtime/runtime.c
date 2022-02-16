@@ -462,6 +462,9 @@ again:
 }
 
 
+/* @expected_pcr: if not NULL, we request the PCR val for the keyboard service
+ * and compare it with expected_pcr.
+ */
 static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 				   queue_update_callback_t callback,
 				   uint8_t *expected_pcr)
@@ -538,6 +541,9 @@ static int yield_secure_keyboard(void)
 	return 0;
 }
 
+/* @expected_pcr: if not NULL, we request the PCR val for the serial_out service
+ * and compare it with expected_pcr.
+ */
 static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 				     queue_update_callback_t callback,
 				     uint8_t *expected_pcr)
@@ -802,8 +808,15 @@ static int remove_file(char *filename)
 	return (int) ret0;
 }
 
+/* @expected_pcr: if not NULL, we request the PCR val for the target runtime
+ * proc and compare it with expected_pcr.
+ *
+ * FIMXE: the expected_pcr functionality is not tested for secure IPC.
+ */
 static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
-			      timeout_t timeout, queue_update_callback_t callback)
+			      timeout_t timeout,
+			      queue_update_callback_t callback,
+			      uint8_t *expected_pcr)
 {
 	bool no_response;
 	uint8_t target_proc_id;
@@ -847,12 +860,26 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 		return ERR_FAULT;
 	}
 
+	/* Note: we set the limit/timeout values right after verification and
+	 * before we call check_proc_pcr(). This is because that call issues a
+	 * syscall, which might take an arbitrary amount of time.
+	 */
 	queue_limits[target_runtime_queue_id] = limit;
 	queue_timeouts[target_runtime_queue_id] = timeout;
 
-	/* FIXME: check PCR. Need the proc_id for that. It needs to be done
-	 * after setting limit/timeout. See comments in other similar funcs.
-	 */	
+	if (expected_pcr) {
+		ret = check_proc_pcr(target_proc_id, expected_pcr);
+		if (ret) {
+			printf("Error: %s: unexpected PCR\n", __func__);
+			wait_until_empty(target_runtime_queue_id,
+					 MAILBOX_QUEUE_SIZE);
+			mailbox_yield_to_previous_owner(target_runtime_queue_id);
+			
+			queue_limits[target_runtime_queue_id] = 0;
+			queue_timeouts[target_runtime_queue_id] = 0;
+			return ERR_UNEXPECTED;
+		}
+	}
 
 	queue_update_callbacks[target_runtime_queue_id] = callback;
 

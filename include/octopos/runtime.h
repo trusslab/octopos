@@ -75,7 +75,8 @@ struct runtime_api {
 	/* secure IPC */
 	int (*request_secure_ipc)(uint8_t target_runtime_queue_id,
 				  limit_t limit, timeout_t timeout,
-				  queue_update_callback_t callback);
+				  queue_update_callback_t callback,
+				  uint8_t *expected_pcr);
 	int (*yield_secure_ipc)(void);
 	int (*send_msg_on_secure_ipc)(char *msg, int size);
 	int (*recv_msg_on_secure_ipc)(char *msg, int *size);
