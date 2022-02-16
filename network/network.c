@@ -222,14 +222,20 @@ void dump_packet(struct pkbuf *pkb)
 unsigned int saddr = 0, daddr = 0;
 unsigned short sport = 0, dport = 0;
 int filter_set = 0;
-
+#undef PACKET_IP_FILTER
 static void send_packet(uint8_t *buf)
 {
+#ifdef PACKET_IP_FILTER	
 	if (!filter_set) {
 		printf("%s: Error: queue filter not set.\n", __func__);
 		return;
 	}
-
+#else	
+	if (!bound) {
+		printf("%s: Error: sport did not bound yet.\n", __func__);
+		return;
+	}
+#endif
 	NETWORK_GET_ZERO_ARGS_DATA
 	struct pkbuf *pkb = (struct pkbuf *) data;
 	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
@@ -241,6 +247,7 @@ static void send_packet(uint8_t *buf)
 		return;
 	}
 
+#ifdef PACKET_IP_FILTER
 	/* check the IP addresses */
 	struct ip *iphdr = pkb2ip(pkb);
 	if ((saddr != iphdr->ip_src) || (daddr != iphdr->ip_dst)) {
@@ -254,7 +261,16 @@ static void send_packet(uint8_t *buf)
 		printf("%s: Error: invalid src or dst port numbers.\n", __func__);
 		return;
 	}
+#else
+	/* check the port numbers */
+	struct ip *iphdr = pkb2ip(pkb);
+	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
+	if ((bound_sport != tcphdr->src)) {
+		printf("%s: Error: invalid src  port number bound_sport  = %d , tcphdr->src= %d.\n", __func__, bound_sport, tcphdr->src);
+		return;
+	}
 
+#endif
 	tcp_init_pkb(pkb);
 
 	ip_send_out(pkb);

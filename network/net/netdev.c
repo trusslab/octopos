@@ -37,8 +37,12 @@ extern void xileth_poll(void);
 struct netdev *netdev_alloc(char *devstr, struct netdev_ops *netops)
 {
 	struct netdev *dev;
+#ifndef ARCH_SEC_HW	
+	dev = xzalloc(sizeof(*dev));
+#else	
 	size_t s = sizeof(*dev);
 	dev = xzalloc(s);
+#endif	
 	/* add into localhost net device list */
 	list_add_tail(&dev->net_list, &net_devices);
 	/* set name */

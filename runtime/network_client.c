@@ -139,14 +139,13 @@ int yield_network_access(void)
 
 	has_network_access = false;
 	network_access_count = 0;
-
 	net_stop_receive();
 	/* FIXME: we should have a bounded wait here in case the network service
 	 * does not read all messages off the queue.
 	 * Yielding the queue resets the queues therefore there is no concern
 	 * about the leaking of the leftover messages.
 	 */
-#ifndef ARCH_SEC_HW
+#ifdef SEM_POST_BUG_FIXED
 	/* FIXME: I disable it because wait_until_empty never returns
 	 * left=64, queue_size=4
 	 */

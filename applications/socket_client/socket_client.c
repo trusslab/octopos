@@ -35,12 +35,14 @@ static int _str2ip(char *str, unsigned int *ip)
 	*ip = a | (b << 8) | (c << 16) | (d << 24);
 	return 0;
 }
+#ifdef ARCH_SEC_HW
 static void delay_print(int num)
 {
 	for (int i=0 ; i<num; i++)
 		printf("!");
 	printf("\r\n");
 }
+#endif
 static int _parse_ip_port(char *str, unsigned int *addr, unsigned short *nport)
 {
 	char *port;
@@ -82,7 +84,7 @@ static void send_receive(struct runtime_api *api)
 	while ((len = api->read_from_socket(sock, buf, 512)) > 0) {
 		insecure_printf("%.*s\n", len, buf);
 	}
-	print("read done\n\r");
+	printf("read done\n\r");
 }
 
 #ifdef ARCH_SEC_HW

@@ -18,6 +18,7 @@
 #include <os/network.h>
 #include <arch/mailbox_os.h>
 #include <octopos/io.h>
+#include <os/boot.h>
 
 
 
@@ -107,9 +108,7 @@ void handle_request_network_access_syscall(uint8_t runtime_proc_id,
 		return;
 	}
 
-#ifdef ARCH_SEC_HW
-		reset_proc(P_NETWORK);
-#endif
+	reset_proc(P_NETWORK);
 	struct app *app = runtime_proc->app;
 #ifdef ARCH_SEC_HW
 	if ((runtime_proc_id != P_UNTRUSTED)&&(!app->socket_created)) {
