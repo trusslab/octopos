@@ -19,7 +19,7 @@
 #include <arch/srec.h>
 #include <arch/octopos_mbox.h>
 #include <arch/octopos_xmbox.h>
-#include "xmbox.h"
+#include <arch/mem_layout.h>
 #endif
 #include <stdint.h>
 #include <unistd.h>
@@ -31,7 +31,32 @@
 #include <os/storage.h>
 #include <tpm/hash.h>
 
+#ifndef ARCH_SEC_HW_BOOT
+/* sec_hw bootloader must not use initialize global 
+ * variable because it runs on rom 
+ */
 int need_repeat = 0, total_count = 0;
+#else
+int need_repeat, total_count;
+#endif
+
+#ifdef ARCH_SEC_HW_BOOT
+/* FIXME: move sha256 to a header */
+#define uchar unsigned char // 8-bit byte
+typedef struct {
+   uchar data[64];
+   uint datalen;
+   uint bitlen[2];
+   uint state[8];
+} SHA256_CTX;
+unsigned char hash[32];
+SHA256_CTX ctx;
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
+void sha256_final(SHA256_CTX *ctx, uchar hash[]);
+
+OCTOPOS_XMbox Mbox_TPM;
+#endif
 
 #ifndef ARCH_SEC_HW_BOOT
 int fd_out, fd_in, fd_intr;
@@ -276,7 +301,8 @@ static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
 extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
 
-int _sem_retrieve_mailbox_message_blocking_buf(XMbox *InstancePtr, uint8_t* buf);
+int _sem_retrieve_mailbox_message_blocking_buf_large(
+	OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
 int get_srec_line(uint8 *line, uint8 *buf);
 
 /* FIXME: import headers */
@@ -302,12 +328,28 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #ifndef ARCH_SEC_HW_BOOT
 	FILE *copy_filep;
 #else /* ARCH_SEC_HW_BOOT */
-
+	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
 	u8 unpack_buf[1024] = {0};
 	u16 unpack_buf_head = 0;
 	int line_count;
 	void (*laddr)();
-
+	need_repeat = 0;
+	total_count = 0;
+	u32 tpm_response;
+	int Status;
+#ifdef MJ_TPM
+	/* Init TPM mailbox */
+	/* FIXME: move to each domain's mailbox init */
+	OCTOPOS_XMbox_Config *TPM_config_ptr;
+	TPM_config_ptr = OCTOPOS_XMbox_LookupConfig(XPAR_TPM_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_TPM, 
+		TPM_config_ptr, TPM_config_ptr->BaseAddress);
+	if (Status != XST_SUCCESS)
+	{
+		while(1);
+		return;
+	}
+#endif
 	srinfo.sr_data = sr_data_buf;
 
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
@@ -319,11 +361,11 @@ int copy_file_from_boot_partition(char *filename, char *path)
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_1)
 	init_runtime(1);
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_2)
-	/* no-op */
+	init_runtime(2);
 #elif defined(ARCH_SEC_HW_BOOT_OS)
 	/* no-op */
 #elif defined(ARCH_SEC_HW_BOOT_NETWORK)
-	/* no-op */
+	init_network();
 #elif defined(ARCH_SEC_HW_BOOT_LINUX)
 	/* no-op */
 #endif
@@ -353,19 +395,20 @@ int copy_file_from_boot_partition(char *filename, char *path)
 repeat:
 #ifndef ARCH_SEC_HW_BOOT
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
-	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
+	limit_t count = 
+		mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
 #else
     /* unpack buffer is full, but still, haven't finish a line */
     if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
         SEC_HW_DEBUG_HANG();
 
     /* wait for change queue access */
-    while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+    while(0xdeadbeef == 
+    	octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])) {
+    	octopos_usleep(1);
+    }
     octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
-	limit_t count = octopos_mailbox_get_quota_limit(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
-
-	count = count / 16;
 #endif /* ARCH_SEC_HW_BOOT */
 
 	/*
@@ -375,9 +418,6 @@ repeat:
 	 */ 
 #ifndef ARCH_SEC_HW_BOOT
 	if (count == MAILBOX_MAX_LIMIT_VAL)
-#else
-	if (count == MAILBOX_MAX_LIMIT_VAL / 16)
-#endif
 		need_repeat = 1;
 	else
 		need_repeat = 0;
@@ -385,17 +425,32 @@ repeat:
 	total_count += count;
 
 	for (int i = 0; i < (int) count; i++) {
-#ifndef ARCH_SEC_HW_BOOT
 		read_from_storage_data_queue(buf);
-#else
-		_sem_retrieve_mailbox_message_blocking_buf(Mbox_regs[Q_STORAGE_DATA_OUT], buf);
-#endif
+		
+#else /* ARCH_SEC_HW_BOOT */
+    while(TRUE) {
+#ifdef SEC_HW_TPM_DEBUG
+		printf("BEFORE READ %08x\r\n", 
+			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+#endif /* SEC_HW_TPM_DEBUG */
+		_sem_retrieve_mailbox_message_blocking_buf_large(
+			Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+#ifdef SEC_HW_TPM_DEBUG
+		printf("AFTER READ %08x\r\n", 
+			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+#endif /* SEC_HW_TPM_DEBUG */
+
+		/* update hash */
+		if (offset == 0)
+			sha256_init(&ctx);
+		sha256_update(&ctx, &buf[0], STORAGE_BLOCK_SIZE);
+#endif /* ARCH_SEC_HW_BOOT */
 		
 #ifndef ARCH_SEC_HW_BOOT
 		fseek(copy_filep, offset, SEEK_SET);
 		/* FIXME: check the return val from fwrite */
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
-#else
+#else /* ARCH_SEC_HW_BOOT */
 
         /* copy into unpack buffer */
         memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
@@ -412,7 +467,8 @@ repeat:
                 case SREC_TYPE_1:
                 case SREC_TYPE_2:
                 case SREC_TYPE_3:
-                    memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
+                    memcpy ((void*)srinfo.addr, 
+                    	(void*)srinfo.sr_data, srinfo.dlen);
                     break;
                 case SREC_TYPE_5:
                     break;
@@ -420,9 +476,29 @@ repeat:
                 case SREC_TYPE_8:
                 case SREC_TYPE_9:
 
-                	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+					/* finalize hash and verify with TPM */
+					sha256_final(&ctx, hash);
+#ifdef SEC_HW_TPM_DEBUG
+					for (int idx = 0; idx < 32; idx++)
+						printf("%02x",hash[idx]);
+					printf("\r\n");
+#endif /* SEC_HW_TPM_DEBUG */
+#ifdef MJ_TPM
+					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
+					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
+					if (tpm_response != 0xFFFFFFFF) {
+						printf("Secure boot abort.\r\n");
+						while(1);
+					}
+#endif
+                	octopos_mailbox_deduct_and_set_owner(
+                		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], 
+                		P_PREVIOUS
+                		);
 
-                    laddr = (void (*)())srinfo.addr;
+					*(boot_status_reg) = 1;
+
+					laddr = (void (*)()) BOOT_RESET_REG;
 
                     /* jump to start vector of loaded program */
                     (*laddr)();
@@ -443,10 +519,14 @@ repeat:
 #endif /* ARCH_SEC_HW_BOOT */
 
 		offset += STORAGE_BLOCK_SIZE;
+
 	}
 
 #ifdef ARCH_SEC_HW_BOOT
-	octopos_mailbox_deduct_and_set_owner(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], P_PREVIOUS);
+	octopos_mailbox_deduct_and_set_owner(
+		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], 
+		P_PREVIOUS
+		);
 #endif /* ARCH_SEC_HW_BOOT */
 
 	if (need_repeat)

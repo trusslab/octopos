@@ -27,8 +27,6 @@
 
 #ifdef ARCH_SEC_HW
 #include <arch/sec_hw.h>
-
-u32 get_boot_image_address(int pid);
 #endif
 
 /* FIXME: do we need access control for this FS? Currently, anyone can
@@ -39,7 +37,7 @@ u32 get_boot_image_address(int pid);
  */
 
 /* FIXME: hard-coded */
-uint32_t partition_num_blocks = 0;
+uint32_t partition_num_blocks;
 
 struct file {
 	char filename[MAX_FILENAME_SIZE];
@@ -61,11 +59,11 @@ struct file_list_node {
 	struct file_list_node *next;
 };
 
-struct file_list_node *file_list_head = NULL;
-struct file_list_node *file_list_tail = NULL;
+struct file_list_node *file_list_head;
+struct file_list_node *file_list_tail;
 
 uint8_t dir_data[DIR_DATA_SIZE];
-int dir_data_ptr = 0;
+int dir_data_ptr;
 
 static int get_unused_fd(void)
 {
@@ -550,57 +548,6 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 	}
 #endif /* ROLE_OS || ROLE_INSTALLER */
 
-#ifdef ARCH_SEC_HW
-	if (!file && *filename == ':') {
-		file = (struct file *) malloc(sizeof(struct file));
-		if (!file)
-			return (uint32_t) 0;
-
-		strcpy(file->filename, filename + sizeof(char));
-
-		if (!strcmp(file->filename, "keyboard")) {
-			file->start_block = get_boot_image_address(P_KEYBOARD);
-			file->num_blocks = KEYBOARD_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
-			file->size = KEYBOARD_IMAGE_SIZE;
-		} else if (!strcmp(file->filename, "serial_out")) {
-			file->start_block = get_boot_image_address(P_SERIAL_OUT);
-			file->num_blocks = SERIALOUT_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
-			file->size = SERIALOUT_IMAGE_SIZE;
-		} else if (!strcmp(file->filename, "network")) {
-			file->start_block = 0;
-			file->num_blocks = 0;
-			file->size = 0;
-		} else if (!strcmp(file->filename, "os")) {
-			file->start_block = get_boot_image_address(P_OS);
-			file->num_blocks = OS_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
-			file->size = OS_IMAGE_SIZE;
-		} else if (!strcmp(file->filename, "storage")) {
-			file->start_block = get_boot_image_address(P_STORAGE);
-			file->num_blocks = STORAGE_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
-			file->size = STORAGE_IMAGE_SIZE;
-		} else if (!strcmp(file->filename, "runtime1")) {
-			file->start_block = get_boot_image_address(P_RUNTIME1);
-			file->num_blocks = RUNTIME1_IMAGE_SIZE / STORAGE_BLOCK_SIZE;
-			file->size = RUNTIME1_IMAGE_SIZE;
-		} else if (!strcmp(file->filename, "runtime2")) {
-			file->start_block = 0;
-			file->num_blocks = 0;
-			file->size = 0;
-		} else if (!strcmp(file->filename, "linux")) {
-			file->start_block = get_boot_image_address(P_UNTRUSTED);
-			file->num_blocks = UNTRUSTED_KERNEL_SIZE / STORAGE_BLOCK_SIZE;
-			file->size = UNTRUSTED_KERNEL_SIZE;
-		} else {
-			printf("Error: %s: unknown binary (%s)\r\n",
-				__func__, 
-				file->filename);
-			exit(-1);
-		}
-
-		add_file_to_list(file);
-	}
-#endif
-
 	if (file) {
 		int ret = get_unused_fd();
 		if (ret < 0)
@@ -733,22 +680,8 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size,
 	uint32_t ret = 0;
 
 	while (read_size < size) {
-#ifdef ARCH_SEC_HW_BOOT
-        /* FIXME: this is a hack to make file system uses
-         * address instead of block number.
-         */
-		if (file->start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE) {
-			ret = read_from_block(&data[read_size], 
-					file->start_block + block_num * STORAGE_BLOCK_SIZE,
-					block_offset, next_read_size);
-		} else {
-			ret = read_from_block(&data[read_size], file->start_block + 
-				    block_num, block_offset, next_read_size);
-		}
-#else
 		ret = read_from_block(&data[read_size], file->start_block +
 				      block_num, block_offset, next_read_size);
-#endif
 		if (ret != next_read_size) {
 			read_size += ret;
 			break;
@@ -839,7 +772,12 @@ repeat:
 
 	wait_for_storage();
 
+/* FIXME (Issue 25): sec-hw storage misses an interrupt after reset,
+ * causing this semaphore to be miscounted. Disable for now.
+ */
+#ifndef ARCH_SEC_HW
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+#endif
 
 	mark_queue_unavailable(Q_STORAGE_DATA_IN);
 
@@ -852,12 +790,15 @@ repeat:
 	buf[0] = IO_OP_SEND_DATA;
 	send_msg_to_storage_no_response(buf);
 
+#ifndef ARCH_SEC_HW
+/* FIXME (Issue 25) */
 	if (num_blocks) {
 		get_response_from_storage(buf);
 		/* FIXME: check the response here */
 		total_written_blocks += next_num_blocks;
 		goto repeat;
 	}
+#endif
 
 	return Q_STORAGE_DATA_IN;
 }
@@ -921,73 +862,50 @@ uint8_t file_system_read_file_blocks(uint32_t fd, uint32_t start_block,
 	}
 
 repeat:
-#ifdef ARCH_SEC_HW
-	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL / 16) {
-#else
+/* sec_hw has no quota limit */
+#ifndef ARCH_SEC_HW
 	if (num_blocks <= MAILBOX_MAX_LIMIT_VAL) {
-#endif
 		next_num_blocks = num_blocks;
 		num_blocks = 0;
 	} else {
-#ifdef ARCH_SEC_HW
-		next_num_blocks = MAILBOX_MAX_LIMIT_VAL / 16;
-		num_blocks -= MAILBOX_MAX_LIMIT_VAL / 16;
-#else
 		next_num_blocks = MAILBOX_MAX_LIMIT_VAL;
 		num_blocks -= MAILBOX_MAX_LIMIT_VAL;
-#endif
 	}
+#endif
 
 	wait_for_storage();
 
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
-#ifdef ARCH_SEC_HW
-	/* FIXME: several workarounds has been made:
-	 * 1. every message read will take 16 quotas;
-	 * 2. a bug in mailbox hardware, which causes quota (q) can only be 
-	 *    q = 4094 - 16n, where n is number of messages.
-	 *    E.g., if the initial quota is 4080, after a message read,
-	 *    the new quota becomes 4078. The correct quota is 4064=4080-16.
-	 *    To workaround this issue, 
-	 *    a) every delegation must add 14 quotas;
-	 *    b) the reader must yield / eat these 14 quotas left.
-	 */
-	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
-				      next_num_blocks * 16 + 14, 
-				      MAILBOX_DEFAULT_TIMEOUT_VAL);
-#else
+/* sec_hw has no quota limit */
+#ifndef ARCH_SEC_HW
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
 				      next_num_blocks, 
 				      MAILBOX_DEFAULT_TIMEOUT_VAL);
-#endif
 
-/* FIXME: similar as in file_system_read_file(), an ad-hoc
- * solution to pass boot image address 
- */
-#ifdef ARCH_SEC_HW
-	u32 start_block_or_address = 0;
-	if (file->start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE)
-		start_block_or_address = file->start_block + 
-			(start_block + total_read_blocks) * STORAGE_BLOCK_SIZE;
-	else
-		start_block_or_address = file->start_block + 
-			start_block + total_read_blocks;
-	STORAGE_SET_TWO_ARGS(start_block_or_address, next_num_blocks)
-#else
 	STORAGE_SET_TWO_ARGS(file->start_block + start_block + 
 			     total_read_blocks, next_num_blocks)
+#else
+	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
+				      MAILBOX_NO_LIMIT_VAL, 
+				      MAILBOX_MAX_TIMEOUT_VAL);
+
+	STORAGE_SET_TWO_ARGS(file->start_block + start_block + 
+			     total_read_blocks, num_blocks)
 #endif
 
 	buf[0] = IO_OP_RECEIVE_DATA;
 	send_msg_to_storage_no_response(buf);
 
+/* FIXME (Issue 25) */
+#ifndef ARCH_SEC_HW
 	if (num_blocks) {
 		get_response_from_storage(buf);
 		/* FIXME: check the response here */
 		total_read_blocks += next_num_blocks;
 		goto repeat;
 	}
+#endif
 
 	return Q_STORAGE_DATA_OUT;
 }
@@ -1104,6 +1022,11 @@ int file_system_remove_file(char *filename)
 
 void initialize_file_system(uint32_t _partition_num_blocks)
 {
+	file_list_head = NULL;
+	file_list_tail = NULL;
+	dir_data_ptr = 0;
+	partition_num_blocks = 0;
+
 	/* initialize fd bitmap */
 	if (MAX_NUM_FD % 8) {
 		printf("Error: %s: MAX_NUM_FD must be divisible by 8\n",
@@ -1186,8 +1109,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			dir_data_ptr += 4;
 #endif
 			
-			/* FIXME: Zephyr added this because it's not initialized to zero */
-			// file->opened = 0;
+			file->opened = 0;
 			add_file_to_list(file);
 		}
 	} else {

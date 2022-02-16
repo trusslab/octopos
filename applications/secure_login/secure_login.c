@@ -26,16 +26,22 @@ int num_chars = 0;
 #define insecure_printf(fmt, args...) {memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args);\
 				     api->write_to_shell(output_buf, num_chars);}				 \
 
-#endif
+#endif /* ARCH_SEC_HW */
+
+#ifndef ARCH_SEC_HW
+#define LINE_LENGTH 1024
+#else /* ARCH_SEC_HW */
+#define LINE_LENGTH 64
+#endif/* ARCH_SEC_HW */
 
 #ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
-#else
+#else /* ARCH_SEC_HW */
 void secure_login(struct runtime_api *api)
-#endif
+#endif /* ARCH_SEC_HW */
 {
-	char line[1024];
+	char line[LINE_LENGTH];
 	int i, size;
 	uint32_t secret = 0;
 	int ret;
@@ -43,6 +49,7 @@ void secure_login(struct runtime_api *api)
 	insecure_printf("This is secure login speaking.\n");
 	insecure_printf("Provide an insecure phrase:\n");
 
+	memset(line, 0x0, LINE_LENGTH);
 	api->read_from_shell(line, &size);
 	insecure_printf("Your phrase: %s (size = %d)\n", line, size);
 
@@ -72,8 +79,8 @@ void secure_login(struct runtime_api *api)
 
 	secure_printf("Please enter your password: ");	
 
-	memset(line, 0x0, 1024);
-	for (i = 0; i < 1024; i++) {
+	memset(line, 0x0, LINE_LENGTH);
+	for (i = 0; i < LINE_LENGTH; i++) {
 		api->read_char_from_secure_keyboard(&line[i]);
 #ifdef ARCH_SEC_HW
 		if (line[i] == '\r')
@@ -93,7 +100,7 @@ void secure_login(struct runtime_api *api)
 	api->yield_secure_keyboard();
 	api->yield_secure_serial_out();
 
-	memset(line, 0x0, 1024);
+	memset(line, 0x0, LINE_LENGTH);
 	api->read_from_file(fd, (uint8_t *) line, size, 50);
 	insecure_printf("Your secret phrase: %s (size = %d)\n", line, size);
 	api->close_file(fd);
@@ -110,7 +117,7 @@ void secure_login(struct runtime_api *api)
 	}
 
 	api->write_to_secure_storage_block((uint8_t *) line, 0, 0, size);
-	memset(line, 0x0, 1024);
+	memset(line, 0x0, LINE_LENGTH);
 	api->read_from_secure_storage_block((uint8_t *) line, 0, 0, size);
 	insecure_printf("secret (from secure storage): %s (size = %d)\n", line,
 			size);

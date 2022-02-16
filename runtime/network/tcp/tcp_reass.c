@@ -3,7 +3,12 @@
 #include "cbuf.h"
 #include "sock.h"
 #include "netif.h"
-
+#else /*ARCH_SEC_HW*/
+#include <network/tcp.h>
+#include <network/cbuf.h>
+#include <network/sock.h>
+#include <network/netif.h>
+#endif /*ARCH_SEC_HW*/
 struct tcp_reass_head {
 	struct list_head list;	/* list of reassamble tcp segment */
 	void *data;		/* memory address of tcp segment text */
@@ -81,4 +86,3 @@ void tcp_segment_reass(struct tcp_sock *tsk, struct tcp_segment *seg, struct pkb
 out:
 	return;
 }
-#endif

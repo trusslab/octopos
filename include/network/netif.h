@@ -67,6 +67,7 @@ struct pkbuf {
 #define PKT_BROADCAST	4
 
 #define HOST_LITTLE_ENDIAN	/* default: little endian machine */
+
 #ifdef HOST_LITTLE_ENDIAN
 
 static _inline unsigned short _htons(unsigned short host)
@@ -84,10 +85,28 @@ static _inline unsigned int _htonl(unsigned int host)
 }
 #define _ntohl(net) _htonl(net)
 
+#else/* HOST_LITTLE_ENDIAN */
+
+static _inline unsigned short _htons(unsigned short host)
+{
+	return host;
+}
+#define _ntohs(net) _htons(net)
+
+static _inline unsigned int _htonl(unsigned int host)
+{
+	return host;
+}
+#define _ntohl(net) _htonl(net)
+
 #endif	/* HOST_LITTLE_ENDIAN */
 
+#ifndef ARCH_SEC_HW
 extern struct tapdev *tap;
 extern struct netdev *veth;
+#else
+extern struct netdev *xileth;
+#endif
 extern struct netdev *loop;
 
 extern void netdev_init(void);

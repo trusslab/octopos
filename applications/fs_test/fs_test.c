@@ -27,6 +27,13 @@ int num_chars = 0;
 
 #endif
 
+/* sec_hw boot image cannot hold giant arrays */
+#ifndef ARCH_SEC_HW
+#define NUM_TEST_BLOCKS 100
+#else
+#define NUM_TEST_BLOCKS 2
+#endif
+
 #ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
@@ -74,7 +81,7 @@ void fs_test(struct runtime_api *api)
 
 	insecure_printf("Test 1 passed.\n");
 	insecure_printf("Test 2\n");
-	uint8_t block[STORAGE_BLOCK_SIZE * 100];
+	uint8_t block[STORAGE_BLOCK_SIZE * NUM_TEST_BLOCKS];
 	memset(block, 0x0, STORAGE_BLOCK_SIZE);
 
 	block[10] = 14;
@@ -89,13 +96,13 @@ void fs_test(struct runtime_api *api)
 	insecure_printf("Test 2 passed.\n");
 
 	insecure_printf("Test 3\n");
-	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * NUM_TEST_BLOCKS);
 
-	index = (99 * STORAGE_BLOCK_SIZE) + 10;
+	index = ((NUM_TEST_BLOCKS - 1) * STORAGE_BLOCK_SIZE) + 10;
 	block[index] = 12;
-	api->write_file_blocks(fd2, block, 1, 100);
-	memset(block, 0x0, STORAGE_BLOCK_SIZE * 100);
-	api->read_file_blocks(fd2, block, 1, 100);
+	api->write_file_blocks(fd2, block, 1, NUM_TEST_BLOCKS);
+	memset(block, 0x0, STORAGE_BLOCK_SIZE * NUM_TEST_BLOCKS);
+	api->read_file_blocks(fd2, block, 1, NUM_TEST_BLOCKS);
 	insecure_printf("block[index] = %d\n", (int) block[index]);
 	if (block[index] != 12) {
 		insecure_printf("Test 3 failed\n");

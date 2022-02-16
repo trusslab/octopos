@@ -5,6 +5,14 @@
 #include "ip.h"
 #include "netif.h"
 #include "cbuf.h"
+#else /*ARCH_SEC_HW*/
+#include <network/socket.h>
+#include <network/tcp_hash.h>
+#include <network/tcp.h>
+#include <network/ip.h>
+#include <network/netif.h>
+#include <network/cbuf.h>
+#endif /*ARCH_SEC_HW*/
 
 static struct tcp_hash_table tcp_table;
 /* @src is for remote machine */
@@ -168,6 +176,7 @@ static int tcp_wait_connect(struct tcp_sock *tsk)
 {
 	int err;
 	err = sleep_on(tsk->wait_connect);
+
 	tsk->wait_connect = NULL;
 	return err;
 }
@@ -200,13 +209,25 @@ static int tcp_connect(struct sock *sk, struct sock_addr *skaddr)
 	 */
 	tcp_pre_wait_connect(tsk);
 	tcp_send_syn(tsk, NULL);
+
+#ifdef ARCH_SEC_HW
+	print("in tcp_connect waiting for connection\n\r");
+	while(tsk->state != 5){
+		print(".");
+	}
+	print("\n\r");
+	err = 0;
+#else
 	err = tcp_wait_connect(tsk);
+
 	if (err || tsk->state != TCP_ESTABLISHED) {
 		tcp_unhash(sk);
 		tcp_unbhash(tsk);
 		tsk->state = TCP_CLOSED;
 		err = -1;
 	}
+#endif
+
 	return err;
 }
 
@@ -458,4 +479,3 @@ void tcp_init(void)
 	/* tcp ip id */
 	tcp_id = 0;
 }
-#endif
