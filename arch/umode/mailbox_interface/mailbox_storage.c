@@ -95,7 +95,7 @@ uint8_t read_request_get_owner_from_queue(uint8_t *buf)
        write(fd_out, opcode, 2);
 
        /* get owner proc_id */
-       opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
+       opcode[0] = MAILBOX_OPCODE_VERIFY_QUEUE_ACCESS;
        opcode[1] = Q_STORAGE_CMD_IN;
        write(fd_out, opcode, 2);
        read(fd_in, &state, sizeof(mailbox_state_reg_t));

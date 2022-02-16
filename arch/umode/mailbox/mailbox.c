@@ -940,15 +940,15 @@ static void yield_queue_access(uint8_t queue_id, uint8_t requester)
 	processors[queues[queue_id].OWNER].send_interrupt(queue_id + NUM_QUEUES);
 }
 
-static mailbox_state_reg_t attest_queue_access(uint8_t queue_id,
+static mailbox_state_reg_t verify_queue_access(uint8_t queue_id,
 					       uint8_t requester)
 {
 	mailbox_state_reg_t MAILBOX_STATE_REG_INVALID =
 		{.owner = 0x00, .limit = 0x000, .timeout = 0x000};
 
 	if (queues[queue_id].queue_type == QUEUE_TYPE_SIMPLE) {
-		printf("Error: %s: SIMPLE queues don't support attestation "
-		       "(%d).\n", __func__, queue_id);
+		printf("Error: %s: SIMPLE queues don't support access "
+		       "verification  (%d).\n", __func__, queue_id);
 		return MAILBOX_STATE_REG_INVALID;
 	}
 
@@ -1043,8 +1043,8 @@ static void handle_proc_request(uint8_t requester)
 		}
 		break;
 
-	case MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS: {
-		mailbox_state_reg_t state = attest_queue_access(queue_id, requester);				
+	case MAILBOX_OPCODE_VERIFY_QUEUE_ACCESS: {
+		mailbox_state_reg_t state = verify_queue_access(queue_id, requester);				
 		write(processors[requester].in_handle, &state, sizeof(mailbox_state_reg_t));
 		break;
 		}

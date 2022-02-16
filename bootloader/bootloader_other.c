@@ -53,7 +53,7 @@ static limit_t mailbox_get_queue_access_count(uint8_t queue_id)
 	uint8_t opcode[2];
 	mailbox_state_reg_t state;
 
-	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
+	opcode[0] = MAILBOX_OPCODE_VERIFY_QUEUE_ACCESS;
 	opcode[1] = queue_id;
 	write(fd_out, opcode, 2);
 	read(fd_in, &state, sizeof(mailbox_state_reg_t));

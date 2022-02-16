@@ -15,7 +15,7 @@
 #define	MAILBOX_OPCODE_WRITE_QUEUE		1
 #define	MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS	2
 #define	MAILBOX_OPCODE_YIELD_QUEUE_ACCESS	3
-#define	MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS	4
+#define	MAILBOX_OPCODE_VERIFY_QUEUE_ACCESS	4
 #define	MAILBOX_OPCODE_DISABLE_QUEUE_DELEGATION	5
 #define	MAILBOX_OPCODE_ENABLE_QUEUE_DELEGATION	6
 
@@ -103,7 +103,7 @@ typedef uint32_t timeout_t;
 /* FIXME: move somewhere else */
 #ifdef UNTRUSTED_DOMAIN
 void mailbox_yield_to_previous_owner(uint8_t queue_id);
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
+int mailbox_verify_queue_access(uint8_t queue_id, limit_t limit,
 				timeout_t timeout);
 void reset_queue_sync(uint8_t queue_id, int init_val);
 limit_t get_queue_limit(uint8_t queue_id);

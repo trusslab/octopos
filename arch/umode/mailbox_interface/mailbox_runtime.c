@@ -75,7 +75,7 @@ static mailbox_state_reg_t mailbox_read_state_register(uint8_t queue_id)
 	uint8_t opcode[2];
 	mailbox_state_reg_t state;
 
-	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
+	opcode[0] = MAILBOX_OPCODE_VERIFY_QUEUE_ACCESS;
 	opcode[1] = queue_id;
 	pthread_spin_lock(&mailbox_lock);	
 	write(fd_out, opcode, 2);
@@ -85,7 +85,7 @@ static mailbox_state_reg_t mailbox_read_state_register(uint8_t queue_id)
 	return state;
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
+int mailbox_verify_queue_access(uint8_t queue_id, limit_t limit,
 				timeout_t timeout)
 {
 	mailbox_state_reg_t state;
@@ -96,7 +96,7 @@ int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
 		(state.timeout == timeout));
 }
 
-int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
+int mailbox_verify_queue_owner(uint8_t queue_id, uint8_t owner)
 {
 	mailbox_state_reg_t state;
 
@@ -105,7 +105,7 @@ int mailbox_attest_queue_owner(uint8_t queue_id, uint8_t owner)
 	return (state.owner == owner);
 }
 
-int mailbox_attest_own_queue_access(uint8_t proc_id, limit_t limit,
+int mailbox_verify_own_queue_access(uint8_t proc_id, limit_t limit,
 				    timeout_t timeout)
 {
 	mailbox_state_reg_t state;

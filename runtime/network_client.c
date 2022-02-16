@@ -179,16 +179,16 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	if (ret0)
 		return (int) ret0;
 
-	ret = mailbox_attest_queue_access(Q_NETWORK_DATA_IN, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_NETWORK_DATA_IN, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest network write access\n",
+		printf("%s: Error: failed to verify network write access\n",
 		       __func__);
 		return ERR_FAULT;
 	}
 
-	ret = mailbox_attest_queue_access(Q_NETWORK_DATA_OUT, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_NETWORK_DATA_OUT, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest network read access\n",
+		printf("%s: Error: failed to verify network read access\n",
 		       __func__);
 		wait_until_empty(Q_NETWORK_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 		mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
@@ -196,7 +196,7 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	}
 
 #ifndef UNTRUSTED_DOMAIN
-	/* Note: we set the limit/timeout values right after attestation and
+	/* Note: we set the limit/timeout values right after verification and
 	 * before we call check_proc_pcr() or read_tpm_pcr_for_proc().
 	 * This is because those calls issue syscalls, which might take
 	 * arbitrary amounts of time.

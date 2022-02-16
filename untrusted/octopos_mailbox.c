@@ -332,14 +332,14 @@ void mailbox_yield_to_previous_owner(uint8_t queue_id)
 	spin_unlock_irqrestore(&mailbox_lock, flags);
 }
 
-int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
+int mailbox_verify_queue_access(uint8_t queue_id, limit_t limit,
 				timeout_t timeout)
 {
 	uint8_t opcode[2];
 	mailbox_state_reg_t state;
 	unsigned long flags;
 
-	opcode[0] = MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS;
+	opcode[0] = MAILBOX_OPCODE_VERIFY_QUEUE_ACCESS;
 	opcode[1] = queue_id;
 	spin_lock_irqsave(&mailbox_lock, flags);
 	os_write_file(fd_out, opcode, 2);

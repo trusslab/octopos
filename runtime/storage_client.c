@@ -378,25 +378,25 @@ static int request_secure_storage_queues_access(limit_t limit,
 	udelay(100);
 #endif
 
-	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_IN, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_STORAGE_CMD_IN, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure storage cmd write "
+		printf("%s: Error: failed to verify secure storage cmd write "
 		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
-	ret = mailbox_attest_queue_access(Q_STORAGE_CMD_OUT, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_STORAGE_CMD_OUT, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure storage cmd read "
+		printf("%s: Error: failed to verify secure storage cmd read "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 		return ERR_FAULT;
 	}
 
-	ret = mailbox_attest_queue_access(Q_STORAGE_DATA_IN, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_STORAGE_DATA_IN, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure storage data write "
+		printf("%s: Error: failed to verify secure storage data write "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
@@ -404,9 +404,9 @@ static int request_secure_storage_queues_access(limit_t limit,
 		return ERR_FAULT;
 	}
 
-	ret = mailbox_attest_queue_access(Q_STORAGE_DATA_OUT, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_STORAGE_DATA_OUT, limit, timeout);
 	if (!ret) {
-		printf("%s: Error: failed to attest secure storage data read "
+		printf("%s: Error: failed to verify secure storage data read "
 		       "access\n", __func__);
 		wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 		wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -417,7 +417,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 	}
 
 #ifndef UNTRUSTED_DOMAIN
-	/* Note: we set the limit/timeout values right after attestation and
+	/* Note: we set the limit/timeout values right after verification and
 	 * before we call check_proc_pcr(). This is because that call issues a
 	 * syscall, which might take an arbitrary amount of time.
 	 */

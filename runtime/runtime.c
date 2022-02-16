@@ -484,18 +484,18 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 	if (ret0)
 		return (int) ret0;
 
-	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_KEYBOARD, limit, timeout);
 	if (!ret) {
 #ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+		_SEC_HW_ERROR("%s: fail to verify\r\n", __func__);
 #else
-		printf("Error: %s: failed to attest secure keyboard access\n",
+		printf("Error: %s: failed to verify secure keyboard access\n",
 		       __func__);
 #endif
 		return ERR_FAULT;
 	}
 
-	/* Note: we set the limit/timeout values right after attestation and
+	/* Note: we set the limit/timeout values right after verification and
 	 * before we call check_proc_pcr(). This is because that call issues a
 	 * syscall, which might take an arbitrary amount of time.
 	 */
@@ -559,18 +559,18 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 	if (ret0)
 		return (int) ret0;
 
-	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_SERIAL_OUT, limit, timeout);
 	if (!ret) {
 #ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
+		_SEC_HW_ERROR("%s: fail to verify\r\n", __func__);
 #else
-		printf("Error: %s: failed to attest secure keyboard access\n",
+		printf("Error: %s: failed to verify secure keyboard access\n",
 		       __func__);
 #endif
 		return ERR_FAULT;
 	}
 
-	/* Note: we set the limit/timeout values right after attestation and
+	/* Note: we set the limit/timeout values right after verification and
 	 * before we call check_proc_pcr(). This is because that call issues a
 	 * syscall, which might take an arbitrary amount of time.
 	 */
@@ -828,19 +828,19 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 		return ERR_INVALID;
 	}
 
-	ret = mailbox_attest_queue_access(target_runtime_queue_id,
-						     limit, timeout);
+	ret = mailbox_verify_queue_access(target_runtime_queue_id, limit,
+					  timeout);
 	if (!ret) {
-		printf("Error: %s: failed to attest secure ipc send queue "
+		printf("Error: %s: failed to verify secure ipc send queue "
 		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
 	target_proc_id = get_runtime_proc_id(target_runtime_queue_id);
 
-	ret = mailbox_attest_own_queue_access(target_proc_id, limit, timeout);
+	ret = mailbox_verify_own_queue_access(target_proc_id, limit, timeout);
 	if (!ret) {
-		printf("Error: %s: failed to attest secure ipc recv queue "
+		printf("Error: %s: failed to verify secure ipc recv queue "
 		       "access\n", __func__);
 		wait_until_empty(target_runtime_queue_id, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(target_runtime_queue_id);
@@ -877,17 +877,17 @@ static int yield_secure_ipc(void)
 #ifdef ARCH_SEC_HW
 	/* OctopOS mailbox only allows the current owner
 	 * to change/yield ownership.
-	 * Thus, instead of explicitly yielding it, we attest it.
+	 * Thus, instead of explicitly yielding it, we verify it.
 	 * In case the other runtime refuses to yield, we forcefully
 	 * deplete the quota by repeatedly reading the mailbox.
 	 */
-	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
+	if (!mailbox_verify_queue_owner(q_runtime, P_OS)) {
 		mailbox_force_ownership(q_runtime, P_OS);
 	}
 #else
 	/*
 	 * Or we can just wait for the timeout */
-	if (!mailbox_attest_queue_owner(q_runtime, P_OS)) {
+	if (!mailbox_verify_queue_owner(q_runtime, P_OS)) {
 		sleep(1);
 	}
 #endif
@@ -1173,25 +1173,25 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	memcpy(am_addrs, ret_data, _size);
 
 	/* Verify mailbox state */
-	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_IN, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_BLUETOOTH_CMD_IN, limit, timeout);
 	if (!ret) {
-		printf("Error: %s: failed to attest secure bluetooth cmd write "
+		printf("Error: %s: failed to verify secure bluetooth cmd write "
 		       "access\n", __func__);
 		return ERR_FAULT;
 	}
 
-	ret = mailbox_attest_queue_access(Q_BLUETOOTH_CMD_OUT, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_BLUETOOTH_CMD_OUT, limit, timeout);
 	if (!ret) {
-		printf("Error: %s: failed to attest secure bluetooth cmd read "
+		printf("Error: %s: failed to verify secure bluetooth cmd read "
 		       "access\n", __func__);
 		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
 		return ERR_FAULT;
 	}
 
-	ret = mailbox_attest_queue_access(Q_BLUETOOTH_DATA_IN, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_BLUETOOTH_DATA_IN, limit, timeout);
 	if (!ret) {
-		printf("Error: %s: failed to attest secure bluetooth data write "
+		printf("Error: %s: failed to verify secure bluetooth data write "
 		       "access\n", __func__);
 		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
 		mailbox_yield_to_previous_owner(Q_BLUETOOTH_CMD_IN);
@@ -1199,9 +1199,9 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 		return ERR_FAULT;
 	}
 
-	ret = mailbox_attest_queue_access(Q_BLUETOOTH_DATA_OUT, limit, timeout);
+	ret = mailbox_verify_queue_access(Q_BLUETOOTH_DATA_OUT, limit, timeout);
 	if (!ret) {
-		printf("Error: %s: failed to attest secure bluetooth data read "
+		printf("Error: %s: failed to verify secure bluetooth data read "
 		       "access\n", __func__);
 		wait_until_empty(Q_BLUETOOTH_CMD_IN, MAILBOX_QUEUE_SIZE);
 		wait_until_empty(Q_BLUETOOTH_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
@@ -1212,7 +1212,7 @@ static int request_secure_bluetooth_access(uint8_t *device_names,
 	}
 
 #ifndef UNTRUSTED_DOMAIN
-	/* Note: we set the limit/timeout values right after attestation and
+	/* Note: we set the limit/timeout values right after verification and
 	 * before we call check_proc_pcr(). This is because that call issues a
 	 * syscall, which might take an arbitrary amount of time.
 	 */
