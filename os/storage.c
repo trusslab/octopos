@@ -117,7 +117,6 @@ static int query_storage_partitions(void)
 		return ret;
 	}
 
-	/* FIXME: we don't free() on halt. */
 	partitions = (struct partition *) malloc(num_partitions *
 						 sizeof(struct partition));
 	if (!partitions) {
@@ -192,8 +191,7 @@ static int bind_partition(uint32_t partition_id)
 
 static int authenticate_with_storage_service(void)
 {
-	/* FIXME: use a macro for this. */
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
+	ALLOC_MAILBOX_MESSAGE_BUF
 	buf[0] = IO_OP_AUTHENTICATE;
 	
 	send_msg_to_storage_no_response(buf);

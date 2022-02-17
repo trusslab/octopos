@@ -1,3 +1,4 @@
+void check_and_run_repeat_cmd(void);
 void inform_shell_of_termination(uint8_t runtime_proc_id);
 void inform_shell_of_pause(uint8_t runtime_proc_id);
 int app_write_to_shell(struct app *app, uint8_t *data, int size);

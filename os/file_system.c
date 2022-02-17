@@ -31,14 +31,16 @@
 u32 get_boot_image_address(int pid);
 #endif
 
-/* FIXME: do we need access control for this FS? Currently, anyone can
+/* Do we need access control for this FS? Currently, anyone can
  * read/write to any file.
  *
- * Answer1: For the OS using this FS for the boot partition, It should be
- * enough to make the files read-only.
+ * Answer1: For the OS using this FS for the boot partition, it should be
+ * enough to make the files read-only. If the boot images are modified
+ * maliciously, they will be detected during secure boot and remote attestation.
+ * But it's better not to allow modifications anyway.
+ * FIXME: make the boot partition read-only.
  */
 
-/* FIXME: hard-coded */
 uint32_t partition_num_blocks = 0;
 
 struct file {
@@ -50,7 +52,6 @@ struct file {
 	bool opened;
 };
 
-/* FIXME: use per-process fd */
 #define MAX_NUM_FD	64 /* must be divisible by 8 */
 uint8_t fd_bitmap[MAX_NUM_FD / 8];
 
@@ -538,6 +539,8 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		file->start_block = 0;
 		file->num_blocks = 0;
 		file->size = 0;
+		file->dir_data_off = 0;
+		file->opened = false;
 
 		int ret = add_file_to_directory(file);
 		if (ret) {
@@ -734,7 +737,7 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size,
 
 	while (read_size < size) {
 #ifdef ARCH_SEC_HW_BOOT
-        /* FIXME: this is a hack to make file system uses
+        /* FIXME: this is a hack to make the file system use
          * address instead of block number.
          */
 		if (file->start_block >= BOOT_IMAGE_OFFSET * QSPI_SECTOR_SIZE) {
@@ -866,7 +869,8 @@ void file_system_write_file_blocks_late(void)
 {
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	/* FIXME: pretty inefficient. Why wait if we don't check the response?
-	 * Answer: it may be used for synchronization. */
+	 * Answer: it may be used for synchronization.
+	 */
 	get_response_from_storage(buf);
 }
 
@@ -943,7 +947,7 @@ repeat:
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
 #ifdef ARCH_SEC_HW
-	/* FIXME: several workarounds has been made:
+	/* FIXME: several workarounds have been made:
 	 * 1. every message read will take 16 quotas;
 	 * 2. a bug in mailbox hardware, which causes quota (q) can only be 
 	 *    q = 4094 - 16n, where n is number of messages.
@@ -1186,8 +1190,6 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			dir_data_ptr += 4;
 #endif
 			
-			/* FIXME: Zephyr added this because it's not initialized to zero */
-			// file->opened = 0;
 			add_file_to_list(file);
 		}
 	} else {

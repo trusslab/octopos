@@ -31,7 +31,6 @@ static void distribute_input(void)
 	uint8_t queue_id;
 
 	memset(input_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-	/* FIXME: we should use separate threads for these two */
 	recv_input(input_buf, &queue_id);
 	if (queue_id == Q_KEYBOARD) {
 		shell_process_input((char) input_buf[0]);
@@ -43,10 +42,11 @@ static void distribute_input(void)
 		process_system_call(input_buf, P_UNTRUSTED);
 #ifdef ARCH_SEC_HW
 	} else if (queue_id == 0) {
-	// FIXME: What's this?
+	/* FIXME: What's this? */
 #endif
 	} else {
-		printf("Error (%s): invalid queue_id (%d)\n", __func__, queue_id);
+		printf("Error (%s): invalid queue_id (%d)\n", __func__,
+		       queue_id);
 		exit(-1);
 	}
 }
@@ -68,7 +68,7 @@ int main()
 #endif
 
 	uint32_t partition_size = initialize_storage();
-// FIXME remove ARCH_SEC_HW. initialize_file_system should be moved to boot
+/* FIXME remove ARCH_SEC_HW. initialize_file_system should be moved to boot */
 #if defined(ARCH_UMODE) || defined(ARCH_SEC_HW)
 	initialize_file_system(partition_size);
 #endif

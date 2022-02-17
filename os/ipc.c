@@ -24,9 +24,12 @@ int ipc_send_data(struct app *sender, uint8_t *data, int data_size)
 	if (receiver->waiting_for_msg && (receiver->state == SCHED_RUNNING)) {
 		/* send msg */
 		struct runtime_proc *runtime_proc = receiver->runtime_proc;
-		/* FIXME: we need to return error to sender if data_size too big */
+		/* FIXME: we need to return error to sender if data_size too
+		 * big.
+		 */
 		receiver->waiting_for_msg = false;
-		syscall_read_from_shell_response(runtime_proc->id, data, data_size);
+		syscall_read_from_shell_response(runtime_proc->id, data,
+						 data_size);
 		return 0;
 	}
 
@@ -48,7 +51,8 @@ void ipc_receive_data(struct app *receiver)
 {
 	if (receiver->has_pending_msg) {
 		syscall_read_from_shell_response(receiver->runtime_proc->id,
-						 receiver->msg_buf, receiver->msg_size);
+						 receiver->msg_buf,
+						 receiver->msg_size);
 		memset(receiver->msg_buf, 0x0, receiver->msg_size);
 		receiver->msg_size = 0;
 		receiver->has_pending_msg = false;
@@ -66,7 +70,8 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 	if (!target_proc_id)
 		return ERR_INVALID;
 
-	struct runtime_proc *target_runtime_proc = get_runtime_proc(target_proc_id);
+	struct runtime_proc *target_runtime_proc =
+					get_runtime_proc(target_proc_id);
 	if (!target_runtime_proc)
 		return ERR_FAULT;
 
@@ -74,7 +79,9 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 
 	if (target_runtime_proc->pending_secure_ipc_request == runtime_queue_id) {
 
-		/* FIXME: do we need to wait for these queues to be empty using wait_until_empty()? */
+		/* FIXME: do we need to wait for these queues to be empty
+		 * using wait_until_empty()?
+		 */
 
 		mark_queue_unavailable(target_runtime_queue_id);
 		mark_queue_unavailable(runtime_queue_id);
@@ -88,14 +95,16 @@ int set_up_secure_ipc(uint8_t target_runtime_queue_id, uint8_t runtime_queue_id,
 		target_runtime_proc->pending_secure_ipc_request = 0;
 		*no_response = true;
 	} else {
-		struct runtime_proc *runtime_proc = get_runtime_proc(runtime_proc_id);
+		struct runtime_proc *runtime_proc =
+					get_runtime_proc(runtime_proc_id);
 		if (!runtime_proc)
 			return ERR_FAULT;
 
 		if (runtime_proc->pending_secure_ipc_request)
 			return ERR_INVALID;
 
-		runtime_proc->pending_secure_ipc_request = target_runtime_queue_id;
+		runtime_proc->pending_secure_ipc_request =
+							target_runtime_queue_id;
 		*no_response = true;
 	}
 

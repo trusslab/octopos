@@ -28,7 +28,6 @@
 #endif
 #include <arch/mailbox_os.h>
 
-/* FIXME: add reset logic for other I/O servers as well. */
 bool bluetooth_proc_need_reset = false;
 
 /* response for async syscalls */
@@ -41,7 +40,6 @@ void syscall_read_from_shell_response(uint8_t runtime_proc_id, uint8_t *line,
 	check_avail_and_send_msg_to_runtime(runtime_proc_id, buf);
 }
 
-/* FIXME: move somewhere else */
 static uint32_t send_bind_cmd_to_bluetooth(uint8_t *device_names,
 					   uint32_t num_devices,
 					   uint8_t *resp_data)
@@ -260,9 +258,8 @@ static void handle_syscall(uint8_t runtime_proc_id, uint8_t *buf,
 		uint8_t ret_buf[MAILBOX_QUEUE_MSG_SIZE];
 		SYSCALL_GET_THREE_ARGS
 		int size = (int) arg1;
-		/* FIXME: the size info should only be in the corresponding
-		 * de/marshalling macro.
-		 */
+
+		/* We won't be able to send a larger response. */
 		if (size > (MAILBOX_QUEUE_MSG_SIZE - 5)) {
 			printf("Error: read size too big. Will truncate\n");
 			size = MAILBOX_QUEUE_MSG_SIZE - 5;
@@ -528,7 +525,6 @@ static void handle_untrusted_syscall(uint8_t *buf)
 		SYSCALL_SET_ONE_RET(ret)
 		break;
 	}
-	/* FIXME: the next 7 are very similar to normal secure syscall handler */
 	case SYSCALL_INFORM_OS_OF_TERMINATION: {
 		inform_shell_of_termination(P_UNTRUSTED);
 		SYSCALL_SET_ONE_RET(0)

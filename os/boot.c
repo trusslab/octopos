@@ -52,7 +52,7 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	wait_for_storage();
 
 #ifdef ARCH_SEC_HW
-	// FIXME: Why do we need this wait and flush?
+	/* FIXME: Why do we need this wait and flush? */
 	/* flush storage queue */
 	while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
 	OCTOPOS_XMbox_Flush(Mbox_regs[Q_STORAGE_DATA_OUT]);
@@ -100,7 +100,7 @@ void help_boot_runtime_proc(uint8_t runtime_proc_id)
 	if (runtime_proc_id == P_RUNTIME1)
 		help_boot_proc(runtime_proc_id, (char *) "runtime1");
 	else if (runtime_proc_id == P_RUNTIME2)
-		// FIXME: now we only have runtime 1
+		/* FIXME: now we only have runtime 1 */
 		SEC_HW_DEBUG_HANG();
 //		help_boot_proc(runtime_proc_id, (char *) "runtime2");
 	else
@@ -205,6 +205,7 @@ int reboot_system(void)
 	return ret;
 }
 
+/* FIXME: We need to release all the memory allocated by other OS submodules. */
 int halt_system(void)
 {
 	int ret;

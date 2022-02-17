@@ -1,12 +1,10 @@
 /* OctopOS shell
  * Forked from https://gist.github.com/966049.git
- */
-
-/*
+ *
  * Based on https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841941/Zynq+UltraScale+MPSoC+-+IPI+Messaging+Example
+ *
+ * Compile with: g++ -Wall –Werror -o shell shell.c
  */
-
-/* Compile with: g++ -Wall –Werror -o shell shell.c */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,9 +51,12 @@ struct app *foreground_app = NULL;
 int shell_status = SHELL_STATE_WAITING_FOR_CMD;
 bool untrusted_in_foreground = false;
 
-/* FIXME: move all mailbox-related stuff out of shell */
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
-#define output_printf(fmt, args...) {memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE); sprintf(output_buf, fmt, ##args); send_output((uint8_t *) output_buf);}
+#define output_printf(fmt, args...) {				\
+	memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);	\
+	sprintf(output_buf, fmt, ##args);			\
+	send_output((uint8_t *) output_buf);			\
+}								\
 
 #define MAX_LINE_SIZE	MAILBOX_QUEUE_MSG_SIZE
 static char line[MAX_LINE_SIZE];
@@ -81,10 +82,11 @@ int serial_out_needs_reset = 0;
  *
  * So if 'command' returns a file descriptor, the next 'command' has this
  * descriptor as its 'input'.
+ *
+ * FIXME: add support for passing args to apps
  */
 static int command(int input, int first, int last, int double_pipe, int bg)
 {
-	/* FIXME: add support for passing args to apps */
 
 	if (first == 1 && last == 0 && input == 0) {
 		// First command
@@ -125,7 +127,8 @@ static void cleanup(int n)
 #endif
 }
 
-static int run(char* cmd, int input, int first, int last, int double_pipe, int bg);
+static int run(char* cmd, int input, int first, int last, int double_pipe,
+	       int bg);
 static int n = 0; /* number of calls to 'command' */
 
 
@@ -273,7 +276,8 @@ void shell_process_input(char buf)
 		else if (shell_status == SHELL_STATE_APP_WAITING_FOR_INPUT) {
 			/* Don't send the \n or \r to the app. */
 			num_chars--;
-			process_app_input(foreground_app, (uint8_t *) line, num_chars);
+			process_app_input(foreground_app, (uint8_t *) line,
+					  num_chars);
 			memset(line, 0, MAX_LINE_SIZE);
 		}
 		/* don't need to do anything if SHELL_STATE_RUNNING_APP */
@@ -357,7 +361,8 @@ int app_write_to_shell(struct app *app, uint8_t *data, int size)
 	}
 
 	if (size > MAILBOX_QUEUE_MSG_SIZE) {
-		printf("Error: size of data to be written to shell is too large\n");
+		printf("Error: size of data to be written to shell is too "
+		       "large\n");
 		return ERR_INVALID;
 	}
 
@@ -366,7 +371,6 @@ int app_write_to_shell(struct app *app, uint8_t *data, int size)
 		reset_proc(P_SERIAL_OUT);
 	}
 
-	/* FIXME: don't use output_buf here. It's a char array. */
 	memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	memcpy(output_buf, data, size);
 	send_output((uint8_t *) output_buf);
@@ -387,11 +391,11 @@ int untrusted_write_to_shell(uint8_t *data, int size)
 	}
 
 	if (size > MAILBOX_QUEUE_MSG_SIZE) {
-		printf("Error: size of data to be written to shell is too large\n");
+		printf("Error: size of data to be written to shell is too "
+		       "large\n");
 		return ERR_INVALID;
 	}
 
-	/* FIXME: don't use output_buf here. It's a char array. */
 	memset(output_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 	memcpy(output_buf, data, size);
 	send_output((uint8_t *) output_buf);
@@ -425,7 +429,8 @@ void initialize_shell(void)
  
 static void split(char* cmd);
  
-static int run(char* cmd, int input, int first, int last, int double_pipe, int bg)
+static int run(char* cmd, int input, int first, int last, int double_pipe,
+	       int bg)
 {
 	split(cmd);
 	if (args[0] != NULL) {
@@ -457,10 +462,11 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 #ifndef ARCH_SEC_HW
 			ret = reset_proc(proc_id);
 			if (ret == 1 && proc_id == P_UNTRUSTED) {
-				output_printf("Enter this command again to complete "
-					      "the reset\n");
+				output_printf("Enter this command again to "
+					      "complete the reset\n");
 			} else if (ret) {
-				output_printf("Couldn't reset proc %d\n", proc_id);
+				output_printf("Couldn't reset proc %d\n",
+					      proc_id);
 			}
 #endif
 			output_printf("octopos$> ");
