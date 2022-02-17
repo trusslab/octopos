@@ -1,4 +1,4 @@
-install: tss abrmd emu
+install: tss abrmd emu fin
 
 tss:
 	cd tpm2-tss/ && ./bootstrap
@@ -21,6 +21,9 @@ emu:
 	make -j$(nproc) -C ./ibmtpm/
 	sudo cp ./ibmtpm/tpm_server /usr/local/bin/
 
+fin:
+	touch INSTALLED
+
 clean:
 	make clean -C ./tpm2-tss/
 	make clean -C ./tpm2-abrmd/
@@ -30,6 +33,8 @@ uninstall:
 	make uninstall -C ./tpm2-abrmd/
 	make uninstall -C ./tpm2-tss/
 	rm ./ibmtpm/tpm_server
+	rm /usr/local/bin/tpm_server
+	rm INSTALLED
 
 uninstall-local:
 	make uninstall-local -C ./tpm2-tss/

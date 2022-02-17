@@ -4,6 +4,9 @@ DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network b
 EXTERNAL_DIR := ./external
 
 umode:
+ifeq ("$(wildcard $(EXTERNAL_DIR)/INSTALLED)","")
+	$(MAKE) install -C $(EXTERNAL_DIR)
+endif
 	./sync_untrusted_linux.sh
 	for dir in $(DIRS); do \
 		$(MAKE) umode -C $$dir; \
