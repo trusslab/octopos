@@ -43,20 +43,13 @@ bool has_network_access = false;
 int network_access_count = 0;
 
 #ifndef UNTRUSTED_DOMAIN
-/* FIXME: conslidate with the callback system of the untrusted domain. */
 extern limit_t queue_limits[];
 extern timeout_t queue_timeouts[];
 extern queue_update_callback_t queue_update_callbacks[];
 #endif
 
-#ifdef CONFIG_UML
-/* FIXME: move to a header file */
-void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
-void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
-#endif
-
 #ifndef ARCH_SEC_HW
-// TODO: missing pkbuf definition
+/* FIXME: missing pkbuf definition */
 void ip_send_out(struct pkbuf *pkb)
 {
 	int size = pkb->pk_len + sizeof(*pkb);
@@ -103,7 +96,9 @@ int syscall_allocate_tcp_socket(unsigned int *saddr, unsigned short *sport,
 #ifndef UNTRUSTED_DOMAIN
 void reset_network_queues_tracker(void)
 {
-	/* FIXME: redundant when called from yield_network_access() */
+	/* The next two lines are redundant when called from
+	 * yield_network_access().
+	 */
 	has_network_access = false;
 	network_access_count = 0;
 
@@ -155,7 +150,7 @@ int yield_network_access(void)
  * It can get the measured value here and compare it with the expected value
  * later.
  *
- * FIXME: @callback, @expected_pcr, and @return_pcr can be set by the untrusted
+ * @callback, @expected_pcr, and @return_pcr can be set by the untrusted
  * domain, but they're no ops.
  */
 int request_network_access(limit_t limit, timeout_t timeout,
@@ -210,7 +205,6 @@ int request_network_access(limit_t limit, timeout_t timeout,
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_NETWORK, expected_pcr);
 		if (ret) {
-			/* FIXME: the next three error blocks are identical. */
 			printf("%s: Error: unexpected PCR\n", __func__);
 			ret = ERR_UNEXPECTED;
 			goto error;

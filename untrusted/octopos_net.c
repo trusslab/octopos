@@ -41,7 +41,6 @@
 struct work_struct net_wq;
 static struct work_struct close_socket_wq;
 
-/* FIXME: modified from octopos/util/network/pkb.c */
 static struct pkbuf *alloc_pkb(int size)
 {
         struct pkbuf *pkb;
@@ -55,7 +54,6 @@ static struct pkbuf *alloc_pkb(int size)
         return pkb;
 }
 
-/* FIXME: modified from octopos/util/network/pkb.c */
 static void free_pkb(struct pkbuf *pkb)
 {
         if (--pkb->pk_refcnt <= 0) {

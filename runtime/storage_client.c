@@ -56,14 +56,6 @@ extern queue_update_callback_t queue_update_callbacks[];
 extern _Bool async_syscall_mode;
 #endif
 
-#if defined(CONFIG_UML) || defined(CONFIG_ARM64)
-/* FIXME: move to a header file */
-void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id);
-void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id);
-void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
-void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
-#endif
-
 bool secure_storage_created = false;
 uint32_t secure_partition_id = 0;
 bool has_access_to_secure_storage = false;
@@ -89,9 +81,6 @@ int send_msg_to_storage(uint8_t *buf)
 	return 0;
 }
 
-/* FIXME: the same function is defined in arch/umode/mailbox_interface/mailbox_os.c.
- * Consolidate.
- */
 int send_msg_to_storage_no_response(uint8_t *buf)
 {
 	runtime_send_msg_on_queue(buf, Q_STORAGE_CMD_IN);
@@ -102,9 +91,6 @@ int send_msg_to_storage_no_response(uint8_t *buf)
 	return 0;
 }
 
-/* FIXME: the same function is defined in arch/umode/mailbox_interface/mailbox_os.c.
- * Consolidate.
- */
 int get_response_from_storage(uint8_t *buf)
 {
 	runtime_recv_msg_from_queue(buf, Q_STORAGE_CMD_OUT);
@@ -115,9 +101,6 @@ int get_response_from_storage(uint8_t *buf)
 	return 0;
 }
 
-/* FIXME: the same function is defined in arch/umode/mailbox_interface/mailbox_os.c.
- * Consolidate.
- */
 void read_from_storage_data_queue(uint8_t *buf)
 {
 	runtime_recv_msg_from_queue_large(buf, Q_STORAGE_DATA_OUT);
@@ -126,9 +109,6 @@ void read_from_storage_data_queue(uint8_t *buf)
 #endif
 }
 
-/* FIXME: the same function is defined in arch/umode/mailbox_interface/mailbox_os.c.
- * Consolidate.
- */
 void write_to_storage_data_queue(uint8_t *buf)
 {
 	runtime_send_msg_on_queue_large(buf, Q_STORAGE_DATA_IN);
@@ -255,7 +235,9 @@ static int request_secure_storage_creation(uint32_t size)
 #ifndef UNTRUSTED_DOMAIN
 void reset_storage_queues_trackers(void)
 {
-	/* FIXME: redundant when called from yield_secure_storage_queues_access() */
+	/* The next line is redundant when called from
+	 * yield_secure_storage_queues_access()
+	 */
 	has_access_to_secure_storage = false;
 
 	queue_limits[Q_STORAGE_CMD_IN] = 0;
@@ -287,7 +269,7 @@ if (!async_syscall_mode) {
 #endif
 
 #ifndef CONFIG_ARM64
-	// FIXME: There is a bug preventing semaphore post on Q_STORAGE_DATA_IN
+	/* FIXME: There is a bug preventing semaphore post on Q_STORAGE_DATA_IN */
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 #endif
@@ -345,7 +327,7 @@ int yield_secure_storage_access(void)
  * It can get the measured value here and compare it with the expected value
  * later.
  *
- * FIXME: @callback, @expected_pcr, and @return_ocr can be set by the untrusted
+ * @callback, @expected_pcr, and @return_ocr can be set by the untrusted
  * domain, but they're no ops.
  */
 static int request_secure_storage_queues_access(limit_t limit,
@@ -557,9 +539,6 @@ int delete_and_yield_secure_storage(void)
 	}
 #endif
 
-	/* FIXME: why not call yield_secure_storage_queues_access() instead
-	 * of the next couple of lines?
-	 */
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 
@@ -571,7 +550,6 @@ int delete_and_yield_secure_storage(void)
 	return 0;
 }
 
-/* FIXME: modified from write_blocks() in os/file_system.c */
 int write_secure_storage_blocks(uint8_t *data, uint32_t start_block,
 				uint32_t num_blocks)
 {
@@ -600,7 +578,6 @@ int write_secure_storage_blocks(uint8_t *data, uint32_t start_block,
 	return (int) ret1; /* size */
 }
 
-/* FIXME: modified from read_blocks() in os/file_system.c */
 int read_secure_storage_blocks(uint8_t *data, uint32_t start_block,
 			       uint32_t num_blocks)
 {
@@ -629,7 +606,6 @@ int read_secure_storage_blocks(uint8_t *data, uint32_t start_block,
 	return (int) ret1; /* size */
 }
 
-/* FIXME: modified from read_from_block() in os/file_system.c */
 int read_from_secure_storage_block(uint8_t *data, uint32_t block_num,
 				   uint32_t block_offset, uint32_t read_size)
 {
@@ -653,7 +629,6 @@ int read_from_secure_storage_block(uint8_t *data, uint32_t block_num,
 	return (int) read_size;
 }
 
-/* FIXME: modified from write_to_block in os/file_system.c */
 int write_to_secure_storage_block(uint8_t *data, uint32_t block_num,
 				  uint32_t block_offset, uint32_t write_size)
 {
@@ -766,5 +741,3 @@ int write_context_to_storage(int do_yield)
 
 	return 0;
 }
-
-

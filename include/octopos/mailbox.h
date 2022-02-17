@@ -111,7 +111,14 @@ timeout_t get_queue_timeout(uint8_t queue_id);
 void decrement_queue_limit(uint8_t queue_id, limit_t count);
 void register_timeout_update_callback(uint8_t queue_id,
 				      void (*callback)(uint8_t, timeout_t));
+void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id);
+void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id);
+void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
+void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
+void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
+void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
 #endif
+
 uint8_t get_runtime_queue_id(uint8_t runtime_proc_id);
 int is_valid_runtime_queue_id(int queue_id);
 uint8_t get_runtime_proc_id(uint8_t runtime_queue_id);
