@@ -52,20 +52,24 @@ extern timeout_t queue_timeouts[];
 extern queue_update_callback_t queue_update_callbacks[];
 #endif
 
+int send_cmd_to_network(uint8_t *buf);
 #ifdef CONFIG_UML
 /* FIXME: move to a header file */
 void runtime_recv_msg_from_queue_large(uint8_t *buf, uint8_t queue_id);
 void runtime_send_msg_on_queue_large(uint8_t *buf, uint8_t queue_id);
-#endif
 
-#ifndef CONFIG_UML /* Linux UML */
-int send_cmd_to_network(uint8_t *buf);
-#else /* Linux UML */
+void runtime_recv_msg_from_queue(uint8_t *buf, uint8_t queue_id);
+void runtime_send_msg_on_queue(uint8_t *buf, uint8_t queue_id);
 int send_cmd_to_network(uint8_t *buf)
 {
-	return 0;
+        runtime_send_msg_on_queue(buf, Q_NETWORK_CMD_IN);
+        runtime_recv_msg_from_queue(buf, Q_NETWORK_CMD_OUT);
+
+        return 0;
 }
-#endif /* Linux UML */
+
+#endif
+
 
 // TODO: missing pkbuf definition
 void ip_send_out(struct pkbuf *pkb)
