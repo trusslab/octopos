@@ -16,8 +16,12 @@ static sem_t *sem;
 struct queue_list *in_queues = NULL;
 struct queue_list *out_queues = NULL;
 
-/* Driver support functions:
+/* Support functions:
  * 	write_to_driver
+ * 	print_digest
+ * 	print_digest_buffer
+ * 	hash_to_byte_structure
+ * 	prepare_extend
  */
 int write_to_driver(uint8_t *in_buf, size_t in_size,
 		    uint8_t **out_buf, size_t *out_size)
@@ -52,12 +56,6 @@ int write_to_driver(uint8_t *in_buf, size_t in_size,
 	return rc;
 }
 
-/* Hash support functions:
- * 	print_digest
- * 	print_digest_buffer
- * 	hash_to_byte_structure
- * 	prepare_extend
- */
 void print_digest(uint8_t pcr_index, const uint8_t *digest, size_t digest_size)
 {
 	printf("PCR %d: ", pcr_index);
@@ -120,6 +118,15 @@ int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value)
 	return 0;
 }
 
+int check_processor(uint8_t processor)
+{
+	if (processor == 0 || processor >= INVALID_PROCESSOR) {
+		fprintf(stderr, "Invalid processor.\n");
+		return -1;
+	}
+	return 0;
+}
+
 /* Wrapper of FAPI and ESAPI
  * 	tpm_set_locality
  * 	tpm_initialize
@@ -134,6 +141,9 @@ int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor)
 {
 	TSS2_RC rc = TSS2_RC_SUCCESS;
 	TSS2_TCTI_CONTEXT *tcti_ctx = NULL;
+
+	rc = check_processor(processor);
+	return_if_error_no_msg(rc);
 
 	rc = Fapi_GetTcti(context, &tcti_ctx);
 	return_if_error(rc, "Get TCTI Error.");
@@ -359,11 +369,8 @@ int tpm_reset(FAPI_CONTEXT *context, uint32_t pcr_selected)
  */
 int enforce_running_process(uint8_t processor)
 {
-	if (processor == 0 || processor >= INVALID_PROCESSOR) {
-		fprintf(stderr, "Invalid processor.\n");
-		return -1;
-	}
-	running_processor = processor;
+	if (check_processor(processor) == 0)
+		running_processor = processor;
 	return 0;
 }
 

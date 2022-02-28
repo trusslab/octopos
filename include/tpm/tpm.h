@@ -45,16 +45,6 @@
 #define PROC_TO_PCR(proc)	(proc + TPM_PCR_BASE)
 
 #define LOCALITY_BASE		0x80
-#define LOCALITY_OS		(LOCALITY_BASE)
-#define LOCALITY_KEYBOARD	(LOCALITY_BASE + 0x01)
-#define LOCALITY_SERIAL_OUT	(LOCALITY_BASE + 0x02)
-#define LOCALITY_STORAGE	(LOCALITY_BASE + 0x03)
-#define LOCALITY_NETWORK	(LOCALITY_BASE + 0x04)
-#define LOCALITY_BLUETOOTH	(LOCALITY_BASE + 0x05)
-#define LOCALITY_RUNTIME1	(LOCALITY_BASE + 0x06)
-#define LOCALITY_RUNTIME2	(LOCALITY_BASE + 0x07)
-#define LOCALITY_UNTRUSTED	(LOCALITY_BASE + 0x08)
-#define LOCALITY_PMU		(LOCALITY_BASE + 0x09)
 #define PROC_LOCALITY(proc)	(LOCALITY_BASE + (proc - 1))
 
 #define OP_MEASURE		0x01
@@ -62,7 +52,7 @@
 #define OP_ATTEST		0x03
 #define OP_SEAL			0x04
 #define OP_RESET		0x06
-/* Deprecated OP  */
+/* Deprecated OP */
 #define OP_UNSEAL		0x05
 
 
@@ -94,13 +84,14 @@
 		return r;  \
 	}
 
-/* Hash support function */
+/* Support functions */
 void print_digest(uint8_t pcr_index, const uint8_t *digest, size_t digest_size);
 void print_digest_buffer(const uint8_t *digest, size_t digest_size,
 			 char* buf, size_t buf_size);
 int hash_to_byte_structure(const char *input_string, UINT16 *byte_length,
 			   BYTE *byte_buffer);
 int prepare_extend(char *hash_buf, TPML_DIGEST_VALUES *digest_value);
+int check_processor(uint8_t processor);
 
 /* Wrapper of FAPI and ESAPI */
 int tpm_set_locality(FAPI_CONTEXT *context, uint8_t processor);
