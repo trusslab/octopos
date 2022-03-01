@@ -1,7 +1,10 @@
 umode:
-	g++ -Wall -I ../../include/ high_performance.c -o high_performance.so -shared -fPIC -lrt -lpthread -fvisibility=hidden
+	g++ -Wall -I ../../include/ matrix_left.c emu_sys.c -o matrix_left.so -shared -fPIC -fvisibility=hidden
+	g++ -Wall -I ../../include/ matrix_right.c emu_sys.c -o matrix_right.so -shared -fPIC -fvisibility=hidden
 	mkdir -p ../bin
-	cp high_performance.so ../bin/
+	cp matrix_left.so ../bin/
+	cp matrix_right.so ../bin/
 
 clean:
-	rm high_performance.so
+	rm matrix_left.so
+	rm matrix_right.so

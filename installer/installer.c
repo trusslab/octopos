@@ -270,8 +270,10 @@ static int prepare_boot_partition(void)
 			       (char *) "./applications/bin/simple_loop.so");
 	copy_file_to_partition((char *) "socket_client",
 			       (char *) "./applications/bin/socket_client.so");
-  copy_file_to_partition((char *) "high_performance",
-             (char *) "./applications/bin/high_performance.so");
+	copy_file_to_partition((char *) "matrix_left",
+			       (char *) "./applications/bin/matrix_left.so");
+	copy_file_to_partition((char *) "matrix_right",
+			       (char *) "./applications/bin/matrix_right.so");
 
 	/* For testing purposes, copy the files from partition */
 	copy_file_from_partition((char *) "keyboard",
@@ -312,8 +314,10 @@ static int prepare_boot_partition(void)
 				 (char *) "./installer/copy_simple_loop.so", 0);
 	copy_file_from_partition((char *) "socket_client",
 				 (char *) "./installer/copy_socket_client.so", 0);
-  copy_file_from_partition((char *) "high_performance",
-         (char *) "./installer/copy_high_performance.so", 0);
+	copy_file_from_partition((char *) "matrix_left",
+				 (char *) "./installer/copy_matrix_left.so", 0);
+	copy_file_from_partition((char *) "matrix_right",
+				 (char *) "./installer/copy_matrix_right.so", 0);
 
 	/* For attestation, we need the block-aligned version of some of the
 	 * files.

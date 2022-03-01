@@ -823,7 +823,7 @@ static int request_secure_ipc(uint8_t target_runtime_queue_id, limit_t limit,
 		return (int) ret0;
 	}
 
-	/* FIXME: if any of the attetations fail, we should yield the other one */
+	/* FIXME: if any of the attestations fail, we should yield the other one */
 	int attest_ret = mailbox_attest_queue_access(target_runtime_queue_id,
 						     limit, timeout);
 	if (!attest_ret) {
