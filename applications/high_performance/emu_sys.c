@@ -16,22 +16,30 @@ void disconnect_ipc(struct runtime_api *api)
 	api->yield_secure_ipc();
 }
 
-void send_msg_on_secure_ipc(struct runtime_api *api, int loc)
+void send_thread_msg(struct runtime_api *api, int loc, char op)
 {
 	char request_msg[MAX_MSG_SIZE];
-	sprintf(request_msg, "%d", loc);
+	request_msg[0] = op;
+	sprintf(request_msg + 1, "%d", loc);
 	api->send_msg_on_secure_ipc(request_msg, MAX_MSG_SIZE);
 }
 
-int recv_msg_on_secure_ipc(struct runtime_api *api)
+int recv_thread_msg(struct runtime_api *api)
 {
 	int dummy_size;
 	char response_msg[MAX_MSG_SIZE];
 	api->recv_msg_on_secure_ipc(response_msg, &dummy_size);
-	return (int) strtol(response_msg, NULL, 10);
+	if (response_msg[0] == OP_THREAD_RESP) {
+		return (int) strtol(response_msg + 1, NULL, 10);
+	} else if (response_msg[0] == OP_THREAD_EXIT) {
+		return -INT_MAX;
+	} else {
+		printf("%s: Unexpected response message\n", __func__);
+		return -INT_MAX;
+	}
 }
 
-void generate_square_matrix(int *matrix)
+void generate_matrix(int *matrix, int size)
 {
 	unsigned int randval;
 	FILE *f = fopen("/dev/random", "r");
@@ -39,27 +47,17 @@ void generate_square_matrix(int *matrix)
 	fclose(f);
 
 	srand(randval);
-	for (int i = 0; i < N * N; i++) {
+	for (int i = 0; i < size; i++) {
 		matrix[i] = rand() % MAX_ELEM_VALUE;
 	}
 }
 
-void print_square_matrix(int *matrix)
+void print_matrix(int *matrix, int rows, int cols)
 {
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j < N; j++) {
-			printf("%5d ", matrix[i * N + j]);
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < cols; j++) {
+			printf("%5d ", matrix[i * cols + j]);
 		}
 		printf("\n");
-	}
-}
-
-int read_memory(struct runtime_api *api, int *matrix, int loc)
-{
-	if (loc >= N * N) {
-		send_msg_on_secure_ipc(api, loc);
-		return recv_msg_on_secure_ipc(api);
-	} else {
-		return matrix[loc];
 	}
 }
