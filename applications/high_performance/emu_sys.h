@@ -12,7 +12,7 @@
  * location and value maximum contains 10 characters since INT_MAX has 10 digits
  */
 #define MAX_MSG_SIZE	22
-#define N		2
+#define N		3
 #define M		(2 * N)	// Matrix size: M x M
 #define MAX_ELEM_VALUE	64
 

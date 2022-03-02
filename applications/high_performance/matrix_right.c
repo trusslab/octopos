@@ -13,11 +13,17 @@ int ipc_val;
 int read_memory(struct runtime_api *api, int *matrix, int loc)
 {
 	if (loc < N * M) {
-		pthread_mutex_lock(&mem_lock);
-		send_thread_msg(api, OP_THREAD_READ, loc, 0);
-		pthread_cond_wait(&mem_accessible, &mem_lock);
-		pthread_mutex_unlock(&mem_lock);
-		return ipc_val;
+		if (cache[loc % CACHE_SIZE].loc == loc) {
+			return cache[loc % CACHE_SIZE].val;
+		} else {
+			pthread_mutex_lock(&mem_lock);
+			send_thread_msg(api, OP_THREAD_READ, loc, 0);
+			pthread_cond_wait(&mem_accessible, &mem_lock);
+			pthread_mutex_unlock(&mem_lock);
+			cache[loc % CACHE_SIZE].loc = loc;
+			cache[loc % CACHE_SIZE].val = ipc_val;
+			return ipc_val;
+		}
 	} else {
 		return matrix[loc - N * M];
 	}
@@ -41,8 +47,6 @@ void *ipc_handler(void *arg)
 			loc = (int) strtol(loc_ptr, &val_ptr, 10);
 			val = (int) strtol(val_ptr, NULL, 10);
 			ipc_val = val;
-			cache[loc % CACHE_SIZE].loc = loc;
-			cache[loc % CACHE_SIZE].val = val;
 			pthread_cond_signal(&mem_accessible);
 		} else {
 			pthread_mutex_unlock(&ipc_lock);
