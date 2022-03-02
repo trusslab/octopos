@@ -16,27 +16,21 @@ void disconnect_ipc(struct runtime_api *api)
 	api->yield_secure_ipc();
 }
 
-void send_thread_msg(struct runtime_api *api, int loc, char op)
+void send_thread_msg(struct runtime_api *api, char op, int loc, int val)
 {
 	char request_msg[MAX_MSG_SIZE];
 	request_msg[0] = op;
-	sprintf(request_msg + 1, "%d", loc);
+	sprintf(request_msg + 1, "%10d", loc);
+	sprintf(request_msg + 11, "%10d", val);
 	api->send_msg_on_secure_ipc(request_msg, MAX_MSG_SIZE);
 }
 
-int recv_thread_msg(struct runtime_api *api)
+void recv_thread_msg(struct runtime_api *api, char *msg)
 {
 	int dummy_size;
 	char response_msg[MAX_MSG_SIZE];
 	api->recv_msg_on_secure_ipc(response_msg, &dummy_size);
-	if (response_msg[0] == OP_THREAD_RESP) {
-		return (int) strtol(response_msg + 1, NULL, 10);
-	} else if (response_msg[0] == OP_THREAD_EXIT) {
-		return -INT_MAX;
-	} else {
-		printf("%s: Unexpected response message\n", __func__);
-		return -INT_MAX;
-	}
+	memcpy(msg, response_msg, MAX_MSG_SIZE);
 }
 
 void generate_matrix(int *matrix, int size)
