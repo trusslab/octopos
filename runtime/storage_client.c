@@ -246,23 +246,24 @@ static int query_and_verify_storage(void)
 	STORAGE_GET_ONE_RET_DATA(data)
 	if (ret0) {
 		printf("Error: %s: couldn't query the state of the storage "
-		       "service.\n", __func__);
+		       "service.\r\n", __func__);
 		return (int) ret0;
 	}
 
 	if (_size != 5) {
-		printf("Error: %s: unexpected state query size (%d).\n",
+		printf("Error: %s: unexpected state query size (%d).\r\n",
 		       __func__, _size);
 		return ERR_UNEXPECTED;
 	}
 
 #ifndef UNTRUSTED_DOMAIN
-	if ((data[0] != 1) || (data[1] != 0) || (data[2] != 0) ||
+	/* FIXME: This should be enabled, double check */
+	if ((data[0] != 1) || (data[1] != 0) || (data[2] != 0) || 
 	    (data[3] != secure_partition_id) || (data[4] != 1)) {
 		printf("Error: %s: couldn't successfully verify the query "
 		       "response from the storage service (bound = %d, "
 		       "used = %d, authenticated = %d, bound_partition = %d, "
-		       "is_created = %d).\n", __func__, data[0], data[1],
+		       "is_created = %d).\r\n", __func__, data[0], data[1],
 		       data[2], data[3], data[4]);
 		return ERR_FAULT;
 	}
@@ -466,7 +467,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 		return ERR_FAULT;
 	}
-
+	
 #ifndef UNTRUSTED_DOMAIN
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr(). This is because that call issues a
@@ -511,19 +512,22 @@ static int request_secure_storage_queues_access(limit_t limit,
 	ret = query_and_verify_storage();
 	if (ret) {
 		printf("%s: Error: couldn't query and verify access to the "
-		       "storage service\n", __func__);
+		       "storage service\r\n", __func__);
 		ret = ERR_UNEXPECTED;
 		goto error;
 	}
 
 	ret = authenticate_storage();
 	if (ret) {
+#ifndef ARCH_SEC_HW
+		/* FIXME: why disabled? */
 		printf("%s: Error: couldn't authenticate with the storage "
-		       "service\n", __func__);
+		       "service\r\n", __func__);
 		ret = ERR_UNEXPECTED;
 		goto error;
+#endif
 	}
-
+	
 	has_access_to_secure_storage = true;
 
 	return 0;
@@ -599,9 +603,12 @@ int delete_and_yield_secure_storage(void)
 	secure_storage_created = false;
 	has_access_to_secure_storage = false;
 
+	/* FIXME issue 25 sechw Q_STORAGE_DATA_IN is not delivering interrupt. */
+#ifndef ARCH_SEC_HW
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
-
+#endif
+	
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
@@ -785,7 +792,7 @@ int write_context_to_storage(int do_yield)
 		return ERR_INVALID;
 	}
 
-#ifdef ARCH_SEC_HW
+#if defined(ARCH_SEC_HW) && !defined(CONFIG_ARM64)
 	async_syscall_mode = true;
 #endif
 

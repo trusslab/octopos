@@ -581,6 +581,9 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_CMD_IN].OWNER = P_OS;
 	/* FIXME: use a SIMPLE queue if only one connection */
 	queues[Q_NETWORK_CMD_IN].connections[P_OS] = 1;
+	queues[Q_NETWORK_CMD_IN].connections[P_RUNTIME1] = 1;
+	queues[Q_NETWORK_CMD_IN].connections[P_RUNTIME2] = 1;
+	queues[Q_NETWORK_CMD_IN].connections[P_UNTRUSTED] = 1;
 	queues[Q_NETWORK_CMD_IN].LIMIT = MAILBOX_NO_LIMIT_VAL;
 	queues[Q_NETWORK_CMD_IN].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_NETWORK_CMD_IN].queue_size = MAILBOX_QUEUE_SIZE;
@@ -595,6 +598,9 @@ static void initialize_queues(void)
 	queues[Q_NETWORK_CMD_OUT].OWNER = P_OS;
 	/* FIXME: use a SIMPLE queue if only one connection */
 	queues[Q_NETWORK_CMD_OUT].connections[P_OS] = 1;
+	queues[Q_NETWORK_CMD_OUT].connections[P_RUNTIME1] = 1;
+	queues[Q_NETWORK_CMD_OUT].connections[P_RUNTIME2] = 1;
+	queues[Q_NETWORK_CMD_OUT].connections[P_UNTRUSTED] = 1;
 	queues[Q_NETWORK_CMD_OUT].LIMIT = MAILBOX_NO_LIMIT_VAL;
 	queues[Q_NETWORK_CMD_OUT].TIMEOUT = MAILBOX_NO_TIMEOUT_VAL;
 	queues[Q_NETWORK_CMD_OUT].queue_size = MAILBOX_QUEUE_SIZE;
@@ -905,13 +911,14 @@ static void yield_queue_access(uint8_t queue_id, uint8_t requester)
 		       __func__, queue_id);
 		return;
 	}
-
+//FIXME proper handling of proc infinite qouta	
+#ifdef UNLIMITED_QUOTA_IS_NOT_SUPPORTED
 	if (queues[queue_id].LIMIT == MAILBOX_NO_LIMIT_VAL) {
 		printf("Error: %s: unexpected limit val (%d, %d).\n",
 		       __func__, queue_id, queues[queue_id].LIMIT);
 		return;
 	}
-
+#endif
 	if (queues[queue_id].TIMEOUT == MAILBOX_NO_TIMEOUT_VAL) {
 		printf("Error: %s: unexpected timeout val (%d, %d).\n",
 		       __func__, queue_id, queues[queue_id].TIMEOUT);

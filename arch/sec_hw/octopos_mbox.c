@@ -8,6 +8,27 @@
 
 #define OCTOPOS_MAILBOX_INTR_OFFSET 4
 
+/* "unitsleep: rsub %1, r11, %1" <- 1 clk cycle */
+/* "nop                        " <- 1 clk cycle */
+/* "bnei %1, unitsleep         " <- 3 clk cycle */	
+void octopos_usleep(u32 usecs)
+{
+    asm(
+		"addik r11, r0, 1             \n\t"
+		"nextsleep: rsub %0, r11, %0  \n\t"
+		"unitsleep: rsub %1, r11, %1  \n\t"
+		"nop                          \n\t"
+		"bnei %1, unitsleep           \n\t"
+		"add %1, r0, %2               \n\t"
+		"bnei %0, nextsleep           \n\t"
+		: 
+		: "r"(usecs), 
+		"r"(CPU_SPEED_IN_MHZ / 5), 
+		"r"(CPU_SPEED_IN_MHZ / 5)
+		: "r11"
+    );
+}
+
 u32 octopos_mailbox_get_status_reg(UINTPTR base)
 {
 	Xil_AssertNonvoid(base != 0);
@@ -39,17 +60,24 @@ void octopos_mailbox_set_owner(UINTPTR base, u8 owner)
 	octopos_mailbox_set_status_reg(base, reg);
 }
 
-/* Temporary owner of the mailbox cannot delegate full quota to another
- * owner (or switch back to the OS). So we must take one off from the
- * read limit and time limit quotas.
- */
 void octopos_mailbox_deduct_and_set_owner(UINTPTR base, u8 owner)
 {
 	Xil_AssertVoid(base != 0);
 
+/* Old mailbox hardware code
+ * 	
+ * Temporary owner of the mailbox cannot delegate full quota to another
+ * owner (or switch back to the OS). So we must take one off from the
+ * read limit and time limit quotas.
+ */
+
+/*
 	u32 reg = octopos_mailbox_get_status_reg(base) - 0x1001;
 	reg = (OWNER_MASK & reg) | owner << 24;
-
+*/
+	
+	u32 reg = 0xFF000000;
+	
 	octopos_mailbox_set_status_reg(base, reg);
 }
 

@@ -435,6 +435,7 @@ static irqreturn_t om_interrupt(int irq, void *data)
 		} else if (interrupt == Q_OSU ||
 		    interrupt == Q_STORAGE_CMD_IN || interrupt == Q_STORAGE_CMD_OUT ||
 		    interrupt == Q_STORAGE_DATA_IN || interrupt == Q_STORAGE_DATA_OUT ||
+		    interrupt == Q_NETWORK_CMD_IN || interrupt == Q_NETWORK_CMD_OUT ||
 		    interrupt == Q_NETWORK_DATA_IN || interrupt == Q_NETWORK_DATA_OUT) {
 			if (interrupt == Q_NETWORK_DATA_OUT)
 				schedule_work(&net_wq);

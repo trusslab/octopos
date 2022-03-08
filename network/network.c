@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW
 /* octopos network code */
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +18,8 @@
 #include <network/ip.h>
 #include <network/tcp.h>
 #include <arch/mailbox.h>
+#include <octopos/io.h>
+#include <arch/syscall.h> 
 
 /* Need to make sure msgs are big enough so that we don't overflow
  * when processing incoming msgs and preparing outgoing ones.
@@ -80,13 +83,21 @@
 	}							\
 	data = &buf[2];
 
-#define NETWORK_GET_FOUR_ARGS			\
-	uint32_t arg0, arg1, arg2, arg3;	\
-	arg0 = *((uint32_t *) &buf[0]);		\
-	arg1 = *((uint32_t *) &buf[4]);		\
-	arg2 = *((uint32_t *) &buf[8]);		\
-	arg3 = *((uint32_t *) &buf[12]);	\
 
+#define NETWORK_GET_ONE_ARG		\
+	uint32_t arg0;			\
+	DESERIALIZE_32(&arg0, &buf[1])	\
+
+uint32_t bound_sport = 0; /* 0xFF is an invalid partition number. */
+uint8_t bound = 0;
+uint8_t used = 0;
+
+#define ARBITER_UNTRUSTED 1
+#define ARBITER_UNTRUSTED_FLAG 0xF0F0F0F0
+#define ARBITER_TRUSTED 0
+#define ARBITER_TRUSTED_FLAG 0
+#define ARBITER_BASE_ADDRESS 0xF0880000
+#define TRUSTED_PORT_BOUNDARY 5000
 int fd_out, fd_in, fd_intr;
 
 /* Not all will be used */
@@ -211,14 +222,20 @@ void dump_packet(struct pkbuf *pkb)
 unsigned int saddr = 0, daddr = 0;
 unsigned short sport = 0, dport = 0;
 int filter_set = 0;
-
+#undef PACKET_IP_FILTER
 static void send_packet(uint8_t *buf)
 {
+#ifdef PACKET_IP_FILTER	
 	if (!filter_set) {
 		printf("%s: Error: queue filter not set.\n", __func__);
 		return;
 	}
-
+#else	
+	if (!bound) {
+		printf("%s: Error: sport did not bound yet.\n", __func__);
+		return;
+	}
+#endif
 	NETWORK_GET_ZERO_ARGS_DATA
 	struct pkbuf *pkb = (struct pkbuf *) data;
 	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
@@ -230,6 +247,7 @@ static void send_packet(uint8_t *buf)
 		return;
 	}
 
+#ifdef PACKET_IP_FILTER
 	/* check the IP addresses */
 	struct ip *iphdr = pkb2ip(pkb);
 	if ((saddr != iphdr->ip_src) || (daddr != iphdr->ip_dst)) {
@@ -243,23 +261,110 @@ static void send_packet(uint8_t *buf)
 		printf("%s: Error: invalid src or dst port numbers.\n", __func__);
 		return;
 	}
+#else
+	/* check the port numbers */
+	struct ip *iphdr = pkb2ip(pkb);
+	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
+	if ((bound_sport != tcphdr->src)) {
+		printf("%s: Error: invalid src  port number bound_sport  = %d , tcphdr->src= %d.\n", __func__, bound_sport, tcphdr->src);
+		return;
+	}
 
+#endif
 	tcp_init_pkb(pkb);
 
 	ip_send_out(pkb);
 }
 
-static void process_cmd(uint8_t *buf)
-{
-	NETWORK_GET_FOUR_ARGS
-	saddr = (unsigned int) arg0;
-	sport = (unsigned short) arg1;
-	daddr = (unsigned int) arg2;
-	dport = (unsigned short) arg3;
 
-	filter_set = 1;
-	NETWORK_SET_ONE_RET((unsigned int) 0)
+void network_arbiter_change(unsigned int trusted){
+	return;
 }
+
+/*
+ * Bound or not?
+ * Used or not?
+ * If bound, resouce name.
+ * If global flag "used" not set, set it.
+ * This is irreversible until reset.
+ */
+static void network_query_state(uint8_t *buf)
+{
+	uint8_t state[3];
+	uint32_t state_size = 3;
+
+	state[0] = bound;
+	state[1] = used;
+	used = 1;
+	state[2] = bound_sport;
+
+	NETWORK_SET_ONE_RET_DATA(0, state, state_size)
+}
+
+/*
+ * Return error if bound, or used is set.
+ * Return error if invalid resource name
+ * Bind the resource to the data queues.
+ * Set the global var "bound"
+ * This is irreversible until reset.
+ */
+static void network_bind_resource(uint8_t *buf, uint8_t owner_id)
+{
+	uint32_t sport;
+
+	if (bound || used) {
+		printf("Error: %s: the bind op is invalid if bound (%d), "
+		      " or used (%d) is set.\n", __func__,
+		       bound, used);
+		NETWORK_SET_ONE_RET(ERR_INVALID)
+		return;
+	}
+
+	NETWORK_GET_ONE_ARG
+	sport = arg0;
+
+	printf("%s:  bound_sport  = %d .\n", __func__, sport);
+#ifdef ARCH_SEC_HW
+	if (sport >= TRUSTED_PORT_BOUNDARY) {
+		network_arbiter_change(ARBITER_TRUSTED);
+	} else {
+		if ( owner_id != UNTRUSTED_DOMAIN_OWNER_ID) {
+			print("trusted domains cannot bound port less than 50000\r\n");
+			NETWORK_SET_ONE_RET(ERR_INVALID)
+			return;
+		}
+		network_arbiter_change(ARBITER_UNTRUSTED);
+	}
+#endif	
+
+	bound_sport = sport;
+	bound = 1;
+
+	NETWORK_SET_ONE_RET(0)
+}
+void process_cmd(uint8_t *buf, uint8_t owner_id)
+{
+	switch (buf[0]) {
+	case IO_OP_BIND_RESOURCE:
+		network_bind_resource(buf, owner_id);
+		break;
+
+	case IO_OP_QUERY_STATE:
+		network_query_state(buf);
+		break;
+
+	default:
+		/*
+		 * If global flag "used" not set, set it.
+		 * This is irreversible until reset.
+		 */
+		printf("Error: %s: unsupported op (%d)\n", __func__, buf[0]);
+		used = 1;
+		NETWORK_SET_ONE_RET(ERR_INVALID)
+		break;
+	}
+}
+
 
 /* FIXME: identical copy form storage.c */
 static void send_response(uint8_t *buf, uint8_t queue_id)
@@ -291,6 +396,7 @@ void tcp_in(struct pkbuf *pkb)
 {
 	/* check the IP addresses */
 	struct ip *iphdr = pkb2ip(pkb);
+#ifdef PACKET_IP_FILTER
 	if ((daddr != iphdr->ip_src) || (saddr != iphdr->ip_dst)) {
 		printf("%s: Error: invalid src or dst IP addresses. Dropping the packet\n", __func__);
 		return;
@@ -302,22 +408,24 @@ void tcp_in(struct pkbuf *pkb)
 		printf("%s: Error: invalid src or dst port numbers. Dropping the packet\n", __func__);
 		return;
 	}
+#endif
+	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
+	if (bound_sport != tcphdr->dst) {
+		printf("%s: Error: invalid src port number. Dropping the packet\n", __func__);
+		return;
+	}
 	
 	int size = pkb->pk_len + sizeof(*pkb);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
 	send_received_packet(buf, Q_NETWORK_DATA_OUT);
+	free_pkb(pkb);
+
 }
 
-int main(int argc, char **argv)
+pthread_t mailbox_thread;
+
+int init_network(void)
 {
-	uint8_t opcode[2];
-	pthread_t mailbox_thread;
-	int is_data_queue = 0;
-
-	/* Non-buffering stdout */
-	setvbuf(stdout, NULL, _IONBF, 0);
-	printf("%s: network init\n", __func__);
-
 	sem_init(&interrupts[Q_NETWORK_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
 	sem_init(&interrupts[Q_NETWORK_CMD_IN], 0, 0);
@@ -342,10 +450,31 @@ int main(int argc, char **argv)
 		printf("Error: couldn't launch the mailbox thread\n");
 		return -1;
 	}
+	return 0;
+}
 
+void close_network(void)
+{
+	pthread_cancel(mailbox_thread);
+	pthread_join(mailbox_thread, NULL);
+
+	close(fd_out);
+	close(fd_in);
+	close(fd_intr);
+
+	remove(FIFO_NETWORK_OUT);
+	remove(FIFO_NETWORK_IN);
+	remove(FIFO_NETWORK_INTR);
+
+	net_stack_exit();
+}
+
+void network_event_loop(void)
+{
+	uint8_t opcode[2];
+	int is_data_queue = 0;
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
-	
 	while(1) {
 		sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
 		sem_getvalue(&interrupts[Q_NETWORK_DATA_IN], &is_data_queue);
@@ -354,7 +483,7 @@ int main(int argc, char **argv)
 			opcode[1] = Q_NETWORK_CMD_IN;
 			write(fd_out, opcode, 2), 
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
-			process_cmd(buf);
+			process_cmd(buf, 1);
 			send_response(buf, Q_NETWORK_CMD_OUT);
 		} else {
 			uint8_t *dbuf = malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
@@ -369,17 +498,17 @@ int main(int argc, char **argv)
 			send_packet(dbuf);
 		}
 	}
-	
-	pthread_cancel(mailbox_thread);
-	pthread_join(mailbox_thread, NULL);
 
-	close(fd_out);
-	close(fd_in);
-	close(fd_intr);
-
-	remove(FIFO_NETWORK_OUT);
-	remove(FIFO_NETWORK_IN);
-	remove(FIFO_NETWORK_INTR);
-
-	net_stack_exit();
 }
+
+int main(int argc, char **argv)
+{
+
+	/* Non-buffering stdout */
+	setvbuf(stdout, NULL, _IONBF, 0);
+	printf("%s: network init\n", __func__);
+	init_network();
+	network_event_loop();
+	close_network();
+}
+#endif /*ARCH_SEC_HW*/

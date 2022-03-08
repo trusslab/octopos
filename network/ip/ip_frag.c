@@ -1,11 +1,20 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include "netif.h"
 #include "ether.h"
 #include "ip.h"
 #include "icmp.h"
-
 #include "lib.h"
 #include "list.h"
 #include "netcfg.h"
+#else /*ARCH_SEC_HW_NETWORK*/
+#include <network/netif.h>
+#include <network/ether.h>
+#include <network/ip.h>
+//#include "raw.h"
+#include <network/icmp.h>
+#include <network/list.h>
+#include <network/lib.h>
+#endif /*ARCH_SEC_HW_NETWORK*/
 
 static LIST_HEAD(frag_head);	/* head of datagrams */
 

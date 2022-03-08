@@ -32,8 +32,8 @@
 #endif
 #include <arch/defines.h>
 
-#ifdef 	ARCH_SEC_HW
-#include <arch/reset_api.h>
+#ifdef ARCH_SEC_HW
+#define ARCH_SEC_HW_EVALUATION
 #endif
 
 /* The array below will hold the arguments: args[0] is the command. */
@@ -66,6 +66,10 @@ static int repeat_num = 0;
 static bool repeat_cmd_exists = false;
 static int repeat_cmd_counter = 0;
 
+#ifdef ARCH_SEC_HW_EVALUATION
+extern long long global_counter;
+#endif
+
 /*
  * Handle commands separatly
  * input: return value from previous command (useful for pipe file descriptor)
@@ -83,7 +87,10 @@ static int repeat_cmd_counter = 0;
 static int command(int input, int first, int last, int double_pipe, int bg)
 {
 	/* FIXME: add support for passing args to apps */
-
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("command %lld\r\n", global_counter);
+#endif
+	
 	if (first == 1 && last == 0 && input == 0) {
 		// First command
 		return sched_create_app(args[0]);
@@ -310,11 +317,6 @@ void inform_shell_of_termination(uint8_t runtime_proc_id)
 		foreground_app = NULL;
 		output_printf("octopos$> ");
 	}
-#ifdef ARCH_SEC_HW
-	/* FIXME: merge into mainline api */
-	/* FIXME: consolidate with umode's use of reset_proc in syscall.c */
-	request_pmu_to_reset(runtime_proc_id);
-#endif
 
 	sched_clean_up_app(runtime_proc_id);
 }
@@ -332,9 +334,6 @@ void inform_shell_of_pause(uint8_t runtime_proc_id)
 		foreground_app = NULL;
 		output_printf("octopos$> ");
 	}
-#ifdef ARCH_SEC_HW
-	request_pmu_to_reset(runtime_proc_id);
-#endif
 	sched_pause_app(runtime_proc_id);
 }
 
@@ -438,7 +437,6 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			int ret;
 			uint8_t proc_id = (uint8_t) atoi(args[1]);
 
-#ifndef ARCH_SEC_HW
 			ret = reset_proc(proc_id);
 			if (ret == 1 && proc_id == P_UNTRUSTED) {
 				output_printf("Enter this command again to complete "
@@ -446,7 +444,7 @@ static int run(char* cmd, int input, int first, int last, int double_pipe, int b
 			} else if (ret) {
 				output_printf("Couldn't reset proc %d\n", proc_id);
 			}
-#endif
+
 			output_printf("octopos$> ");
 			return 0;
 		}

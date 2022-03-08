@@ -252,11 +252,13 @@ void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id,
 	mailbox_state_reg_t new_state;
 
 	new_state.owner = proc_id;
-
-	if (limit > MAILBOX_MAX_LIMIT_VAL)
-		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
-	else
-		new_state.limit = limit;
+//FIXME : consider infinit delegation
+//	if (limit > MAILBOX_MAX_LIMIT_VAL)
+//		new_state.limit = MAILBOX_MAX_LIMIT_VAL;
+//	else
+//		new_state.limit = limit;
+//
+	new_state.limit = limit;
 
 	if (timeout > MAILBOX_MAX_TIMEOUT_VAL)
 		new_state.timeout = MAILBOX_MAX_TIMEOUT_VAL;
@@ -375,6 +377,15 @@ static void *handle_mailbox_interrupts(void *data)
 			case Q_NETWORK_DATA_OUT:
 				sem_init(&interrupts[Q_NETWORK_DATA_OUT], 0, 0);
 				sem_post(&availables[Q_NETWORK_DATA_OUT]);
+				break;
+			case Q_NETWORK_CMD_IN:
+				sem_init(&interrupts[Q_NETWORK_CMD_IN], 0,
+					 MAILBOX_QUEUE_SIZE);
+				sem_post(&availables[Q_NETWORK_CMD_IN]);
+				break;
+			case Q_NETWORK_CMD_OUT:
+				sem_init(&interrupts[Q_NETWORK_CMD_OUT], 0, 0);
+				sem_post(&availables[Q_NETWORK_CMD_OUT]);
 				break;
 			case Q_BLUETOOTH_CMD_IN:
 				sem_init(&interrupts[Q_BLUETOOTH_CMD_IN], 0,

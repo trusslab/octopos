@@ -1,6 +1,10 @@
 #ifndef ARCH_SEC_HW
 #include "tcp.h"
 #include "lib.h"
+#else /*ARCH_SEC_HW*/
+#include <network/tcp.h>
+#include <network/lib.h>
+#endif /*ARCH_SEC_HW*/
 
 static struct tcp_timer_head timewait;
 /* static struct tcp_timer_head retrans; */
@@ -53,4 +57,3 @@ void tcp_timer(void)
 			tcp_timewait_timer(1000000);
 	}
 }
-#endif

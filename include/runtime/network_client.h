@@ -1,4 +1,7 @@
 #include <octopos/runtime.h>
+#ifdef ARCH_SEC_HW
+#include <network/netif.h>
+#endif
 
 /* FIXME: there are a lot of repetition in these macros (also see include/os/storage.h) */
 /* FIXME: the first check on max size is always false */
@@ -31,7 +34,20 @@
 		return NULL;								\
 	}										\
 	data = &buf[2];
-
+#define HW_NETWORK_GET_ZERO_ARGS_DATA							\
+	uint8_t *data;									\
+	uint16_t data_size;								\
+	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;				\
+	if (max_size >= 65536) {							\
+		printf("Error (%s): max_size not supported\n", __func__);		\
+		return NULL;								\
+	}										\
+	data_size = *((uint16_t *) &net_buf[0]);						\
+	if (data_size > max_size) {							\
+		printf("Error (%s): size not supported (%d)\n", __func__, data_size);	\
+		return NULL;								\
+	}										\
+	data = &net_buf[2];
 #ifdef CONFIG_UML
 /* FIXME: copied from include/network/list.h */
 /* list head */
@@ -62,6 +78,7 @@ int yield_network_access(void);
 int request_network_access(limit_t limit, timeout_t timeout,
 			   queue_update_callback_t callback,
 			   uint8_t *expected_pcr, uint8_t *return_pcr);
+int network_domain_bind_sport(unsigned short sport);
 void syscall_close_socket(void);
 #ifndef UNTRUSTED_DOMAIN
 void reset_network_queues_tracker(void);
