@@ -10,7 +10,7 @@ CONFIG_TOPLOGY = 2
 
 LD = ld
 CC = gcc
-CFLAGS = -Wall -Werror -I ../include/ -I ../include/network/ -I ../../include/network/ -I ../../../include/ -I ../../../include/network/ -I ../arch/umode/include/
+CFLAGS = -Wall -Werror -Wno-address-of-packed-member -I ../include/ -I ../include/network/ -I ../../include/network/ -I ../../../include/ -I ../../../include/network/ -I ../arch/umode/include/
 LFLAGS = -ldl -lpthread -lrt -ltss2-esys -ltss2-rc -ltss2-fapi -lcrypto
 export LD CC CFLAGS
 

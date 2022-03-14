@@ -1,6 +1,10 @@
 #ifndef _OCTOPOS_MAILBOX_H_
 #define _OCTOPOS_MAILBOX_H_
 
+#ifdef ARCH_SEC_HW
+#include "stdint.h"
+#endif
+
 #if !defined(UNTRUSTED_DOMAIN) && !defined(APPLICATION)
 #include <arch/defines.h>
 #endif
@@ -59,12 +63,11 @@
 #define MAILBOX_QUEUE_MSG_SIZE		64
 
 #ifdef ARCH_SEC_HW
-#define MAILBOX_QUEUE_SIZE_LARGE	MAILBOX_QUEUE_SIZE
-#define MAILBOX_QUEUE_MSG_SIZE_LARGE	MAILBOX_QUEUE_MSG_SIZE
+#define MAILBOX_QUEUE_SIZE_LARGE	4
 #else
 #define MAILBOX_QUEUE_SIZE_LARGE	8
-#define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
 #endif
+#define MAILBOX_QUEUE_MSG_SIZE_LARGE	512
 
 typedef struct __attribute__((__packed__)) {
 #ifdef ARCH_SEC_HW
@@ -90,9 +93,11 @@ typedef uint32_t timeout_t;
 #ifndef ARCH_SEC_HW
 #define MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL	2
 #define MAILBOX_DEFAULT_TIMEOUT_VAL		6
+#define MAILBOX_NETWORK_TIMEOUT_VAL MAILBOX_DEFAULT_TIMEOUT_VAL
 #else
 #define MAILBOX_MIN_PRACTICAL_TIMEOUT_VAL	20
 #define MAILBOX_DEFAULT_TIMEOUT_VAL		60
+#define MAILBOX_NETWORK_TIMEOUT_VAL MAILBOX_MAX_LIMIT_VAL
 #endif
 
 /* FIXME: move somewhere else */

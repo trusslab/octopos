@@ -24,6 +24,7 @@
 #include <arch/srec_errors.h>
 #include <arch/mem_layout.h>
 #include <arch/srec.h>
+#include "xil_io.h"
 
 /* Need to make sure msgs are big enough so that we don't overflow
  * when processing incoming msgs and preparing outgoing ones.
@@ -34,7 +35,6 @@
 
 void init_platform();
 void cleanup_platform();
-void cleanup_qspi_flash();
 
 /* Defines */
 #define CR       13
@@ -58,63 +58,61 @@ static uint8 *flbuf;
 
 static uint8 load_exec()
 {
-		uint8 ret;
-		void (*laddr)();
-		int8 done = 0;
+	uint8 ret;
+	void (*laddr)();
+	int8 done = 0;
+	srinfo.sr_data = sr_data_buf;
 
-		srinfo.sr_data = sr_data_buf;
+	while (!done) {
+		if ((ret = flash_get_srec_line (sr_buf)) != 0)
+			return ret;
+		if ((ret = decode_srec_line (sr_buf, &srinfo)) != 0)
+			return ret;
+		switch (srinfo.type) {
+			case SREC_TYPE_0:
+				break;
+			case SREC_TYPE_1:
+			case SREC_TYPE_2:
+			case SREC_TYPE_3:
+				memcpy ((void*)srinfo.addr, 
+					(void*)srinfo.sr_data, srinfo.dlen);
+				break;
+			case SREC_TYPE_5:
+				break;
+			case SREC_TYPE_7:
+			case SREC_TYPE_8:
+			case SREC_TYPE_9:
+				laddr = (void (*)())srinfo.addr;
+				done = 1;
+				ret = 0;
+				break;
+			}
+	}
 
-		while (!done) {
-				if ((ret = flash_get_srec_line (sr_buf)) != 0)
-						return ret;
+	(*laddr)();
 
-				if ((ret = decode_srec_line (sr_buf, &srinfo)) != 0)
-						return ret;
-
-				switch (srinfo.type) {
-						case SREC_TYPE_0:
-								break;
-						case SREC_TYPE_1:
-						case SREC_TYPE_2:
-						case SREC_TYPE_3:
-								memcpy ((void*)srinfo.addr, (void*)srinfo.sr_data, srinfo.dlen);
-								break;
-						case SREC_TYPE_5:
-								break;
-						case SREC_TYPE_7:
-						case SREC_TYPE_8:
-						case SREC_TYPE_9:
-								laddr = (void (*)())srinfo.addr;
-								done = 1;
-								ret = 0;
-								break;
-				}
-		}
-
-		(*laddr)();
-
-		/* We will be dead at this point */
-		return 0;
+	/* We will be dead at this point */
+	return 0;
 }
 
 static uint8 flash_get_srec_line (uint8 *buf)
 {
-		uint8 c;
-		int count = 0;
+	uint8 c;
+	int count = 0;
 
-		while (1) {
-				c  = *flbuf++;
-				if (c == 0xD) {
-						/* Eat up the 0xA too */
-						c = *flbuf++;
-						return 0;
-				}
-
-				*buf++ = c;
-				count++;
-				if (count > SREC_MAX_BYTES)
-						return LD_SREC_LINE_ERROR;
+	while (1) {
+		c  = *flbuf++;
+		if (c == 0xD) {
+			/* Eat up the 0xA too */
+			c = *flbuf++;
+			return 0;
 		}
+
+		*buf++ = c;
+		count++;
+		if (count > SREC_MAX_BYTES)
+			return LD_SREC_LINE_ERROR;
+	}
 }
 #endif
 
@@ -196,6 +194,26 @@ static int secure_boot_check(char *path, char *signature_path)
 
 int main(int argc, char *argv[])
 {
+#if defined(ARCH_SEC_HW_BOOT_STORAGE) || defined(ARCH_SEC_HW_BOOT_OS)
+	/* BENCHMARK: measure clock time between prints */
+	printf("Bootloader\r\n");
+#endif
+
+#ifdef ARCH_SEC_HW_BOOT
+	/* Clear target memory contents */
+	memset((void*) RAM_BASE_ADDRESS, 0, 
+		RAM_RANGE + BOOT_STACK_HEAP_SIZE);
+
+	/* lock ROM */
+	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
+	unsigned int * fuse1 = (unsigned int *) ROM_FUSE1;
+	unsigned int * fuse2 = (unsigned int *) ROM_FUSE2;
+	*fuse1 = FUSE_BURN_VALUE;
+	*fuse2 = FUSE_BURN_VALUE;
+	// printf("BL main\r\n");
+	*boot_status_reg = 0;
+#endif /* ARCH_SEC_HW_BOOT */
+
 	char path[128];
 	int ret;
 #ifndef ARCH_SEC_HW_BOOT
@@ -217,25 +235,26 @@ int main(int argc, char *argv[])
 	name = argv[1];
 #else /* ARCH_SEC_HW_BOOT */
 
-	/* Clear target memory contents */
-	memset((void*) DDR_BASE_ADDRESS, 0, DDR_RANGE);
-
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
-	char *name = ":storage";
+	Xil_Out32(
+		XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40,
+		0x0000000A
+		);
+	char *name = "storage";
 #elif defined(ARCH_SEC_HW_BOOT_KEYBOARD)
-	char *name = ":keyboard";
+	char *name = "keyboard";
 #elif defined(ARCH_SEC_HW_BOOT_SERIAL_OUT)
-	char *name = ":serial_out";
+	char *name = "serial_out";
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_1)
-	char *name = ":runtime1";
+	char *name = "runtime1";
 #elif defined(ARCH_SEC_HW_BOOT_RUNTIME_2)
-	char *name = ":runtime2";
+	char *name = "runtime2";
 #elif defined(ARCH_SEC_HW_BOOT_OS)
-	char *name = ":os";
+	char *name = "os";
 #elif defined(ARCH_SEC_HW_BOOT_NETWORK)
-	char *name = ":network";
+	char *name = "network";
 #elif defined(ARCH_SEC_HW_BOOT_LINUX)
-	char *name = ":linux";
+	char *name = "linux";
 #endif /* ARCH_SEC_HW_BOOT_STORAGE */
 
 #endif /* ARCH_SEC_HW_BOOT */

@@ -14,14 +14,17 @@
 #include <os/storage.h>
 #include <os/scheduler.h>
 #include <arch/mailbox_os.h>
-#ifndef ARCH_SEC_HW
 #include <arch/pmu.h>
-#else
+
+#ifdef ARCH_SEC_HW
 #include "arch/sec_hw.h"
 #include "arch/octopos_xmbox.h"
 
-extern OCTOPOS_XMbox*			Mbox_regs[NUM_QUEUES + 1];
-extern UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
+#define ARCH_SEC_HW_EVALUATION
+
+extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
+extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
+extern long long global_counter;
 
 u32 octopos_mailbox_get_status_reg(UINTPTR base);
 #endif
@@ -35,16 +38,7 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 #endif
 
 	/* Help with reading the image off of storage */
-#ifdef ARCH_SEC_HW
-	/* ad hoc solution for loading boot image as file */
-	char bootname[20] = {':'};
-	strcpy(&bootname[1], filename);
-	uint32_t fd = file_system_open_file(bootname, FILE_OPEN_MODE);
-
-#else
 	uint32_t fd = file_system_open_file(filename, FILE_OPEN_MODE);
-#endif
-
 	uint32_t num_blocks = file_system_get_file_num_blocks(fd);
 	file_system_read_file_blocks(fd, 0, num_blocks, proc_id);
 	file_system_read_file_blocks_late();
@@ -52,9 +46,9 @@ static void help_boot_proc(uint8_t proc_id, char *filename)
 	wait_for_storage();
 
 #ifdef ARCH_SEC_HW
-	// FIXME: Why do we need this wait and flush?
-	/* flush storage queue */
-	while(0xdeadbeef == octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
+	/* FIXME: unnecessary check */
+	while(0xdeadbeef == 
+		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
 	OCTOPOS_XMbox_Flush(Mbox_regs[Q_STORAGE_DATA_OUT]);
 #endif
 
@@ -100,9 +94,7 @@ void help_boot_runtime_proc(uint8_t runtime_proc_id)
 	if (runtime_proc_id == P_RUNTIME1)
 		help_boot_proc(runtime_proc_id, (char *) "runtime1");
 	else if (runtime_proc_id == P_RUNTIME2)
-		// FIXME: now we only have runtime 1
-		SEC_HW_DEBUG_HANG();
-//		help_boot_proc(runtime_proc_id, (char *) "runtime2");
+		help_boot_proc(runtime_proc_id, (char *) "runtime2");
 	else
 		SEC_HW_DEBUG_HANG();
 #endif
@@ -115,27 +107,63 @@ static void help_boot_untrusted_proc(void)
 
 void help_boot_procs(int boot_untrusted)
 {
-#ifndef ARCH_SEC_HW
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("init done\r\n");
+	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_keyboard_proc();
+
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("keyboard %d\r\n", global_counter);
+	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_serial_out_proc();
+
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("serial %d\r\n", global_counter);
+	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_network_proc();
+
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("net %d\r\n", global_counter);
+#endif /* ARCH_SEC_HW_EVALUATION */
+
+#ifndef ARCH_SEC_HW
 	help_boot_bluetooth_proc();
+#endif /* ARCH_SEC_HW */
+
+#ifdef ARCH_SEC_HW_EVALUATION
+	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_runtime_proc(P_RUNTIME1);
+
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("enclave0 %d\r\n", global_counter);
+	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	help_boot_runtime_proc(P_RUNTIME2);
+
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("enclave1 %d\r\n", global_counter);
+	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	if (boot_untrusted)
 		help_boot_untrusted_proc();
-#else
-	help_boot_serial_out_proc();
-	help_boot_keyboard_proc();
-	help_boot_runtime_proc(P_RUNTIME1);
-	if (boot_untrusted)
-	 	help_boot_untrusted_proc();
-#endif
+	
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("linux %d\r\n", global_counter);
+#endif /* ARCH_SEC_HW_EVALUATION */
 }
 
 int reset_proc(uint8_t proc_id)
 {
-#ifndef ARCH_SEC_HW
 	int ret;
 
 	if (proc_id == P_STORAGE) {
@@ -180,7 +208,6 @@ int reset_proc(uint8_t proc_id)
 			untrusted_needs_help_with_boot = 0;
 		}
 	}
-#endif
 	return 0;
 }
 
@@ -188,16 +215,15 @@ int reset_proc_simple(uint8_t proc_id)
 {
 	int ret;
 
-#ifndef ARCH_SEC_HW
 	ret = pmu_reset_proc(proc_id);
-#endif
 	
 	return ret;	
 }
 
 int reboot_system(void)
 {
-	int ret;
+	int ret = 0;
+
 #ifndef ARCH_SEC_HW
 	/* send a reboot cmd to PMU */
 	ret = pmu_reboot();
@@ -207,7 +233,8 @@ int reboot_system(void)
 
 int halt_system(void)
 {
-	int ret;
+	int ret = 0;
+	
 #ifndef ARCH_SEC_HW
 	/* send a shutdown cmd to PMU */
 	/* FIXME: there is a race condition here.

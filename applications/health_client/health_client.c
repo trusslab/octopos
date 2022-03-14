@@ -338,13 +338,14 @@ static int request_network_access(void)
 		return -1;
 	}
 
-	if (gapi->request_network_access(200, 100, queue_update_callback, NULL,
+	if (gapi->request_network_access(4095, 100, queue_update_callback, NULL,
 					 measured_network_pcr)) {
 		insecure_printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
 
 	has_network = 1;
+	gapi->bind_socket(sock, &skaddr);
 
 	return 0;
 }

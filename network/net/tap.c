@@ -1,3 +1,4 @@
+#ifndef ARCH_SEC_HW_NETWORK
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -189,3 +190,4 @@ void unset_tap(void)
 {
 	close(skfd);
 }
+#endif //ARCH_SEC_HW_NETWORK

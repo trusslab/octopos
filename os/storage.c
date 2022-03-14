@@ -27,11 +27,17 @@
 #include <arch/mailbox_os.h>
 
 struct partition *partitions;
-uint32_t num_partitions = 0;
-uint8_t storage_status = OS_ACCESS;
-struct app *current_app_with_storage_access = NULL;
-struct partition *boot_partition = NULL;
+uint32_t num_partitions;
+uint8_t storage_status;
+struct app *current_app_with_storage_access;
+struct partition *boot_partition;
 extern struct app untrusted_app;
+
+#ifdef ARCH_SEC_HW
+/* FIXME: how do we know storage is ready? */
+#define STORAGE_REBOOT_WAIT sleep(4)
+#define ARCH_SEC_HW_EVALUATION
+#endif
 
 static int query_number_partitions(void)
 {
@@ -72,17 +78,18 @@ static int query_partition(uint32_t partition_id, struct partition *partition)
 	
 	STORAGE_SET_TWO_ARGS(query_type, partition_id)
 	buf[0] = IO_OP_QUERY_ALL_RESOURCES;
-	
+
 	send_msg_to_storage_no_response(buf);
 	get_response_from_storage(buf);
-	
+
 	STORAGE_GET_ONE_RET_DATA(data)
 	
 	if (ret0)
 		return (int) ret0;
 
 	if (_size != (5 + TPM_EXTEND_HASH_SIZE)) {
-		printf("Error: %s: unexpected returned data size.\n", __func__);
+		printf("Error: %s: unexpected returned data size (%d).\n",
+			__func__, _size);
 		return ERR_UNEXPECTED;
 	}
 
@@ -201,8 +208,9 @@ void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_CMD_OUT);
 	}
 
-/* FIXME: why do we need this ifdef? */
-#ifdef ROLE_OS	
+	/* FIXME: sec_hw issue 25 */
+	/* FIXME: why do we need this ifdef? */
+#ifndef ARCH_SEC_HW
 	ret = is_queue_available(Q_STORAGE_DATA_IN);
 	if (!ret) {
 		wait_for_queue_availability(Q_STORAGE_DATA_IN);
@@ -214,6 +222,10 @@ void wait_for_storage(void)
 		wait_for_queue_availability(Q_STORAGE_DATA_OUT);
 	}
 }
+#endif
+
+#ifdef ARCH_SEC_HW_EVALUATION
+extern long long global_counter;
 #endif
 
 int wait_for_storage_for_os_use(void)
@@ -252,6 +264,9 @@ int wait_for_storage_for_os_use(void)
 				return ERR_UNEXPECTED;
 			}
 
+#ifdef ARCH_SEC_HW_EVALUATION
+			global_counter = 0;
+#endif
 			wait_for_storage();
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
@@ -260,7 +275,13 @@ int wait_for_storage_for_os_use(void)
 				return ERR_FAULT;
 			}
 
+#ifdef ARCH_SEC_HW
+			STORAGE_REBOOT_WAIT;
+#endif
 			storage_status = OS_ACCESS;
+#ifdef ARCH_SEC_HW_EVALUATION
+			printf("RESET (OS USE) %lld\r\n", global_counter);
+#endif
 			
 			ret = bind_partition(boot_partition->partition_id);
 			if (ret) {
@@ -296,10 +317,11 @@ static int storage_create_secure_partition(uint8_t *app_key,
 {
 	uint32_t i, _partition_id;
 
+	/* FIXME: sec_hw untrusted partition is created by installer */
 	if (runtime_proc_id == P_UNTRUSTED) {
 		if ((num_partitions >= 2) &&
-		    (partitions[1].size == partition_size) &&
-		    !partitions[1].is_created) {
+		    (partitions[1].size == partition_size)/* && 
+		    !partitions[1].is_created*/) {
 			_partition_id = 1;
 		} else {
 			printf("Error: %s: couldn't find the proper partition "
@@ -398,6 +420,9 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	}
 
 	if (storage_status != OS_ACCESS) {
+#ifdef ARCH_SEC_HW_EVALUATION
+		global_counter = 0;
+#endif
 		if (storage_status == OS_USE) {
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
@@ -418,6 +443,12 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 			}
 			storage_status = OS_ACCESS;
 		}
+#ifdef ARCH_SEC_HW
+		STORAGE_REBOOT_WAIT;
+#endif
+#ifdef ARCH_SEC_HW_EVALUATION
+		printf("RESET (CREATION) %lld\r\n", global_counter);
+#endif
 	}
 
 	ret = storage_create_secure_partition(app_key, runtime_proc_id,
@@ -446,11 +477,14 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	limit = arg0;
 	timeout = arg1;
 
+#ifndef ARCH_SEC_HW
+	/* sec_hw has unlimited quota */
 	if (limit > MAILBOX_MAX_LIMIT_VAL) {
 		printf("Error: %s: limit (%d) too large\n", __func__, limit);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
+#endif
 
 	runtime_proc = get_runtime_proc(runtime_proc_id);
 	if (!runtime_proc || !runtime_proc->app) {
@@ -472,14 +506,14 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		 * We limit its usage to MAILBOX_DEFAULT_TIMEOUT_VAL per
 		 * request in order not to starve other domains.
 		 */
-		if (timeout > MAILBOX_DEFAULT_TIMEOUT_VAL) {
+		if (timeout > MAILBOX_MAX_LIMIT_VAL) {
 			printf("Error: %s: timeout (%d) too large for the "
 			       "untrusted domain\n", __func__, timeout);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			return;
 		}
 	} else {
-		if (timeout > 100) {
+		if (timeout > MAILBOX_MAX_LIMIT_VAL) {
 			printf("Error: %s: timeout (%d) too large\n", __func__,
 			       timeout);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
@@ -489,6 +523,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	if ((storage_status == APP_ACCESS) &&
 	    (current_app_with_storage_access == app)) {
+#ifndef ARCH_SEC_HW
 		if (is_queue_available(Q_STORAGE_CMD_IN) &&
 		    is_queue_available(Q_STORAGE_CMD_OUT) &&
 		    is_queue_available(Q_STORAGE_DATA_IN) &&
@@ -513,9 +548,15 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			return;
 		}
+#else
+		no_reset = 1;
+#endif
 	}
 
 	if ((storage_status != OS_ACCESS) && !no_reset) {
+#ifdef ARCH_SEC_HW_EVALUATION
+		global_counter = 0;
+#endif
 		if (storage_status == OS_USE) {
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
@@ -536,6 +577,12 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 				return;
 			}
 		}
+#ifdef ARCH_SEC_HW
+		STORAGE_REBOOT_WAIT;
+#endif
+#ifdef ARCH_SEC_HW_EVALUATION
+		printf("RESET (ACCESS) %lld\r\n", global_counter);
+#endif
 	}
 
 	current_app_with_storage_access = app;
@@ -552,8 +599,11 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		}
 	}
 
+/* sec_hw issue 25 */
+#ifndef ARCH_SEC_HW
 	wait_until_empty(Q_STORAGE_CMD_IN, MAILBOX_QUEUE_SIZE);
 	wait_until_empty(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
+#endif
 
 	mark_queue_unavailable(Q_STORAGE_CMD_IN);
 	mark_queue_unavailable(Q_STORAGE_CMD_OUT);
@@ -577,7 +627,22 @@ uint32_t initialize_storage(void)
 {
 	int ret;
 
+	storage_status = OS_ACCESS;
+	num_partitions = 0;
+	current_app_with_storage_access = NULL;
+	boot_partition = NULL;
+
+/* Issue with sec_hw: the other bootloaders are busy 
+ * waiting on STORAGE_DATA_QUEUE, so that resetting the
+ * storage domain will distrube the bootloaders access to
+ * status register, which causes crash.
+ */
 #ifdef ROLE_OS
+
+#ifdef ARCH_SEC_HW_EVALUATION
+	global_counter = 0;
+#endif /* ARCH_SEC_HW_EVALUATION */
+
 	/* The bootloader has already used the partition. */
 	ret = reset_proc_simple(P_STORAGE);
 	if (ret) {
@@ -585,7 +650,17 @@ uint32_t initialize_storage(void)
 		       __func__);
 		exit(-1);
 	}
-#endif
+
+#ifdef ARCH_SEC_HW
+	STORAGE_REBOOT_WAIT;
+
+#ifdef ARCH_SEC_HW_EVALUATION
+	printf("RESET (BOOT) %lld\r\n", global_counter);
+#endif /* ARCH_SEC_HW_EVALUATION */
+
+#endif /*ARCH_SEC_HW */
+
+#endif /* ROLE_OS */
 
 	ret = query_storage_partitions();
 	if (ret) {

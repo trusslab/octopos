@@ -32,7 +32,16 @@
 #include <network/tcp_timer.h>
 #include <runtime/network_client.h>
 #endif
-
+#ifdef ARCH_SEC_HW
+#include <sys/stat.h>
+#include <runtime/runtime.h>
+#include <runtime/storage_client.h>
+#include <network/sock.h>
+#include <network/socket.h>
+#include <network/netif.h>
+#include <network/tcp_timer.h>
+#include <runtime/network_client.h>
+#endif
 #include <octopos/mailbox.h>
 #include <octopos/syscall.h>
 #include <octopos/runtime.h>
@@ -50,7 +59,8 @@
 #include <runtime/storage_client.h>
 #include "xparameters.h"
 #include "arch/sec_hw.h"
-#include "xil_cache.h"
+#include <network/ip.h>
+#include <network/tcp.h>
 #endif
 /* FIXME: remove */
 #ifdef ARCH_UMODE
@@ -60,11 +70,10 @@
 #endif
 
 #ifdef ARCH_SEC_HW
-volatile int i = 0xDEADBEEF;
-extern unsigned char __datacopy;
-extern unsigned char __data_start;
-extern unsigned char __data_end;
+#define ARCH_SEC_HW_EVALUATION
 #endif
+
+int network_domain_bind_sport(unsigned short sport);
 
 int p_runtime = 0;
 int q_runtime = 0;
@@ -338,7 +347,6 @@ void timer_tick(void)
 	}
 }
 
-#ifdef ARCH_UMODE
 /* network */
 int local_address(unsigned int addr)
 {
@@ -360,7 +368,9 @@ int rt_output(struct pkbuf *pkb)
 	exit(-1);
 	return 0;
 }
-
+extern bool has_network_access;
+extern int network_access_count;
+#ifndef ARCH_SEC_HW
 static void *tcp_receive(void *_data)
 {
 	while (1) {
@@ -398,25 +408,88 @@ static void *tcp_receive(void *_data)
 		free(buf);
 	}
 }
+#else /*ARCH_SEC_HW*/
+bool had_network_access;
+#define NETWRORK_RECEIVE_INTR_WORK
+uint8_t net_buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+extern UINTPTR			Mbox_ctrl_regs[NUM_QUEUES + 1];
+extern _Bool octopos_mailbox_attest_owner_fast(UINTPTR base);
+
+int tcp_receive()
+{
+
+
+	int bytes_read;
+	if(!has_network_access){
+		had_network_access = has_network_access;
+		return -1;
+	}
+	if(has_network_access & !had_network_access){
+		for(int i =0 ; i<100000; i++){
+		}
+		had_network_access = true;
+
+	}
+	_Bool result = TRUE;
+	UINTPTR queue_ptr = Mbox_ctrl_regs[Q_NETWORK_DATA_OUT];
+	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
+#ifdef NETWRORK_RECEIVE_INTR_WORK
+	if (!result){
+		while(1);
+	}
+	if (OCTOPOS_XMbox_IsEmptyHw(Mbox_regs[Q_NETWORK_DATA_OUT]->Config.BaseAddress)){
+		return XST_NO_DATA;
+	}
+
+	bytes_read = sem_wait_one_time_receive_buf_large(&interrupts[Q_NETWORK_DATA_OUT], Mbox_regs[Q_NETWORK_DATA_OUT], net_buf);
+
+	if (bytes_read == NULL){
+		return -1;
+	}
+
+
+
+	HW_NETWORK_GET_ZERO_ARGS_DATA
+	if (!data_size) {
+		printf("%s: Error: bad network data message\n", __func__);
+		return -1;
+	}
+
+	struct pkbuf *pkb = (struct pkbuf *) data;
+	pkb->pk_refcnt = 2; /* prevents the TCP code from freeing the pkb */
+	list_init(&pkb->pk_list);
+	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
+		printf("%s: Error: packet size is not correct.\n", __func__);
+		return -1;
+	}
+	tcp_in(pkb);
+#endif
+
+	return 0;
+}
+#endif /*ARCH_SEC_HW*/
 
 int net_start_receive(void)
 {
 	/* tcp receive */
 	/* FIXME: process received message on the main thread */
+#ifndef ARCH_SEC_HW
 	int ret = pthread_create(&tcp_threads[1], NULL, (pfunc_t) tcp_receive, NULL);
 	if (ret) {
 		printf("Error: couldn't launch tcp_threads[1]\n");
 		return ret;
 	}
-
+#endif
 	return 0;
 }
 
 void net_stop_receive(void)
 {
+#ifndef ARCH_SEC_HW
 	int ret = pthread_cancel(tcp_threads[1]);
 	if (ret)
 		printf("Error: couldn't kill tcp_threads[1]");
+#endif
 }
 
 int net_stack_init(void)
@@ -425,22 +498,25 @@ int net_stack_init(void)
 
 	/* tcp timer */
 	/* FIXME: do we need this? */
+#ifndef ARCH_SEC_HW
 	int ret = pthread_create(&tcp_threads[0], NULL, (pfunc_t) tcp_timer, NULL);
 	if (ret) {
 		printf("Error: couldn't launch tcp_threads[0]\n");
 		return -1;
 	}
-
+#endif
 	return 0;
 }
 
 void net_stack_exit(void)
 {
+#ifndef ARCH_SEC_HW
 	int ret = pthread_cancel(tcp_threads[0]);
 	if (ret)
 		printf("Error: couldn't kill tcp_threads[0]");
-}
 #endif
+
+}
 
 /* Only to be used for queues that runtime writes to */
 /* FIXME: busy-waiting */
@@ -502,12 +578,8 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 
 	ret = mailbox_attest_queue_access(Q_KEYBOARD, limit, timeout);
 	if (!ret) {
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-#else
 		printf("Error: %s: failed to attest secure keyboard access\n",
 		       __func__);
-#endif
 		return ERR_FAULT;
 	}
 
@@ -518,6 +590,7 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 	queue_limits[Q_KEYBOARD] = limit;
 	queue_timeouts[Q_KEYBOARD] = timeout;
 
+#ifndef ARCH_SEC_HW
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_KEYBOARD, expected_pcr);
 		if (ret) {
@@ -529,6 +602,7 @@ static int request_secure_keyboard(limit_t limit, timeout_t timeout,
 			return ERR_UNEXPECTED;
 		}
 	}
+#endif
 
 	queue_update_callbacks[Q_KEYBOARD] = callback;
 
@@ -572,17 +646,14 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 			     (uint32_t) timeout);
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
-	if (ret0)
+	if (ret0) {
 		return (int) ret0;
+	}
 
 	ret = mailbox_attest_queue_access(Q_SERIAL_OUT, limit, timeout);
 	if (!ret) {
-#ifdef ARCH_SEC_HW
-		_SEC_HW_ERROR("%s: fail to attest\r\n", __func__);
-#else
 		printf("Error: %s: failed to attest secure keyboard access\n",
 		       __func__);
-#endif
 		return ERR_FAULT;
 	}
 
@@ -593,6 +664,7 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 	queue_limits[Q_SERIAL_OUT] = limit;
 	queue_timeouts[Q_SERIAL_OUT] = timeout;
 
+#ifndef ARCH_SEC_HW
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_SERIAL_OUT, expected_pcr);
 		if (ret) {
@@ -605,11 +677,11 @@ static int request_secure_serial_out(limit_t limit, timeout_t timeout,
 			return ERR_UNEXPECTED;
 		}
 	}
+#endif
 
 	has_secure_serial_out_access = true;
 
 	queue_update_callbacks[Q_SERIAL_OUT] = callback;
-
 	return 0;
 }
 
@@ -668,6 +740,20 @@ static int read_char_from_secure_keyboard(char *buf)
 
 static int inform_os_of_termination(void)
 {
+#ifdef ARCH_SEC_HW
+	/* FIXME: Issue #26 */
+	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
+	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_OUT);
+	mailbox_yield_to_previous_owner(Q_NETWORK_DATA_IN);
+	mailbox_yield_to_previous_owner(Q_NETWORK_CMD_OUT);
+	mailbox_yield_to_previous_owner(Q_NETWORK_CMD_IN);
+	mailbox_yield_to_previous_owner(Q_KEYBOARD);
+	mailbox_yield_to_previous_owner(Q_SERIAL_OUT);
+#endif
+
 	SYSCALL_SET_ZERO_ARGS(SYSCALL_INFORM_OS_OF_TERMINATION)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
@@ -712,9 +798,6 @@ static int read_from_shell(char *data, int *data_size)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET_DATA(data)
 	*data_size = (int) _size;
-#ifdef ARCH_SEC_HW
-	data[*data_size - 1] = '\0';
-#endif
 	return (int) ret0;
 }
 
@@ -778,7 +861,7 @@ static int read_file_blocks(uint32_t fd, uint8_t *data, int start_block,
 	for (int i = 0; i < num_blocks; i++)
 		runtime_recv_msg_from_queue_large(data + (i * STORAGE_BLOCK_SIZE),
 						  queue_id);
-
+	
 	return num_blocks;
 }
 
@@ -974,7 +1057,6 @@ static uint64_t get_time(void)
 extern bool has_network_access;
 extern int network_access_count;
 
-#ifdef ARCH_UMODE
 static struct socket *create_socket(int family, int type, int protocol,
 					struct sock_addr *skaddr)
 {
@@ -1015,11 +1097,11 @@ static void close_socket(struct socket *sock)
 	syscall_close_socket();
 }
 
-//static int bind_socket(struct socket *sock, struct sock_addr *skaddr)
-//{
-//	return bind_socket(sock, skaddr);
-//}
-//
+static int bind_socket(struct socket *sock, struct sock_addr *skaddr)
+{
+	return network_domain_bind_sport(skaddr->src_port);
+}
+
 //static struct socket *accept_connection(struct socket *sock, struct sock_addr *skaddr)
 //{
 //	return _accept(sock, skaddr);
@@ -1070,6 +1152,7 @@ static int write_to_socket(struct socket *sock, void *buf, int len)
 
 	return _write(sock, buf, len);
 }
+#ifdef ARCH_UMODE
 
 static int verify_bluetooth_service_state(uint8_t *device_names,
 					  uint32_t num_devices,
@@ -1498,8 +1581,17 @@ int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 }
 #endif
 
+#ifdef ARCH_SEC_HW_EVALUATION
+extern long long global_counter;
+#endif
+
+#ifndef ARCH_SEC_HW_BOOT
 static void load_application(char *msg)
 {
+#ifdef ARCH_SEC_HW_EVALUATION
+	global_counter = 0;
+#endif
+
 	/* The bound is the length of load_buf minus one (for the null
 	 * terminator)
 	 */
@@ -1552,17 +1644,17 @@ static void load_application(char *msg)
 #endif
 		.get_random_uint = get_random_uint,
 		.get_time = get_time,
-#ifndef ARCH_SEC_HW
 		.create_socket = create_socket,
 		//.listen_on_socket = listen_on_socket,
 		.close_socket = close_socket,
-		//.bind_socket = bind_socket,
+		.bind_socket = bind_socket,
 		//.accept_connection = accept_connection,
 		.connect_socket = connect_socket,
 		.read_from_socket = read_from_socket,
 		.write_to_socket = write_to_socket,
 		.request_network_access = request_network_access,
 		.yield_network_access = yield_network_access,
+#ifndef ARCH_SEC_HW
 		.request_secure_bluetooth_access =
 					request_secure_bluetooth_access,
 		.authenticate_with_bluetooth_service =
@@ -1652,13 +1744,18 @@ void *run_app(void *load_buf)
 		return NULL;
 	}
 	wait_for_app_load();
-	
 	load_application((char *) load_buf);
 	still_running = false;
 	inform_os_of_termination();
 
 	return NULL;
 }
+
+#else /* ARCH_SEC_HW_BOOT */
+
+void *run_app(void *load_buf) {}
+
+#endif /* ARCH_SEC_HW_BOOT */
 
 /* FIXME: copied from mailbox.c */
 static uint8_t **allocate_memory_for_queue(int queue_size, int msg_size)
@@ -1702,23 +1799,6 @@ int main(int argc, char **argv)
 int main()
 #endif
 {
-#ifdef ARCH_SEC_HW
-
-	unsigned char *dataCopyStart = &__datacopy;
-	unsigned char *dataStart = &__data_start;
-	unsigned char *dataEnd = &__data_end;
-	if (i == 0xDEADBEEF) {
-		while(dataStart < dataEnd)
-			*dataCopyStart++ = *dataStart++;
-	} else {
-		while(dataStart < dataEnd)
-			*dataStart++ = *dataCopyStart++;
-		// _mb_restarted = TRUE;
-	}
-
-	i = 0;
-#endif /* ARCH_SEC_HW */
-
 	int runtime_id = -1;
 
 	/* Non-buffering stdout */
@@ -1733,12 +1813,12 @@ int main()
 		       __func__, MAILBOX_QUEUE_MSG_SIZE);
 		return -1;
 	}
-
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error: %s: storage data queue msg size must be equal "
 		       "to storage block size\n", __func__);
 		return -1;
 	}
+
 #ifdef ARCH_UMODE
 	if (argc != 2) {
 		printf("Error: %s: incorrect command. Use ``runtime "
@@ -1749,6 +1829,7 @@ int main()
 	runtime_id = atoi(argv[1]);
 #else
 	runtime_id = RUNTIME_ID;
+
 #endif
 	printf("%s: runtime%d init\n", __func__, runtime_id);
 
@@ -1762,6 +1843,7 @@ int main()
 		printf("Error: %s: couldn't initialize the runtime\n", __func__);
 		return -1;
 	}
+
 #ifndef ARCH_SEC_HW
 	enforce_running_process(p_runtime);
 #endif
@@ -1794,6 +1876,7 @@ int main()
 #endif
 
 	runtime_core();
+
 #ifdef ARCH_UMODE
 	net_stack_exit();
 #endif

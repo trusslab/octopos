@@ -2,6 +2,10 @@
 *.swp
 *.swo
 *.so
+*.jou
+*.log
+*.srec
+bin
 storage/storage
 storage/octopos_partition*
 keyboard/keyboard
@@ -34,5 +38,8 @@ installer/installer
 installer/copy*
 installer/aligned*
 installer/*signature
+installer_sec_hw/installer
+installer_sec_hw/copy*
 external/ibmtpm/tpm_server
-util/tools/tpm_shutdown
+util/tpm/tpm_shutdown/tpm_shutdown
+arch/sec_hw/bootloader_interface/file_system.c

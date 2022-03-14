@@ -147,11 +147,12 @@ void app_main(struct runtime_api *api)
 		goto out;
 	}
 
-	if (api->request_network_access(200, 100, NULL, NULL, NULL)) {
+	if (api->request_network_access(4095, 100, NULL, NULL, NULL)) {
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}
 
+	api->bind_socket(sock, &skaddr);
 	send_receive(api);
 
 out:	/* close and out */
