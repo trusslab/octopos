@@ -20,6 +20,9 @@
 #include "octopos/storage.h"
 #include "octopos/error.h"
 
+extern struct partition partitions[NUM_PARTITIONS];
+#define FILE DFILE
+
 XIntc			intc;
 
 OCTOPOS_XMbox	Mbox_storage_in_2,
@@ -357,6 +360,40 @@ int init_storage(void)
 
 	initialize_storage_space();
 #endif
+
+	/* copy storage contents to ram */
+	// unsigned int * test_ram = (unsigned int *) 0x20000000;
+	// *test_ram = 0xDEADABCD;
+	// unsigned int * test_ram2 = (unsigned int *) 0x25000000;
+	// *test_ram2 = 0xBEEFABCD;
+	// printf("%08x, %08x\r\n", *test_ram, *test_ram2);
+
+	FILE *filep;
+	size_t fsize;
+
+	filep = fop_open(partitions[0].data_name, "r");
+	if (!filep)
+		return XST_FAILURE;
+
+	fsize = fop_size(filep);
+	for (int i = 0; i < fsize; i++) {
+		fop_read(
+			(unsigned int *) (RAM_ROOT_PARTITION_BASE + i * STORAGE_BLOCK_SIZE), 
+			sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
+	}
+	fop_close(filep);
+
+	filep = fop_open(partitions[1].data_name, "r");
+	if (!filep)
+		return XST_FAILURE;
+
+	fsize = fop_size(filep);
+	for (int i = 0; i < fsize; i++) {
+		fop_read(
+			(unsigned int *) (RAM_UNTRUSTED_PARTITION_BASE + i * STORAGE_BLOCK_SIZE), 
+			sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
+	}
+	fop_close(filep);
 
 	return XST_SUCCESS;
 }

@@ -123,17 +123,6 @@
 	}							\
 	data = &buf[6];						\
 
-/* partition information */
-struct partition {
-	uint32_t size; /* in blocks */
-	char data_name[256];
-	char create_name[256];
-	char keys_name[256];
-	uint8_t is_created;
-};
-
-#define NUM_PARTITIONS		6
-
 /* FIXME: determine partitions and their sizes dynamically. */
 struct partition partitions[NUM_PARTITIONS];
 /*
@@ -143,6 +132,17 @@ struct partition partitions[NUM_PARTITIONS];
  */
 uint32_t partition_sizes[NUM_PARTITIONS] = {STORAGE_BOOT_PARTITION_SIZE,
 	STORAGE_UNTRUSTED_ROOT_FS_PARTITION_SIZE, 100, 100, 100, 100};
+
+#ifdef ARCH_SEC_HW
+unsigned int partition_base[NUM_PARTITIONS] = {
+	RAM_ROOT_PARTITION_BASE,
+	RAM_UNTRUSTED_PARTITION_BASE,
+	RAM_ENCLAVE_PARTITION_1_BASE,
+	RAM_ENCLAVE_PARTITION_2_BASE,
+	RAM_ENCLAVE_PARTITION_3_BASE,
+	RAM_ENCLAVE_PARTITION_4_BASE
+};
+#endif
 	
 uint8_t bound_partition = 0xFF; /* 0xFF is an invalid partition number. */
 uint8_t bound = 0;
@@ -362,6 +362,15 @@ static int wipe_partition(int partition_id)
 		fop_write(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE,
 			  filep);
 
+#ifdef ARCH_SEC_HW
+	size_t fsize = fop_size(filep);
+	for (int i = 0; i < fsize; i++) {
+		memset((unsigned int *) partition_base[partition_id] +
+			i * STORAGE_BLOCK_SIZE, 
+			0x0, STORAGE_BLOCK_SIZE);
+	}
+#endif
+
 	fop_close(filep);
 
 	return 0;
@@ -479,6 +488,7 @@ static void storage_send_data(uint8_t *buf)
 		return;
 	}
 
+#ifndef ARCH_SEC_HW
 	filep = fop_open(partitions[partition_id].data_name, "r+");
 	if (!filep) {
 		printf("Error: %s: couldn't open %s for write\n", __func__,
@@ -486,6 +496,7 @@ static void storage_send_data(uint8_t *buf)
 		STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 		return;
 	}
+#endif
 
 	STORAGE_GET_TWO_ARGS
 	start_block = arg0;
@@ -499,17 +510,28 @@ static void storage_send_data(uint8_t *buf)
 	}
 
 	seek_off = start_block * STORAGE_BLOCK_SIZE;
+#ifndef ARCH_SEC_HW
 	fop_seek(filep, seek_off, SEEK_SET);
+#endif
 	size = 0;
 
 	for (i = 0; i < num_blocks; i++) {
 		read_data_from_queue(data_buf, Q_STORAGE_DATA_IN);
+#ifndef ARCH_SEC_HW
 		size += (uint32_t) fop_write(data_buf, sizeof(uint8_t),
 					     STORAGE_BLOCK_SIZE, filep);
+#else
+		memcpy((unsigned int *) partition_base[partition_id] +
+			seek_off + i * STORAGE_BLOCK_SIZE,
+			data_buf, STORAGE_BLOCK_SIZE);
+		size += STORAGE_BLOCK_SIZE;
+#endif
 	}
 
 	STORAGE_SET_TWO_RETS(0, size)
+#ifndef ARCH_SEC_HW
 	fop_close(filep);
+#endif
 }
 
 /*
@@ -553,6 +575,7 @@ static void storage_receive_data(uint8_t *buf)
 		return;
 	}
 
+#ifndef ARCH_SEC_HW
 	filep = fop_open(partitions[partition_id].data_name, "r");
 	if (!filep) {
 		printf("Error: %s: couldn't open %s for read\n", __func__,
@@ -560,6 +583,7 @@ static void storage_receive_data(uint8_t *buf)
 		STORAGE_SET_TWO_RETS(ERR_FAULT, 0)
 		return;
 	}
+#endif
 
 	STORAGE_GET_TWO_ARGS
 	start_block = arg0;
@@ -573,18 +597,29 @@ static void storage_receive_data(uint8_t *buf)
 	}
 	
 	seek_off = start_block * STORAGE_BLOCK_SIZE;
+#ifndef ARCH_SEC_HW
 	fop_seek(filep, seek_off, SEEK_SET);
+#endif
 	size = 0;
 	
 	for (i = 0; i < num_blocks; i++) {
+#ifndef ARCH_SEC_HW
 		size += (uint32_t) fop_read(data_buf, sizeof(uint8_t),
 					    STORAGE_BLOCK_SIZE, filep);
-
+#else
+		memcpy(data_buf, 
+			(unsigned int *) partition_base[partition_id] + 
+			seek_off + i * STORAGE_BLOCK_SIZE,
+			STORAGE_BLOCK_SIZE);
+		size += STORAGE_BLOCK_SIZE;
+#endif
 		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 	}
 
 	STORAGE_SET_TWO_RETS(0, size)
+#ifndef ARCH_SEC_HW
 	fop_close(filep);
+#endif
 }
 
 /* 
