@@ -20,7 +20,6 @@
 #include "octopos/storage.h"
 #include "octopos/error.h"
 
-extern struct partition partitions[NUM_PARTITIONS];
 #define FILE DFILE
 
 XIntc			intc;
@@ -359,41 +358,68 @@ int init_storage(void)
 	sem_init(&interrupts[Q_STORAGE_CMD_OUT], 0, MAILBOX_QUEUE_SIZE);
 
 	initialize_storage_space();
-#endif
 
 	/* copy storage contents to ram */
-	// unsigned int * test_ram = (unsigned int *) 0x20000000;
+	unsigned int * ram_inited = (unsigned int *) 0x20000000;
 	// *test_ram = 0xDEADABCD;
 	// unsigned int * test_ram2 = (unsigned int *) 0x25000000;
 	// *test_ram2 = 0xBEEFABCD;
 	// printf("%08x, %08x\r\n", *test_ram, *test_ram2);
 
+	printf("bit: %02x\r\n", *ram_inited);
+	if (*ram_inited == 0x265e2524) {
+		printf("[0]\r\n");
+		return XST_SUCCESS;
+	}
+
 	FILE *filep;
 	size_t fsize;
 
-	filep = fop_open(partitions[0].data_name, "r");
+	filep = fop_open("octopos_partition_0_data", "r");
 	if (!filep)
 		return XST_FAILURE;
 
 	fsize = fop_size(filep);
-	for (int i = 0; i < fsize; i++) {
+	printf("size0:%d\r\n", fsize);
+	fop_seek(filep, 0, SEEK_SET);
+	for (int i = 0; i < fsize / STORAGE_BLOCK_SIZE; i++) {
+		// printf("%d\r\n", i);
 		fop_read(
-			(unsigned int *) (RAM_ROOT_PARTITION_BASE + i * STORAGE_BLOCK_SIZE), 
+			(void *) (RAM_ROOT_PARTITION_BASE + i * STORAGE_BLOCK_SIZE), 
 			sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
+		// printf("%d 0x%08x\r\n", i, *((unsigned int *) (RAM_ROOT_PARTITION_BASE + i * STORAGE_BLOCK_SIZE)));
+		if (i % 256 == 0) {
+			printf("%d\r\n", i);
+			fop_close(filep);
+			filep = fop_open("octopos_partition_0_data", "r");
+			fop_seek(filep, RAM_ROOT_PARTITION_BASE + (i+1) * STORAGE_BLOCK_SIZE, SEEK_SET);
+		}
 	}
 	fop_close(filep);
 
-	filep = fop_open(partitions[1].data_name, "r");
+	filep = fop_open("octopos_partition_1_data", "r");
 	if (!filep)
 		return XST_FAILURE;
 
 	fsize = fop_size(filep);
-	for (int i = 0; i < fsize; i++) {
+	printf("size1:%d\r\n", fsize);
+	fop_seek(filep, 0, SEEK_SET);
+	for (int i = 0; i < fsize / STORAGE_BLOCK_SIZE; i++) {
+		// printf("%d\r\n", i);
 		fop_read(
 			(unsigned int *) (RAM_UNTRUSTED_PARTITION_BASE + i * STORAGE_BLOCK_SIZE), 
 			sizeof(uint8_t), STORAGE_BLOCK_SIZE, filep);
+		if (i % 256 == 0) {
+			printf("%d\r\n", i);
+			fop_close(filep);
+			filep = fop_open("octopos_partition_1_data", "r");
+			fop_seek(filep, RAM_ROOT_PARTITION_BASE + (i+1) * STORAGE_BLOCK_SIZE, SEEK_SET);
+		}
 	}
 	fop_close(filep);
+	printf("[1]\r\n");
+
+#endif
 
 	return XST_SUCCESS;
 }

@@ -123,6 +123,17 @@
 	}							\
 	data = &buf[6];						\
 
+/* partition information */
+struct partition {
+	uint32_t size; /* in blocks */
+	char data_name[256];
+	char create_name[256];
+	char keys_name[256];
+	uint8_t is_created;
+};
+
+#define NUM_PARTITIONS		6
+
 /* FIXME: determine partitions and their sizes dynamically. */
 struct partition partitions[NUM_PARTITIONS];
 /*
@@ -521,10 +532,11 @@ static void storage_send_data(uint8_t *buf)
 		size += (uint32_t) fop_write(data_buf, sizeof(uint8_t),
 					     STORAGE_BLOCK_SIZE, filep);
 #else
-		memcpy((unsigned int *) partition_base[partition_id] +
-			seek_off + i * STORAGE_BLOCK_SIZE,
+		memcpy((void *) (partition_base[partition_id] +
+			seek_off + i * STORAGE_BLOCK_SIZE),
 			data_buf, STORAGE_BLOCK_SIZE);
 		size += STORAGE_BLOCK_SIZE;
+		printf("tx %d %d\r\n", partition_id, i);
 #endif
 	}
 
@@ -608,10 +620,11 @@ static void storage_receive_data(uint8_t *buf)
 					    STORAGE_BLOCK_SIZE, filep);
 #else
 		memcpy(data_buf, 
-			(unsigned int *) partition_base[partition_id] + 
-			seek_off + i * STORAGE_BLOCK_SIZE,
+			(void *) (partition_base[partition_id] + 
+			seek_off + i * STORAGE_BLOCK_SIZE),
 			STORAGE_BLOCK_SIZE);
 		size += STORAGE_BLOCK_SIZE;
+		printf("rx %d %d\r\n", partition_id, i);
 #endif
 		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 	}

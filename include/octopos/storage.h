@@ -7,17 +7,7 @@
 #define false 0
 #endif
 
-#define NUM_PARTITIONS		6
 #define MAX_PARTITION_NAME_LEN 64
-
-/* partition information */
-struct partition {
-	uint32_t size; /* in blocks */
-	char data_name[MAX_PARTITION_NAME_LEN];
-	char create_name[MAX_PARTITION_NAME_LEN];
-	char keys_name[MAX_PARTITION_NAME_LEN];
-	uint8_t is_created;
-};
 
 #define STORAGE_BLOCK_SIZE	512  /* bytes */
 
