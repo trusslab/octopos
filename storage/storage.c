@@ -516,7 +516,9 @@ static void storage_send_data(uint8_t *buf)
 	if (start_block + num_blocks > partitions[partition_id].size) {
 		printf("Error: %s: invalid args\n", __func__);
 		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+#ifndef ARCH_SEC_HW
 		fop_close(filep);
+#endif
 		return;
 	}
 
@@ -604,7 +606,9 @@ static void storage_receive_data(uint8_t *buf)
 	if (start_block + num_blocks > partitions[partition_id].size) {
 		printf("Error: %s: invalid args\n", __func__);
 		STORAGE_SET_TWO_RETS(ERR_INVALID, 0)
+#ifndef ARCH_SEC_HW
 		fop_close(filep);
+#endif
 		return;
 	}
 	
