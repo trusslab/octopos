@@ -663,6 +663,7 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size,
 	}
 
 	if (offset >= file->size) {
+	printf("[7!]\r\n");
 		return 0;
 	}
 
@@ -1050,10 +1051,11 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 
 	/* read the directory */
 	read_dir_data_from_storage();
-
+printf("[1]\r\n");
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
+printf("[2]\r\n");
 		/* retrieve file info */
 #ifdef ARCH_SEC_HW
 		uint16_t num_files;
@@ -1132,6 +1134,7 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
+printf("[3]\r\n");
 }
 
 void close_file_system(void)
