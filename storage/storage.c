@@ -1037,12 +1037,6 @@ int main(int argc, char **argv)
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: storage init\n", __func__);
 
-//	sleep(10);
-//	mem_test();
-	printf("dom %08x\r\n", *((unsigned int *) 0x30000000));
-	printf("dom %08x\r\n", *((unsigned int *) 0x30100000));
-//	return 0;
-
 #ifdef ARCH_SEC_HW
 	Xil_Out32(
 		XPAR_STORAGE_SUBSYSTEM_PMODSD_0_AXI_LITE_SPI_BASEADDR + 0x40,
@@ -1055,9 +1049,6 @@ int main(int argc, char **argv)
 #endif
 
 	init_storage();
-#if defined(ARCH_SEC_HW) && !defined(ARCH_SEC_HW_BOOT_STORAGE)
-//	copy_partitions_to_ram();
-#endif
 	storage_event_loop();
 	close_storage();
 }

@@ -206,7 +206,7 @@ int main(int argc, char *argv[])
 
 	/* Clear target memory contents */
 	memset((void*) RAM_BASE_ADDRESS, 0, 
-		RAM_RANGE + BOOT_STACK_HEAP_SIZE);
+		RAM_TOTAL_SIZE + BOOT_STACK_HEAP_SIZE);
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
 
 #ifndef ARCH_SEC_HW_BOOT_STORAGE
@@ -228,11 +228,11 @@ int main(int argc, char *argv[])
 ////	return 0;
 //#endif
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
-	sleep(10);
-//	mem_test();
-	printf("%08x\r\n", *((unsigned int *) 0x30000000));
-	printf("%08x\r\n", *((unsigned int *) 0x30100000));
-//	return 0;
+	unsigned int * boot_counter_reg = (unsigned int *) BOOT_COUNTER_REG;
+	if (*boot_counter_reg != 1) {
+		*boot_counter_reg = 1;
+		sleep(10);
+	}
 #endif
 
 #endif /* ARCH_SEC_HW_BOOT */
