@@ -11,6 +11,7 @@
 #include <semaphore.h>
 #include <tpm/tpm.h>
 #else
+#include "xil_cache.h"
 #include "arch/sec_hw.h"
 #include "arch/semaphore.h"
 #include "PmodSD.h"
@@ -538,7 +539,7 @@ static void storage_send_data(uint8_t *buf)
 			seek_off + i * STORAGE_BLOCK_SIZE),
 			data_buf, STORAGE_BLOCK_SIZE);
 		size += STORAGE_BLOCK_SIZE;
-		printf("tx %d %d\r\n", partition_id, i);
+//		printf("tx %d %d\r\n", partition_id, i);
 #endif
 	}
 
@@ -628,10 +629,10 @@ static void storage_receive_data(uint8_t *buf)
 			seek_off + i * STORAGE_BLOCK_SIZE),
 			STORAGE_BLOCK_SIZE);
 		size += STORAGE_BLOCK_SIZE;
-		printf("rx %d %d %d\r\n", partition_id, i, start_block);
-		printf ("%08x: %08x\r\n", (partition_base[partition_id] + 
-			seek_off + i * STORAGE_BLOCK_SIZE), *((unsigned int *) (partition_base[partition_id] + 
-			seek_off + i * STORAGE_BLOCK_SIZE)));
+//		printf("rx %d %d %d\r\n", partition_id, i, start_block);
+//		printf ("%08x: %08x\r\n", (partition_base[partition_id] +
+//			seek_off + i * STORAGE_BLOCK_SIZE), *((unsigned int *) (partition_base[partition_id] +
+//			seek_off + i * STORAGE_BLOCK_SIZE)));
 #endif
 		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 	}
@@ -1000,12 +1001,47 @@ void process_request(uint8_t *buf, uint8_t proc_id)
 	}
 }
 
+//void mem_test() __attribute__((aligned, section("memaccess")));
+
+void mem_test()
+{
+        for (u32 i = 0; i < 0xfffffff; i+=1) {
+                *((unsigned char *) 0x30000000 + i) = 0xDE;
+                // debug
+//                if (i % 4 ==0) while(1);
+                if (i % 0x10000 == 0)
+                        printf("%08x\r\n", i+0x30000000);
+                if (*((unsigned char *) 0x30000000 + i) != 0xDE) {
+                	printf("%08x wrong (%02x)\r\n", i+0x30000000, *((unsigned char *) 0x30000000 + i));
+                    while(1);
+                }
+        }
+
+        return;
+
+		memset((void*) 0x30000000, 0xac, 0xffffff);
+		printf("%08x\r\n", *((u32*) 0x30ff0000));
+		while(1);
+}
+
+
 #ifndef ARCH_SEC_HW_BOOT
 int main(int argc, char **argv)
 {
+//	Xil_DCacheFlush();
+//	Xil_ICacheInvalidate();
+	Xil_ICacheEnable();
+//	Xil_DCacheEnable();
+
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: storage init\n", __func__);
+
+//	sleep(10);
+//	mem_test();
+	printf("dom %08x\r\n", *((unsigned int *) 0x30000000));
+	printf("dom %08x\r\n", *((unsigned int *) 0x30100000));
+//	return 0;
 
 #ifdef ARCH_SEC_HW
 	Xil_Out32(
@@ -1013,14 +1049,14 @@ int main(int argc, char **argv)
 		0x0000000A
 		);
 #endif
-	
+
 #ifndef ARCH_SEC_HW
 	enforce_running_process(P_STORAGE);
 #endif
 
 	init_storage();
 #if defined(ARCH_SEC_HW) && !defined(ARCH_SEC_HW_BOOT_STORAGE)
-	copy_partitions_to_ram();
+//	copy_partitions_to_ram();
 #endif
 	storage_event_loop();
 	close_storage();

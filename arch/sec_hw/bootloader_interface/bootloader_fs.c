@@ -66,6 +66,8 @@ void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
 void sha256_final(SHA256_CTX *ctx, uchar hash[]);
 OCTOPOS_XMbox Mbox_TPM;
 
+void mem_test();
+
 void storage_request_boot_image_by_line(char *filename)
 {
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
@@ -201,7 +203,10 @@ void storage_request_boot_image_by_line(char *filename)
 					*(boot_status_reg) = 1;
 
 					laddr = (void (*)()) BOOT_RESET_REG;
-
+//#ifdef ARCH_SEC_HW_BOOT_STORAGE
+//	sleep(10);
+//	mem_test();
+//#endif
 					/* jump to start vector of loaded program */
 					(*laddr)();
 

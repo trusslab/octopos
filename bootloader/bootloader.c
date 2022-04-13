@@ -192,6 +192,9 @@ static int secure_boot_check(char *path, char *signature_path)
 }
 #endif
 
+//void mem_test();
+//#include "xil_cache.h"
+
 int main(int argc, char *argv[])
 {
 #if defined(ARCH_SEC_HW_BOOT_STORAGE) || defined(ARCH_SEC_HW_BOOT_OS)
@@ -200,18 +203,38 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef ARCH_SEC_HW_BOOT
+
 	/* Clear target memory contents */
 	memset((void*) RAM_BASE_ADDRESS, 0, 
 		RAM_RANGE + BOOT_STACK_HEAP_SIZE);
-
-	/* lock ROM */
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
+
+#ifndef ARCH_SEC_HW_BOOT_STORAGE
+	/* lock ROM */
 	unsigned int * fuse1 = (unsigned int *) ROM_FUSE1;
 	unsigned int * fuse2 = (unsigned int *) ROM_FUSE2;
 	*fuse1 = FUSE_BURN_VALUE;
 	*fuse2 = FUSE_BURN_VALUE;
 	// printf("BL main\r\n");
+#endif /* ARCH_SEC_HW_BOOT_STORAGE */
+
 	*boot_status_reg = 0;
+
+//#ifdef ARCH_SEC_HW_BOOT_OS
+////	sleep(60);
+//////	mem_test();
+////	printf("%08x\r\n", *((unsigned int *) 0x30100000));
+//	while(1){}
+////	return 0;
+//#endif
+#ifdef ARCH_SEC_HW_BOOT_STORAGE
+	sleep(10);
+//	mem_test();
+	printf("%08x\r\n", *((unsigned int *) 0x30000000));
+	printf("%08x\r\n", *((unsigned int *) 0x30100000));
+//	return 0;
+#endif
+
 #endif /* ARCH_SEC_HW_BOOT */
 
 	char path[128];

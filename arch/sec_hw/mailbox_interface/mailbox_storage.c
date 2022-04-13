@@ -469,14 +469,19 @@ void copy_partitions_to_ram(void)
 	// uint8_t tmp_data_buf[STORAGE_BLOCK_SIZE];
 
 	/* copy storage contents to ram */
-	unsigned int * ram_inited = (unsigned int *) 0x20000000;
+	// unsigned char * ram_inited = (unsigned char *) RAM_ROOT_PARTITION_BASE;
 	// *test_ram = 0xDEADABCD;
 	// unsigned int * test_ram2 = (unsigned int *) 0x25000000;
 	// *test_ram2 = 0xBEEFABCD;
 	// printf("%08x, %08x\r\n", *test_ram, *test_ram2);
 
-	printf("bit: %08x\r\n", *ram_inited);
-	if (*ram_inited == 0x265e2524) {
+	printf("0x%02x%02x%02x%02x\r\n", 
+		((unsigned char *) RAM_ROOT_PARTITION_BASE)[0],
+		((unsigned char *) RAM_ROOT_PARTITION_BASE)[1],
+		((unsigned char *) RAM_ROOT_PARTITION_BASE)[2],
+		((unsigned char *) RAM_ROOT_PARTITION_BASE)[3]);
+	if (((unsigned char *) RAM_ROOT_PARTITION_BASE)[0] == 0x24 &&
+		((unsigned char *) RAM_ROOT_PARTITION_BASE)[1] == 0x25) {
 		printf("[0]\r\n");
 		return;
 	}
