@@ -629,10 +629,6 @@ static void storage_receive_data(uint8_t *buf)
 			seek_off + i * STORAGE_BLOCK_SIZE),
 			STORAGE_BLOCK_SIZE);
 		size += STORAGE_BLOCK_SIZE;
-//		printf("rx %d %d %d\r\n", partition_id, i, start_block);
-//		printf ("%08x: %08x\r\n", (partition_base[partition_id] +
-//			seek_off + i * STORAGE_BLOCK_SIZE), *((unsigned int *) (partition_base[partition_id] +
-//			seek_off + i * STORAGE_BLOCK_SIZE)));
 #endif
 		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
 	}

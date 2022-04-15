@@ -25,8 +25,8 @@
 /* RAM_RANGE = total RAM size - common stack/heap size */
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
 #define RAM_BASE_ADDRESS 0x40000
-#define RAM_TOTAL_SIZE 0x3ffb0
-#define BOOT_STACK_HEAP_SIZE 0x0
+#define RAM_TOTAL_SIZE 0x3c000
+#define BOOT_STACK_HEAP_SIZE 0x3fb0
 #define BOOT_STATUS_REG 0x7FFE0
 #define BOOT_RESET_REG 0x7FFB0
 #define BOOT_COUNTER_REG 0x7FFE4
