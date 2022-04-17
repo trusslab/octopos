@@ -399,8 +399,8 @@ static int wipe_partition(int partition_id)
 	fop_close(filep);
 #else
 	printf("Wipe %d\r\n", partition_id);
-	memset((void *) partition_base[partition_id] 
-		0, partition_size[partition_id]);
+	memset((void *) partition_base[partition_id],  
+		0, partition_sizes[partition_id]);
 #endif
 
 	return 0;
@@ -981,7 +981,7 @@ static void storage_destroy_resource(uint8_t *buf)
 			+ partition_id * STORAGE_METADATA_SIZE,
 			0, STORAGE_METADATA_SIZE);
 #endif
-	
+
 	STORAGE_SET_ONE_RET(0)
 }
 
