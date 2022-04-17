@@ -14,13 +14,10 @@
 #include "arch/ring_buffer.h"
 #include "arch/octopos_mbox_owner_map.h"
 #include "arch/octopos_mbox.h"
-#include "arch/pmod_fop.h"
 
 #include "octopos/mailbox.h"
 #include "octopos/storage.h"
 #include "octopos/error.h"
-
-#define FILE DFILE
 
 XIntc			intc;
 
@@ -156,8 +153,6 @@ int init_storage(void)
 					*Config_cmd_in, 
 					*Config_Data_out, 
 					*Config_Data_in;
-
-	initialize_pmodsd();
 
 #ifndef ARCH_SEC_HW_BOOT
 	/* Initialize OCTOPOS_XMbox */

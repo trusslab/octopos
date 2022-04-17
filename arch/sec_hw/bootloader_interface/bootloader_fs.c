@@ -94,22 +94,19 @@ void storage_request_boot_image_by_line(char *filename)
 		return;
 	}
 #endif
-	printf("[5]\r\n");
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
 		printf("Error: %s: Couldn't open file %s in octopos file "
 			   "system.\n", __func__, filename);
 		return;
 	}
-	printf("[6]\r\n");
 
 	srinfo.sr_data = sr_data_buf;
 
 	while (1) {
 		/* unpack buffer is full, but still, haven't finish a line */
 		if (unpack_buf_head > STORAGE_BOOT_UNPACK_BUF_SIZE - STORAGE_BOOT_BLOCK_SIZE) {
-			printf("[7.1!]%d\r\n", unpack_buf_head);
-			printf("unpack buffer\r\n");
+			printf("bad srec\r\n");
 			for (int idx = 0; idx < 1024; idx++) {
 				printf("%02x ",unpack_buf[idx]);
 				if (idx % 128 == 0)
@@ -119,18 +116,11 @@ void storage_request_boot_image_by_line(char *filename)
 			SEC_HW_DEBUG_HANG();
 		}
 
-// #ifdef ARCH_SEC_HW_BOOT_OS
-// 		printf("[7.2]\r\n");
-// #endif
 		/* read message from file */
 		_size = file_system_read_from_file(fd, buf, STORAGE_BOOT_BLOCK_SIZE,
 						   offset);
-// #ifdef ARCH_SEC_HW_BOOT_OS
-// 		printf("[7.3]\r\n");
-// #endif
 
 		if (_size == 0) {
-			printf("[7!]\r\n");
 			break;
 		}
 
@@ -153,16 +143,9 @@ void storage_request_boot_image_by_line(char *filename)
 		/* load lines until there is no complete line in unpack buffer */
 		while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
 			if (decode_srec_line(sr_buf, &srinfo) != 0) {
-				printf("buffer\r\n");
+				printf("bad srec\r\n");
 				for (int idx = 0; idx < 512; idx++) {
 					printf("%02x ",buf[idx]);
-					if (idx % 128 == 0)
-						printf("\r\n");
-				}
-				printf("\r\n");
-				printf("unpack buffer\r\n");
-				for (int idx = 0; idx < 1024; idx++) {
-					printf("%02x ",unpack_buf[idx]);
 					if (idx % 128 == 0)
 						printf("\r\n");
 				}
@@ -203,10 +186,7 @@ void storage_request_boot_image_by_line(char *filename)
 					*(boot_status_reg) = 1;
 
 					laddr = (void (*)()) BOOT_RESET_REG;
-//#ifdef ARCH_SEC_HW_BOOT_STORAGE
-//	sleep(10);
-//	mem_test();
-//#endif
+
 					/* jump to start vector of loaded program */
 					(*laddr)();
 
@@ -224,7 +204,6 @@ void storage_request_boot_image_by_line(char *filename)
 		}
 
 	}
-	printf("[bad!]\r\n");
 
 	/* if program reaches here, something goes wrong */
 	SEC_HW_DEBUG_HANG();

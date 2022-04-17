@@ -52,8 +52,6 @@
 #define fop_seek fseek
 #define fop_read fread
 #define fop_write fwrite
-#else /* ARCH_SEC_HW_STORAGE */
-#define FILE DFILE
 #endif /* ARCH_SEC_HW_STORAGE */
 
 #define STORAGE_SET_ONE_RET(ret0)		\
@@ -164,7 +162,9 @@ uint8_t authenticated = 0;
 /* https://stackoverflow.com/questions/7775027/how-to-create-file-of-x-size */
 void initialize_storage_space(void)
 {	
+#ifdef ARCH_UMODE
 	FILE *filep, *filep2;
+#endif
 	struct partition *partition;
 	int suffix, i;
 	uint32_t tag, size, j;
@@ -178,6 +178,7 @@ void initialize_storage_space(void)
 		partition = &partitions[i];
 		partition->size = partition_sizes[i];
 
+#ifdef ARCH_UMODE
 		memset(partition->data_name, 0x0, 256);
 		sprintf(partition->data_name, "octopos_partition_%d_data",
 			suffix);
@@ -207,7 +208,6 @@ void initialize_storage_space(void)
 		} else {
 			fop_close(filep);
 		}
-
 
 		/* Is partition created? */
 		filep = fop_open(partition->create_name, "r");
@@ -240,11 +240,18 @@ void initialize_storage_space(void)
 			fop_close(filep2);
 			continue;
 		}
+#else
+		tag = *((uint32_t *) RAM_ROOT_PARTITION_METADATA_BASE 
+			+ i * STORAGE_METADATA_SIZE);
+		if (tag == 1)
+			partition->is_created = 1;
+#endif
 	}
 }
 
 static int set_partition_key(uint8_t *data, int partition_id)
 {
+#ifdef ARCH_UMODE
 	FILE *filep;
 	uint32_t size;
 	
@@ -265,12 +272,21 @@ static int set_partition_key(uint8_t *data, int partition_id)
 		fop_close(filep);
 		return ERR_FAULT;
 	}
+#else
+	/* FIXME: make metadata size into a macro. metadata is now 
+	 * 64 bytes per partition, 32 bytes for tags and 32 bytes for key 
+	 */
+	memcpy((void *) RAM_ROOT_PARTITION_METADATA_BASE 
+			+ partition_id * STORAGE_METADATA_SIZE + 32,
+			data, STORAGE_KEY_SIZE);
+#endif
 
 	return 0;
 }
 
 static int remove_partition_key(int partition_id)
 {
+#ifdef ARCH_UMODE
 	FILE *filep = fop_open(partitions[partition_id].keys_name, "w");
 	if (!filep) {
 		printf("Error: %s: couldn't open %s\n", __func__,
@@ -279,6 +295,11 @@ static int remove_partition_key(int partition_id)
 	}
 
 	fop_close(filep);
+#else
+	memset((void *) RAM_ROOT_PARTITION_METADATA_BASE 
+			+ partition_id * STORAGE_METADATA_SIZE + 32,
+			0, STORAGE_KEY_SIZE);
+#endif
 
 	return 0;
 }
@@ -355,6 +376,7 @@ static int authenticate_partition(int partition_id, uint8_t proc_id)
 
 static int wipe_partition(int partition_id)
 {
+#ifdef ARCH_UMODE
 	uint8_t zero_block[STORAGE_BLOCK_SIZE];
 	uint32_t i;
 
@@ -374,16 +396,12 @@ static int wipe_partition(int partition_id)
 		fop_write(zero_block, sizeof(uint8_t), STORAGE_BLOCK_SIZE,
 			  filep);
 
-#ifdef ARCH_SEC_HW
-	size_t fsize = fop_size(filep);
-	for (int i = 0; i < fsize; i++) {
-		memset((unsigned int *) partition_base[partition_id] +
-			i * STORAGE_BLOCK_SIZE, 
-			0x0, STORAGE_BLOCK_SIZE);
-	}
-#endif
-
 	fop_close(filep);
+#else
+	printf("Wipe %d\r\n", partition_id);
+	memset((void *) partition_base[partition_id] 
+		0, partition_size[partition_id]);
+#endif
 
 	return 0;
 }
@@ -469,7 +487,9 @@ static void storage_query_state(uint8_t *buf)
  */
 static void storage_send_data(uint8_t *buf)
 {
+#ifndef ARCH_SEC_HW
 	FILE *filep;
+#endif
 	uint8_t partition_id;
 	uint32_t start_block, num_blocks, seek_off, size, i;
 	uint8_t data_buf[STORAGE_BLOCK_SIZE];
@@ -559,7 +579,9 @@ static void storage_send_data(uint8_t *buf)
  */
 static void storage_receive_data(uint8_t *buf)
 {
+#ifndef ARCH_SEC_HW
 	FILE *filep;
+#endif
 	uint8_t partition_id;
 	uint32_t start_block, num_blocks, seek_off, size, i;
 	uint8_t data_buf[STORAGE_BLOCK_SIZE];
@@ -653,7 +675,9 @@ static void storage_receive_data(uint8_t *buf)
  */
 static void storage_create_resource(uint8_t *buf)
 {
+#ifndef ARCH_SEC_HW
 	FILE *filep, *filep2;
+#endif
 	uint32_t partition_id, tag, size;
 	int ret;
 
@@ -686,6 +710,7 @@ static void storage_create_resource(uint8_t *buf)
 		return;
 	}
 
+#ifndef ARCH_SEC_HW
 	filep = fop_open(partitions[partition_id].create_name, "w");
 	if (!filep) {
 		printf("Error: %s: Couldn't open %s.\n", __func__,
@@ -709,6 +734,10 @@ static void storage_create_resource(uint8_t *buf)
 		}
 		return;
 	}
+#else
+	*((uint32_t *) RAM_ROOT_PARTITION_METADATA_BASE 
+		+ partition_id * STORAGE_METADATA_SIZE) = 1;
+#endif
 
 	partitions[partition_id].is_created = 1;
 
@@ -723,7 +752,9 @@ static void storage_create_resource(uint8_t *buf)
  */
 static void storage_query_all_resources(uint8_t *buf)
 {
+#ifndef ARCH_SEC_HW
 	FILE *filep;
+#endif
 	uint32_t size;
 	uint32_t num_partitions;
 	uint8_t partition_id;
@@ -901,7 +932,9 @@ static void storage_destroy_resource(uint8_t *buf)
 {
 	uint8_t partition_id;
 	int ret;
+#ifndef ARCH_SEC_HW
 	FILE *filep;
+#endif
 
 	used = 1;
 
@@ -940,9 +973,15 @@ static void storage_destroy_resource(uint8_t *buf)
 	partitions[partition_id].is_created = 0;
 
 	/* wipe the create file of the partition */
+#ifndef ARCH_SEC_HW
 	filep = fop_open(partitions[partition_id].create_name, "w");
 	fop_close(filep);
-
+#else
+	memset((void *) RAM_ROOT_PARTITION_METADATA_BASE 
+			+ partition_id * STORAGE_METADATA_SIZE,
+			0, STORAGE_METADATA_SIZE);
+#endif
+	
 	STORAGE_SET_ONE_RET(0)
 }
 

@@ -46,8 +46,6 @@ int write_boot_image_to_storage(int pid, void *ptr);
 #define FILE DFILE
 #endif /* ARCH_SEC_HW_BOOT */
 
-/* in file system wrapper */
-extern FILE *filep;
 /* FIXME: why should we need the total_blocks in bootloader? */
 extern uint32_t total_blocks;
 
@@ -97,26 +95,14 @@ void close_mailbox(void)
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
-#ifdef ARCH_SEC_HW_BOOT
-	int Status;
-
-	Status = init_storage();
-	if (Status != XST_SUCCESS) {
-		SEC_HW_DEBUG_HANG();
-		return;
-	}
-#endif
-
-#ifdef ARCH_SEC_HW_BOOT
-	filep = fop_open("octopos_partition_0_data", "r");
-#else
+#ifndef ARCH_SEC_HW_BOOT
 	filep = fop_open("./storage/octopos_partition_0_data", "r");
-#endif
 	if (!filep) {
 		printf("Error: %s: Couldn't open the boot partition file.\n",
 		       __func__);
 		exit(-1);
 	}
+#endif
 
 	/* The added 1 is for the signature.
 	 *
@@ -188,7 +174,6 @@ int copy_file_from_boot_partition(char *filename, char *path)
 void bootloader_close_file_system(void)
 {
 	close_file_system();
-	fop_close(filep);
 }
 
 #ifndef ARCH_SEC_HW_BOOT
