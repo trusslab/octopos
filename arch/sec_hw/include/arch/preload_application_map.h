@@ -45,9 +45,9 @@ void preloaded_app_init()
 //	set_app("ipc_receiver", (void*) ipc_receiver);
 //	set_app("ipc_sender", (void*) ipc_sender);
 //	set_app("simple_loop", (void*) simple_loop);
-	set_app("fs_test", (void*) fs_test);
+	// set_app("fs_test", (void*) fs_test);
 	set_app("socket_client", (void*) socket_client);
-//	set_app("storage_benchmark",(void*) storage_benchmark);
+	set_app("storage_benchmark",(void*) storage_benchmark);
 	set_app("serial_benchmark",(void*) serial_benchmark);
 }
 

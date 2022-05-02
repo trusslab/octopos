@@ -72,7 +72,7 @@ void storage_request_boot_image_by_line(char *filename)
 {
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
 	u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
-	u8 buf[STORAGE_BOOT_BLOCK_SIZE];
+	// u8 buf[STORAGE_BOOT_BLOCK_SIZE];
 	u16 unpack_buf_head = 0;
 	u32 fd;
 	int line_count;
@@ -117,8 +117,8 @@ void storage_request_boot_image_by_line(char *filename)
 		}
 
 		/* read message from file */
-		_size = file_system_read_from_file(fd, buf, STORAGE_BOOT_BLOCK_SIZE,
-						   offset);
+		_size = file_system_read_from_file(fd, &unpack_buf[unpack_buf_head],
+			STORAGE_BOOT_BLOCK_SIZE, offset);
 
 		if (_size == 0) {
 			break;
@@ -132,24 +132,21 @@ void storage_request_boot_image_by_line(char *filename)
 		/* update hash */
 		if (offset == 0)
 			sha256_init(&ctx);
-		sha256_update(&ctx, &buf[0], STORAGE_BOOT_BLOCK_SIZE);
+		sha256_update(&ctx, &unpack_buf[unpack_buf_head], STORAGE_BOOT_BLOCK_SIZE);
 
 		offset += _size;
-
-		/* copy into unpack buffer */
-		memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BOOT_BLOCK_SIZE);
 		unpack_buf_head += STORAGE_BOOT_BLOCK_SIZE;
 
 		/* load lines until there is no complete line in unpack buffer */
 		while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
 			if (decode_srec_line(sr_buf, &srinfo) != 0) {
 				printf("bad srec\r\n");
-				for (int idx = 0; idx < 512; idx++) {
-					printf("%02x ",buf[idx]);
-					if (idx % 128 == 0)
-						printf("\r\n");
-				}
-				printf("\r\n");
+				// for (int idx = 0; idx < 512; idx++) {
+				// 	printf("%02x ",buf[idx]);
+				// 	if (idx % 128 == 0)
+				// 		printf("\r\n");
+				// }
+				// printf("\r\n");
 				SEC_HW_DEBUG_HANG();
 			}
 
