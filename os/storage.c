@@ -362,6 +362,8 @@ static int storage_create_secure_partition(uint8_t *app_key,
 	return (int) ret0;
 }
 
+uint8_t last_runtime_proc_id = 0xff;
+
 void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 						    uint8_t *buf)
 {
@@ -523,7 +525,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	if ((storage_status == APP_ACCESS) &&
 	    (current_app_with_storage_access == app)) {
-#ifndef ARCH_SEC_HW
+// #ifndef ARCH_SEC_HW
 		if (is_queue_available(Q_STORAGE_CMD_IN) &&
 		    is_queue_available(Q_STORAGE_CMD_OUT) &&
 		    is_queue_available(Q_STORAGE_DATA_IN) &&
@@ -548,10 +550,12 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			return;
 		}
-#else
-		no_reset = 1;
-#endif
+// #else
+// 		no_reset = 1;
+// #endif
 	}
+
+	printf("no_reset%d\r\n", no_reset);
 
 	if ((storage_status != OS_ACCESS) && !no_reset) {
 #ifdef ARCH_SEC_HW_EVALUATION
