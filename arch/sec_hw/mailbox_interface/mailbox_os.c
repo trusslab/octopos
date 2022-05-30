@@ -134,6 +134,22 @@ _Bool handle_partial_message(
 	}
 }
 
+void wait_for_storage_sec_hw(void)
+{
+	while(
+		0xdeadbeef == 
+		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_CMD_IN]) ||
+		0xdeadbeef == 
+		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_CMD_OUT]) ||
+		0xdeadbeef == 
+		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_IN]) ||
+		0xdeadbeef == 
+		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])
+		) {
+		// octopos_usleep(1);
+	}
+}
+
 /* reads from Q_OS's and Q_KEYBOARD */
 int recv_input(uint8_t *buf, uint8_t *queue_id)
 {

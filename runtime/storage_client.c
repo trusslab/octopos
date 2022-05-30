@@ -418,12 +418,14 @@ static int request_secure_storage_queues_access(limit_t limit,
 	reset_queue_sync(Q_STORAGE_DATA_IN, MAILBOX_QUEUE_SIZE_LARGE);
 	reset_queue_sync(Q_STORAGE_DATA_OUT, 0);
 
+printf("[0]\r\n");
 	SYSCALL_SET_TWO_ARGS(SYSCALL_REQUEST_SECURE_STORAGE_ACCESS,
 			     (uint32_t) limit, (uint32_t) timeout)
 	issue_syscall(buf);
 	SYSCALL_GET_ONE_RET
 	if (ret0)
 		return (int) ret0;
+printf("[1]\r\n");
 
 	/* FIXME: wait for OS to switch the queue. Microblaze does not have this problem */
 #ifdef CONFIG_ARM64
@@ -467,6 +469,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 		mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 		return ERR_FAULT;
 	}
+printf("[2]\r\n");
 	
 #ifndef UNTRUSTED_DOMAIN
 	/* Note: we set the limit/timeout values right after attestation and
@@ -516,6 +519,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 		ret = ERR_UNEXPECTED;
 		goto error;
 	}
+printf("[3]\r\n");
 
 	ret = authenticate_storage();
 	if (ret) {
@@ -527,6 +531,7 @@ static int request_secure_storage_queues_access(limit_t limit,
 		goto error;
 #endif
 	}
+printf("[4]\r\n");
 	
 	has_access_to_secure_storage = true;
 

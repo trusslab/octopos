@@ -42,4 +42,3 @@ installer_sec_hw/installer
 installer_sec_hw/copy*
 external/ibmtpm/tpm_server
 util/tpm/tpm_shutdown/tpm_shutdown
-arch/sec_hw/bootloader_interface/file_system.c

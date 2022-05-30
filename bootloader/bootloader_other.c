@@ -67,7 +67,7 @@ sem_t interrupts[NUM_QUEUES + 1];
 sem_t availables[NUM_QUEUES + 1];
 
 int keyboard = 0, serial_out = 0, network = 0, bluetooth = 0, runtime1 = 0,
-    runtime2 = 0, untrusted = 0;
+	runtime2 = 0, untrusted = 0;
 uint8_t processor = 0;
 
 int file_copy_counter = 0;
@@ -126,7 +126,7 @@ static void *handle_mailbox_interrupts(void *data)
 			 * is delivered in one message only.
 			 */
 			if (!need_repeat && (num_storage_data_out_interrupts >=
-					     total_count)) {
+						 total_count)) {
 				return NULL;
 			}
 
@@ -150,7 +150,7 @@ static void *handle_mailbox_interrupts(void *data)
 			spurious++;
 		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n",
-			       interrupt);
+				   interrupt);
 			exit(-1);
 		}
 	}
@@ -261,7 +261,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {
 			printf("Error: %s: invalid number of args for runtime\n",
-			       __func__);
+				   __func__);
 			exit(-1);
 		}
 		if (!strcmp(argv[0], "1")) {
@@ -272,7 +272,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 			processor = P_RUNTIME2;
 		} else {
 			printf("Error: %s: invalid runtime ID (%s)\n", __func__,
-			       argv[0]);
+				   argv[0]);
 			exit(-1);
 		}
 	} else if (!strcmp(filename, "linux")) {
@@ -287,7 +287,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error: %s: storage data queue msg size must be equal "
-		       "to storage block size\n", __func__);
+			   "to storage block size\n", __func__);
 		exit(-1);
 	}
 }
@@ -386,7 +386,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
 		printf("Error: %s: Couldn't open the target file (%s).\n",
-		       __func__, path);
+			   __func__, path);
 		return -1;
 	}
 #endif /* ARCH_SEC_HW_BOOT */
@@ -398,16 +398,16 @@ repeat:
 	limit_t count = 
 		mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
 #else
-    /* unpack buffer is full, but still, haven't finish a line */
-    if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
-        SEC_HW_DEBUG_HANG();
+	/* unpack buffer is full, but still, haven't finish a line */
+	if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
+		SEC_HW_DEBUG_HANG();
 
-    /* wait for change queue access */
-    while(0xdeadbeef == 
-    	octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])) {
-    	octopos_usleep(1);
-    }
-    octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
+	/* wait for change queue access */
+	while(0xdeadbeef == 
+		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])) {
+		octopos_usleep(1);
+	}
+	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
 #endif /* ARCH_SEC_HW_BOOT */
 
@@ -428,7 +428,7 @@ repeat:
 		read_from_storage_data_queue(buf);
 		
 #else /* ARCH_SEC_HW_BOOT */
-    while(TRUE) {
+	while(TRUE) {
 #ifdef SEC_HW_TPM_DEBUG
 		printf("BEFORE READ %08x\r\n", 
 			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
@@ -452,29 +452,29 @@ repeat:
 		fwrite(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE, copy_filep);
 #else /* ARCH_SEC_HW_BOOT */
 
-        /* copy into unpack buffer */
-        memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
-        unpack_buf_head += STORAGE_BLOCK_SIZE;
+		/* copy into unpack buffer */
+		memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
+		unpack_buf_head += STORAGE_BLOCK_SIZE;
 
-        /* load lines until there is no complete line in unpack buffer */
-        while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
-            if (decode_srec_line(sr_buf, &srinfo) != 0)
-                SEC_HW_DEBUG_HANG();
+		/* load lines until there is no complete line in unpack buffer */
+		while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
+			if (decode_srec_line(sr_buf, &srinfo) != 0)
+				SEC_HW_DEBUG_HANG();
 
-            switch (srinfo.type) {
-                case SREC_TYPE_0:
-                    break;
-                case SREC_TYPE_1:
-                case SREC_TYPE_2:
-                case SREC_TYPE_3:
-                    memcpy ((void*)srinfo.addr, 
-                    	(void*)srinfo.sr_data, srinfo.dlen);
-                    break;
-                case SREC_TYPE_5:
-                    break;
-                case SREC_TYPE_7:
-                case SREC_TYPE_8:
-                case SREC_TYPE_9:
+			switch (srinfo.type) {
+				case SREC_TYPE_0:
+					break;
+				case SREC_TYPE_1:
+				case SREC_TYPE_2:
+				case SREC_TYPE_3:
+					memcpy ((void*)srinfo.addr, 
+						(void*)srinfo.sr_data, srinfo.dlen);
+					break;
+				case SREC_TYPE_5:
+					break;
+				case SREC_TYPE_7:
+				case SREC_TYPE_8:
+				case SREC_TYPE_9:
 
 					/* finalize hash and verify with TPM */
 					sha256_final(&ctx, hash);
@@ -491,31 +491,31 @@ repeat:
 						while(1);
 					}
 #endif
-                	octopos_mailbox_deduct_and_set_owner(
-                		Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], 
-                		P_PREVIOUS
-                		);
+					octopos_mailbox_deduct_and_set_owner(
+						Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], 
+						P_PREVIOUS
+						);
 
 					*(boot_status_reg) = 1;
 
 					laddr = (void (*)()) BOOT_RESET_REG;
 
-                    /* jump to start vector of loaded program */
-                    (*laddr)();
+					/* jump to start vector of loaded program */
+					(*laddr)();
 
-                    /* the old program is dead at this point */
+					/* the old program is dead at this point */
 					SEC_HW_DEBUG_HANG();
-                    break;
-            }
+					break;
+			}
 
-            /* after loading the line, remove the contents being loaded */
-            memcpy(&unpack_buf[0],
-                    &unpack_buf[line_count],
-                    unpack_buf_head - line_count);
+			/* after loading the line, remove the contents being loaded */
+			memcpy(&unpack_buf[0],
+					&unpack_buf[line_count],
+					unpack_buf_head - line_count);
 
-            unpack_buf_head -= line_count;
-            memset(&unpack_buf[unpack_buf_head], 0, line_count);
-        }
+			unpack_buf_head -= line_count;
+			memset(&unpack_buf[unpack_buf_head], 0, line_count);
+		}
 #endif /* ARCH_SEC_HW_BOOT */
 
 		offset += STORAGE_BLOCK_SIZE;
