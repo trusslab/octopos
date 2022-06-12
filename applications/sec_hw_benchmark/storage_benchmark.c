@@ -63,9 +63,10 @@ void storage_benchmark(struct runtime_api *api)
 	total_req = global_counter;
 	if (ret) {
 		// printf("Error: could not get secure access to storage.\n");
-		_SEC_HW_ERROR("Error: no access to storage.\n %d", ret);
+		printf("Error: no access to storage.\n %d", ret);
 		return;
 	}
+	printf("Write");
 
 	/* BENCHMARK: write to flash */
 	global_counter = 0;
@@ -76,18 +77,19 @@ void storage_benchmark(struct runtime_api *api)
 	/* BENCHMARK: read from flash */
 	memset(block, 0x0, STORAGE_BLOCK_SIZE * 31);
 
-	// _SEC_HW_ERROR("Enter Read test");
+	printf("Read");
 	global_counter = 0;
 	for (int jj = 0; jj < 65; jj++)
 		ret = api->read_secure_storage_blocks(block, 0, 31);
-	total_read += global_counter;
+	total_read = global_counter;
 
+	printf("Yield");
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_DATA_OUT);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_IN);
 	mailbox_yield_to_previous_owner(Q_STORAGE_CMD_OUT);
 
-	_SEC_HW_ERROR("(verify %02x) Write %d, Read %d, Req %d", 
+	printf("(verify %02x) Write %d, Read %d, Req %d\r\n", 
 		block[0],
 		total_write,
 		total_read,
