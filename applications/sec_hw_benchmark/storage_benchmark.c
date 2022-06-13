@@ -94,6 +94,8 @@ void storage_benchmark(struct runtime_api *api)
 		total_write,
 		total_read,
 		total_req);
+
+	sleep(1);
 }
 
 #endif /* ARCH_SEC_HW */
