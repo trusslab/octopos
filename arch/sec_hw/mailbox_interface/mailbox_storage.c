@@ -146,6 +146,14 @@ void storage_event_loop(void)
 	}
 }
 
+// // DEBUG>>>
+// long long global_counter;
+// static void handle_measurement_timer_interrupts(void* ignored)
+// {
+// 	global_counter++;
+// }
+// // DEBUG<<<
+
 int init_storage(void)
 {
 	int				Status;
@@ -328,6 +336,15 @@ int init_storage(void)
 		return XST_FAILURE;
 	}
 
+// // DEBUG>>>
+// 	Status = XIntc_Connect(&intc, 11U,
+// 		(XInterruptHandler)handle_measurement_timer_interrupts, 0);
+// 	if (Status != XST_SUCCESS) {
+// 		_SEC_HW_ERROR("timer failed");
+// 		return XST_FAILURE;
+// 	}
+// // DEBUG<<<
+
 	Status = XIntc_Start(&intc, XIN_REAL_MODE);
 	if (Status != XST_SUCCESS) {
 		_SEC_HW_ERROR("XIntc_Start failed");
@@ -343,6 +360,9 @@ int init_storage(void)
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_IN]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_OUT]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_IN]);
+// // DEBUG>>>
+// 	XIntc_Enable(&intc, 11U);
+// // DEBUG<<<
 
 	Xil_ExceptionInit();
 	Xil_ExceptionEnable();

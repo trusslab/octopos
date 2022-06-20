@@ -302,6 +302,9 @@ static void queue_expired(uint8_t queue_id)
 
 void report_queue_usage(uint8_t queue_id)
 {
+#ifdef ARCH_SEC_HW
+	return;
+#endif
 	int check_expire = 0;
 
 	if (queue_limits[queue_id]) {

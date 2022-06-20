@@ -154,6 +154,10 @@ unsigned int partition_base[NUM_PARTITIONS] = {
 };
 #endif
 	
+// // DEBUG>>>
+// extern long long global_counter;
+// // DEBUG<<<
+
 uint8_t bound_partition = 0xFF; /* 0xFF is an invalid partition number. */
 uint8_t bound = 0;
 uint8_t used = 0;
@@ -439,6 +443,22 @@ static void storage_bind_resource(uint8_t *buf)
 	STORAGE_SET_ONE_RET(0)
 }
 
+// void * Memcpy(void* dst, const void* src, unsigned int cnt)
+// {
+//     char *pszDest = (char *)dst;
+//     const char *pszSource =( const char*)src;
+//     if((pszDest!= NULL) && (pszSource!= NULL))
+//     {
+//         while(cnt) //till cnt
+//         {
+//             //Copy byte by byte
+//             *(pszDest++)= *(pszSource++);
+//             --cnt;
+//         }
+//     }
+//     return dst;
+// }
+
 /*
  * Bound or not?
  * Used or not?
@@ -569,6 +589,8 @@ static void storage_send_data(uint8_t *buf)
 #endif
 }
 
+// #include "xil_cache.h"
+
 /*
  * Return error if "bound" not set.
  * Return error if authentication is needed and not authenticated. 
@@ -646,10 +668,34 @@ static void storage_receive_data(uint8_t *buf)
 		size += (uint32_t) fop_read(data_buf, sizeof(uint8_t),
 					    STORAGE_BLOCK_SIZE, filep);
 #else
-		memcpy(data_buf, 
-			(void *) (partition_base[partition_id] + 
-			seek_off + i * STORAGE_BLOCK_SIZE),
-			STORAGE_BLOCK_SIZE);
+		// if (partition_id == 2) {
+		// 	// memset(data_buf, 0x67, STORAGE_BLOCK_SIZE);
+		// 	// memcpy(
+		// 	// 	(void *) (partition_base[partition_id] + 
+		// 	// 	seek_off + i * STORAGE_BLOCK_SIZE), 
+		// 	// 	data_buf, STORAGE_BLOCK_SIZE);
+
+		// 	// for (int jj = 0; jj < 100; jj++)
+		// 	// memcpy(data_buf, 
+		// 	// 	(void *) (partition_base[1] + 500 * STORAGE_BLOCK_SIZE),
+		// 	// 	STORAGE_BLOCK_SIZE);
+
+		// 	// microblaze_invalidate_dcache();
+		// 	for (int jj = 0; jj < 1; jj++)
+		// 		memcpy(data_buf, 
+		// 		(void *) (partition_base[1] + 
+		// 		(i + jj) * STORAGE_BLOCK_SIZE),
+		// 		STORAGE_BLOCK_SIZE);
+		// } else {
+		// // DEBUG
+		// global_counter = 0;
+			memcpy(data_buf, 
+				(void *) (partition_base[partition_id] + 
+				seek_off + i * STORAGE_BLOCK_SIZE),
+				STORAGE_BLOCK_SIZE);
+		// }
+		// // DEBUG
+		// printf("%d\r\n", global_counter);
 		size += STORAGE_BLOCK_SIZE;
 #endif
 		write_data_to_queue(data_buf, Q_STORAGE_DATA_OUT);
@@ -1038,26 +1084,26 @@ void process_request(uint8_t *buf, uint8_t proc_id)
 
 //void mem_test() __attribute__((aligned, section("memaccess")));
 
-void mem_test()
-{
-        for (u32 i = 0; i < 0xfffffff; i+=1) {
-                *((unsigned char *) 0x30000000 + i) = 0xDE;
-                // debug
-//                if (i % 4 ==0) while(1);
-                if (i % 0x10000 == 0)
-                        printf("%08x\r\n", i+0x30000000);
-                if (*((unsigned char *) 0x30000000 + i) != 0xDE) {
-                	printf("%08x wrong (%02x)\r\n", i+0x30000000, *((unsigned char *) 0x30000000 + i));
-                    while(1);
-                }
-        }
+// void mem_test()
+// {
+//         for (u32 i = 0; i < 0xfffffff; i+=1) {
+//                 *((unsigned char *) 0x30000000 + i) = 0xDE;
+//                 // debug
+// //                if (i % 4 ==0) while(1);
+//                 if (i % 0x10000 == 0)
+//                         printf("%08x\r\n", i+0x30000000);
+//                 if (*((unsigned char *) 0x30000000 + i) != 0xDE) {
+//                 	printf("%08x wrong (%02x)\r\n", i+0x30000000, *((unsigned char *) 0x30000000 + i));
+//                     while(1);
+//                 }
+//         }
 
-        return;
+//         return;
 
-		memset((void*) 0x30000000, 0xac, 0xffffff);
-		printf("%08x\r\n", *((u32*) 0x30ff0000));
-		while(1);
-}
+// 		memset((void*) 0x30000000, 0xac, 0xffffff);
+// 		printf("%08x\r\n", *((u32*) 0x30ff0000));
+// 		while(1);
+// }
 
 
 #ifndef ARCH_SEC_HW_BOOT
@@ -1065,7 +1111,7 @@ int main(int argc, char **argv)
 {
 //	Xil_DCacheFlush();
 //	Xil_ICacheInvalidate();
-	Xil_ICacheEnable();
+//	Xil_ICacheEnable();
 //	Xil_DCacheEnable();
 
 	/* Non-buffering stdout */
