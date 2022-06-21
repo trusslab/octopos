@@ -38,8 +38,6 @@ extern err_t octopos_xemac_init(struct xemac_s *xemac, unsigned char * mac_addr,
 
 int initialize_network_hardware(struct xemac_s *xemac)
 {
-
-
 	/* the mac address of the board. this should be unique per board */
 	unsigned char mac_ethernet_address[] = {
 			0x00, 0x0a, 0x35, 0x00, 0x22, 0x01 };
@@ -88,7 +86,7 @@ static int xileth_xmit(struct netdev *dev, struct pkbuf *pkb)
 	xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
 	XLlFifo *llfifo = &xaxiemacif->axififo;
 	//l = write(tap->fd, pkb->pk_data, pkb->pk_len);
-	l= pkb->pk_len;
+	l = pkb->pk_len;
 	XLlFifo_Write(llfifo, pkb->pk_data, l);
 	XLlFifo_TxSetLen(llfifo, l);
 	if (l != pkb->pk_len) {
@@ -111,7 +109,7 @@ static struct netdev_ops xileth_ops = {
 static int xileth_recv(struct pkbuf *pkb)
 {
 	int l;
-	if(xil_netif_initialized == 1){
+	if(xil_netif_initialized == 1) {
 		struct xemac_s *xemac = xil_xemac;
 		struct octopos_pbuf *p;
 		xaxiemacif_s *xaxiemacif = (xaxiemacif_s *)(xemac->state);
@@ -139,10 +137,24 @@ static int xileth_recv(struct pkbuf *pkb)
 
 }
 
+void xileth_process(void *payload, unsigned short len)
+{
+	struct pkbuf *pkb = alloc_netdev_pkb(xileth);
+	pkb->pk_len = len;
+	memcpy(pkb->pk_data, payload, len);
+	if (len <= 0) {
+		devdbg("read net dev");
+		xileth->net_stats.rx_errors++;
+		return;
+	}
+	xileth->net_stats.rx_packets++;
+	xileth->net_stats.rx_bytes += len;
+	net_in(xileth, pkb);
+}
+
 static void xileth_rx(void)
 {
-	// struct pkbuf *pkb = alloc_netdev_pkb(xileth);
-	struct pkbuf *pkb = alloc_fixed_netdev_pkb(xileth);
+	struct pkbuf *pkb = alloc_netdev_pkb(xileth);
 	if (xileth_recv(pkb) > 0)
 		net_in(xileth, pkb);	/* pass to upper */
 	else
@@ -162,7 +174,6 @@ void xileth_init(void)
 	hardware_ready = 1;
 	xileth_dev_init(xileth);
 	xil_netif_initialized = 1;
-
 }
 
 void xileth_exit(void)

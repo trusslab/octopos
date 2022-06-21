@@ -23,7 +23,6 @@
 void ip_recv_local(struct pkbuf *pkb)
 {
 	struct ip *iphdr = pkb2ip(pkb);
-	struct pkbuf *pkb2;
 
 	/* fragment reassambly */
 	if (iphdr->ip_fragoff & (IP_FRAG_OFF | IP_FRAG_MF)) {
@@ -32,13 +31,9 @@ void ip_recv_local(struct pkbuf *pkb)
 			free_pkb(pkb);
 			return;
 		}
-		pkb2 = pkb;
 		pkb = ip_reass(pkb);
-		if (!pkb) {
-			free_pkb(pkb2);
+		if (!pkb)
 			return;
-		}
-		pkb2 = NULL;
 		iphdr = pkb2ip(pkb);
 	}
 
@@ -52,7 +47,6 @@ void ip_recv_local(struct pkbuf *pkb)
 		icmp_in(pkb);
 		break;
 	case IP_P_TCP:
-		printf("TCP packet received\n");
 		tcp_in(pkb);
 		break;
 	case IP_P_UDP:

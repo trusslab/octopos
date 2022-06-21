@@ -62,7 +62,8 @@ void net_in(struct netdev *dev, struct pkbuf *pkb)
 	pkb->pk_indev = dev;
 	switch (pkb->pk_pro) {
 	case ETH_P_RARP:
-//		rarp_in(dev, pkb);
+		// FIXME: enable rarp_in
+		// rarp_in(dev, pkb);
 		free_pkb(pkb);
 		break;
 	case ETH_P_ARP:

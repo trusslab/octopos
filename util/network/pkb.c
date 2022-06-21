@@ -14,12 +14,14 @@
 #include <network/lib.h>
 #endif /*ARCH_SEC_HW*/
 
-#ifndef ARCH_SEC_HW
+#ifndef ARCH_SEC_HW_NETWORK
 #define MAX_PKBS 200
 int free_pkbs = 0;
 int alloc_pkbs = 0;
 uint8_t dbuf[512];
 #else
+// FIXME: static allocation
+extern uint8_t send_buf[510];
 uint8_t netdev_pkb[1486 + ETH_HRD_SZ + sizeof(struct pkbuf)];
 #endif
 
@@ -35,6 +37,10 @@ do {\
 void pkb_trim(struct pkbuf *pkb, int len)
 {
 	pkb->pk_len = len;
+#ifdef ARCH_SEC_HW_NETWORK
+	if ((uint8_t *) pkb == &netdev_pkb[0])
+		return;
+#endif
 	if (realloc(pkb, sizeof(*pkb) + len) == NULL)
 		perrx("realloc");
 }
@@ -57,12 +63,10 @@ struct pkbuf *alloc_pkb(int size)
 
 struct pkbuf *alloc_netdev_pkb(struct netdev *nd)
 {
+#ifndef ARCH_SEC_HW_NETWORK
 	return alloc_pkb(nd->net_mtu + ETH_HRD_SZ);
-}
-
-#ifdef ARCH_SEC_HW
-struct pkbuf *alloc_fixed_netdev_pkb(struct netdev *nd)
-{
+#else
+	memset(netdev_pkb, 0, 1486 + ETH_HRD_SZ + sizeof(struct pkbuf));
 	((struct pkbuf *)netdev_pkb)->pk_len = nd->net_mtu + ETH_HRD_SZ;
 	((struct pkbuf *)netdev_pkb)->pk_pro = 0xffff;
 	((struct pkbuf *)netdev_pkb)->pk_type = 0;
@@ -71,8 +75,8 @@ struct pkbuf *alloc_fixed_netdev_pkb(struct netdev *nd)
 	((struct pkbuf *)netdev_pkb)->pk_rtdst = NULL;
 	list_init(&((struct pkbuf *)netdev_pkb)->pk_list);
 	return (struct pkbuf *) netdev_pkb;
-}
 #endif
+}
 
 struct pkbuf *copy_pkb(struct pkbuf *pkb)
 {
@@ -94,10 +98,15 @@ void _free_pkb(struct pkbuf *pkb)
 void free_pkb(struct pkbuf *pkb)
 {
 #endif
-	if ((uint8_t *)pkb - 2 == &dbuf[0])
+#ifndef ARCH_SEC_HW_NETWORK
+	if ((uint8_t *) pkb - 2 == &dbuf[0])
 		return;
-	if ((uint8_t *)pkb == &netdev_pkb[0])
+#else
+	if ((uint8_t *) pkb == &send_buf[0])
 		return;
+	if ((uint8_t *) pkb == &netdev_pkb[0])
+		return;
+#endif
 	if (--pkb->pk_refcnt <= 0) {
 		free_pkbs++;
 		free(pkb);

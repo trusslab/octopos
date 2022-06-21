@@ -72,7 +72,8 @@ void platform_setup_interrupts2(XIntc *intcp)
 	microblaze_register_handler((XInterruptHandler)XIntc_InterruptHandler, intcp);
 #endif
 
-	platform_setup_timer();
+	// FIXME: synchronization processing
+	// platform_setup_timer();
 
 #ifdef XPAR_ETHERNET_MAC_IP2INTC_IRPT_MASK
 	/* Enable timer and EMAC interrupts in the interrupt controller */
@@ -93,7 +94,8 @@ void platform_setup_interrupts2(XIntc *intcp)
 
 
 #ifdef XPAR_INTC_0_AXIETHERNET_0_VEC_ID
-	XIntc_Enable(intcp, PLATFORM_TIMER_INTERRUPT_INTR);
+	// FIXME: synchronization processing
+	// XIntc_Enable(intcp, PLATFORM_TIMER_INTERRUPT_INTR);
 	XIntc_Enable(intcp, XPAR_INTC_0_AXIETHERNET_0_VEC_ID);
 #endif
 

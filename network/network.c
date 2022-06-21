@@ -158,7 +158,7 @@ static void *handle_mailbox_interrupts(void *data)
 	while (1) {
 		read(fd_intr, &interrupt, 1);
 		if (interrupt < 1 || interrupt > NUM_QUEUES) {
-			printf("Error: interrupt from an invalid queueee (%d)\n", interrupt);
+			printf("Error: interrupt from an invalid queue (%d)\n", interrupt);
 			exit(-1);
 		}
 		sem_post(&interrupts[interrupt]);
@@ -239,15 +239,13 @@ static void send_packet(uint8_t *buf)
 #endif
 	NETWORK_GET_ZERO_ARGS_DATA
 	struct pkbuf *pkb = (struct pkbuf *) data;
-	// pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
-	pkb->pk_refcnt = 1;
+	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
 	list_init(&pkb->pk_list);
 	/* FIXME: add */
 	//pkb_safe();
 	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
 		printf("%s: Error: packet size is not correct.\n", __func__);
-		// return;
-		exit(-1);
+		return;
 	}
 
 #ifdef PACKET_IP_FILTER
@@ -379,8 +377,6 @@ static void send_response(uint8_t *buf, uint8_t queue_id)
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 	write(fd_out, opcode, 2);
-	// printf("send_response write: [%u, %u]\n", opcode[0], opcode[1]);
-	// printf("send_response write buf: [%u, %u, ...]\n", buf[0], buf[1]);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE);
 }
 
@@ -394,14 +390,11 @@ static void send_received_packet(uint8_t *buf, uint8_t queue_id)
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
 	write(fd_out, opcode, 2);
-	// printf("send_received_packet write: [%u, %u]\n", opcode[0], opcode[1]);
-	// printf("send_received_packet write buf: [%u, %u, ...]\n", buf[0], buf[1]);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
 void tcp_in(struct pkbuf *pkb)
 {
-	printf("tcp_in\n");
 	/* check the IP addresses */
 	struct ip *iphdr = pkb2ip(pkb);
 #ifdef PACKET_IP_FILTER
@@ -425,7 +418,6 @@ void tcp_in(struct pkbuf *pkb)
 	
 	int size = pkb->pk_len + sizeof(*pkb);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
-	// printf("received packet size: %d\n", size);
 	send_received_packet(buf, Q_NETWORK_DATA_OUT);
 	free_pkb(pkb);
 }
@@ -490,7 +482,6 @@ void network_event_loop(void)
 			memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 			opcode[1] = Q_NETWORK_CMD_IN;
 			write(fd_out, opcode, 2);
-			// printf("Loop B1 write: [%u, %u]\n", opcode[0], opcode[1]);
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 			process_cmd(buf, 1);
 			send_response(buf, Q_NETWORK_CMD_OUT);
@@ -499,7 +490,6 @@ void network_event_loop(void)
 			sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
 			opcode[1] = Q_NETWORK_DATA_IN;
 			write(fd_out, opcode, 2);
-			// printf("Loop B2 write: [%u, %u]\n", opcode[0], opcode[1]);
 			read(fd_in, dbuf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 			send_packet(dbuf);
 		}

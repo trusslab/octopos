@@ -30,6 +30,10 @@
 #include "arch/mailbox_network.h"
 #include "arch/syscall.h"
 
+// FIXME: static allocation
+extern uint8_t *dbuf;
+uint8_t recv_buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
+
 #define UNTRUSTED_DOMAIN_OWNER_ID 3
 
 #define NETWORK_SET_ONE_RET(ret0)	\
@@ -53,8 +57,7 @@
 
 /* FIXME: the first check on max size is always false */
 #define NETWORK_SET_ZERO_ARGS_DATA(data, size)					\
-	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];				\
-	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);				\
+	memset(recv_buf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);			\
 	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;			\
 	if (max_size >= 65536) {						\
 		printf("Error (%s): max_size not supported\n", __func__);	\
@@ -64,9 +67,8 @@
 		printf("Error (%s): size not supported\n", __func__);		\
 		return;								\
 	}									\
-	*((uint16_t *) &buf[0]) = size;						\
-	memcpy(&buf[2], (uint8_t *) data, size);				\
-
+	*((uint16_t *) &recv_buf[0]) = size;					\
+	memcpy(&recv_buf[2], (uint8_t *) data, size);				\
 
 #define NETWORK_GET_ZERO_ARGS_DATA				\
 	uint8_t *data;						\
@@ -80,7 +82,7 @@
 	}							\
 	data_size = *((uint16_t *) &buf[0]);			\
 	if (data_size > max_size) {				\
-		printf("Error: size not supported data_size=%d\n",data_size);		\
+		printf("Error: size not supported data_size=%d\r\n", data_size);		\
 		NETWORK_SET_ONE_RET((uint32_t) ERR_INVALID)	\
 		exit(-1);					\
 		return;						\
@@ -105,7 +107,8 @@ unsigned int net_debug = 0;
 #define ARBITER_BASE_ADDRESS 0xF0880000
 #define TRUSTED_PORT_BOUNDARY 5000
 
-void network_arbiter_change(unsigned int trusted) {
+void network_arbiter_change(unsigned int trusted)
+{
 	unsigned int * arbitter_base = (unsigned int *) ARBITER_BASE_ADDRESS;
 	if (trusted == ARBITER_TRUSTED){
 		printf("Arbiter changed to trusted\n\r");
@@ -115,7 +118,6 @@ void network_arbiter_change(unsigned int trusted) {
 		*arbitter_base = ARBITER_UNTRUSTED_FLAG;
 	}
 }
-
 
 static int tcp_init_pkb(struct pkbuf *pkb)
 {
@@ -173,20 +175,23 @@ unsigned int saddr = 0, daddr = 0;
 unsigned short sport = 0, dport = 0;
 int filter_set = 0;
 
-void send_packet(uint8_t *buf)
+void send_packet(uint8_t *buf, uint16_t data_size)
 {
 	if (!bound) {
 		printf("%s: Error: sport did not bound yet.\n", __func__);
 		return;
 	}
 
-	NETWORK_GET_ZERO_ARGS_DATA
-	struct pkbuf *pkb = (struct pkbuf *) data;
+	// FIXME: static allocation
+	// NETWORK_GET_ZERO_ARGS_DATA
+	// struct pkbuf *pkb = (struct pkbuf *) data;
+	struct pkbuf *pkb = (struct pkbuf *) buf;
 	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
 	list_init(&pkb->pk_list);
 	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
-		printf("%s: Error: packet size is not correct. data_size = %d, (pkb->pk_len + sizeof(*pkb)) = %d, pkb->pk_len=%d, sizeof(*pkb) =%d\n",
-				__func__, data_size,(pkb->pk_len + sizeof(*pkb)), pkb->pk_len,sizeof(*pkb));
+		printf("%s: Error: packet size is not correct. data_size = %d, 
+				(pkb->pk_len + sizeof(*pkb)) = %d, pkb->pk_len=%d, %p, sizeof(*pkb) =%d\n",
+				__func__, data_size,(pkb->pk_len + sizeof(*pkb)), pkb->pk_len, &(pkb->pk_len), sizeof(*pkb));
 		return;
 	}
 
@@ -208,26 +213,23 @@ struct ip *iphdr = pkb2ip(pkb);
 	/* check the port numbers */
 	struct tcp *tcphdr = (struct tcp *) iphdr->ip_data;
 	if ((bound_sport != tcphdr->src)) {
-		printf("%s: Error: invalid src  port number bound_sport  = %d , tcphdr->src= %d.\n", __func__, bound_sport, tcphdr->src);
+		printf("%s: Error: invalid src port number bound_sport = %d , tcphdr->src= %d.\r\n", 
+			__func__, bound_sport, tcphdr->src);
 		return;
 	}
 #endif
 	tcp_init_pkb(pkb);
 	ip_send_out(pkb);
-
 }
-
-
 
 void network_stack_init(void)
 {
-        netdev_init();
-        arp_cache_init();
-        rt_init();
-    	//MJ FIXME remove the static ARP
-    	unsigned char host_mac_ethernet_address[] = {
-    		0xd0, 0x50, 0x99, 0x5e, 0x71, 0x0b };
-    	arp_insert(xileth, 0x0800, 0x100a8c0, host_mac_ethernet_address);
+	netdev_init();
+	arp_cache_init();
+	rt_init();
+	// FIXME: remove the static ARP
+	unsigned char host_mac_ethernet_address[] = { 0xd0, 0x50, 0x99, 0x5e, 0x71, 0x0b };
+	arp_insert(xileth,0x0800, 0x100a8c0, host_mac_ethernet_address);
 }
 
 /*
@@ -249,7 +251,6 @@ static void network_query_state(uint8_t *buf)
 
 	NETWORK_SET_ONE_RET_DATA(0, state, state_size)
 }
-
 
 /*
  * Return error if bound, or used is set.
@@ -298,15 +299,11 @@ void process_cmd(uint8_t *buf, u8 owner_id)
 	case IO_OP_BIND_RESOURCE:
 		network_bind_resource(buf, owner_id);
 		break;
-
 	case IO_OP_QUERY_STATE:
 		network_query_state(buf);
 		break;
-
-
 	default:
-		/*
-		 * If global flag "used" not set, set it.
+		/* If global flag "used" not set, set it.
 		 * This is irreversible until reset.
 		 */
 		printf("Error: %s: unsupported op (%d)\n", __func__, buf[0]);
@@ -315,7 +312,6 @@ void process_cmd(uint8_t *buf, u8 owner_id)
 		break;
 	}
 }
-
 
 void tcp_in(struct pkbuf *pkb)
 {
@@ -342,12 +338,9 @@ void tcp_in(struct pkbuf *pkb)
 	
 	int size = pkb->pk_len + sizeof(*pkb);
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
-	send_received_packet(buf, Q_NETWORK_DATA_OUT);
+	send_received_packet(recv_buf, Q_NETWORK_DATA_OUT);
 	free_pkb(pkb);
-
 }
-
-
 
 int main(int argc, char **argv)
 {
@@ -355,7 +348,9 @@ int main(int argc, char **argv)
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: network init s\n", __func__);
 	init_network();
+	dbuf = (uint8_t *) malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE * sizeof(uint8_t));
 	network_event_loop();
+	free(dbuf);
 	close_network();
 }
 #endif /*ARCH_SEC_HW_NETWORK*/
