@@ -439,9 +439,13 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 			}
 			storage_status = OS_ACCESS;
 		} else {
-		printf("RC1 %lld\r\n", global_counter);
+#ifdef ARCH_SEC_HW_EVALUATION
+			printf("RC1 %lld\r\n", global_counter);
+#endif
 			wait_for_storage();
-		printf("RC2 %lld\r\n", global_counter);
+#ifdef ARCH_SEC_HW_EVALUATION
+			printf("RC2 %lld\r\n", global_counter);
+#endif
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
@@ -578,9 +582,13 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			current_app_with_storage_access = app;
 			storage_status = APP_ACCESS;
 		} else {
-		printf("RC1 %lld\r\n", global_counter);
+#ifdef ARCH_SEC_HW_EVALUATION
+			printf("RC1 %lld\r\n", global_counter);
+#endif
 			wait_for_storage();
-		printf("RC2 %lld\r\n", global_counter);
+#ifdef ARCH_SEC_HW_EVALUATION
+			printf("RC2 %lld\r\n", global_counter);
+#endif
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "

@@ -1062,7 +1062,7 @@ static void handle_proc_request(uint8_t requester)
 		break;
 
 	default:
-		printf("Error: %s: invalid from %d\n", __func__, requester)
+		printf("Error: %s: invalid from %d\n", __func__, requester);
 		break;
 	}
 }

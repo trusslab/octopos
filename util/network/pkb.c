@@ -14,10 +14,10 @@
 #include <network/lib.h>
 #endif /*ARCH_SEC_HW*/
 
-#ifndef ARCH_SEC_HW_NETWORK
 #define MAX_PKBS 200
 int free_pkbs = 0;
 int alloc_pkbs = 0;
+#ifndef ARCH_SEC_HW_NETWORK
 uint8_t dbuf[512];
 #else
 // FIXME: static allocation
@@ -26,12 +26,12 @@ extern uint8_t recv_buf[510];
 uint8_t netdev_pkb[1486 + ETH_HRD_SZ + sizeof(struct pkbuf)];
 #endif
 
-#define pkb_safe() \
-do {\
-	if ((alloc_pkbs - free_pkbs) > MAX_PKBS) {\
-		dbg("oops: too many pkbuf");\
-		exit(EXIT_FAILURE);\
-	}\
+#define pkb_safe()					\
+do {							\
+	if ((alloc_pkbs - free_pkbs) > MAX_PKBS) {	\
+		dbg("oops: too many pkbuf");		\
+		exit(EXIT_FAILURE);			\
+	}						\
 } while (0)
 
 /* referred from linux-2.6: handing packet l2 padding */

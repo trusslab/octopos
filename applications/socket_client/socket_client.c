@@ -138,14 +138,14 @@ static void throughput_test(struct runtime_api *api)
 	printf("... %.*s\n\r",len,buf);
 	len = strlen(throughput_test_buf);
 	for (int i=0; i<5003; i++) {
-//		througput_test_buf[0] = i % 255;
+//		throughput_test_buf[0] = i % 255;
 		if (api->write_to_socket(sock, throughput_test_buf, 256) < 0) {
 			printf("%s: Error: _write\n", __func__);
 			return;
 		}
 //		if (i % 50 == 0) {
 //			printf("%d\n", i);
-////			delay_print(20);
+//			delay_print(20);
 //		}
 	}
 }
