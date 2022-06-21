@@ -174,13 +174,13 @@ void network_event_loop(void)
 
 	while(1) {
 //		printf("%s: in while loop waiting to receive\n", __func__);
-//		while(OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_cmd_in) &&
-//				OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_data_in));
-		is_data_queue = OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_cmd_in);
-//		is_data_queue = !OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_data_in);
-//		printf("received!\n");
-//      	sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
-//		sem_getvalue(&interrupts[Q_NETWORK_DATA_IN], &is_data_queue);
+		while(OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_cmd_in) &&
+				OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_data_in));
+		// is_data_queue = OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_cmd_in);
+		is_data_queue = !OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_data_in);
+		// printf("received!\n");
+     		// sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
+		// sem_getvalue(&interrupts[Q_NETWORK_DATA_IN], &is_data_queue);
 		if (!is_data_queue) {
 			memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 			OCTOPOS_XMbox_ReadBlocking(&Mbox_network_cmd_in,
