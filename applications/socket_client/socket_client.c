@@ -11,7 +11,7 @@
 #include <network/socket.h>
 
 
-char througput_test_buf [256] = "Claudius, King of Denmark. Marcellus, Officer. Hamlet, son to the former, and nephew to the present king. Polonius, Lord Chamberlain.Horatio, friend to Hamlet.  Laertes, son to Polonius. Voltemand, courtier. Cornelius, courtier. Rosencrantz, courtier.Guil";
+char throughput_test_buf[256] = "Claudius, King of Denmark. Marcellus, Officer. Hamlet, son to the former, and nephew to the present king. Polonius, Lord Chamberlain.Horatio, friend to Hamlet.  Laertes, son to Polonius. Voltemand, courtier. Cornelius, courtier. Rosencrantz, courtier.Guil";
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
 int num_chars = 0;
@@ -87,7 +87,6 @@ static void send_receive(struct runtime_api *api)
 	printf("read done\n\r");
 }
 
-#ifdef ARCH_SEC_HW
 static void latency_test(struct runtime_api *api)
 {
 	char buf[32] = "1";
@@ -102,7 +101,9 @@ static void latency_test(struct runtime_api *api)
 		printf("%s: Error: _write\n", __func__);
 		return;
 	}
+#ifdef ARCH_SEC_HW
 	delay_print(20);
+#endif
 	len = api->read_from_socket(sock, buf, 512);
 	len = strlen(buf2);
 	if (api->write_to_socket(sock, buf2, len) < 0) {
@@ -116,28 +117,29 @@ static void throughput_test(struct runtime_api *api)
 	int len;
 	len = strlen(buf);
 	if (api->connect_socket(sock, &skaddr) < 0) {
-		print("send_receive [0.5]\n\r");
 		printf("%s: Error: _connect\n", __func__);
 		return;
 	}
+	printf("%s: connect_socket\n", __func__);
 	if (api->write_to_socket(sock, buf, len) < 0) {
 		printf("%s: Error: _write\n", __func__);
 		return;
 	}
+	printf("%s: write_to_socket\n", __func__);
+#ifdef ARCH_SEC_HW
 	delay_print(20);
+#endif
 	len = api->read_from_socket(sock, buf, 512);
 	printf("... %.*s\n\r",len,buf);
-	len = strlen(througput_test_buf);
-	for (int i=0; i<2; i++){
-		printf("%d\n\r",i);
-		througput_test_buf[0] = i;
-		if (api->write_to_socket(sock, througput_test_buf, 256) < 0) {
+	len = strlen(throughput_test_buf);
+	for (int i=0; i<1000; i++) {
+		throughput_test_buf[0] = i % 255;
+		if (api->write_to_socket(sock, throughput_test_buf, 256) < 0) {
 			printf("%s: Error: _write\n", __func__);
 			return;
 		}
 	}
 }
-#endif /* ARCH_SEC_HW */
 
 
 #ifndef ARCH_SEC_HW
@@ -171,21 +173,24 @@ void socket_client(struct runtime_api *api)
 		printf("%s: Error: _socket\n", __func__);
 		goto out;
 	}
+	printf("%s: socket created\n", __func__);
 
 	if (api->request_network_access(4095, 100, NULL, NULL, NULL)) {
 		printf("%s: Error: network queue access\n", __func__);
 		return;
 	}
+	printf("%s: network access granted\n", __func__);
 #ifdef ARCH_SEC_HW
 	delay_print(20);
 #endif
 	api->bind_socket(sock, &skaddr);
+	printf("%s: socket binded\n", __func__);
 #ifdef ARCH_SEC_HW
 	delay_print(500);
 #endif
-	send_receive(api);
-//	latency_test(api);
-//	throughput_test(api);
+	// send_receive(api);
+	// latency_test(api);
+	throughput_test(api);
 
 
 out:	/* close and out */

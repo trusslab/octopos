@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
 	n = write(newsockfd,"I",18);
 	if (n < 0)
 		error("ERROR writing to socket");
-	for (int i = 0; i<2; i++) {
+	for (int i = 0; i<1000; i++) {
 		printf("%d\n\r",i);
 		n = read(newsockfd,buffer,1024);
 		if (n < 0)
@@ -77,11 +77,8 @@ int main(int argc, char *argv[])
 	}
 	//timed=clock();
     	gettimeofday(&end, 0);
-    	long microseconds = end.tv_usec - begin.tv_usec;
-	//double diffticks=timed-times;
-	//double diffms=(diffticks)/(CLOCKS_PER_SEC/1000);
-	//printf("Here is the second message (n = %d): %s  time passed= %f \n", n, buffer, diffms);
-	printf("Here is the second message (n = %d): %s  time passed= %ld \n", n, buffer, microseconds);
+    	long time_diff = (end.tv_sec - begin.tv_sec) * 1000000 + end.tv_usec - begin.tv_usec;
+	printf("Here is the last message (n = %d): %s with time passed= %lf\n", n, buffer, time_diff/1000000.0);
 	close(newsockfd);
 	close(sockfd);
 

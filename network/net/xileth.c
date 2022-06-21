@@ -141,7 +141,8 @@ static int xileth_recv(struct pkbuf *pkb)
 
 static void xileth_rx(void)
 {
-	struct pkbuf *pkb = alloc_netdev_pkb(xileth);
+	// struct pkbuf *pkb = alloc_netdev_pkb(xileth);
+	struct pkbuf *pkb = alloc_fixed_netdev_pkb(xileth);
 	if (xileth_recv(pkb) > 0)
 		net_in(xileth, pkb);	/* pass to upper */
 	else

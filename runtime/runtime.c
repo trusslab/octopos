@@ -391,7 +391,8 @@ static void *tcp_receive(void *_data)
 		if (!data_size) {
 			printf("Error: %s: bad network data message\n",
 			       __func__);
-			continue;
+			// continue;
+			exit(-1);
 		}
 
 		struct pkbuf *pkb = (struct pkbuf *) data;

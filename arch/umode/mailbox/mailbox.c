@@ -265,6 +265,8 @@ static int write_queue(struct queue *queue, int out_handle)
 
 	queue->counter++;
 	read(out_handle, queue->messages[queue->tail], queue->msg_size);
+	if (out_handle == processors[P_NETWORK].out_handle)
+		printf("read [%u, %u, ...] from out_handle\n", queue->messages[queue->tail][0], queue->messages[queue->tail][1]);
 	queue->tail = (queue->tail + 1) % queue->queue_size;
 
 	return 0;
@@ -1016,6 +1018,9 @@ static void handle_proc_request(uint8_t requester)
 	memset(opcode, 0x0, 2);
 
 	read(processors[requester].out_handle, opcode, 2);
+	if (requester == P_NETWORK) {
+		printf("Read opcode: [%u, %u]\n", opcode[0], opcode[1]);
+	}
 	queue_id = opcode[1];
 
 	switch (opcode[0]) {
@@ -1062,7 +1067,7 @@ static void handle_proc_request(uint8_t requester)
 		break;
 
 	default:
-		printf("Error: %s: invalid opcode from %d\n", __func__, requester);
+		printf("Error: %s: invalid opcode [%u,%u] from %d\n", __func__, opcode[0], opcode[1], requester);
 		break;
 	}
 }
@@ -1176,8 +1181,10 @@ int main(int argc, char **argv)
 		if (FD_ISSET(processors[P_STORAGE].out_handle, &listen_fds))
 			handle_proc_request(P_STORAGE);
 			
-		if (FD_ISSET(processors[P_NETWORK].out_handle, &listen_fds))
+		if (FD_ISSET(processors[P_NETWORK].out_handle, &listen_fds)) {
+			printf("start processing network request\n");
 			handle_proc_request(P_NETWORK);
+		}
 
 		if (FD_ISSET(processors[P_BLUETOOTH].out_handle, &listen_fds))
 			handle_proc_request(P_BLUETOOTH);

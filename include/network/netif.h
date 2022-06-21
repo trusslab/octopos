@@ -120,6 +120,7 @@ extern void net_timer(void);
 
 extern struct pkbuf *alloc_pkb(int size);
 extern struct pkbuf *alloc_netdev_pkb(struct netdev *nd);
+extern struct pkbuf *alloc_fixed_netdev_pkb(struct netdev *nd);
 extern void pkbdbg(struct pkbuf *pkb);
 extern void pkb_trim(struct pkbuf *pkb, int len);
 //#define DEBUG_PKB

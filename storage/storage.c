@@ -1109,10 +1109,12 @@ void process_request(uint8_t *buf, uint8_t proc_id)
 #ifndef ARCH_SEC_HW_BOOT
 int main(int argc, char **argv)
 {
+#ifdef ARCH_SEC_HW
 //	Xil_DCacheFlush();
 //	Xil_ICacheInvalidate();
 //	Xil_ICacheEnable();
 //	Xil_DCacheEnable();
+#endif
 
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);

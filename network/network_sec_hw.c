@@ -105,7 +105,7 @@ unsigned int net_debug = 0;
 #define ARBITER_BASE_ADDRESS 0xF0880000
 #define TRUSTED_PORT_BOUNDARY 5000
 
-void network_arbiter_change(unsigned int trusted){
+void network_arbiter_change(unsigned int trusted) {
 	unsigned int * arbitter_base = (unsigned int *) ARBITER_BASE_ADDRESS;
 	if (trusted == ARBITER_TRUSTED){
 		printf("Arbiter changed to trusted\n\r");
@@ -182,7 +182,7 @@ void send_packet(uint8_t *buf)
 
 	NETWORK_GET_ZERO_ARGS_DATA
 	struct pkbuf *pkb = (struct pkbuf *) data;
-    pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
+	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
 	list_init(&pkb->pk_list);
 	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
 		printf("%s: Error: packet size is not correct. data_size = %d, (pkb->pk_len + sizeof(*pkb)) = %d, pkb->pk_len=%d, sizeof(*pkb) =%d\n",
@@ -227,9 +227,7 @@ void network_stack_init(void)
     	//MJ FIXME remove the static ARP
     	unsigned char host_mac_ethernet_address[] = {
     		0xd0, 0x50, 0x99, 0x5e, 0x71, 0x0b };
-    	arp_insert(xileth,0x0800,
-    			0x100a8c0, host_mac_ethernet_address);
-
+    	arp_insert(xileth, 0x0800, 0x100a8c0, host_mac_ethernet_address);
 }
 
 /*
@@ -359,7 +357,5 @@ int main(int argc, char **argv)
 	init_network();
 	network_event_loop();
 	close_network();
-	
-	
 }
 #endif /*ARCH_SEC_HW_NETWORK*/

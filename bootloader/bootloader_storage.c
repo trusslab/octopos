@@ -46,6 +46,7 @@ int write_boot_image_to_storage(int pid, void *ptr);
 #define FILE DFILE
 #endif /* ARCH_SEC_HW_BOOT */
 
+extern FILE *filep;
 /* FIXME: why should we need the total_blocks in bootloader? */
 extern uint32_t total_blocks;
 
@@ -180,7 +181,7 @@ void bootloader_close_file_system(void)
 void send_measurement_to_tpm(char *path)
 {
 	enforce_running_process(P_STORAGE);
-	tpm_measure_service(path);
+	tpm_measure_service(path, 1);
 	cancel_running_process();
 	close_mailbox();
 }

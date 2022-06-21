@@ -181,32 +181,30 @@ void network_event_loop(void)
 	UINTPTR qptr = Mbox_ctrl_regs[Q_NETWORK_CMD_IN];
 
 	while(1) {
-	printf("%s: in while loop waiting to receive\n\r", __func__);
-        sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
-        sem_getvalue(&interrupts[Q_NETWORK_DATA_IN], &is_data_queue);
-        if (!is_data_queue) {
-        	memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+		sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
+		sem_getvalue(&interrupts[Q_NETWORK_DATA_IN], &is_data_queue);
+		if (!is_data_queue) {
+			memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 			OCTOPOS_XMbox_ReadBlocking(&Mbox_network_cmd_in,
-				       	(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
+				(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 			status_reg = octopos_mailbox_get_status_reg(qptr);
 			owner_id = (status_reg & 0xFF000000)>>24;
 			printf("status_reg is : %x ; owenr_id = %x\n\r",status_reg, owner_id);
 			process_cmd(buf, owner_id);
 			OCTOPOS_XMbox_WriteBlocking(&Mbox_network_cmd_out,
-			       	(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
+				(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 
-        } else {
-            uint8_t *dbuf = malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
-            if (!dbuf) {
-               	printf("%s: Error: could not allocate memory\n", __func__);
-                continue;
-            }
-            sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
+		} else {
+			uint8_t *dbuf = malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
+			if (!dbuf) {
+				printf("%s: Error: could not allocate memory\n", __func__);
+				continue;
+			}
+			sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
 			OCTOPOS_XMbox_ReadBlocking(&Mbox_network_data_in,
-				       	(u32*) dbuf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-            send_packet(dbuf);
-        }
-
+				(u32*) dbuf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+			send_packet(dbuf);
+		}
 	}
 }
 

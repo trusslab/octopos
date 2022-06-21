@@ -1,20 +1,27 @@
 #ifndef ARCH_SEC_HW
 #include <stdio.h>
 #include <ctype.h>
+#include <stdint.h>
 #include "netif.h"
 #include "ether.h"
 #include "lib.h"
 #else /*ARCH_SEC_HW*/
 #include <stdio.h>
 #include <ctype.h>
+#include <stdint.h>
 #include <network/netif.h>
 #include <network/ether.h>
 #include <network/lib.h>
 #endif /*ARCH_SEC_HW*/
 
+#ifndef ARCH_SEC_HW
 #define MAX_PKBS 200
 int free_pkbs = 0;
 int alloc_pkbs = 0;
+uint8_t dbuf[512];
+#else
+uint8_t netdev_pkb[1486 + ETH_HRD_SZ + sizeof(struct pkbuf)];
+#endif
 
 #define pkb_safe() \
 do {\
@@ -53,6 +60,20 @@ struct pkbuf *alloc_netdev_pkb(struct netdev *nd)
 	return alloc_pkb(nd->net_mtu + ETH_HRD_SZ);
 }
 
+#ifdef ARCH_SEC_HW
+struct pkbuf *alloc_fixed_netdev_pkb(struct netdev *nd)
+{
+	((struct pkbuf *)netdev_pkb)->pk_len = nd->net_mtu + ETH_HRD_SZ;
+	((struct pkbuf *)netdev_pkb)->pk_pro = 0xffff;
+	((struct pkbuf *)netdev_pkb)->pk_type = 0;
+	((struct pkbuf *)netdev_pkb)->pk_refcnt = 1;
+	((struct pkbuf *)netdev_pkb)->pk_indev = NULL;
+	((struct pkbuf *)netdev_pkb)->pk_rtdst = NULL;
+	list_init(&((struct pkbuf *)netdev_pkb)->pk_list);
+	return (struct pkbuf *) netdev_pkb;
+}
+#endif
+
 struct pkbuf *copy_pkb(struct pkbuf *pkb)
 {
 	struct pkbuf *cpkb;
@@ -73,6 +94,10 @@ void _free_pkb(struct pkbuf *pkb)
 void free_pkb(struct pkbuf *pkb)
 {
 #endif
+	if ((uint8_t *)pkb - 2 == &dbuf[0])
+		return;
+	if ((uint8_t *)pkb == &netdev_pkb[0])
+		return;
 	if (--pkb->pk_refcnt <= 0) {
 		free_pkbs++;
 		free(pkb);
@@ -114,4 +139,3 @@ void pkbdbg(struct pkbuf *pkb)
 	if ((i % 16) != 0)
 		ferr("\n");
 }
-

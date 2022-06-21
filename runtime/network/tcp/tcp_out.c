@@ -49,6 +49,7 @@ void tcp_send_out(struct tcp_sock *tsk, struct pkbuf *pkb, struct tcp_segment *s
 	}
 	tcp_set_checksum(iphdr, tcphdr);
 	ip_send_out(pkb);
+	free_pkb(pkb);
 }
 
 /*
