@@ -1,9 +1,12 @@
-DIRS := applications arch keyboard os runtime serial_out storage network bluetooth bootloader installer util/tpm/tpm_shutdown
-DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network bootloader installer util/tpm/tpm_shutdown
+DIRS := applications arch keyboard os runtime serial_out storage network bluetooth bootloader installer
+DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network bootloader installer
 
 EXTERNAL_DIR := ./external
 
 umode:
+ifeq ("$(wildcard $(EXTERNAL_DIR)/INSTALLED)","")
+	$(MAKE) install -C $(EXTERNAL_DIR)
+endif
 	./sync_untrusted_linux.sh
 	for dir in $(DIRS); do \
 		$(MAKE) umode -C $$dir; \
@@ -112,12 +115,9 @@ sechw:
 	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
 	-O srec ${VITIS_DOMAINS}/network/Debug/network.elf ${OCTOPOS_DIR}/network/network.srec
 
-
 	echo "Installing binaries into local octopos filesystem..."
 	cd ${OCTOPOS_DIR}/installer_sec_hw && make
 	${OCTOPOS_DIR}/installer_sec_hw/installer
-
-
 
 sechw_peta:
 	mkdir -p ${OCTOPOS_DIR}/bin
@@ -138,10 +138,7 @@ sechw_peta:
 	cd ${OCTOPOS_DIR}/bin/rootfs_mount && sudo -s pax -rvf ${PETALINUX_PRODUCTS}/rootfs.cpio
 	sudo umount ${OCTOPOS_DIR}/bin/rootfs_mount
 
-
-
 sechw_storage:
-
 	echo "Building all PL domains..."
 	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
 	-O srec ${VITIS_DOMAINS}/storage/Debug/storage.elf ${OCTOPOS_DIR}/storage/storage.srec
@@ -157,7 +154,6 @@ sechw_storage:
 	-O srec ${VITIS_DOMAINS}/enclave1/Debug/enclave1.elf ${OCTOPOS_DIR}/runtime/runtime2.srec
 	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
 	-O srec ${VITIS_DOMAINS}/network/Debug/network.elf ${OCTOPOS_DIR}/network/network.srec
-
 
 	echo "Installing binaries into local octopos filesystem..."
 	cd ${OCTOPOS_DIR}/installer_sec_hw && make

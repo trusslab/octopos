@@ -142,6 +142,10 @@ static uint8_t secure_ipc_target_queue = 0;
 
 unsigned int net_debug = 0;
 pthread_t tcp_threads[2];
+
+// FIXME: static allocation
+uint8_t	recv_buf[MAILBOX_QUEUE_MSG_SIZE_LARGE - 2];
+
 /* FIXME: move to header file. */
 extern void tcp_timer(void);
 
@@ -391,8 +395,7 @@ static void *tcp_receive(void *_data)
 		if (!data_size) {
 			printf("Error: %s: bad network data message\n",
 			       __func__);
-			// continue;
-			exit(-1);
+			continue;
 		}
 
 		struct pkbuf *pkb = (struct pkbuf *) data;
@@ -421,19 +424,17 @@ extern _Bool octopos_mailbox_attest_owner_fast(UINTPTR base);
 
 int tcp_receive()
 {
-
-
 	int bytes_read;
-	if(!has_network_access){
+	if(!has_network_access) {
 		had_network_access = has_network_access;
 		return -1;
 	}
-	if(has_network_access & !had_network_access){
-		for(int i =0 ; i<100000; i++){
-		}
-		had_network_access = true;
 
+	if(has_network_access & !had_network_access){
+		for(int i=0; i<100000; i++);
+		had_network_access = true;
 	}
+
 	_Bool result = TRUE;
 	UINTPTR queue_ptr = Mbox_ctrl_regs[Q_NETWORK_DATA_OUT];
 	result &= octopos_mailbox_attest_owner_fast(queue_ptr);
@@ -445,13 +446,12 @@ int tcp_receive()
 		return XST_NO_DATA;
 	}
 
-	bytes_read = sem_wait_one_time_receive_buf_large(&interrupts[Q_NETWORK_DATA_OUT], Mbox_regs[Q_NETWORK_DATA_OUT], net_buf);
+	bytes_read = sem_wait_one_time_receive_buf_large(&interrupts[Q_NETWORK_DATA_OUT],
+			Mbox_regs[Q_NETWORK_DATA_OUT], net_buf);
 
 	if (bytes_read == NULL){
 		return -1;
 	}
-
-
 
 	HW_NETWORK_GET_ZERO_ARGS_DATA
 	if (!data_size) {
@@ -459,7 +459,9 @@ int tcp_receive()
 		return -1;
 	}
 
-	struct pkbuf *pkb = (struct pkbuf *) data;
+	// FIXME: static allocation
+	// struct pkbuf *pkb = (struct pkbuf *) data;
+	struct pkbuf *pkb = (struct pkbuf *) recv_buf;
 	pkb->pk_refcnt = 2; /* prevents the TCP code from freeing the pkb */
 	list_init(&pkb->pk_list);
 	if (data_size != (pkb->pk_len + sizeof(*pkb))) {

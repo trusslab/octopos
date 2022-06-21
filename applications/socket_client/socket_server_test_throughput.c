@@ -6,13 +6,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 //#include <time.h>
 #include <sys/time.h>
 
-//int times,timed;
 struct timeval begin, end;
 
 void error(const char *msg)
@@ -28,13 +27,13 @@ int main(int argc, char *argv[])
 	char buffer[2048];
 	struct sockaddr_in serv_addr, cli_addr;
 	int n;
-	
+
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: socket_server init\n", __func__);
-	
+
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sockfd < 0) 
+	if (sockfd < 0)
 		error("ERROR opening socket");
 	int enable = 1;
 	/* This will allow us to reuse the port:
@@ -47,41 +46,44 @@ int main(int argc, char *argv[])
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
 	serv_addr.sin_port = htons(portno);
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, 
-		 sizeof(serv_addr)) < 0) 
-		error("ERROR on binding");
-	listen(sockfd,5);
+	if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+		printf("ERROR on binding");
+	listen(sockfd, 5);
 	clilen = sizeof(cli_addr);
 	printf("Waiting for a connection\n");
 	newsockfd = accept(sockfd,
-			   (struct sockaddr *) &cli_addr, 
-	                   &clilen);
+			   (struct sockaddr *) &cli_addr,
+			   &clilen);
 	printf("Received a connection\n");
-	if (newsockfd < 0) 
+	if (newsockfd < 0)
 		error("ERROR on accept");
-	bzero(buffer,256);
-	n = read(newsockfd,buffer,255);
+	bzero(buffer, 256);
+	n = read(newsockfd, buffer, 255);
 	if (n < 0)
 		error("ERROR reading from socket");
 	printf("Here is the first message (n = %d): %s\n", n, buffer);
-	//times=clock();
 	gettimeofday(&begin, 0);
-	n = write(newsockfd,"I",18);
+	n = write(newsockfd, "IIIIIIIIIIIIIIIII", 18);
 	if (n < 0)
-		error("ERROR writing to socket");
-	for (int i = 0; i<1000; i++) {
-		printf("%d\n\r",i);
-		n = read(newsockfd,buffer,1024);
+		printf("ERROR writing to socket");
+	int rounds = 2000;
+	long seconds, microseconds;
+	double diffs, tp;
+	for (int i = 0; i < rounds; i++) {
+		printf("%d\n\r", i);
+		n = read(newsockfd, buffer, 1024);
 		if (n < 0)
-			error("ERROR reading from socket");
+			printf("ERROR reading from socket");
 	}
-	//timed=clock();
-    	gettimeofday(&end, 0);
-    	long time_diff = (end.tv_sec - begin.tv_sec) * 1000000 + end.tv_usec - begin.tv_usec;
-	printf("Here is the last message (n = %d): %s with time passed= %lf\n", n, buffer, time_diff/1000000.0);
+	gettimeofday(&end, 0);
+	seconds = end.tv_sec - begin.tv_sec;
+	microseconds = end.tv_usec - begin.tv_usec;
+	diffs = (seconds * 1000000 + microseconds) / 1000000.0;
+	tp = (256 * rounds) / 1024.0 / 1024.0 / diffs;
+	printf("rounds=%d, t_diff=%lf(%ld.%ld), tp=%lfMB/s\n", rounds, diffs, seconds, microseconds, tp);
 	close(newsockfd);
 	close(sockfd);
 
-	return 0; 
+	return 0;
 }
 #endif

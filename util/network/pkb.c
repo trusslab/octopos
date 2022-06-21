@@ -22,6 +22,7 @@ uint8_t dbuf[512];
 #else
 // FIXME: static allocation
 extern uint8_t send_buf[510];
+extern uint8_t recv_buf[510];
 uint8_t netdev_pkb[1486 + ETH_HRD_SZ + sizeof(struct pkbuf)];
 #endif
 
@@ -102,9 +103,9 @@ void free_pkb(struct pkbuf *pkb)
 	if ((uint8_t *) pkb - 2 == &dbuf[0])
 		return;
 #else
-	if ((uint8_t *) pkb == &send_buf[0])
-		return;
-	if ((uint8_t *) pkb == &netdev_pkb[0])
+	if ((uint8_t *)pkb == &send_buf[0] || 
+		(uint8_t *)pkb == &netdev_pkb[0] ||
+		(uint8_t *)pkb == recv_buf)
 		return;
 #endif
 	if (--pkb->pk_refcnt <= 0) {
