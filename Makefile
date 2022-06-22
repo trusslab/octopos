@@ -1,6 +1,5 @@
 DIRS := applications arch keyboard os runtime serial_out storage network bluetooth bootloader installer
 DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network bootloader installer
-
 EXTERNAL_DIR := ./external
 
 umode:
@@ -15,6 +14,9 @@ endif
 
 install: 
 	$(MAKE) install -C $(EXTERNAL_DIR)
+
+rspi:
+	$(MAKE) -C $(EXTERNAL_DIR)/tpm-rspi-svc
 
 clean:
 	for dir in $(DIRS_CLEAN); do \

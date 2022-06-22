@@ -189,7 +189,7 @@ void send_packet(uint8_t *buf, uint16_t data_size)
 	pkb->pk_refcnt = 2; /* prevents the network code from freeing the pkb */
 	list_init(&pkb->pk_list);
 	if (data_size != (pkb->pk_len + sizeof(*pkb))) {
-		printf("%s: Error: packet size is not correct. data_size = %d, 
+		printf("%s: Error: packet size is not correct. data_size = %d, \
 				(pkb->pk_len + sizeof(*pkb)) = %d, pkb->pk_len=%d, %p, sizeof(*pkb) =%d\n",
 				__func__, data_size,(pkb->pk_len + sizeof(*pkb)), pkb->pk_len, &(pkb->pk_len), sizeof(*pkb));
 		return;
