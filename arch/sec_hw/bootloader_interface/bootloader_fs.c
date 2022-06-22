@@ -82,7 +82,6 @@ void storage_request_boot_image_by_line(char *filename)
 	u32 tpm_response;
 	int Status;
 
-#ifdef MJTMP
 	/* init TPM mailbox */
 	/* FIXME: move to each domain's mailbox init */
 	OCTOPOS_XMbox_Config *TPM_config_ptr;
@@ -93,7 +92,7 @@ void storage_request_boot_image_by_line(char *filename)
 		while(1);
 		return;
 	}
-#endif
+
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
 		printf("Error: %s: Couldn't open file %s in octopos file "
@@ -170,14 +169,14 @@ void storage_request_boot_image_by_line(char *filename)
 						printf("%02x",hash[idx]);
 					printf("\r\n");
 #endif
-#ifdef MJ_TPM
+
 					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
 					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
 					if (tpm_response != 0xFFFFFFFF) {
 						printf("Secure boot abort.\r\n");
 						while(1);
 					}
-#endif
+
 					/* clean up before load program */
 					bootloader_close_file_system();
 					*(boot_status_reg) = 1;
