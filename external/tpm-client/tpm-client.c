@@ -5,94 +5,56 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <termios.h>
 #include <time.h>
 
 #include "tpm.h"
 #include "hash.h"
 #include "aes.h"
 
-#define MAILBOX_QUEUE_MSG_SIZE	64
-#define BUFFER_LENGTH		(MAILBOX_QUEUE_MSG_SIZE + 2)
-#define QUEUE_SIZE		64
+#define MAILBOX_QUEUE_MSG_SIZE	32
+#define BUFFER_LENGTH		(MAILBOX_QUEUE_MSG_SIZE + 1)
 
-#define SHORT_BUFFER		0
-#define LARGE_BUFFER		1
-#define RET_SUCCESS		0
+#define RET_SUCCESS		0xFF
 #define RET_FAILURE		1
 
+#define DEBUG			1
 
-int read_from_kernel(int fd, uint8_t *proc_id, uint8_t **buf, size_t *buf_size)
+
+int set_serial_port_attribute(int fd, int speed)
 {
-	int rc = 0;
-	uint8_t receive[BUFFER_LENGTH] = {0};
-	size_t retrieved_size = 0;
-	size_t trunk_size = 0;
-
-	memset(receive, 0, BUFFER_LENGTH);
-	rc = read(fd, receive, BUFFER_LENGTH);
-	if (rc <= 0) {
-		perror("Failed to read the message from the device.");
+	struct termios tty;
+	if (tcgetattr(fd, &tty) != 0) {
+		perror("error from tcgetattr");
 		return -1;
 	}
 
-	*proc_id = receive[0];
-	*buf_size = (receive[2] << 8) | receive[3];
-	*buf = (uint8_t *) malloc(*buf_size);
+	cfsetospeed(&tty, speed);
+	cfsetispeed(&tty, speed);
 
-	/* If it's a small message, directly copy the size of the message,
-	 * or copy the BUFFER_LENGTH.
-	 */
-	trunk_size = (*buf_size > BUFFER_LENGTH) ? BUFFER_LENGTH : *buf_size;
-	memcpy(*buf, receive + 1, trunk_size);
-	retrieved_size += trunk_size;
+	tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+	tty.c_cflag |= (CLOCAL | CREAD);
+	tty.c_cflag &= ~(PARENB | PARODD);
+	tty.c_cflag |= 0;
+	tty.c_cflag &= ~CSTOPB;
+	tty.c_cflag &= ~CRTSCTS;
 
-	while (retrieved_size != *buf_size) {
-		memset(receive, 0, BUFFER_LENGTH);
-		rc = read(fd, receive, BUFFER_LENGTH);
-		if (rc <= 0) {
-			perror("Failed to read the message from the device.");
-			free(*buf);
-			return -1;
-		}
+	tty.c_iflag &= ~IGNBRK;
+	tty.c_iflag |= ICANON;
+	tty.c_iflag &= ~OPOST;
+	tty.c_iflag &= ~(IXON | IXOFF | IXANY);
 
-		if (*buf_size > retrieved_size + BUFFER_LENGTH) {
-			trunk_size = BUFFER_LENGTH;
-		} else {
-			trunk_size = *buf_size - retrieved_size;
-		}
-		memcpy(*buf + retrieved_size, receive + 1, trunk_size);
+	tty.c_lflag = 0;
 
-		retrieved_size += trunk_size;
-	}
+	tty.c_oflag = 0;
 
-	return 0;
-}
+	tty.c_cc[VMIN] = 1;
+	tty.c_cc[VTIME] = 0;
 
-int write_to_kernel(int fd, uint8_t *buf, size_t buf_size)
-{
-	int rc = 0;
-	uint8_t send[BUFFER_LENGTH] = {0};
-	size_t transferred_size = 0;
-	size_t trunk_size = 0;
 
-	while (transferred_size != buf_size) {
-		memset(send, 0, BUFFER_LENGTH);
-		if (buf_size > transferred_size + BUFFER_LENGTH - 1) {
-			send[0] = LARGE_BUFFER;
-			trunk_size = BUFFER_LENGTH - 1;
-		} else {
-			send[0] = SHORT_BUFFER;
-			trunk_size = buf_size - transferred_size;
-		}
-
-		memcpy(send + 1, buf + transferred_size, trunk_size);
-		rc = write(fd, send, BUFFER_LENGTH);
-		if (rc < 0) {
-			perror("Failed to write the message to the device.");
-			break;
-		}
-
-		transferred_size += trunk_size;
+	if (tcsetattr(fd, TCSANOW, &tty) != 0) {
+		perror("error from tcsetattr");
+		return -1;
 	}
 
 	return 0;
@@ -100,129 +62,83 @@ int write_to_kernel(int fd, uint8_t *buf, size_t buf_size)
 
 int main(int argc, char const *argv[])
 {
+	bool inited = false;
 	int fd = -1;
 	int rc = 0;
-	uint8_t current_proc;
-	uint8_t op;
-	uint8_t *request;
-	size_t request_size;
-	uint8_t *response;
-	size_t response_size;
+	uint8_t request[BUFFER_LENGTH];
+	uint8_t response[1];
+	int read_length = 0;
+	uint8_t read_char = '0';
 	struct timespec start_t;
 	struct timespec end_t;
 	struct timespec diff_t;
 
+	//Zephyr >>>
+	struct timeval tv;
+	//Zephyr <<<
+
+	//Zephyr
+//	setvbuf(stdout, NULL, _IONBF, 0);
+//	setvbuf(stdin, NULL, _IONBF, 0);
+
 	// Open the device with read/write access
-	fd = open("/dev/octopos_tpm", O_RDWR);
+	fd = open("/dev/ttyS0", O_RDWR | O_NOCTTY);
 	if (fd < 0) {
-		perror("Failed to open the device...");
+		perror("Failed to open the device.");
 		return errno;
 	}
+	set_serial_port_attribute(fd, B9600);
+	tcflush(fd, TCIFLUSH);
 
 	while (true) {
-		// Read buffer from driver buffer
-		rc = read_from_kernel(fd, &current_proc, &request, &request_size);
-		if (rc < 0)
-			goto again;
+		// Read the request
+		usleep(BUFFER_LENGTH * 100);
+		// Read message from serial port
+		do {
+			rc = read(fd, &read_char, 1);
+			if (read_char == 0 && inited == false) {
+				rc = read(fd, &read_char, 1);  
+				continue;
+			}
+			if (read_char != 0 && inited == false)
+				inited = true;
 
-		rc = enforce_running_process(current_proc);
-		if (rc < 0)
+			memcpy(&request[read_length], &read_char, 1);
+			read_length += rc;
+		} while(read_length < BUFFER_LENGTH && rc == 1);
+		if (read_length != BUFFER_LENGTH) {
+			perror("Failed to read the message from the device.");
 			goto again;
+		}
+
+#ifdef DEBUG
+		for (size_t i = 0; i < BUFFER_LENGTH; i++) {
+			printf("%02x ", request[i]);
+		}
+		fflush(stdout);
+#endif
+
+		uint8_t current_proc = request[0] - 0x80 + 1;
+		rc = enforce_running_process(current_proc);
+		if (rc < 0) {
+			perror("Failed to enforce running process.");
+			goto again;
+		}
+
+#ifdef DEBUG
+		//Zephyr
+		gettimeofday(&tv, NULL);
+		printf("BEG %lld\n", (tv.tv_sec) * 1000LL + (tv.tv_usec) / 1000);
 
 		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_t);
-		op = request[0];
-		if (op == OP_MEASURE) {
-			uint8_t hash_value[TPM_EXTEND_HASH_SIZE];
-			memcpy(hash_value, request + 3, TPM_EXTEND_HASH_SIZE);
-			rc = tpm_measure_service(hash_value, 0);
-			if (rc == TPM2_RC_SUCCESS) {
-				response_size = 3;
-				response = (uint8_t *) malloc(response_size);
-				response[0] = RET_SUCCESS;
-			}
-		} else if (op == OP_READ) {
-			uint32_t pcr_index = (uint32_t) request[3];
-			uint8_t send[TPM_EXTEND_HASH_SIZE] = {0};
-			rc = tpm_processor_read_pcr(pcr_index, send);
-			if (rc == TPM2_RC_SUCCESS) {
-				response_size = 3 + TPM_EXTEND_HASH_SIZE;
-				response = (uint8_t *) malloc(response_size);
-				response[0] = RET_SUCCESS;
-				memcpy(response + 3, send, TPM_EXTEND_HASH_SIZE);
-			}
-		} else if (op == OP_ATTEST) {
-			uint8_t nonce[TPM_AT_NONCE_LENGTH];
-			size_t pcr_list_size;
-			uint32_t *pcr_list;
-			uint8_t *signature;
-			size_t sig_size;
-			char *quote_info;
-			size_t quote_size;
+#endif
 
-			memcpy(nonce, request + 3, TPM_AT_NONCE_LENGTH);
-			pcr_list_size = (size_t) request[3 + TPM_AT_NONCE_LENGTH];
-			pcr_list = (uint32_t *) malloc(pcr_list_size * sizeof(uint32_t));
-			for (size_t i = 0; i < pcr_list_size; i++)
-				pcr_list[i] = request[4 + TPM_AT_NONCE_LENGTH +i];
+		uint8_t hash_value[TPM_EXTEND_HASH_SIZE];
+		memcpy(hash_value, request + 1, TPM_EXTEND_HASH_SIZE);
+		rc = tpm_measure_service(hash_value, 0);
+		response[0] = rc == TPM2_RC_SUCCESS ? RET_SUCCESS : RET_FAILURE;
 
-			rc = tpm_attest(nonce, pcr_list, pcr_list_size,
-					&signature, &sig_size, &quote_info);
-			free(pcr_list);
-
-			if (rc == TPM2_RC_SUCCESS) {
-				quote_size = strlen(quote_info);
-				response_size = sig_size + quote_size + 7;
-				response = (uint8_t *) malloc(response_size);
-				response[0] = RET_SUCCESS;
-				response[3] = (sig_size >> 8) & 0xFF;
-				response[4] = sig_size & 0xFF;
-				memcpy(response + 5, signature, sig_size);
-				response[5 + sig_size] = (quote_size >> 8) & 0xFF;
-				response[6 + sig_size] = quote_size & 0xFF;
-				memcpy(response + sig_size + 7, quote_info,
-				       quote_size);
-			}
-		} else if (op == OP_SEAL) {
-			uint8_t *key_iv = NULL;
-
-			rc = tpm_get_storage_key(&key_iv);
-			if (rc == TPM2_RC_SUCCESS) {
-				response_size = 3 + 1 + AES_GEN_SIZE;
-				response = (uint8_t *) malloc(response_size);
-				response[0] = RET_SUCCESS;
-				response[3] = AES_GEN_SIZE & 0xFF;
-				memcpy(response + 4, key_iv, AES_GEN_SIZE);
-			}
-		} else if (op == OP_RESET) {
-			size_t pcr_list_size;
-			uint32_t *pcr_list;
-
-			pcr_list_size = (size_t) request[3];
-			pcr_list = (uint32_t *) malloc(pcr_list_size * sizeof(uint32_t));
-			for (size_t i = 0; i < pcr_list_size; i++)
-				pcr_list[i] = (uint32_t) request[4 + i];
-
-			rc = tpm_reset_pcrs(pcr_list, pcr_list_size);
-			free(pcr_list);
-			if (rc == TPM2_RC_SUCCESS) {
-				response_size = 3;
-				response = (uint8_t *) malloc(response_size);
-				response[0] = RET_SUCCESS;
-			}
-		} else {
-			perror("Unrecognizable operator.");
-			goto again;
-		}
-
-		if (rc != TPM2_RC_SUCCESS) {
-			response_size = 7;
-			response = (uint8_t *) malloc(response_size);
-			response[0] = RET_FAILURE;
-			response[3] = (rc >> 24) & 0xFF;
-			response[4] = (rc >> 16) & 0xFF;
-			response[5] = (rc >> 8) & 0xFF;
-			response[6] = rc & 0xFF;
-		}
+#ifdef DEBUG
 		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_t);
 		if ((end_t.tv_nsec - start_t.tv_nsec) < 0) {
 			diff_t.tv_sec = end_t.tv_sec-start_t.tv_sec-1;
@@ -231,12 +147,30 @@ int main(int argc, char const *argv[])
 			diff_t.tv_sec = end_t.tv_sec-start_t.tv_sec;
 			diff_t.tv_nsec = end_t.tv_nsec-start_t.tv_nsec;
 		}
-		printf("%u, %ld.%ld, %u\n", op, diff_t.tv_sec, diff_t.tv_nsec, current_proc);
+		printf("%ld.%lds\n", diff_t.tv_sec, diff_t.tv_nsec);
 
-		write_to_kernel(fd, response, response_size);
+		//Zephyr
+		gettimeofday(&tv, NULL);
+		printf("END %lld\n", (tv.tv_sec) * 1000LL + (tv.tv_usec) / 1000);
+#endif
+
+#ifdef DEBUG
+		printf(" %u\n", response[0]);
+#endif
+		rc = write(fd, response, 1);
+		//Zephyr
+//		usleep(3000);
+		if (rc != 1) {
+			perror("Failed to write the message to the device.");
+			return -1;
+		}
+		tcdrain(fd);
+		tcflush(fd, TCIFLUSH);
+
 again:
-		SAFE_FREE(request);
-		SAFE_FREE(response);
+		read_length = 0;
+		memset(request, 0, BUFFER_LENGTH);
+		memset(response, 0, 1);
 		cancel_running_process();
 	}
 
@@ -248,3 +182,4 @@ again:
 
 	return 0;
 }
+

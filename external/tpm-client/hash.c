@@ -1,8 +1,7 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <tpm/hash.h>
+#include "hash.h"
 
 /*
  * @hash_buf: an array of uint8_t with a minimum size of SHA256_DIGEST_LENGTH.
@@ -91,3 +90,4 @@ void print_hash_buf(uint8_t *hash_buf)
 	}
 	printf("\n");
 }
+
