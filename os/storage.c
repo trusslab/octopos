@@ -35,7 +35,7 @@ extern struct app untrusted_app;
 
 #ifdef ARCH_SEC_HW
 /* FIXME: how do we know storage is ready? */
-#define STORAGE_REBOOT_WAIT sleep(4)
+#define STORAGE_REBOOT_WAIT sleep(1)
 #define ARCH_SEC_HW_EVALUATION
 #endif
 
@@ -439,13 +439,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 			}
 			storage_status = OS_ACCESS;
 		} else {
-#ifdef ARCH_SEC_HW_EVALUATION
-			printf("RC1 %lld\r\n", global_counter);
-#endif
 			wait_for_storage();
-#ifdef ARCH_SEC_HW_EVALUATION
-			printf("RC2 %lld\r\n", global_counter);
-#endif
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
@@ -459,7 +453,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 		STORAGE_REBOOT_WAIT;
 #endif
 #ifdef ARCH_SEC_HW_EVALUATION
-		printf("RESET (CREATION) %lld\r\n", global_counter);
+		printf("RESET (CREATE) %lld\r\n", global_counter);
 #endif
 	}
 
@@ -565,7 +559,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 // #endif
 	}
 
-	printf("no_reset%d %d %d\r\n", no_reset, runtime_proc_id, storage_status);
+	printf("access %d %d %d\r\n", no_reset, runtime_proc_id, storage_status);
 
 	if ((storage_status != OS_ACCESS) && !no_reset) {
 #ifdef ARCH_SEC_HW_EVALUATION
@@ -582,13 +576,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			current_app_with_storage_access = app;
 			storage_status = APP_ACCESS;
 		} else {
-#ifdef ARCH_SEC_HW_EVALUATION
-			printf("RC1 %lld\r\n", global_counter);
-#endif
 			wait_for_storage();
-#ifdef ARCH_SEC_HW_EVALUATION
-			printf("RC2 %lld\r\n", global_counter);
-#endif
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "

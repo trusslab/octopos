@@ -26,20 +26,15 @@
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
-printf("[0.1]\r\n");
 	init_os_mailbox();
-printf("[0.2]\r\n");
 
 #ifdef ARCH_SEC_HW_BOOT
 	/* FIXME: is there a better way to wait for storage boot? */
-	sleep(30);
+	sleep(11);
 #endif
 
 	initialize_storage();
-printf("[0.3]\r\n");
-
 	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
-printf("[0.4]\r\n");
 }
 
 void bootloader_close_file_system(void)

@@ -517,18 +517,6 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		return (uint32_t) 0;
 	}
 
-	// for (struct file_list_node *node = file_list_head; node;
-	//      node = node->next) {
-	// 	printf(">%s< >%s<\r\n", node->file->filename, filename);
-	// 	if (!strcmp(node->file->filename, filename)) {
-	// 		if (node->file->opened) {
-	// 			printf("e[0]\r\n");
-	// 			/* error */
-	// 			return (uint32_t) 0;
-	// 		}
-	// 		file = node->file;
-	// 	}
-	// }
 	file = &static_file;
 
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
@@ -557,22 +545,16 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 	if (file) {
 		int ret = get_unused_fd();
 		if (ret < 0) {
-
-			printf("e[1]\r\n");
 			return (uint32_t) 0;
 		}
 
 		uint32_t fd = (uint32_t) ret;
 		if (fd == 0 || fd >= MAX_NUM_FD){
-
-			printf("e[2]\r\n");
 			return (uint32_t) 0;
 		}
 
 		/* Shouldn't happen, but let's check. */
 		if (file_array[fd]){
-
-			printf("e[3]\r\n");
 			return (uint32_t) 0;
 		}
 
@@ -582,7 +564,6 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		return fd;
 	}
 
-	printf("e[4]\r\n");
 	/* error */
 	return (uint32_t) 0;
 }
@@ -679,7 +660,6 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size,
 	}
 
 	if (offset >= file->size) {
-	printf("[7!]\r\n");
 		return 0;
 	}
 
@@ -1067,7 +1047,6 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 
 	/* read the directory */
 	read_dir_data_from_storage();
-printf("[1]\r\n");
 	/* check to see if there's a valid directory */
 	if (dir_data[0] == '$' && dir_data[1] == '%' &&
 	    dir_data[2] == '^' && dir_data[3] == '&') {
@@ -1079,12 +1058,9 @@ printf("[1]\r\n");
 		uint16_t num_files = *((uint16_t *) &dir_data[4]);
 #endif
 		dir_data_ptr = 6;
-		printf("[2]%d\r\n", num_files);
 		for (int i = 0; i < num_files; i++) {
 			int dir_data_off = dir_data_ptr;
 			if ((dir_data_ptr + 2) > DIR_DATA_SIZE) {
-printf("ee[3]\r\n");
-
 				break;
 			}
 #ifdef ARCH_SEC_HW
@@ -1095,25 +1071,13 @@ printf("ee[3]\r\n");
 				*((uint16_t *) &dir_data[dir_data_ptr]);
 #endif
 			if ((dir_data_ptr + filename_size + 15) > DIR_DATA_SIZE) {
-printf("ee[4]\r\n");
-
 				break;
 			}
 			dir_data_ptr += 2;
 
 			if (filename_size > MAX_FILENAME_SIZE) {
-printf("ee[5]\r\n");
-
 				break;
 			}
-
-//			struct file *file =
-//				 (struct file *) malloc(sizeof(struct file));
-//			if (!file) {
-//printf("ee[6]\r\n");
-//
-//				break;
-//			}
 
 			strcpy(static_file.filename,
 			       (char *) &dir_data[dir_data_ptr]);
@@ -1140,7 +1104,6 @@ printf("ee[5]\r\n");
 			
 			static_file.opened = 0;
 
-			printf("%s\r\n", static_file.filename);
 			if (!strcmp(static_file.filename, "storage")) {
 				// add_file_to_list(&static_file);
 				break;
@@ -1166,7 +1129,6 @@ printf("ee[5]\r\n");
 
 	for (int i = 0; i < MAX_NUM_FD; i++)
 		file_array[i] = NULL;
-printf("[3]\r\n");
 }
 
 void close_file_system(void)
