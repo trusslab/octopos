@@ -31,6 +31,8 @@
 #include <os/storage.h>
 #include <tpm/hash.h>
 
+#define STORAGE_BOOT_UNPACK_BUF_SIZE 1024
+
 #ifndef ARCH_SEC_HW_BOOT
 /* sec_hw bootloader must not use initialize global 
  * variable because it runs on rom 
@@ -303,6 +305,7 @@ extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
 
 int _sem_retrieve_mailbox_message_blocking_buf_large(
 	OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
+u16 unpack_buf_head;
 int get_srec_line(uint8 *line, uint8 *buf);
 
 /* FIXME: import headers */
@@ -329,14 +332,15 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	FILE *copy_filep;
 #else /* ARCH_SEC_HW_BOOT */
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
-	u8 unpack_buf[1024] = {0};
-	u16 unpack_buf_head = 0;
+	u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
 	int line_count;
 	void (*laddr)();
 	need_repeat = 0;
 	total_count = 0;
 	u32 tpm_response;
 	int Status;
+
+	unpack_buf_head = 0;
 
 	/* Init TPM mailbox */
 	/* FIXME: move to each domain's mailbox init */
@@ -372,11 +376,12 @@ int copy_file_from_boot_partition(char *filename, char *path)
 
 #endif /* ARCH_SEC_HW_BOOT */
 
-	uint8_t buf[STORAGE_BLOCK_SIZE + 1] = {0};
+	uint8_t buf[STORAGE_BLOCK_SIZE] = {0};
 	int offset = 0;
 
 /* FIXME: some code is disabled to reduce bootloader binary size */
 #ifndef ARCH_SEC_HW_BOOT
+
 	if (file_copy_counter) {
 		reading_signature = 1;
 	}
@@ -399,13 +404,13 @@ repeat:
 		mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
 #else
 	/* unpack buffer is full, but still, haven't finish a line */
-	if (unpack_buf_head > 1024 - STORAGE_BLOCK_SIZE)
+	if (unpack_buf_head > STORAGE_BOOT_UNPACK_BUF_SIZE - STORAGE_BLOCK_SIZE)
 		SEC_HW_DEBUG_HANG();
 
 	/* wait for change queue access */
 	while(0xdeadbeef == 
 		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])) {
-		octopos_usleep(1);
+		// octopos_usleep(1);
 	}
 	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
@@ -433,8 +438,21 @@ repeat:
 		printf("BEFORE READ %08x\r\n", 
 			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
 #endif /* SEC_HW_TPM_DEBUG */
-		_sem_retrieve_mailbox_message_blocking_buf_large(
-			Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+		// unpack_buf_head = (unpack_buf_head + 3) & ~0x3;
+		// if (unpack_buf_head >= STORAGE_BOOT_UNPACK_BUF_SIZE) {
+		// 	printf("Error: unpack_buf full\r\n");
+		// 	SEC_HW_DEBUG_HANG();
+		// }
+		/* mailbox read buffer must align to 4 */
+		if (!(unpack_buf_head & 0x3)) {
+			_sem_retrieve_mailbox_message_blocking_buf_large(
+				Mbox_regs[Q_STORAGE_DATA_OUT], &unpack_buf[unpack_buf_head]);
+		} else {
+			_sem_retrieve_mailbox_message_blocking_buf_large(
+				Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+			memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
+		}
+
 #ifdef SEC_HW_TPM_DEBUG
 		printf("AFTER READ %08x\r\n", 
 			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
@@ -443,7 +461,7 @@ repeat:
 		/* update hash */
 		if (offset == 0)
 			sha256_init(&ctx);
-		sha256_update(&ctx, &buf[0], STORAGE_BLOCK_SIZE);
+		sha256_update(&ctx, &unpack_buf[unpack_buf_head], STORAGE_BLOCK_SIZE);
 #endif /* ARCH_SEC_HW_BOOT */
 		
 #ifndef ARCH_SEC_HW_BOOT
@@ -453,7 +471,7 @@ repeat:
 #else /* ARCH_SEC_HW_BOOT */
 
 		/* copy into unpack buffer */
-		memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
+		// memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
 		unpack_buf_head += STORAGE_BLOCK_SIZE;
 
 		/* load lines until there is no complete line in unpack buffer */
@@ -514,7 +532,7 @@ repeat:
 					unpack_buf_head - line_count);
 
 			unpack_buf_head -= line_count;
-			memset(&unpack_buf[unpack_buf_head], 0, line_count);
+			// memset(&unpack_buf[unpack_buf_head], 0, line_count);
 		}
 #endif /* ARCH_SEC_HW_BOOT */
 

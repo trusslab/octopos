@@ -20,6 +20,12 @@ static srec_info_t srinfo;
 static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 
+#ifndef ARCH_SEC_HW_BOOT_OTHER
+u16 unpack_buf_head;
+#else
+extern u16 unpack_buf_head;
+#endif
+
 void bootloader_close_file_system(void);
 
 int get_srec_line(uint8 *line, uint8 *buf)
@@ -27,11 +33,13 @@ int get_srec_line(uint8 *line, uint8 *buf)
 	uint8 c;
 	int count = 0;
 
-	while (1) {
+	while (count < unpack_buf_head) {
 		c  = *line++;
 		if (c == 0xD) {
 			/* Eat up the 0xA too */
 			c = *line++;
+			// if (count + 2 > unpack_buf_head)
+			// 	return -LD_SREC_LINE_ERROR;
 			return count + 2;
 		}
 
@@ -66,14 +74,11 @@ void sha256_update(SHA256_CTX *ctx, uchar data[], uint len);
 void sha256_final(SHA256_CTX *ctx, uchar hash[]);
 OCTOPOS_XMbox Mbox_TPM;
 
-void mem_test();
-
 void storage_request_boot_image_by_line(char *filename)
 {
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
 	u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
 	// u8 buf[STORAGE_BOOT_BLOCK_SIZE];
-	u16 unpack_buf_head = 0;
 	u32 fd;
 	int line_count;
 	void (*laddr)();
@@ -81,6 +86,8 @@ void storage_request_boot_image_by_line(char *filename)
 	int offset = 0;
 	u32 tpm_response;
 	int Status;
+
+	unpack_buf_head = 0;
 
 	/* init TPM mailbox */
 	/* FIXME: move to each domain's mailbox init */
@@ -196,7 +203,7 @@ void storage_request_boot_image_by_line(char *filename)
 					unpack_buf_head - line_count);
 
 			unpack_buf_head -= line_count;
-			memset(&unpack_buf[unpack_buf_head], 0, line_count);
+			// memset(&unpack_buf[unpack_buf_head], 0, line_count);
 		}
 
 	}
