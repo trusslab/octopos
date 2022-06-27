@@ -22,8 +22,10 @@ static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 
 #ifndef ARCH_SEC_HW_BOOT_OTHER
 u16 unpack_buf_head;
+u16 unpack_buf_tail;
 #else
 extern u16 unpack_buf_head;
+extern u16 unpack_buf_tail;
 #endif
 
 void bootloader_close_file_system(void);
@@ -33,7 +35,7 @@ int get_srec_line(uint8 *line, uint8 *buf)
 	uint8 c;
 	int count = 0;
 
-	while (count < unpack_buf_head) {
+	while (count + unpack_buf_tail < unpack_buf_head) {
 		c  = *line++;
 		if (c == 0xD) {
 			/* Eat up the 0xA too */
@@ -86,8 +88,8 @@ void storage_request_boot_image_by_line(char *filename)
 	int offset = 0;
 	u32 tpm_response;
 	int Status;
-	int unpack_buf_tail = 0;
 
+	unpack_buf_tail = 0;
 	unpack_buf_head = 0;
 
 	/* init TPM mailbox */

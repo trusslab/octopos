@@ -306,6 +306,7 @@ extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
 int _sem_retrieve_mailbox_message_blocking_buf_large(
 	OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
 u16 unpack_buf_head;
+u16 unpack_buf_tail;
 int get_srec_line(uint8 *line, uint8 *buf);
 
 /* FIXME: import headers */
@@ -339,8 +340,8 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	total_count = 0;
 	u32 tpm_response;
 	int Status;
-	int unpack_buf_tail = 0;
 
+	unpack_buf_tail = 0;
 	unpack_buf_head = 0;
 
 	/* Init TPM mailbox */
