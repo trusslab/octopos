@@ -86,6 +86,7 @@ void storage_request_boot_image_by_line(char *filename)
 	int offset = 0;
 	u32 tpm_response;
 	int Status;
+	int unpack_buf_tail = 0;
 
 	unpack_buf_head = 0;
 
@@ -112,13 +113,15 @@ void storage_request_boot_image_by_line(char *filename)
 	while (1) {
 		/* unpack buffer is full, but still, haven't finish a line */
 		if (unpack_buf_head > STORAGE_BOOT_UNPACK_BUF_SIZE - STORAGE_BOOT_BLOCK_SIZE) {
-			printf("bad srec\r\n");
+#ifdef SEC_HW_TPM_DEBUG
+			printf("srec corruption\r\n");
 			for (int idx = 0; idx < 1024; idx++) {
 				printf("%02x ",unpack_buf[idx]);
 				if (idx % 128 == 0)
 					printf("\r\n");
 			}
 			printf("\r\n");
+#endif
 			SEC_HW_DEBUG_HANG();
 		}
 
@@ -144,15 +147,17 @@ void storage_request_boot_image_by_line(char *filename)
 		unpack_buf_head += STORAGE_BOOT_BLOCK_SIZE;
 
 		/* load lines until there is no complete line in unpack buffer */
-		while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
+		while ((line_count = get_srec_line(&unpack_buf[unpack_buf_tail], sr_buf)) > 0) {
 			if (decode_srec_line(sr_buf, &srinfo) != 0) {
-				printf("bad srec\r\n");
-				// for (int idx = 0; idx < 512; idx++) {
-				// 	printf("%02x ",buf[idx]);
-				// 	if (idx % 128 == 0)
-				// 		printf("\r\n");
-				// }
-				// printf("\r\n");
+#ifdef SEC_HW_TPM_DEBUG
+			printf("srec corruption\r\n");
+			for (int idx = 0; idx < 1024; idx++) {
+				printf("%02x ",unpack_buf[idx]);
+				if (idx % 128 == 0)
+					printf("\r\n");
+			}
+			printf("\r\n");
+#endif
 				SEC_HW_DEBUG_HANG();
 			}
 
@@ -197,15 +202,15 @@ void storage_request_boot_image_by_line(char *filename)
 					break;
 			}
 
-			/* after loading the line, remove the contents being loaded */
-			memcpy(&unpack_buf[0],
-					&unpack_buf[line_count],
-					unpack_buf_head - line_count);
-
-			unpack_buf_head -= line_count;
-			// memset(&unpack_buf[unpack_buf_head], 0, line_count);
+			unpack_buf_tail += line_count;
 		}
 
+		memcpy(&unpack_buf[0],
+				&unpack_buf[unpack_buf_tail],
+				unpack_buf_head - unpack_buf_tail);
+
+		unpack_buf_head = unpack_buf_head - unpack_buf_tail;
+		unpack_buf_tail = 0;
 	}
 
 	/* if program reaches here, something goes wrong */

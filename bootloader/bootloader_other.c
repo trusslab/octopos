@@ -339,6 +339,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	total_count = 0;
 	u32 tpm_response;
 	int Status;
+	int unpack_buf_tail = 0;
 
 	unpack_buf_head = 0;
 
@@ -475,7 +476,7 @@ repeat:
 		unpack_buf_head += STORAGE_BLOCK_SIZE;
 
 		/* load lines until there is no complete line in unpack buffer */
-		while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
+		while ((line_count = get_srec_line(&unpack_buf[unpack_buf_tail], sr_buf)) > 0) {
 			if (decode_srec_line(sr_buf, &srinfo) != 0)
 				SEC_HW_DEBUG_HANG();
 
@@ -525,15 +526,24 @@ repeat:
 					SEC_HW_DEBUG_HANG();
 					break;
 			}
+			unpack_buf_tail += line_count;
 
-			/* after loading the line, remove the contents being loaded */
-			memcpy(&unpack_buf[0],
-					&unpack_buf[line_count],
-					unpack_buf_head - line_count);
+			// /* after loading the line, remove the contents being loaded */
+			// memcpy(&unpack_buf[0],
+			// 		&unpack_buf[line_count],
+			// 		unpack_buf_head - line_count);
 
-			unpack_buf_head -= line_count;
-			// memset(&unpack_buf[unpack_buf_head], 0, line_count);
+			// unpack_buf_head -= line_count;
+			// // memset(&unpack_buf[unpack_buf_head], 0, line_count);
 		}
+		
+		memcpy(&unpack_buf[0],
+				&unpack_buf[unpack_buf_tail],
+				unpack_buf_head - unpack_buf_tail);
+
+		unpack_buf_head = unpack_buf_head - unpack_buf_tail;
+		unpack_buf_tail = 0;
+
 #endif /* ARCH_SEC_HW_BOOT */
 
 		offset += STORAGE_BLOCK_SIZE;
