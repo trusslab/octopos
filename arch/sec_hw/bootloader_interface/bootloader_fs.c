@@ -17,7 +17,7 @@
 #include <arch/octopos_xmbox.h>
 
 static srec_info_t srinfo;
-static uint8 sr_buf[SREC_MAX_BYTES];
+// static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 
 #ifndef ARCH_SEC_HW_BOOT_OTHER
@@ -30,7 +30,7 @@ extern u16 unpack_buf_tail;
 
 void bootloader_close_file_system(void);
 
-int get_srec_line(uint8 *line, uint8 *buf)
+int get_srec_line(uint8 *line)
 {
 	uint8 c;
 	int count = 0;
@@ -45,7 +45,7 @@ int get_srec_line(uint8 *line, uint8 *buf)
 			return count + 2;
 		}
 
-		*buf++ = c;
+		// *buf++ = c;
 		count++;
 		if (count > SREC_MAX_BYTES)
 			return -LD_SREC_LINE_ERROR;
@@ -149,8 +149,8 @@ void storage_request_boot_image_by_line(char *filename)
 		unpack_buf_head += STORAGE_BOOT_BLOCK_SIZE;
 
 		/* load lines until there is no complete line in unpack buffer */
-		while ((line_count = get_srec_line(&unpack_buf[unpack_buf_tail], sr_buf)) > 0) {
-			if (decode_srec_line(sr_buf, &srinfo) != 0) {
+		while ((line_count = get_srec_line(&unpack_buf[unpack_buf_tail])) > 0) {
+			if (decode_srec_line(&unpack_buf[unpack_buf_tail], &srinfo) != 0) {
 #ifdef SEC_HW_TPM_DEBUG
 			printf("srec corruption\r\n");
 			for (int idx = 0; idx < 1024; idx++) {

@@ -298,7 +298,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 #define P_PREVIOUS 0xff
 
 static srec_info_t srinfo;
-static uint8 sr_buf[SREC_MAX_BYTES];
+// static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
 extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
@@ -307,7 +307,7 @@ int _sem_retrieve_mailbox_message_blocking_buf_large(
 	OCTOPOS_XMbox *InstancePtr, uint8_t* buf);
 u16 unpack_buf_head;
 u16 unpack_buf_tail;
-int get_srec_line(uint8 *line, uint8 *buf);
+int get_srec_line(uint8 *line);
 
 /* FIXME: import headers */
 int init_runtime(int runtime_id);
@@ -477,8 +477,8 @@ repeat:
 		unpack_buf_head += STORAGE_BLOCK_SIZE;
 
 		/* load lines until there is no complete line in unpack buffer */
-		while ((line_count = get_srec_line(&unpack_buf[unpack_buf_tail], sr_buf)) > 0) {
-			if (decode_srec_line(sr_buf, &srinfo) != 0)
+		while ((line_count = get_srec_line(&unpack_buf[unpack_buf_tail])) > 0) {
+			if (decode_srec_line(&unpack_buf[unpack_buf_tail], &srinfo) != 0)
 				SEC_HW_DEBUG_HANG();
 
 			switch (srinfo.type) {
