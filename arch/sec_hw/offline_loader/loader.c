@@ -59,12 +59,14 @@ int offline_loader(char *elf_name, char *output_path, char* buffer_size_s, char*
     fclose(fp);
 
     target_buffer = (uint8*)malloc(buffer_size);
-    
+
+    srinfo.sr_data = sr_data_buf;
     
     while (1) {
         if ((ret = flash_get_srec_line (sr_buf)) != 0)
             return ret;
 
+        printf("decode: %08x\n", sr_buf);
         if ((ret = decode_srec_line (sr_buf, &srinfo)) != 0)
             return ret;
 
@@ -74,10 +76,16 @@ int offline_loader(char *elf_name, char *output_path, char* buffer_size_s, char*
 	    case SREC_TYPE_1:
 	    case SREC_TYPE_2:
 	    case SREC_TYPE_3:
-        if (srinfo.addr - base_addr < buffer_size)
+        if ((int) srinfo.addr - base_addr < buffer_size) {
+            printf("memcpy: %08x (offset:%d) from %08x\n, len %d", 
+                (void*) ((int) (srinfo.addr - base_addr) + (int)target_buffer), 
+                (int) (srinfo.addr - base_addr),
+                srinfo.sr_data,
+                srinfo.dlen);
+
             memcpy ((void*) ((int) (srinfo.addr - base_addr) + (int)target_buffer), 
                 (void*)srinfo.sr_data, srinfo.dlen);
-        else if (srinfo.addr - base_addr < buffer_size + PROTECTED_RANGE)
+        } else if ((int) srinfo.addr - base_addr < buffer_size + PROTECTED_RANGE)
             /* ignore write to common_heap_and_stack and protected range */
             continue;
         else {
