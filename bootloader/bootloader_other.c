@@ -446,6 +446,11 @@ repeat:
 		// 	SEC_HW_DEBUG_HANG();
 		// }
 		/* mailbox read buffer must align to 4 */
+#ifdef ARCH_SEC_HW_BOOT_KEYBOARD
+		_sem_retrieve_mailbox_message_blocking_buf_large(
+			Mbox_regs[Q_STORAGE_DATA_OUT], buf);
+		memcpy(0x120000+offset, &buf[0], STORAGE_BLOCK_SIZE);
+#else /* ARCH_SEC_HW_BOOT_KEYBOARD */
 		if (!(unpack_buf_head & 0x3)) {
 			_sem_retrieve_mailbox_message_blocking_buf_large(
 				Mbox_regs[Q_STORAGE_DATA_OUT], &unpack_buf[unpack_buf_head]);
@@ -454,16 +459,46 @@ repeat:
 				Mbox_regs[Q_STORAGE_DATA_OUT], buf);
 			memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
 		}
-
+#endif /* ARCH_SEC_HW_BOOT_KEYBOARD */
 #ifdef SEC_HW_TPM_DEBUG
 		printf("AFTER READ %08x\r\n", 
 			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
 #endif /* SEC_HW_TPM_DEBUG */
 
-		/* update hash */
-		if (offset == 0)
-			sha256_init(&ctx);
-		sha256_update(&ctx, &unpack_buf[unpack_buf_head], STORAGE_BLOCK_SIZE);
+		// /* update hash */
+		// if (offset == 0)
+		// 	sha256_init(&ctx);
+		// sha256_update(&ctx, &unpack_buf[unpack_buf_head], STORAGE_BLOCK_SIZE);
+#ifdef ARCH_SEC_HW_BOOT_KEYBOARD
+		offset += STORAGE_BLOCK_SIZE;
+		if (offset >= 0x1C000) {
+			/* finalize hash and verify with TPM */
+			// sha256_final(&ctx, hash);
+
+			OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
+			OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
+			if (tpm_response != 0xFFFFFFFF) {
+				printf("Secure boot abort.\r\n");
+				while(1);
+			}
+
+			octopos_mailbox_deduct_and_set_owner(
+				Mbox_ctrl_regs[Q_STORAGE_DATA_OUT], 
+				P_PREVIOUS
+				);
+
+			*(boot_status_reg) = 1;
+
+			laddr = (void (*)()) BOOT_RESET_REG;
+
+			/* jump to start vector of loaded program */
+			(*laddr)();
+
+			/* the old program is dead at this point */
+			SEC_HW_DEBUG_HANG();
+		}
+		continue;
+#endif /* ARCH_SEC_HW_BOOT_KEYBOARD */
 #endif /* ARCH_SEC_HW_BOOT */
 		
 #ifndef ARCH_SEC_HW_BOOT
@@ -497,7 +532,7 @@ repeat:
 				case SREC_TYPE_9:
 
 					/* finalize hash and verify with TPM */
-					sha256_final(&ctx, hash);
+					// sha256_final(&ctx, hash);
 #ifdef SEC_HW_TPM_DEBUG
 					for (int idx = 0; idx < 32; idx++)
 						printf("%02x",hash[idx]);

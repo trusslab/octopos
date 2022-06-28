@@ -169,7 +169,7 @@ static int prepare_boot_partition(void)
 	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 
 	copy_file_to_partition((char *) "keyboard",
-			       (char *) "./keyboard/keyboard.srec");
+			       (char *) "./keyboard/keyboard.flat");
 	copy_file_to_partition((char *) "serial_out",
 			       (char *) "./serial_out/serial_out.srec");
 	copy_file_to_partition((char *) "storage",
