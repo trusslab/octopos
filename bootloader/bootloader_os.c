@@ -30,7 +30,8 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 
 #ifdef ARCH_SEC_HW_BOOT
 	/* FIXME: is there a better way to wait for storage boot? */
-	sleep(8);
+	sleep(7);
+	printf("wait done\r\n");
 #endif
 
 	initialize_storage();

@@ -7,7 +7,6 @@
 /* FIXME: the first check on max size is always false */
 #define NETWORK_SET_ZERO_ARGS_DATA(data, size)					\
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE_LARGE];				\
-	memcpy(buf, template, MAILBOX_QUEUE_MSG_SIZE_LARGE);			\
 	uint16_t max_size = MAILBOX_QUEUE_MSG_SIZE_LARGE - 2;			\
 	if (max_size >= 65536) {						\
 		printf("Error (%s): max_size not supported\n", __func__);	\
