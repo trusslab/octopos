@@ -719,9 +719,11 @@ static void handle_mailbox_interrupts(void* callback_ref)
 }
 
 long long global_counter;
+long long reset_tick;
 static void handle_measurement_timer_interrupts(void* ignored)
 {
 	global_counter++;
+	reset_tick++;
 }
 
 static void handle_fixed_timer_interrupts(void* ignored)

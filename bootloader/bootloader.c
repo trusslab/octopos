@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
 	unsigned int * boot_counter_reg = (unsigned int *) BOOT_COUNTER_REG;
 	if (*boot_counter_reg != 1) {
 		*boot_counter_reg = 1;
-		sleep(6);
+		sleep(BOOT_RAM_COPY_TIME_S);
 		printf("wait done\r\n");
 	}
 #endif

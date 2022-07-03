@@ -35,7 +35,7 @@ extern struct app untrusted_app;
 
 #ifdef ARCH_SEC_HW
 /* FIXME: how do we know storage is ready? */
-#define STORAGE_REBOOT_WAIT sleep(1)
+extern long long reset_tick;
 #define ARCH_SEC_HW_EVALUATION
 #endif
 
@@ -280,7 +280,7 @@ int wait_for_storage_for_os_use(void)
 			}
 
 #ifdef ARCH_SEC_HW
-			STORAGE_REBOOT_WAIT;
+			STORAGE_REBOOT_WAIT();
 #endif
 			storage_status = OS_ACCESS;
 #ifdef ARCH_SEC_HW_EVALUATION
@@ -450,7 +450,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 			storage_status = OS_ACCESS;
 		}
 #ifdef ARCH_SEC_HW
-		STORAGE_REBOOT_WAIT;
+		STORAGE_REBOOT_WAIT();
 #endif
 #ifdef ARCH_SEC_HW_EVALUATION
 		printf("RESET (CREATE) %lld\r\n", global_counter);
@@ -586,7 +586,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			}
 		}
 #ifdef ARCH_SEC_HW
-		STORAGE_REBOOT_WAIT;
+		STORAGE_REBOOT_WAIT();
 #endif
 #ifdef ARCH_SEC_HW_EVALUATION
 		printf("RESET (ACCESS) %lld\r\n", global_counter);
@@ -660,7 +660,7 @@ uint32_t initialize_storage(void)
 	}
 
 #ifdef ARCH_SEC_HW
-	STORAGE_REBOOT_WAIT;
+	STORAGE_REBOOT_WAIT();
 
 #ifdef ARCH_SEC_HW_EVALUATION
 	printf("RESET (BOOT) %lld\r\n", global_counter);

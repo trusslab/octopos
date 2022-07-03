@@ -24,13 +24,16 @@
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 
+extern long long reset_tick;
+
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	init_os_mailbox();
 
 #ifdef ARCH_SEC_HW_BOOT
 	/* FIXME: is there a better way to wait for storage boot? */
-	sleep(7);
+	sleep(BOOT_RAM_COPY_TIME_S);
+	STORAGE_REBOOT_WAIT();
 	printf("wait done\r\n");
 #endif
 
