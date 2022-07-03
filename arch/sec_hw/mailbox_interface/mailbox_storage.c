@@ -137,7 +137,7 @@ void storage_event_loop(void)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
-		sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
+		// sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
 		OCTOPOS_XMbox_ReadBlocking(&Mbox_storage_cmd_in, 
 			(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
 		process_request(buf, 0);
@@ -352,10 +352,10 @@ int init_storage(void)
 	}
 
 	/* Enable interrupts */
-	XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_OUT]);
-	XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_IN]);
-	XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_OUT]);
-	XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_IN]);
+	// XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_OUT]);
+	// XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_DATA_IN]);
+	// XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_OUT]);
+	// XIntc_Enable(&intc, OMboxIntrs[P_STORAGE][Q_STORAGE_CMD_IN]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_OUT]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_DATA_IN]);
 	XIntc_Enable(&intc, OMboxCtrlIntrs[P_STORAGE][Q_STORAGE_CMD_OUT]);
@@ -364,8 +364,8 @@ int init_storage(void)
 // 	XIntc_Enable(&intc, 11U);
 // // DEBUG<<<
 
-	Xil_ExceptionInit();
-	Xil_ExceptionEnable();
+	// Xil_ExceptionInit();
+	// Xil_ExceptionEnable();
 
 	sem_init(&interrupts[Q_STORAGE_DATA_IN], 0, 0);
 	sem_init(&interrupts[Q_STORAGE_DATA_OUT], 0, MAILBOX_QUEUE_SIZE_LARGE);
