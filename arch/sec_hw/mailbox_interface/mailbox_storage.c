@@ -27,6 +27,10 @@ OCTOPOS_XMbox	Mbox_storage_in_2,
 				Mbox_storage_cmd_out,
 				Mbox_storage_data_in,
 				Mbox_storage_data_out;
+#ifndef ARCH_SEC_HW_BOOT
+OCTOPOS_XMbox	Mbox_TPM;
+_Bool			domain_is_fresh;
+#endif
 
 sem_t			interrupts[NUM_QUEUES + 1];
 
@@ -137,6 +141,22 @@ void storage_event_loop(void)
 	uint8_t buf[MAILBOX_QUEUE_MSG_SIZE];
 	while(1) {
 		memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
+#ifndef ARCH_SEC_HW_BOOT
+		if (domain_is_fresh) {
+			u32 tpm_response;
+			while(OCTOPOS_XMbox_IsEmpty(
+				(OCTOPOS_XMbox*) &Mbox_storage_cmd_in));
+			domain_is_fresh = FALSE;
+			/* Extend TPM with random data to signal
+			 * the domain has been used. 
+			 */
+			OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)buf, 32);
+			OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
+			if (tpm_response != 0xFFFFFFFF) {
+				SEC_HW_DEBUG_HANG();
+			}
+		}
+#endif
 		// sem_wait(&interrupts[Q_STORAGE_CMD_IN]);
 		OCTOPOS_XMbox_ReadBlocking(&Mbox_storage_cmd_in, 
 			(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
@@ -160,10 +180,18 @@ int init_storage(void)
 	OCTOPOS_XMbox_Config	*Config_cmd_out, 
 					*Config_cmd_in, 
 					*Config_Data_out, 
-					*Config_Data_in;
+					*Config_Data_in,
+					*Config_tpm;
 
 #ifndef ARCH_SEC_HW_BOOT
 	/* Initialize OCTOPOS_XMbox */
+	domain_is_fresh = TRUE;
+	Config_tpm = OCTOPOS_XMbox_LookupConfig(XPAR_TPM_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_TPM, 
+		Config_tpm, Config_tpm->BaseAddress);
+	if (Status != XST_SUCCESS)
+		return XST_FAILURE;
+
 	Config_cmd_in = 
 		OCTOPOS_XMbox_LookupConfig(XPAR_STORAGE_MBOX_CMD_IN_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_storage_cmd_in, 

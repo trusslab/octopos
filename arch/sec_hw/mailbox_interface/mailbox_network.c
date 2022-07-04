@@ -20,6 +20,10 @@
 extern void network_stack_init(void);
 extern void platform_enable_interrupts2();
 
+#ifndef ARCH_SEC_HW_BOOT
+OCTOPOS_XMbox Mbox_TPM;
+_Bool domain_is_fresh;
+#endif
 
 OCTOPOS_XMbox	Mbox_network_cmd_in,
 		Mbox_network_cmd_out,
@@ -176,6 +180,22 @@ void network_event_loop(void)
 //		printf("%s: in while loop waiting to receive\n", __func__);
 		while(OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_cmd_in) &&
 				OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_data_in));
+		
+#ifndef ARCH_SEC_HW_BOOT
+		if (domain_is_fresh) {
+			u32 tpm_response;
+			domain_is_fresh = FALSE;
+			/* Extend TPM with random data to signal
+			 * the domain has been used. 
+			 */
+			OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)buf, 32);
+			OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
+			if (tpm_response != 0xFFFFFFFF) {
+				SEC_HW_DEBUG_HANG();
+			}
+		}
+#endif
+
 		// is_data_queue = OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_cmd_in);
 		is_data_queue = !OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_data_in);
 		// printf("received!\n");
@@ -231,12 +251,20 @@ int init_network(void)
 				*Config_cmd_in,
 				*Config_Data_out,
 				*Config_Data_in,
-				*Config_Storage_Data_out;
+				*Config_Storage_Data_out,
+				*Config_tpm;
 
 //	init_platform();
 #ifndef ARCH_SEC_HW_BOOT
 
 	/* Initialize OCTOPOS_XMbox */
+	domain_is_fresh = TRUE;
+	Config_tpm = OCTOPOS_XMbox_LookupConfig(XPAR_TPM_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_TPM, 
+		Config_tpm, Config_tpm->BaseAddress);
+	if (Status != XST_SUCCESS)
+		return XST_FAILURE;
+
 	Config_cmd_in = OCTOPOS_XMbox_LookupConfig(XPAR_NETWORK_MBOX_CMD_IN_DEVICE_ID);
 	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_network_cmd_in, Config_cmd_in, Config_cmd_in->BaseAddress);
 	if (Status != XST_SUCCESS) {
