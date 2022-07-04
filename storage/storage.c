@@ -1105,6 +1105,26 @@ void process_request(uint8_t *buf, uint8_t proc_id)
 // 		while(1);
 // }
 
+/* 
+void raw_memory_benchmark()
+{
+	uint8_t bram_buffer[512];
+	memset(&bram_buffer[0], 0xF0, 512);
+
+	printf("write start\r\n");
+	for (int i = 0; i < 2000; i++) {
+		memcpy((void*) 0x30000000 + i * 512, &bram_buffer[0], 512);
+	}
+	printf("write end\r\n");
+
+	printf("read start\r\n");
+	for (int i = 0; i < 2000; i++) {
+		memcpy(&bram_buffer[0], (void*) 0x30000000 + i * 512, 512);
+	}
+	printf("read end\r\n");
+	while(1){};
+}
+*/
 
 #ifndef ARCH_SEC_HW_BOOT
 int main(int argc, char **argv)
@@ -1119,6 +1139,8 @@ int main(int argc, char **argv)
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: storage init\n", __func__);
+
+	/* raw_memory_benchmark(); */
 
 #ifdef ARCH_SEC_HW
 	Xil_Out32(
