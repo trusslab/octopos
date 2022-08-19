@@ -47,7 +47,6 @@
 		return NULL;								\
 	}										\
 	memcpy(recv_buf, &net_buf[2], data_size);	\
-	//data = &net_buf[2];
 
 #ifdef CONFIG_UML
 /* FIXME: copied from include/network/list.h */

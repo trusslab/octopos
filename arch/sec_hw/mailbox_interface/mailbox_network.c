@@ -126,37 +126,37 @@ void send_received_packet(uint8_t *buf, uint8_t queue_id)
 {
 	// sem_wait(&interrupts[queue_id]);
 	switch(queue_id) {
-        case Q_NETWORK_DATA_OUT:
+	case Q_NETWORK_DATA_OUT:
 		OCTOPOS_XMbox_WriteBlocking(&Mbox_network_data_out,
 			(u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-           break;
-        case Q_NETWORK_CMD_OUT:
+		break;
+	case Q_NETWORK_CMD_OUT:
 		OCTOPOS_XMbox_WriteBlocking(&Mbox_network_cmd_out,
 			(u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-           break;
-        default :
-           printf("%s: Error: Invalid queue_id\n", __func__);
-	   return;
-     }
+		break;
+	default:
+		printf("%s: Error: Invalid queue_id\n", __func__);
+		return;
+	}
 }
 
 void send_response(uint8_t *buf, uint8_t queue_id)
 {
-        sem_wait(&interrupts[queue_id]);
+	sem_wait(&interrupts[queue_id]);
 
-        switch(queue_id) {
-		case Q_NETWORK_DATA_OUT:
-			OCTOPOS_XMbox_WriteBlocking(&Mbox_network_data_out,
-				(u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
-			break;
-		case Q_NETWORK_CMD_OUT:
-			OCTOPOS_XMbox_WriteBlocking(&Mbox_network_cmd_out,
-				(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
-			break;
-		default :
-			printf("%s: Error: Invalid queue_id\n", __func__);
-			return;
-        }
+	switch(queue_id) {
+	case Q_NETWORK_DATA_OUT:
+		OCTOPOS_XMbox_WriteBlocking(&Mbox_network_data_out,
+			(u32*) buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
+		break;
+	case Q_NETWORK_CMD_OUT:
+		OCTOPOS_XMbox_WriteBlocking(&Mbox_network_cmd_out,
+			(u32*) buf, MAILBOX_QUEUE_MSG_SIZE);
+		break;
+	default:
+		printf("%s: Error: Invalid queue_id\n", __func__);
+		return;
+	}
 }
 
 extern void process_cmd(uint8_t *buf, u8 owner_id);
@@ -199,7 +199,7 @@ void network_event_loop(void)
 		// is_data_queue = OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_cmd_in);
 		is_data_queue = !OCTOPOS_XMbox_IsEmpty((OCTOPOS_XMbox*) &Mbox_network_data_in);
 		// printf("received!\n");
-     		// sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
+		// sem_wait(&interrupts[Q_NETWORK_CMD_IN]);
 		// sem_getvalue(&interrupts[Q_NETWORK_DATA_IN], &is_data_queue);
 		if (!is_data_queue) {
 			memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);

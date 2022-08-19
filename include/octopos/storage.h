@@ -7,8 +7,6 @@
 #define false 0
 #endif
 
-#define MAX_PARTITION_NAME_LEN 64
-
 #define STORAGE_BLOCK_SIZE	512  /* bytes */
 
 #ifndef ARCH_SEC_HW

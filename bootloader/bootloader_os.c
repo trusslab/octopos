@@ -24,7 +24,9 @@
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 
+#ifdef ARCH_SEC_HW_BOOT
 extern long long reset_tick;
+#endif
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {

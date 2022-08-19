@@ -145,9 +145,7 @@ void wait_for_storage_sec_hw(void)
 		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_IN]) ||
 		0xdeadbeef == 
 		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])
-		) {
-		// octopos_usleep(1);
-	}
+		) {}
 }
 
 /* reads from Q_OS's and Q_KEYBOARD */

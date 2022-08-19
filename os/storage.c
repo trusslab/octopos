@@ -61,7 +61,7 @@ static int query_number_partitions(void)
 			return 0;
 		} else {
 			printf("Error: %s: unexpected returned data size.\n",
-				   __func__);
+					__func__);
 			return ERR_UNEXPECTED;
 		}
 	}
@@ -116,7 +116,7 @@ static int query_storage_partitions(void)
 	ret = query_number_partitions();
 	if (ret) {
 		printf("Error: %s: couldn't query the number of partitions (%d)\n",
-			   __func__, ret);
+				__func__, ret);
 		return ret;
 	}
 
@@ -125,7 +125,7 @@ static int query_storage_partitions(void)
 						 sizeof(struct partition));
 	if (!partitions) {
 		printf("Error: %s: couldn't allocate memory for partitions.\n",
-			   __func__);
+				__func__);
 		return ERR_MEMORY;
 	}
 
@@ -135,7 +135,7 @@ static int query_storage_partitions(void)
 		ret = query_partition(i, &partitions[i]);
 		if (ret) {
 			printf("Error: %s: failed to query partition %d\n",
-				   __func__, i);
+					__func__, i);
 			return ERR_FAULT;
 		}
 	}
@@ -158,7 +158,7 @@ static struct partition *get_boot_partition(void)
 
 	if (partitions[0].size != STORAGE_BOOT_PARTITION_SIZE) {
 		printf("Error: %s: unexpected size for the boot partition.\n",
-			   __func__);
+				__func__);
 		return NULL;
 	}
 
@@ -240,22 +240,22 @@ int wait_for_storage_for_os_use(void)
 		if (storage_status == OS_ACCESS) {
 			if (!boot_partition) {
 				printf("Error: %s: boot partition is NULL\n",
-					   __func__);
+						__func__);
 				return ERR_UNEXPECTED;
 			}
 
 			ret = bind_partition(boot_partition->partition_id);
 			if (ret) {
 				printf("Error: %s: couldn't bind the boot "
-					   "partition.\n", __func__);
+						"partition.\n", __func__);
 				return ERR_FAULT;
 			}
 
 			ret = authenticate_with_storage_service();
 			if (ret) {
 				printf("Error: %s: couldn't authenticate with "
-					   "the storage service to access the boot "
-					   "partition.\n", __func__);
+						"the storage service to access the boot "
+						"partition.\n", __func__);
 				return ERR_FAULT;
 			}
 
@@ -264,7 +264,7 @@ int wait_for_storage_for_os_use(void)
 #ifdef ROLE_OS
 			if (!boot_partition) {
 				printf("Error: %s: boot_partition is NULL "
-					   "(else)\n", __func__);
+						"(else)\n", __func__);
 				return ERR_UNEXPECTED;
 			}
 
@@ -275,7 +275,7 @@ int wait_for_storage_for_os_use(void)
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
-					   "service.\n", __func__);
+						"service.\n", __func__);
 				return ERR_FAULT;
 			}
 
@@ -290,15 +290,15 @@ int wait_for_storage_for_os_use(void)
 			ret = bind_partition(boot_partition->partition_id);
 			if (ret) {
 				printf("Error: %s: couldn't bind the boot "
-					   "partition (else).\n", __func__);
+						"partition (else).\n", __func__);
 				return ERR_FAULT;
 			}
 
 			ret = authenticate_with_storage_service();
 			if (ret) {
 				printf("Error: %s: couldn't authenticate with "
-					   "the storage service to access the boot "
-					   "partition.\n", __func__);
+						"the storage service to access the boot "
+						"partition.\n", __func__);
 				return ERR_FAULT;
 			}
 
@@ -315,9 +315,9 @@ int wait_for_storage_for_os_use(void)
 
 #ifdef ROLE_OS	
 static int storage_create_secure_partition(uint8_t *app_key,
-					   uint8_t runtime_proc_id,
-					   uint32_t partition_size,
-					   uint32_t *partition_id)
+						uint8_t runtime_proc_id,
+						uint32_t partition_size,
+						uint32_t *partition_id)
 {
 	uint32_t i, _partition_id;
 
@@ -329,7 +329,7 @@ static int storage_create_secure_partition(uint8_t *app_key,
 			_partition_id = 1;
 		} else {
 			printf("Error: %s: couldn't find the proper partition "
-				   "for the untrusted domain.\n", __func__);
+					"for the untrusted domain.\n", __func__);
 			return ERR_EXIST;
 		}
 	} else {
@@ -343,7 +343,7 @@ static int storage_create_secure_partition(uint8_t *app_key,
 
 		if (i >= num_partitions) {
 			printf("Error: %s: couldn't find a proper partition "
-				   "for the domain.\n", __func__);
+					"for the domain.\n", __func__);
 			return ERR_EXIST;
 		}
 	}
@@ -359,14 +359,12 @@ static int storage_create_secure_partition(uint8_t *app_key,
 	if (!ret0) {
 		partitions[_partition_id].is_created = 1;
 		memcpy(partitions[_partition_id].key, app_key,
-			   TPM_EXTEND_HASH_SIZE);
+				TPM_EXTEND_HASH_SIZE);
 		*partition_id = _partition_id;
 	}
 	
 	return (int) ret0;
 }
-
-uint8_t last_runtime_proc_id = 0xff;
 
 void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 							uint8_t *buf)
@@ -407,7 +405,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	ret = tpm_processor_read_pcr(PROC_TO_PCR(runtime_proc_id), app_key);
 	if (ret) {
 		printf("Error: %s: couldn't read TPM PCR for runtime proc %d.\n",
-			   __func__, runtime_proc_id);
+				__func__, runtime_proc_id);
 		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
 		return;
 	}
@@ -433,7 +431,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
-					   "service.\n", __func__);
+						"service.\n", __func__);
 				SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
 				return;
 			}
@@ -443,7 +441,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
-					   "service (2).\n", __func__);
+						"service (2).\n", __func__);
 				SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
 				return;
 			}
@@ -458,7 +456,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 	}
 
 	ret = storage_create_secure_partition(app_key, runtime_proc_id,
-						  partition_size, &sec_partition_id);
+							partition_size, &sec_partition_id);
 	if (ret) {
 		SYSCALL_SET_TWO_RETS((uint32_t) ERR_FAULT, 0)
 		return;
@@ -471,7 +469,7 @@ void handle_request_secure_storage_creation_syscall(uint8_t runtime_proc_id,
 }
 
 void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
-						  uint8_t *buf)
+							uint8_t *buf)
 {
 	uint32_t limit, timeout;
 	struct runtime_proc *runtime_proc;
@@ -502,7 +500,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	if (!app->sec_partition_created) {
 		printf("Error: %s: app does not have a secure storage "
-			   "partition.\n", __func__);
+				"partition.\n", __func__);
 		SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 		return;
 	}
@@ -514,14 +512,14 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		 */
 		if (timeout > MAILBOX_MAX_LIMIT_VAL) {
 			printf("Error: %s: timeout (%d) too large for the "
-				   "untrusted domain\n", __func__, timeout);
+					"untrusted domain\n", __func__, timeout);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			return;
 		}
 	} else {
 		if (timeout > MAILBOX_MAX_LIMIT_VAL) {
 			printf("Error: %s: timeout (%d) too large\n", __func__,
-				   timeout);
+					timeout);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			return;
 		}
@@ -529,7 +527,6 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 
 	if ((storage_status == APP_ACCESS) &&
 		(current_app_with_storage_access == app)) {
-// #ifndef ARCH_SEC_HW
 		if (is_queue_available(Q_STORAGE_CMD_IN) &&
 			is_queue_available(Q_STORAGE_CMD_OUT) &&
 			is_queue_available(Q_STORAGE_DATA_IN) &&
@@ -550,16 +547,15 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 				no_reset = 1;
 		} else {
 			printf("Error: %s: app already has access to the "
-				   "storage queues.\n", __func__);
+					"storage queues.\n", __func__);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_INVALID)
 			return;
 		}
-// #else
-// 		no_reset = 1;
-// #endif
 	}
 
+#ifdef ARCH_SEC_HW
 	printf("access %d %d %d\r\n", no_reset, runtime_proc_id, storage_status);
+#endif
 
 	if ((storage_status != OS_ACCESS) && !no_reset) {
 #ifdef ARCH_SEC_HW_EVALUATION
@@ -569,7 +565,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
-					   "service.\n", __func__);
+						"service.\n", __func__);
 				SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 				return;
 			}
@@ -580,7 +576,7 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 			ret = reset_proc_simple(P_STORAGE);
 			if (ret) {
 				printf("Error: %s: couldn't reset the storage "
-					   "service (2).\n", __func__);
+						"service (2).\n", __func__);
 				SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 				return;
 			}
@@ -600,8 +596,8 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 		ret = bind_partition(app->sec_partition_id);
 		if (ret) {
 			printf("Error: %s: couldn't bind the storage service "
-				   "to partition (%d).\n", __func__,
-				   app->sec_partition_id);
+					"to partition (%d).\n", __func__,
+					app->sec_partition_id);
 			SYSCALL_SET_ONE_RET((uint32_t) ERR_FAULT)
 			return;
 		}
@@ -619,13 +615,13 @@ void handle_request_secure_storage_access_syscall(uint8_t runtime_proc_id,
 	mark_queue_unavailable(Q_STORAGE_DATA_OUT);
 
 	mailbox_delegate_queue_access(Q_STORAGE_CMD_IN, runtime_proc_id,
-					  (limit_t) limit, (timeout_t) timeout);
+						(limit_t) limit, (timeout_t) timeout);
 	mailbox_delegate_queue_access(Q_STORAGE_CMD_OUT, runtime_proc_id,
-					  (limit_t) limit, (timeout_t) timeout);
+						(limit_t) limit, (timeout_t) timeout);
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_IN, runtime_proc_id,
-					  (limit_t) limit, (timeout_t) timeout);
+						(limit_t) limit, (timeout_t) timeout);
 	mailbox_delegate_queue_access(Q_STORAGE_DATA_OUT, runtime_proc_id,
-					  (limit_t) limit, (timeout_t) timeout);
+						(limit_t) limit, (timeout_t) timeout);
 
 	SYSCALL_SET_ONE_RET(0)
 }
@@ -655,7 +651,7 @@ uint32_t initialize_storage(void)
 	ret = reset_proc_simple(P_STORAGE);
 	if (ret) {
 		printf("Error: %s: couldn't reset the storage service.\n",
-			   __func__);
+				__func__);
 		exit(-1);
 	}
 
@@ -673,14 +669,14 @@ uint32_t initialize_storage(void)
 	ret = query_storage_partitions();
 	if (ret) {
 		printf("Error: %s: couldn't successfully query storage "
-			   "partitions\n", __func__);
+				"partitions\n", __func__);
 		exit(-1);
 	}
 
 	boot_partition = get_boot_partition();
 	if (!boot_partition) {
 		printf("Error: %s: couldn't find the boot partition.\n",
-			   __func__);
+				__func__);
 		exit(-1);
 	}
 
@@ -694,14 +690,14 @@ uint32_t initialize_storage(void)
 	ret = bind_partition(boot_partition->partition_id);
 	if (ret) {
 		printf("Error: %s: couldn't bind the boot partition.\n",
-			   __func__);
+				__func__);
 		exit(-1);
 	}
 
 	ret = authenticate_with_storage_service();
 	if (ret) {
 		printf("Error: %s: couldn't authenticate with the storage "
-			   "service to access the boot partition.\n", __func__);
+				"service to access the boot partition.\n", __func__);
 		exit(-1);
 	}
 

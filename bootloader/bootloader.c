@@ -191,9 +191,6 @@ static int secure_boot_check(char *path, char *signature_path)
 }
 #endif
 
-//void mem_test();
-//#include "xil_cache.h"
-
 int main(int argc, char *argv[])
 {
 #if defined(ARCH_SEC_HW_BOOT_STORAGE) || defined(ARCH_SEC_HW_BOOT_OS)
@@ -219,13 +216,6 @@ int main(int argc, char *argv[])
 
 	*boot_status_reg = 0;
 
-//#ifdef ARCH_SEC_HW_BOOT_OS
-////	sleep(60);
-//////	mem_test();
-////	printf("%08x\r\n", *((unsigned int *) 0x30100000));
-//	while(1){}
-////	return 0;
-//#endif
 #ifdef ARCH_SEC_HW_BOOT_STORAGE
 	unsigned int * boot_counter_reg = (unsigned int *) BOOT_COUNTER_REG;
 	if (*boot_counter_reg != 1) {

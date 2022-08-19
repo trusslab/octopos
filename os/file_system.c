@@ -663,7 +663,6 @@ uint32_t file_system_read_from_file(uint32_t fd, uint8_t *data, uint32_t size,
 	}
 
 	if (offset >= file->size) {
-	printf("[7!]\r\n");
 		return 0;
 	}
 

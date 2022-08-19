@@ -31,8 +31,6 @@
 #include <os/storage.h>
 #include <tpm/hash.h>
 
-#define STORAGE_BOOT_UNPACK_BUF_SIZE 1024
-
 #ifndef ARCH_SEC_HW_BOOT
 /* sec_hw bootloader must not use initialize global 
  * variable because it runs on rom 
@@ -43,6 +41,7 @@ int need_repeat, total_count;
 #endif
 
 #ifdef ARCH_SEC_HW_BOOT
+#define STORAGE_BOOT_UNPACK_BUF_SIZE 1024
 /* FIXME: move sha256 to a header */
 #define uchar unsigned char // 8-bit byte
 typedef struct {
@@ -128,7 +127,7 @@ static void *handle_mailbox_interrupts(void *data)
 			 * is delivered in one message only.
 			 */
 			if (!need_repeat && (num_storage_data_out_interrupts >=
-						 total_count)) {
+						total_count)) {
 				return NULL;
 			}
 
@@ -152,7 +151,7 @@ static void *handle_mailbox_interrupts(void *data)
 			spurious++;
 		} else {
 			printf("Error: interrupt from an invalid queue (%d)\n",
-				   interrupt);
+					interrupt);
 			exit(-1);
 		}
 	}
@@ -263,7 +262,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 	} else if (!strcmp(filename, "runtime")) {
 		if (argc != 1) {
 			printf("Error: %s: invalid number of args for runtime\n",
-				   __func__);
+					__func__);
 			exit(-1);
 		}
 		if (!strcmp(argv[0], "1")) {
@@ -274,7 +273,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 			processor = P_RUNTIME2;
 		} else {
 			printf("Error: %s: invalid runtime ID (%s)\n", __func__,
-				   argv[0]);
+					argv[0]);
 			exit(-1);
 		}
 	} else if (!strcmp(filename, "linux")) {
@@ -289,7 +288,7 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 
 	if (MAILBOX_QUEUE_MSG_SIZE_LARGE != STORAGE_BLOCK_SIZE) {
 		printf("Error: %s: storage data queue msg size must be equal "
-			   "to storage block size\n", __func__);
+				"to storage block size\n", __func__);
 		exit(-1);
 	}
 }
@@ -298,7 +297,6 @@ void prepare_bootloader(char *filename, int argc, char *argv[])
 #define P_PREVIOUS 0xff
 
 static srec_info_t srinfo;
-// static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 extern UINTPTR Mbox_ctrl_regs[NUM_QUEUES + 1];
 extern OCTOPOS_XMbox* Mbox_regs[NUM_QUEUES + 1];
@@ -393,7 +391,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 	copy_filep = fopen(path, "w");
 	if (!copy_filep) {
 		printf("Error: %s: Couldn't open the target file (%s).\n",
-			   __func__, path);
+				__func__, path);
 		return -1;
 	}
 #endif /* ARCH_SEC_HW_BOOT */
@@ -412,7 +410,6 @@ repeat:
 	/* wait for change queue access */
 	while(0xdeadbeef == 
 		octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT])) {
-		// octopos_usleep(1);
 	}
 	octopos_mailbox_clear_interrupt(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]);
 
@@ -440,11 +437,6 @@ repeat:
 		printf("BEFORE READ %08x\r\n", 
 			octopos_mailbox_get_status_reg(Mbox_ctrl_regs[Q_STORAGE_DATA_OUT]));
 #endif /* SEC_HW_TPM_DEBUG */
-		// unpack_buf_head = (unpack_buf_head + 3) & ~0x3;
-		// if (unpack_buf_head >= STORAGE_BOOT_UNPACK_BUF_SIZE) {
-		// 	printf("Error: unpack_buf full\r\n");
-		// 	SEC_HW_DEBUG_HANG();
-		// }
 		/* mailbox read buffer must align to 4 */
 		if (!(unpack_buf_head & 0x3)) {
 			_sem_retrieve_mailbox_message_blocking_buf_large(
@@ -473,7 +465,6 @@ repeat:
 #else /* ARCH_SEC_HW_BOOT */
 
 		/* copy into unpack buffer */
-		// memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BLOCK_SIZE);
 		unpack_buf_head += STORAGE_BLOCK_SIZE;
 
 		/* load lines until there is no complete line in unpack buffer */
@@ -528,14 +519,6 @@ repeat:
 					break;
 			}
 			unpack_buf_tail += line_count;
-
-			// /* after loading the line, remove the contents being loaded */
-			// memcpy(&unpack_buf[0],
-			// 		&unpack_buf[line_count],
-			// 		unpack_buf_head - line_count);
-
-			// unpack_buf_head -= line_count;
-			// // memset(&unpack_buf[unpack_buf_head], 0, line_count);
 		}
 		
 		memcpy(&unpack_buf[0],

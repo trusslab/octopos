@@ -63,6 +63,8 @@ int main(int argc, char *argv[])
 		error("ERROR reading from socket");
 	printf("Here is the first message (n = %d): %s\n", n, buffer);
 	gettimeofday(&begin, 0);
+	
+	/* A customized handshake with the application server */
 	n = write(newsockfd, "IIIIIIIIIIIIIIIII", 18);
 	if (n < 0)
 		printf("ERROR writing to socket");

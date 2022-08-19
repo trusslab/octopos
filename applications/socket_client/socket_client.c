@@ -12,7 +12,7 @@
 
 
 char throughput_test_buf[256] = "Claudius, King of Denmark. Marcellus, Officer. Hamlet, son to the former, and nephew to the present king. Polonius, Lord Chamberlain.Horatio, friend to Hamlet.  Laertes, son to Polonius. Voltemand, courtier. Cornelius, courtier. Rosencrantz, courtier.Guil";
-// FIXME: how does the app know the size of the buf?
+/* FIXME: how does the app know the size of the buf? */
 char output_buf[64];
 int num_chars = 0;
 #define secure_printf(fmt, args...) { 					\
@@ -137,16 +137,16 @@ static void throughput_test(struct runtime_api *api)
 	len = api->read_from_socket(sock, buf, 512);
 	printf("... %.*s\n\r",len,buf);
 	len = strlen(throughput_test_buf);
+	/* FIXME: There is a bug in secure hardware that 
+	 * the last 3 packets are lost. The runtime domain
+	 * sends them out, but the network doesn't receive.
+	 * Maybe relevant to the mailbox corruption bug. */
 	for (int i=0; i<5003; i++) {
 //		throughput_test_buf[0] = i % 255;
 		if (api->write_to_socket(sock, throughput_test_buf, 256) < 0) {
 			printf("%s: Error: _write\n", __func__);
 			return;
 		}
-//		if (i % 50 == 0) {
-//			printf("%d\n", i);
-//			delay_print(20);
-//		}
 	}
 }
 

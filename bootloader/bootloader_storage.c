@@ -175,6 +175,9 @@ int copy_file_from_boot_partition(char *filename, char *path)
 void bootloader_close_file_system(void)
 {
 	close_file_system();
+#ifndef ARCH_SEC_HW_BOOT
+	fop_close(filep);
+#endif
 }
 
 #ifndef ARCH_SEC_HW_BOOT

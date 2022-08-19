@@ -117,9 +117,11 @@ void ip_send_out(struct pkbuf *pkb)
 	// 	while (1)
 	// 		runtime_send_msg_on_queue_large(buf, Q_NETWORK_DATA_IN);
 	runtime_send_msg_on_queue_large(buf, Q_NETWORK_DATA_IN);
+#ifdef ARCH_SEC_HW
 	if (buf[0] != 86)
 		printf("Send buf [%u, %u, %u, ...]\r\n", buf[0], buf[1], buf[2]);
-
+#endif
+	
 #ifndef UNTRUSTED_DOMAIN
 #ifndef ARCH_SEC_HW
 	report_queue_usage(Q_NETWORK_DATA_IN);

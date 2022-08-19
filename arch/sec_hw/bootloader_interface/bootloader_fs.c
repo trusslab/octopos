@@ -17,7 +17,6 @@
 #include <arch/octopos_xmbox.h>
 
 static srec_info_t srinfo;
-// static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
 
 #ifndef ARCH_SEC_HW_BOOT_OTHER
@@ -40,12 +39,9 @@ int get_srec_line(uint8 *line)
 		if (c == 0xD) {
 			/* Eat up the 0xA too */
 			c = *line++;
-			// if (count + 2 > unpack_buf_head)
-			// 	return -LD_SREC_LINE_ERROR;
 			return count + 2;
 		}
 
-		// *buf++ = c;
 		count++;
 		if (count > SREC_MAX_BYTES)
 			return -LD_SREC_LINE_ERROR;
@@ -80,7 +76,6 @@ void storage_request_boot_image_by_line(char *filename)
 {
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
 	u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
-	// u8 buf[STORAGE_BOOT_BLOCK_SIZE];
 	u32 fd;
 	int line_count;
 	void (*laddr)();

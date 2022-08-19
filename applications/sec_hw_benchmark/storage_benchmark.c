@@ -62,7 +62,6 @@ void storage_benchmark(struct runtime_api *api)
 						 NULL, NULL, NULL);
 	total_req = global_counter;
 	if (ret) {
-		// printf("Error: could not get secure access to storage.\n");
 		printf("Error: no access to storage.\n %d", ret);
 		return;
 	}
