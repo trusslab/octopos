@@ -1,12 +1,14 @@
 #ifndef ARCH_SEC_HW
 #include <stdio.h>
 #include <ctype.h>
+#include <stdint.h>
 #include "netif.h"
 #include "ether.h"
 #include "lib.h"
 #else /*ARCH_SEC_HW*/
 #include <stdio.h>
 #include <ctype.h>
+#include <stdint.h>
 #include <network/netif.h>
 #include <network/ether.h>
 #include <network/lib.h>
@@ -15,19 +17,31 @@
 #define MAX_PKBS 200
 int free_pkbs = 0;
 int alloc_pkbs = 0;
+#ifndef ARCH_SEC_HW_NETWORK
+uint8_t dbuf[512];
+#else
+// FIXME: static allocation
+extern uint8_t send_buf[510];
+extern uint8_t recv_buf[510];
+uint8_t netdev_pkb[1486 + ETH_HRD_SZ + sizeof(struct pkbuf)];
+#endif
 
-#define pkb_safe() \
-do {\
-	if ((alloc_pkbs - free_pkbs) > MAX_PKBS) {\
-		dbg("oops: too many pkbuf");\
-		exit(EXIT_FAILURE);\
-	}\
+#define pkb_safe()					\
+do {							\
+	if ((alloc_pkbs - free_pkbs) > MAX_PKBS) {	\
+		dbg("oops: too many pkbuf");		\
+		exit(EXIT_FAILURE);			\
+	}						\
 } while (0)
 
 /* referred from linux-2.6: handing packet l2 padding */
 void pkb_trim(struct pkbuf *pkb, int len)
 {
 	pkb->pk_len = len;
+#ifdef ARCH_SEC_HW_NETWORK
+	if ((uint8_t *) pkb == &netdev_pkb[0])
+		return;
+#endif
 	if (realloc(pkb, sizeof(*pkb) + len) == NULL)
 		perrx("realloc");
 }
@@ -50,7 +64,19 @@ struct pkbuf *alloc_pkb(int size)
 
 struct pkbuf *alloc_netdev_pkb(struct netdev *nd)
 {
+#ifndef ARCH_SEC_HW_NETWORK
 	return alloc_pkb(nd->net_mtu + ETH_HRD_SZ);
+#else
+	memset(netdev_pkb, 0, 1486 + ETH_HRD_SZ + sizeof(struct pkbuf));
+	((struct pkbuf *)netdev_pkb)->pk_len = nd->net_mtu + ETH_HRD_SZ;
+	((struct pkbuf *)netdev_pkb)->pk_pro = 0xffff;
+	((struct pkbuf *)netdev_pkb)->pk_type = 0;
+	((struct pkbuf *)netdev_pkb)->pk_refcnt = 1;
+	((struct pkbuf *)netdev_pkb)->pk_indev = NULL;
+	((struct pkbuf *)netdev_pkb)->pk_rtdst = NULL;
+	list_init(&((struct pkbuf *)netdev_pkb)->pk_list);
+	return (struct pkbuf *) netdev_pkb;
+#endif
 }
 
 struct pkbuf *copy_pkb(struct pkbuf *pkb)
@@ -72,6 +98,15 @@ void _free_pkb(struct pkbuf *pkb)
 #else
 void free_pkb(struct pkbuf *pkb)
 {
+#endif
+#ifndef ARCH_SEC_HW_NETWORK
+	if ((uint8_t *) pkb - 2 == &dbuf[0])
+		return;
+#else
+	if ((uint8_t *)pkb == &send_buf[0] || 
+		(uint8_t *)pkb == &netdev_pkb[0] ||
+		(uint8_t *)pkb == recv_buf)
+		return;
 #endif
 	if (--pkb->pk_refcnt <= 0) {
 		free_pkbs++;
@@ -114,4 +149,3 @@ void pkbdbg(struct pkbuf *pkb)
 	if ((i % 16) != 0)
 		ferr("\n");
 }
-

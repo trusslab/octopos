@@ -91,6 +91,7 @@
 uint32_t bound_sport = 0; /* 0xFF is an invalid partition number. */
 uint8_t bound = 0;
 uint8_t used = 0;
+extern uint8_t dbuf[MAILBOX_QUEUE_MSG_SIZE_LARGE];
 
 #define ARBITER_UNTRUSTED 1
 #define ARBITER_UNTRUSTED_FLAG 0xF0F0F0F0
@@ -419,7 +420,6 @@ void tcp_in(struct pkbuf *pkb)
 	NETWORK_SET_ZERO_ARGS_DATA(pkb, size);
 	send_received_packet(buf, Q_NETWORK_DATA_OUT);
 	free_pkb(pkb);
-
 }
 
 pthread_t mailbox_thread;
@@ -481,19 +481,15 @@ void network_event_loop(void)
 		if (!is_data_queue) {
 			memset(buf, 0x0, MAILBOX_QUEUE_MSG_SIZE);
 			opcode[1] = Q_NETWORK_CMD_IN;
-			write(fd_out, opcode, 2), 
+			write(fd_out, opcode, 2);
 			read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE);
 			process_cmd(buf, 1);
 			send_response(buf, Q_NETWORK_CMD_OUT);
 		} else {
-			uint8_t *dbuf = malloc(MAILBOX_QUEUE_MSG_SIZE_LARGE);
-			if (!dbuf) {
-				printf("%s: Error: could not allocate memory\n", __func__);
-				continue;
-			}
+			memset(dbuf, 0x0, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 			sem_wait(&interrupts[Q_NETWORK_DATA_IN]);
 			opcode[1] = Q_NETWORK_DATA_IN;
-			write(fd_out, opcode, 2); 
+			write(fd_out, opcode, 2);
 			read(fd_in, dbuf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 			send_packet(dbuf);
 		}
@@ -503,7 +499,6 @@ void network_event_loop(void)
 
 int main(int argc, char **argv)
 {
-
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: network init\n", __func__);

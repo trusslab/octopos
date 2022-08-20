@@ -190,4 +190,13 @@ char host_printf_buf[64];
 		}													\
 	}
 
+#define STORAGE_RESET_TIME_MS 200
+#define BOOT_RAM_COPY_TIME_S  6
+
+
+#define STORAGE_REBOOT_WAIT()							\
+	do {reset_tick = 0; 								\
+		while(reset_tick >= STORAGE_RESET_TIME_MS) {}	\
+	} while (0)
+
 #endif /* __SEC_HW_H */

@@ -58,7 +58,6 @@
 
 err_t octopos_xemac_init(struct xemac_s *xemac, unsigned char * mac_addr,  unsigned  mac_baseaddr)
 {
-
 	xaxiemacif_s *xaxiemacif;
 	XAxiEthernet_Config *mac_config;
 //	xaxiemacif = mem_malloc(sizeof *xaxiemacif);

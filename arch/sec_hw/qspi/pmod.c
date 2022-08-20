@@ -107,4 +107,9 @@ size_t fop_write(void *ptr, size_t size, size_t count, DFILE *filep)
 		return 0;
 	}
 }
+
+size_t fop_size(DFILE *filep)
+{
+	return filep->fssize();
+}
 #endif /* ARCH_SEC_HW_STORAGE */

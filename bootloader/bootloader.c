@@ -8,7 +8,6 @@
 #ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
 #include <fcntl.h>
-#include <semaphore.h>
 #include <tpm/hash.h>
 #include <tpm/rsa.h>
 #endif
@@ -200,25 +199,38 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef ARCH_SEC_HW_BOOT
+
 	/* Clear target memory contents */
 	memset((void*) RAM_BASE_ADDRESS, 0, 
-		RAM_RANGE + BOOT_STACK_HEAP_SIZE);
-
-	/* lock ROM */
+		RAM_TOTAL_SIZE + BOOT_STACK_HEAP_SIZE);
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
+
+#ifndef ARCH_SEC_HW_BOOT_STORAGE
+	/* lock ROM */
 	unsigned int * fuse1 = (unsigned int *) ROM_FUSE1;
 	unsigned int * fuse2 = (unsigned int *) ROM_FUSE2;
 	*fuse1 = FUSE_BURN_VALUE;
 	*fuse2 = FUSE_BURN_VALUE;
 	// printf("BL main\r\n");
+#endif /* ARCH_SEC_HW_BOOT_STORAGE */
+
 	*boot_status_reg = 0;
+
+#ifdef ARCH_SEC_HW_BOOT_STORAGE
+	unsigned int * boot_counter_reg = (unsigned int *) BOOT_COUNTER_REG;
+	if (*boot_counter_reg != 1) {
+		*boot_counter_reg = 1;
+		sleep(BOOT_RAM_COPY_TIME_S);
+		printf("wait done\r\n");
+	}
+#endif
+
 #endif /* ARCH_SEC_HW_BOOT */
 
 	char path[128];
 	int ret;
 #ifndef ARCH_SEC_HW_BOOT
 	char *name;
-	sem_t *sem;
 	char signature_filename[128];
 	char signature_filepath[128];
 
@@ -259,14 +271,6 @@ int main(int argc, char *argv[])
 
 #endif /* ARCH_SEC_HW_BOOT */
 
-#ifndef ARCH_SEC_HW_BOOT
-	sem = sem_open("/tpm_sem", O_CREAT, 0644, 1);
-	if (sem == SEM_FAILED) {
-		printf("Error: couldn't open tpm semaphore.\n");
-		exit(-1);
-	}
-#endif /* ARCH_SEC_HW_BOOT */
-
 	memset(path, 0x0, 128);
 	/* FIXME: use a different path. */
 	strcpy(path, "./bootloader/");
@@ -303,11 +307,7 @@ int main(int argc, char *argv[])
 
 	/* Add exec permission for the copied file */
 	chmod(path, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH);
-
-	sem_wait(sem);
 	send_measurement_to_tpm(path);
-	sem_post(sem);
-	sem_close(sem);
 
 	/* FIXME */
 	if (!strcmp(name, "runtime")) {

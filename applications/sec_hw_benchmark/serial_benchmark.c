@@ -30,13 +30,15 @@ int num_chars = 0;
 extern long long global_counter;
 
 #ifndef ARCH_SEC_HW
+#define LINE_MAX_LENGTH 1024
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
 #else
+#define LINE_MAX_LENGTH 64
 void serial_benchmark(struct runtime_api *api)
 #endif
 {
-	char line[1024];
+	char line[LINE_MAX_LENGTH];
 	int i, size;
 	int ret;
 
@@ -62,8 +64,8 @@ void serial_benchmark(struct runtime_api *api)
 	
 	secure_printf("Please enter your secure phrase: \r\n");
 
-	memset(line, 0x0, 1024);
-	for (i = 0; i < 1024; i++) {
+	memset(line, 0x0, LINE_MAX_LENGTH);
+	for (i = 0; i < LINE_MAX_LENGTH; i++) {
 		api->read_char_from_secure_keyboard(&line[i]);
 #ifdef ARCH_SEC_HW
 		if (line[i] == '\r') {

@@ -32,4 +32,6 @@ void mailbox_delegate_queue_access(uint8_t queue_id, uint8_t proc_id, limit_t li
 int init_os_mailbox(void);
 void close_os_mailbox(void);
 
+void wait_for_storage_sec_hw(void);
+
 #endif /* __SEC_HW_MAILBOX_OS_H */
