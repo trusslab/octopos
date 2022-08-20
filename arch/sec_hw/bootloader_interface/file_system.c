@@ -1,3 +1,4 @@
+#if defined(ARCH_SEC_HW_BOOT) && !defined(ARCH_SEC_HW_BOOT_OS)
 /* OctopOS file system
  *
  * This file is used the OS, the installer, and the bootloader for storage.
@@ -47,6 +48,8 @@ struct file {
 	uint32_t dir_data_off;
 	bool opened;
 };
+
+struct file static_file;
 
 /* FIXME: use per-process fd */
 #define MAX_NUM_FD	64 /* must be divisible by 8 */
@@ -514,16 +517,7 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 		return (uint32_t) 0;
 	}
 
-	for (struct file_list_node *node = file_list_head; node;
-	     node = node->next) {
-		if (!strcmp(node->file->filename, filename)) {
-			if (node->file->opened)
-				/* error */
-				return (uint32_t) 0;
-
-			file = node->file;
-		}
-	}
+	file = &static_file;
 
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
 	if (file == NULL && mode == FILE_OPEN_CREATE_MODE) {
@@ -550,16 +544,19 @@ uint32_t file_system_open_file(char *filename, uint32_t mode)
 
 	if (file) {
 		int ret = get_unused_fd();
-		if (ret < 0)
+		if (ret < 0) {
 			return (uint32_t) 0;
+		}
 
 		uint32_t fd = (uint32_t) ret;
-		if (fd == 0 || fd >= MAX_NUM_FD)
+		if (fd == 0 || fd >= MAX_NUM_FD){
 			return (uint32_t) 0;
+		}
 
 		/* Shouldn't happen, but let's check. */
-		if (file_array[fd])
+		if (file_array[fd]){
 			return (uint32_t) 0;
+		}
 
 		file_array[fd] = file;
 		file->opened = true;
@@ -1061,11 +1058,11 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 		uint16_t num_files = *((uint16_t *) &dir_data[4]);
 #endif
 		dir_data_ptr = 6;
-
 		for (int i = 0; i < num_files; i++) {
 			int dir_data_off = dir_data_ptr;
-			if ((dir_data_ptr + 2) > DIR_DATA_SIZE)
+			if ((dir_data_ptr + 2) > DIR_DATA_SIZE) {
 				break;
+			}
 #ifdef ARCH_SEC_HW
 			uint16_t filename_size;
 			memcpy(&filename_size, &dir_data[dir_data_ptr], 2);
@@ -1073,29 +1070,26 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			int filename_size =
 				*((uint16_t *) &dir_data[dir_data_ptr]);
 #endif
-			if ((dir_data_ptr + filename_size + 15) > DIR_DATA_SIZE)
+			if ((dir_data_ptr + filename_size + 15) > DIR_DATA_SIZE) {
 				break;
+			}
 			dir_data_ptr += 2;
 
-			if (filename_size > MAX_FILENAME_SIZE)
+			if (filename_size > MAX_FILENAME_SIZE) {
 				break;
+			}
 
-			struct file *file =
-				(struct file *) malloc(sizeof(struct file));
-			if (!file)
-				break;
-
-			strcpy(file->filename,
+			strcpy(static_file.filename,
 			       (char *) &dir_data[dir_data_ptr]);
 			dir_data_ptr = dir_data_ptr + filename_size + 1;
 
-			file->dir_data_off = dir_data_off;
+			static_file.dir_data_off = dir_data_off;
 #ifdef ARCH_SEC_HW
-			memcpy(&(file->start_block), &dir_data[dir_data_ptr], 4);
+			memcpy(&(static_file.start_block), &dir_data[dir_data_ptr], 4);
 			dir_data_ptr += 4;
-			memcpy(&(file->num_blocks), &dir_data[dir_data_ptr], 4);
+			memcpy(&(static_file.num_blocks), &dir_data[dir_data_ptr], 4);
 			dir_data_ptr += 4;
-			memcpy(&(file->size), &dir_data[dir_data_ptr], 4);
+			memcpy(&(static_file.size), &dir_data[dir_data_ptr], 4);
 			dir_data_ptr += 4;
 #else
 			file->start_block =
@@ -1108,8 +1102,12 @@ void initialize_file_system(uint32_t _partition_num_blocks)
 			dir_data_ptr += 4;
 #endif
 			
-			file->opened = 0;
-			add_file_to_list(file);
+			static_file.opened = 0;
+
+			if (!strcmp(static_file.filename, "storage")) {
+				// add_file_to_list(&static_file);
+				break;
+			}
 		}
 	} else {
 #if defined(ROLE_OS) || defined(ROLE_INSTALLER) 
@@ -1140,3 +1138,5 @@ void close_file_system(void)
 	flush_dir_data_to_storage();
 #endif
 }
+#endif
+

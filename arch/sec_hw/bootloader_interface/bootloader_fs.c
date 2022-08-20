@@ -17,17 +17,24 @@
 #include <arch/octopos_xmbox.h>
 
 static srec_info_t srinfo;
-static uint8 sr_buf[SREC_MAX_BYTES];
 static uint8 sr_data_buf[SREC_DATA_MAX_BYTES];
+
+#ifndef ARCH_SEC_HW_BOOT_OTHER
+u16 unpack_buf_head;
+u16 unpack_buf_tail;
+#else
+extern u16 unpack_buf_head;
+extern u16 unpack_buf_tail;
+#endif
 
 void bootloader_close_file_system(void);
 
-int get_srec_line(uint8 *line, uint8 *buf)
+int get_srec_line(uint8 *line)
 {
 	uint8 c;
 	int count = 0;
 
-	while (1) {
+	while (count + unpack_buf_tail < unpack_buf_head) {
 		c  = *line++;
 		if (c == 0xD) {
 			/* Eat up the 0xA too */
@@ -35,7 +42,6 @@ int get_srec_line(uint8 *line, uint8 *buf)
 			return count + 2;
 		}
 
-		*buf++ = c;
 		count++;
 		if (count > SREC_MAX_BYTES)
 			return -LD_SREC_LINE_ERROR;
@@ -70,8 +76,6 @@ void storage_request_boot_image_by_line(char *filename)
 {
 	unsigned int * boot_status_reg = (unsigned int *) BOOT_STATUS_REG;
 	u8 unpack_buf[STORAGE_BOOT_UNPACK_BUF_SIZE] = {0};
-	u8 buf[STORAGE_BOOT_BLOCK_SIZE];
-	u16 unpack_buf_head = 0;
 	u32 fd;
 	int line_count;
 	void (*laddr)();
@@ -80,7 +84,9 @@ void storage_request_boot_image_by_line(char *filename)
 	u32 tpm_response;
 	int Status;
 
-#ifdef MJTMP
+	unpack_buf_tail = 0;
+	unpack_buf_head = 0;
+
 	/* init TPM mailbox */
 	/* FIXME: move to each domain's mailbox init */
 	OCTOPOS_XMbox_Config *TPM_config_ptr;
@@ -91,7 +97,7 @@ void storage_request_boot_image_by_line(char *filename)
 		while(1);
 		return;
 	}
-#endif
+
 	fd = file_system_open_file(filename, FILE_OPEN_MODE); 
 	if (fd == 0) {
 		printf("Error: %s: Couldn't open file %s in octopos file "
@@ -103,14 +109,26 @@ void storage_request_boot_image_by_line(char *filename)
 
 	while (1) {
 		/* unpack buffer is full, but still, haven't finish a line */
-		if (unpack_buf_head > STORAGE_BOOT_UNPACK_BUF_SIZE - STORAGE_BOOT_BLOCK_SIZE)
+		if (unpack_buf_head > STORAGE_BOOT_UNPACK_BUF_SIZE - STORAGE_BOOT_BLOCK_SIZE) {
+#ifdef SEC_HW_TPM_DEBUG
+			printf("srec corruption\r\n");
+			for (int idx = 0; idx < 1024; idx++) {
+				printf("%02x ",unpack_buf[idx]);
+				if (idx % 128 == 0)
+					printf("\r\n");
+			}
+			printf("\r\n");
+#endif
 			SEC_HW_DEBUG_HANG();
+		}
 
 		/* read message from file */
-		_size = file_system_read_from_file(fd, buf, STORAGE_BOOT_BLOCK_SIZE,
-						   offset);
-		if (_size == 0)
+		_size = file_system_read_from_file(fd, &unpack_buf[unpack_buf_head],
+			STORAGE_BOOT_BLOCK_SIZE, offset);
+
+		if (_size == 0) {
 			break;
+		}
 
 		if (_size < 0 || _size > STORAGE_BOOT_BLOCK_SIZE) {
 			printf("Error: %s: reading file.\n", __func__);
@@ -120,18 +138,25 @@ void storage_request_boot_image_by_line(char *filename)
 		/* update hash */
 		if (offset == 0)
 			sha256_init(&ctx);
-		sha256_update(&ctx, &buf[0], STORAGE_BOOT_BLOCK_SIZE);
+		sha256_update(&ctx, &unpack_buf[unpack_buf_head], STORAGE_BOOT_BLOCK_SIZE);
 
 		offset += _size;
-
-		/* copy into unpack buffer */
-		memcpy(&unpack_buf[unpack_buf_head], &buf[0], STORAGE_BOOT_BLOCK_SIZE);
 		unpack_buf_head += STORAGE_BOOT_BLOCK_SIZE;
 
 		/* load lines until there is no complete line in unpack buffer */
-		while ((line_count = get_srec_line(&unpack_buf[0], sr_buf)) > 0) {
-			if (decode_srec_line(sr_buf, &srinfo) != 0)
+		while ((line_count = get_srec_line(&unpack_buf[unpack_buf_tail])) > 0) {
+			if (decode_srec_line(&unpack_buf[unpack_buf_tail], &srinfo) != 0) {
+#ifdef SEC_HW_TPM_DEBUG
+			printf("srec corruption\r\n");
+			for (int idx = 0; idx < 1024; idx++) {
+				printf("%02x ",unpack_buf[idx]);
+				if (idx % 128 == 0)
+					printf("\r\n");
+			}
+			printf("\r\n");
+#endif
 				SEC_HW_DEBUG_HANG();
+			}
 
 			switch (srinfo.type) {
 				case SREC_TYPE_0:
@@ -153,14 +178,14 @@ void storage_request_boot_image_by_line(char *filename)
 						printf("%02x",hash[idx]);
 					printf("\r\n");
 #endif
-#ifdef MJ_TPM
+
 					OCTOPOS_XMbox_WriteBlocking(&Mbox_TPM, (u32*)hash, 32);
 					OCTOPOS_XMbox_ReadBlocking(&Mbox_TPM, &tpm_response, 4);
 					if (tpm_response != 0xFFFFFFFF) {
 						printf("Secure boot abort.\r\n");
 						while(1);
 					}
-#endif
+
 					/* clean up before load program */
 					bootloader_close_file_system();
 					*(boot_status_reg) = 1;
@@ -174,15 +199,15 @@ void storage_request_boot_image_by_line(char *filename)
 					break;
 			}
 
-			/* after loading the line, remove the contents being loaded */
-			memcpy(&unpack_buf[0],
-					&unpack_buf[line_count],
-					unpack_buf_head - line_count);
-
-			unpack_buf_head -= line_count;
-			memset(&unpack_buf[unpack_buf_head], 0, line_count);
+			unpack_buf_tail += line_count;
 		}
 
+		memcpy(&unpack_buf[0],
+				&unpack_buf[unpack_buf_tail],
+				unpack_buf_head - unpack_buf_tail);
+
+		unpack_buf_head = unpack_buf_head - unpack_buf_tail;
+		unpack_buf_tail = 0;
 	}
 
 	/* if program reaches here, something goes wrong */

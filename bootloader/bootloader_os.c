@@ -24,17 +24,22 @@
 #include <tpm/hash.h>
 #include <arch/mailbox_os.h>
 
+#ifdef ARCH_SEC_HW_BOOT
+extern long long reset_tick;
+#endif
+
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
 	init_os_mailbox();
 
 #ifdef ARCH_SEC_HW_BOOT
 	/* FIXME: is there a better way to wait for storage boot? */
-	sleep(4);
+	sleep(BOOT_RAM_COPY_TIME_S);
+	STORAGE_REBOOT_WAIT();
+	printf("wait done\r\n");
 #endif
 
 	initialize_storage();
-
 	initialize_file_system(STORAGE_BOOT_PARTITION_SIZE);
 }
 
@@ -105,7 +110,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 void send_measurement_to_tpm(char *path)
 {
 	enforce_running_process(P_OS);
-	tpm_measure_service(path);
+	tpm_measure_service(path, 1);
 	cancel_running_process();
 	close_os_mailbox();
 }

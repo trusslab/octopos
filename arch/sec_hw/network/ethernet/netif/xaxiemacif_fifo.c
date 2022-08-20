@@ -30,26 +30,16 @@
  */
 
 #include "arch/network/netif/lwipopts.h"
-
-
-
-//#include "lwip/stats.h"
 #include "arch/network/netif/xadapter.h"
 #include "arch/network/netif/xaxiemacif.h"
-//#include "lwip/pbuf.h"
-
-#include "xintc_l.h"
-#include "xintc.h"
-
-
-
-#include "xstatus.h"
-
-#include "xaxiemacif_fifo.h"
-
 #include "arch/network/netif/xlwipconfig.h"
 #include "arch/network/netif/octopos_pbuf.h"
-
+//#include "lwip/stats.h"
+//#include "lwip/pbuf.h"
+#include "xintc_l.h"
+#include "xintc.h"
+#include "xstatus.h"
+#include "xaxiemacif_fifo.h"
 
 #undef LINK_STATS
 #define LINK_STATS 0
@@ -75,6 +65,8 @@ xaxiemacif_s *xaxiemacif_fast;
 unsigned int xInsideISR = 0;
 #endif
 
+extern void xileth_process(void *payload, unsigned short len);
+
 int is_tx_space_available(xaxiemacif_s *emac)
 {
 	return ((XLlFifo_TxVacancy(&emac->axififo) * 4) > XAE_MAX_FRAME_SIZE);
@@ -94,23 +86,22 @@ xllfifo_recv_handler(struct xemac_s *xemac)
 		frame_length = XLlFifo_RxGetLen(llfifo);
 
 		/* allocate a pbuf */
-//Octopos
-//		p = pbuf_alloc(PBUF_RAW, frame_length, PBUF_POOL);
-//		p = pbuf_alloc(PBUF_RAW, frame_length, PBUF_OCTOPOS);
+		// Octopos
+		// p = pbuf_alloc(PBUF_RAW, frame_length, PBUF_POOL);
+		// p = pbuf_alloc(PBUF_RAW, frame_length, PBUF_OCTOPOS);
 		p = octopos_pbuf_alloc(frame_length);
 
-		if (!p) {
-                        char tmp_frame[XAE_MAX_FRAME_SIZE];
-
+		if (!p || !(p->payload)) {
+			char tmp_frame[XAE_MAX_FRAME_SIZE];
 #if LINK_STATS
 			lwip_stats.link.memerr++;
 			lwip_stats.link.drop++;
 #endif
 			/* receive and drop packet to keep data & len registers in sync */
-		        XLlFifo_Read(llfifo, tmp_frame, frame_length);
-
+			XLlFifo_Read(llfifo, tmp_frame, frame_length);
+			octopos_pbuf_free(p);
 			continue;
-                }
+        	}
 
 		/* receive packet */
 		XLlFifo_Read(llfifo, p->payload, frame_length);
@@ -118,16 +109,19 @@ xllfifo_recv_handler(struct xemac_s *xemac)
 #if ETH_PAD_SIZE
 		len += ETH_PAD_SIZE;		/* allow room for Ethernet padding */
 #endif
+		// FIXME: synchronization processing
+		xileth_process(p->payload, p->len);
+		octopos_pbuf_free(p);
 
-		/* store it in the receive queue, where it'll be processed by xemacif input thread */
-		if (pq_enqueue(xaxiemacif->recv_q, (void*)p) < 0) {
-#if LINK_STATS
-			lwip_stats.link.memerr++;
-			lwip_stats.link.drop++;
-#endif
-			octopos_pbuf_free(p);
-			continue;
-		}
+// 		/* store it in the receive queue, where it'll be processed by xemacif input thread */
+// 		if (pq_enqueue(xaxiemacif->recv_q, (void*)p) < 0) {
+// #if LINK_STATS
+// 			lwip_stats.link.memerr++;
+// 			lwip_stats.link.drop++;
+// #endif
+// 			octopos_pbuf_free(p);
+// 			continue;
+// 		}
 
 #if !NO_SYS
 		sys_sem_signal(&xemac->sem_rx_data_available);

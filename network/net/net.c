@@ -51,8 +51,10 @@ static struct ether *eth_init(struct netdev *dev, struct pkbuf *pkb)
 void net_in(struct netdev *dev, struct pkbuf *pkb)
 {
 	struct ether *ehdr = eth_init(dev, pkb);
-	if (!ehdr)
+	if (!ehdr) {
+		free_pkb(pkb);
 		return;
+	}
 	l2dbg(MACFMT " -> " MACFMT "(%s)",
 				macfmt(ehdr->eth_src),
 				macfmt(ehdr->eth_dst),
@@ -60,7 +62,9 @@ void net_in(struct netdev *dev, struct pkbuf *pkb)
 	pkb->pk_indev = dev;
 	switch (pkb->pk_pro) {
 	case ETH_P_RARP:
-//		rarp_in(dev, pkb);
+		// FIXME: enable rarp_in
+		// rarp_in(dev, pkb);
+		free_pkb(pkb);
 		break;
 	case ETH_P_ARP:
 		arp_in(dev, pkb);

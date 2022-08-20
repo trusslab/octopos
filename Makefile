@@ -1,9 +1,11 @@
-DIRS := applications arch keyboard os runtime serial_out storage network bluetooth bootloader installer util/tpm/tpm_shutdown
-DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network bootloader installer util/tpm/tpm_shutdown
-
+DIRS := applications arch keyboard os runtime serial_out storage network bluetooth bootloader installer
+DIRS_CLEAN := applications arch keyboard os runtime serial_out storage network bluetooth util/network bootloader installer
 EXTERNAL_DIR := ./external
 
 umode:
+ifeq ("$(wildcard $(EXTERNAL_DIR)/INSTALLED)","")
+	$(MAKE) install -C $(EXTERNAL_DIR)
+endif
 	./sync_untrusted_linux.sh
 	for dir in $(DIRS); do \
 		$(MAKE) umode -C $$dir; \
@@ -12,6 +14,9 @@ umode:
 
 install: 
 	$(MAKE) install -C $(EXTERNAL_DIR)
+
+rspi:
+	$(MAKE) -C $(EXTERNAL_DIR)/tpm-rspi-svc
 
 clean:
 	for dir in $(DIRS_CLEAN); do \
@@ -75,11 +80,11 @@ sechw:
 	-data ${VITIS_BOOTLOADERS}/os_bootloader/Debug/os_bootloader.elf \
 	-proc design_1_i/OS_subsys/microblaze_6 \
 	-out ${PETALINUX_PRODUCTS}/system_mb6.bit -force
-	#${VITIS_INSTALLATION}/2020.1/bin/updatemem -bit ${PETALINUX_PRODUCTS}/system_mb6.bit \
-	#-meminfo ${HW_DESIGN_WITH_ARBITTER}/zcu102_octopos.runs/impl_1/design_1_wrapper.mmi \
-	#-data ${VITIS_TPM}/tpm/Debug/tpm.elf \
-	#-proc design_1_i/TPM_subsys/microblaze_7 \
-	#-out ${PETALINUX_PRODUCTS}/system_mb7.bit -force
+	${VITIS_INSTALLATION}/2020.1/bin/updatemem -bit ${PETALINUX_PRODUCTS}/system_mb6.bit \
+	-meminfo ${HW_DESIGN_WITH_ARBITTER}/zcu102_octopos.runs/impl_1/design_1_wrapper.mmi \
+	-data ${VITIS_TPM}/tpm/Debug/tpm.elf \
+	-proc design_1_i/TPM_subsys/microblaze_7 \
+	-out ${PETALINUX_PRODUCTS}/system_mb7.bit -force
 
 	echo "Building final boot image..."
 	${VITIS_INSTALLATION}/2020.1/bin/bootgen \
@@ -112,12 +117,9 @@ sechw:
 	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
 	-O srec ${VITIS_DOMAINS}/network/Debug/network.elf ${OCTOPOS_DIR}/network/network.srec
 
-
 	echo "Installing binaries into local octopos filesystem..."
 	cd ${OCTOPOS_DIR}/installer_sec_hw && make
 	${OCTOPOS_DIR}/installer_sec_hw/installer
-
-
 
 sechw_peta:
 	mkdir -p ${OCTOPOS_DIR}/bin
@@ -138,10 +140,7 @@ sechw_peta:
 	cd ${OCTOPOS_DIR}/bin/rootfs_mount && sudo -s pax -rvf ${PETALINUX_PRODUCTS}/rootfs.cpio
 	sudo umount ${OCTOPOS_DIR}/bin/rootfs_mount
 
-
-
 sechw_storage:
-
 	echo "Building all PL domains..."
 	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
 	-O srec ${VITIS_DOMAINS}/storage/Debug/storage.elf ${OCTOPOS_DIR}/storage/storage.srec
@@ -158,7 +157,6 @@ sechw_storage:
 	${VITIS_INSTALLATION}/2020.1/gnu/microblaze/lin/bin/mb-objcopy \
 	-O srec ${VITIS_DOMAINS}/network/Debug/network.elf ${OCTOPOS_DIR}/network/network.srec
 
-
 	echo "Installing binaries into local octopos filesystem..."
 	cd ${OCTOPOS_DIR}/installer_sec_hw && make
 	${OCTOPOS_DIR}/installer_sec_hw/installer
@@ -168,6 +166,9 @@ install_sechw_boot:
 	cp ${PETALINUX_PRODUCTS}/boot.scr ${BOOT_MEDIA}/
 	cp ${OCTOPOS_DIR}/bin/BOOT.bin ${BOOT_MEDIA}/
 	cp ${PETALINUX_PRODUCTS}/image.ub ${BOOT_MEDIA}/
+	cp ${OCTOPOS_DIR}/bin/rootfs.img ${BOOT_MEDIA}/octopos_partition_1_data
+	cp ${OCTOPOS_DIR}/storage/octopos_partition_0_* ${BOOT_MEDIA}/
+	echo -n "" > ${BOOT_MEDIA}/octopos_partition_1_create
 	sync
 	echo "Done. Please remove media."
 

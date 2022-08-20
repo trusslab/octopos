@@ -78,9 +78,10 @@ void read_from_storage_data_queue(uint8_t *buf)
 	}
 
 	uint32_t seek_off = start_block * STORAGE_BLOCK_SIZE;
-	fop_seek(filep, seek_off, SEEK_SET);
-	size += (uint32_t) fop_read(buf, sizeof(uint8_t), STORAGE_BLOCK_SIZE,
-				 filep);
+	memcpy(buf, 
+		(void *) (RAM_ROOT_PARTITION_BASE + seek_off),
+		STORAGE_BLOCK_SIZE);
+	size += STORAGE_BLOCK_SIZE;
 	start_block++;
 	num_blocks--;
 }

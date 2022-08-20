@@ -3,7 +3,7 @@
  * http://hayageek.com/rsa-encryption-decryption-openssl-c/
  */
 
-#define RSA_SIGNATURE_SIZE	256
+#define RSA_SIGNATURE_SIZE 256
 
 int public_encrypt(unsigned char *data, int data_len, unsigned char *key,
 		   unsigned char *encrypted);
