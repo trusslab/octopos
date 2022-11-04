@@ -124,7 +124,18 @@ int main(int argc, char const *argv[])
 			perror("Failed to enforce running process.");
 			goto again;
 		}
-
+		
+		/* mode 0: extend PCR,
+		 * mode 1: read PCR,
+		 * mode 2: read report.
+		 */
+		uint8_t current_mode = 0;
+		if (request[1] == 0x1 && request[2] == 0x1)
+			current_mode = 1;
+		else if (request[1] == 0x2 && request[2] == 0x2)
+			current_mode = 2;
+		else
+			current_mode = 0;
 #ifdef DEBUG
 		//Zephyr
 		gettimeofday(&tv, NULL);
@@ -134,10 +145,34 @@ int main(int argc, char const *argv[])
 #endif
 
 		uint8_t hash_value[TPM_EXTEND_HASH_SIZE];
-		memcpy(hash_value, request + 1, TPM_EXTEND_HASH_SIZE);
-		rc = tpm_measure_service(hash_value, 0);
-		response[0] = rc == TPM2_RC_SUCCESS ? RET_SUCCESS : RET_FAILURE;
-
+		uint8_t pcr_result[TPM_EXTEND_HASH_SIZE];
+		int pcr_req = request[3];
+		
+		switch (current_mode) {
+		case 0:
+			/* Extend PCR */
+			memcpy(hash_value, request + 1, TPM_EXTEND_HASH_SIZE);
+			rc = tpm_measure_service(hash_value, 0);
+			response[0] = rc == TPM2_RC_SUCCESS ? RET_SUCCESS : RET_FAILURE;
+			break;
+		case 1:
+			/* Return PCR */
+			pcr_req = request[3];
+			rc = tpm_processor_read_pcr(PROC_TO_PCR(pcr_req), pcr_result);
+			if (rc) {
+				printf("Error: %s: couldn't read TPM PCR for proc %d.\n",
+				       __func__, pcr_req);
+			}
+			break;	
+		case 2:
+			/* Return report */
+			// get nounce (how long is it? if it's bigger than 30 we need to enlarge TPM-domain queue
+			// call tpm_attest()
+			break;
+		default:
+			break;
+		
+		}
 #ifdef DEBUG
 		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_t);
 		if ((end_t.tv_nsec - start_t.tv_nsec) < 0) {
@@ -154,19 +189,44 @@ int main(int argc, char const *argv[])
 		printf("END %lld\n", (tv.tv_sec) * 1000LL + (tv.tv_usec) / 1000);
 #endif
 
+		switch (current_mode) {
+		case 0:
 #ifdef DEBUG
-		printf(" %u\n", response[0]);
+			printf(" %u\n", response[0]);
 #endif
-		rc = write(fd, response, 1);
-		//Zephyr
-//		usleep(3000);
-		if (rc != 1) {
-			perror("Failed to write the message to the device.");
-			return -1;
+			/* done extend TPM, return 1 byte response */
+			rc = write(fd, response, 1);
+			//Zephyr
+	//		usleep(3000);
+			if (rc != 1) {
+				perror("Failed to write the message to the device.");
+				return -1;
+			}
+			tcdrain(fd);
+			tcflush(fd, TCIFLUSH);
+			break;
+		case 1:
+#ifdef DEBUG
+			for (size_t i = 0; i <= TPM_EXTEND_HASH_SIZE; i++) {
+				printf("%02x ", pcr_result[i]);
+			}
+			fflush(stdout);
+#endif
+			rc = write(fd, pcr_result, TPM_EXTEND_HASH_SIZE);
+			//Zephyr
+	//		usleep(3000);
+			if (rc != 1) {
+				perror("Failed to write the message to the device.");
+				return -1;
+			}
+			tcdrain(fd);
+			tcflush(fd, TCIFLUSH);
+			break;
+		case 2:
+			break;
+		default:
+			break;
 		}
-		tcdrain(fd);
-		tcflush(fd, TCIFLUSH);
-
 again:
 		read_length = 0;
 		memset(request, 0, BUFFER_LENGTH);

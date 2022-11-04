@@ -1,4 +1,4 @@
-#include <tpm/aes.h>
+#include "aes.h"
 
 /* AES-GCM-256
  * Referenced from https://github.com/bawejakunal/AES-GCM-256 licensed under MIT
