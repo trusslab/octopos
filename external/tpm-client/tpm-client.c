@@ -94,6 +94,7 @@ int main(int argc, char const *argv[])
 		// Read the request
 		usleep(BUFFER_LENGTH * 100);
 		// Read message from serial port
+		inited = false; // line init. raspi serial keep receiving zeros.
 		do {
 			rc = read(fd, &read_char, 1);
 			if (read_char == 0 && inited == false) {
@@ -191,17 +192,18 @@ int main(int argc, char const *argv[])
 
 		switch (current_mode) {
 		case 0:
-#ifdef DEBUG
-			printf(" %u\n", response[0]);
-#endif
-			/* done extend TPM, return 1 byte response */
-			rc = write(fd, response, 1);
-			//Zephyr
-	//		usleep(3000);
-			if (rc != 1) {
-				perror("Failed to write the message to the device.");
-				return -1;
-			}
+/* No need to echo back */
+//#ifdef DEBUG
+//			printf(" %u\n", response[0]);
+//#endif
+//			/* done extend TPM, return 1 byte response */
+//			rc = write(fd, response, 1);
+//			//Zephyr
+//	//		usleep(3000);
+//			if (rc != 1) {
+//				perror("Failed to write the message to the device.");
+//				return -1;
+//			}
 			tcdrain(fd);
 			tcflush(fd, TCIFLUSH);
 			break;
