@@ -214,7 +214,9 @@ int main(int argc, char const *argv[])
 			}
 			fflush(stdout);
 #endif
+			printf("[0]");
 			rc = write(fd, pcr_result, TPM_EXTEND_HASH_SIZE);
+			printf("[1]%d", rc);
 			//Zephyr
 	//		usleep(3000);
 			if (rc != 1) {
