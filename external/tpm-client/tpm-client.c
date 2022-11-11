@@ -140,7 +140,7 @@ int main(int argc, char const *argv[])
 #ifdef DEBUG
 		//Zephyr
 		gettimeofday(&tv, NULL);
-		printf("BEG %lld\n", (tv.tv_sec) * 1000LL + (tv.tv_usec) / 1000);
+		printf("BEG (%d) %lld\n", current_mode, (tv.tv_sec) * 1000LL + (tv.tv_usec) / 1000);
 
 		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_t);
 #endif
@@ -158,12 +158,14 @@ int main(int argc, char const *argv[])
 			break;
 		case 1:
 			/* Return PCR */
+			// printf("[0.1]");
 			pcr_req = request[3];
 			rc = tpm_processor_read_pcr(PROC_TO_PCR(pcr_req), pcr_result);
 			if (rc) {
 				printf("Error: %s: couldn't read TPM PCR for proc %d.\n",
 				       __func__, pcr_req);
 			}
+			// printf("[0.2]");
 			break;	
 		case 2:
 			/* Return report */
@@ -185,7 +187,6 @@ int main(int argc, char const *argv[])
 		}
 		printf("%ld.%lds\n", diff_t.tv_sec, diff_t.tv_nsec);
 
-		//Zephyr
 		gettimeofday(&tv, NULL);
 		printf("END %lld\n", (tv.tv_sec) * 1000LL + (tv.tv_usec) / 1000);
 #endif
@@ -209,17 +210,16 @@ int main(int argc, char const *argv[])
 			break;
 		case 1:
 #ifdef DEBUG
-			for (size_t i = 0; i <= TPM_EXTEND_HASH_SIZE; i++) {
-				printf("%02x ", pcr_result[i]);
+			for (size_t i = 0; i <= 32; i++) {
+				printf("XX %02x ", pcr_result[i]);
 			}
 			fflush(stdout);
 #endif
-			printf("[0]");
-			rc = write(fd, pcr_result, TPM_EXTEND_HASH_SIZE);
-			printf("[1]%d", rc);
-			//Zephyr
+			// printf("[0]");
+			rc = write(fd, pcr_result, 32);
+			// printf("[1]%d", rc);
 	//		usleep(3000);
-			if (rc != 1) {
+			if (rc != 32) {
 				perror("Failed to write the message to the device.");
 				return -1;
 			}
