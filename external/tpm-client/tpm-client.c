@@ -210,9 +210,11 @@ int main(int argc, char const *argv[])
 			break;
 		case 1:
 #ifdef DEBUG
-			for (size_t i = 0; i <= 32; i++) {
-				printf("XX %02x ", pcr_result[i]);
+			printf("tx: ");
+			for (size_t i = 0; i < 32; i++) {
+				printf("%02x ", pcr_result[i]);
 			}
+			printf("\n");
 			fflush(stdout);
 #endif
 			// printf("[0]");
