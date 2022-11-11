@@ -67,7 +67,8 @@ OCTOPOS_XMbox 	Mbox_out,
 				Mbox_network_cmd_in,
 				Mbox_network_cmd_out,
 				Mbox_network_data_in,
-				Mbox_network_data_out;
+				Mbox_network_data_out,
+				Mbox_tpm;
 
 static XIntc 	intc;
 cbuf_handle_t   cbuf_keyboard, cbuf_runtime;
@@ -646,7 +647,8 @@ int init_runtime(int runtime_id)
 							*Config_network_cmd_in,
 							*Config_network_cmd_out,
 							*Config_network_data_in,
-							*Config_network_data_out;
+							*Config_network_data_out,
+							*Config_tpm;
 
 	runtime_inited = FALSE;
 	runtime_terminated = FALSE;
@@ -780,6 +782,13 @@ int init_runtime(int runtime_id)
 		&Mbox_network_cmd_out, 
 		Config_network_cmd_out, 
 		Config_network_cmd_out->BaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Config_tpm = OCTOPOS_XMbox_LookupConfig(XPAR_TPM_DEVICE_ID);
+	Status = OCTOPOS_XMbox_CfgInitialize(&Mbox_tpm,
+		Config_tpm, Config_tpm->BaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}

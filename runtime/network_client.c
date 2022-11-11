@@ -304,6 +304,7 @@ int request_network_access(limit_t limit, timeout_t timeout,
 
 #ifndef UNTRUSTED_DOMAIN
 #ifndef ARCH_SEC_HW
+	/* Only the untrusted domain of SEC_HW tracks timeout. */
 	/* Note: we set the limit/timeout values right after attestation and
 	 * before we call check_proc_pcr() or read_tpm_pcr_for_proc().
 	 * This is because those calls issue syscalls, which might take
@@ -314,6 +315,7 @@ int request_network_access(limit_t limit, timeout_t timeout,
 
 	queue_limits[Q_NETWORK_DATA_OUT] = limit;
 	queue_timeouts[Q_NETWORK_DATA_OUT] = timeout;
+#endif /* ARCH_SEC_HW */
 
 	if (expected_pcr) {
 		ret = check_proc_pcr(P_NETWORK, expected_pcr);
@@ -347,8 +349,7 @@ int request_network_access(limit_t limit, timeout_t timeout,
 			return ERR_FAULT;
 		}
 	}
-#endif
-#endif
+#endif /* UNTRUSTED_DOMAIN */
 
 	ret = net_start_receive();
 	if (ret) {

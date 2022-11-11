@@ -1,5 +1,3 @@
-#ifndef ARCH_SEC_HW
-
 /* bank_client app
  *
  * Based on:
@@ -20,6 +18,9 @@
 #include <network/socket.h>
 #include <tpm/tpm.h>
 #include <tpm/hash.h>
+#ifdef ARCH_SEC_HW
+#include "arch/sec_hw.h"
+#endif
 
 /* Must be smaller than each message size minus 1.
  * For secure print, the message is the same as the mailbox size.
@@ -29,7 +30,11 @@
 #define MAX_PRINT_SIZE			((MAILBOX_QUEUE_MSG_SIZE - 4) * 20)
 char output_buf_full[MAX_PRINT_SIZE];
 char output_buf[MAILBOX_QUEUE_MSG_SIZE];
+#ifdef ARCH_SEC_HW
+static int num_chars = 0;
+#else
 int num_chars = 0;
+#endif
 int msg_num = 0;
 
 uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
@@ -119,8 +124,6 @@ static void terminate_network_session(void)
 	}
 }
 
-
-
 static void *yield_resources(void *data)
 {
 	if (has_secure_serial_out)
@@ -139,6 +142,7 @@ static void *yield_resources(void *data)
 	return NULL;
 }
 
+#ifndef ARCH_SEC_HW
 /*
  * When there is an update on the limit, this function is called in the main
  * app context. When the update is on the timeout, it is called in the interrupt
@@ -175,6 +179,16 @@ static void queue_update_callback(uint8_t queue_id, limit_t limit,
 		}
 	}
 }
+#endif
+
+#ifdef ARCH_SEC_HW
+static void delay_print(int num)
+{
+	for (int i=0 ; i<num; i++)
+		printf("!");
+	printf("\r\n");
+}
+#endif
 
 static int connect_to_server(void)
 {
@@ -184,7 +198,11 @@ static int connect_to_server(void)
 	type = SOCK_STREAM;	/* default TCP stream */
 	sock = NULL;
 	
-	char addr[256] = "10.0.0.2:12346";	
+#ifndef ARCH_SEC_HW
+	char addr[256] = "10.0.0.2:12346";
+#else
+	char addr[256] = "192.168.0.1:12346";
+#endif
 	err = _parse_ip_port(addr, &skaddr.dst_addr,
 					&skaddr.dst_port);
 	if (err < 0) {
@@ -199,8 +217,14 @@ static int connect_to_server(void)
 		return -1;
 	}
 
+#ifndef ARCH_SEC_HW
 	if (gapi->request_network_access(4095, 100, queue_update_callback, NULL,
 					 measured_network_pcr)) {
+#else
+	if (gapi->request_network_access(4095, 100, NULL, NULL,
+					 measured_network_pcr)) {
+	delay_print(20);
+#endif
 		insecure_printf("%s: Error: network queue access\n", __func__);
 		return -1;
 	}
@@ -208,6 +232,10 @@ static int connect_to_server(void)
 	has_network = 1;
 	gapi->bind_socket(sock, &skaddr);
 
+#ifdef ARCH_SEC_HW
+	delay_print(200);
+#endif
+	
 	if (gapi->connect_socket(sock, &skaddr) < 0) {
 		insecure_printf("%s: Error: _connect\n", __func__);
 		return -1;
@@ -216,6 +244,7 @@ static int connect_to_server(void)
 	return 0;
 }
 
+#ifdef DEV_LOCK
 static int get_user_secret(char *username, char *secret)
 {
 	char success = 0;
@@ -224,7 +253,10 @@ static int get_user_secret(char *username, char *secret)
 		insecure_printf("Error: couldn't write to socket (username)\n");
 		return -1;
 	}
-
+// QUESTION: how is 200 determined? sometimes it's 20 in socket_client
+#ifdef ARCH_SEC_HW
+	delay_print(200);
+#endif
 	if (gapi->read_from_socket(sock, &success, 1) < 0) {
 		insecure_printf("Error: couldn't read from socket (username:1)\n");
 		return -1;
@@ -255,7 +287,9 @@ static int send_password_to_server(char *password)
 		secure_printf("Error: couldn't write to socket (password)\n");
 		return -1;
 	}
-
+#ifdef ARCH_SEC_HW
+	delay_print(200);
+#endif
 	if (gapi->read_from_socket(sock, &success, 1) < 0) {
 		secure_printf("Error: couldn't read from socket (password)\n");
 		return -1;
@@ -306,7 +340,9 @@ static int perform_remote_attestation(void)
 				"attestation)\n");
 		return -1;
 	}
-
+#ifdef ARCH_SEC_HW
+	delay_print(20);
+#endif
 	if (gapi->read_from_socket(sock, &success, 1) < 0) {
 		insecure_printf("Error: couldn't read from socket (remote "
 				"attestation:1)\n");
@@ -550,7 +586,9 @@ static int show_account_info(void)
 			      session_word);
 		return -1;
 	}
-
+#ifdef ARCH_SEC_HW
+	delay_print(200);
+#endif
 	if (gapi->read_from_socket(sock, &success, 1) < 0) {
 		secure_printf("%s: Error: couldn't read from socket "
 			      "(balance:1)\n", session_word);
@@ -576,10 +614,32 @@ static int show_account_info(void)
 
 	return 0;
 }
+#endif
 
+#ifndef ARCH_SEC_HW
 extern "C" __attribute__ ((visibility ("default")))
 void app_main(struct runtime_api *api)
+#else /*ARCH_SEC_HW*/
+void bank_client(struct runtime_api *api)
+#endif /*ARCH_SEC_HW*/
 {
+
+	// >>>>>>>>>>>>>>>>>>>>>
+	// TEST CODE
+	uint8_t tmp_buf[32];
+	_SEC_HW_ERROR("bank");
+	read_tpm_pcr_for_proc(P_NETWORK, tmp_buf);
+	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[0], tmp_buf[1], tmp_buf[2], tmp_buf[3]);
+	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[4], tmp_buf[5], tmp_buf[6], tmp_buf[7]);
+	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[8], tmp_buf[9], tmp_buf[10], tmp_buf[11]);
+	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[12], tmp_buf[13], tmp_buf[14], tmp_buf[15]);
+	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[16], tmp_buf[17], tmp_buf[18], tmp_buf[19]);
+	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[20], tmp_buf[21], tmp_buf[22], tmp_buf[23]);
+	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[24], tmp_buf[25], tmp_buf[26], tmp_buf[27]);
+	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[28], tmp_buf[29], tmp_buf[30], tmp_buf[31]);
+
+	// <<<<<<<<<<<<<<<<<<<<<
+
 	/*
 	 * Step 1: Connect to the server and perform remote attestation of
 	 *	   the app itself, keyboard, serial_out, and network.
@@ -605,7 +665,7 @@ void app_main(struct runtime_api *api)
 		insecure_printf("Error: couldn't connect to the server.\n");
 		return;
 	}
-
+#ifdef DEV_LOCK
 	ret = perform_remote_attestation();
 	if (ret) {
 		insecure_printf("Error: remote attestation failed.\n");
@@ -622,9 +682,14 @@ void app_main(struct runtime_api *api)
 		goto terminate_network;
 	}
 
+
 	/* Request secure keyboard/serial_out and use secure_printf from now on. */
+#ifndef ARCH_SEC_HW
 	ret = gapi->request_secure_keyboard(100, 100, queue_update_callback,
 					    keyboard_pcr);
+#else
+	ret = gapi->request_secure_keyboard(100, 100, NULL, keyboard_pcr);
+#endif
 	if (ret) {
 		insecure_printf("Error: could not get secure access to "
 				"keyboard\n");
@@ -662,7 +727,7 @@ void app_main(struct runtime_api *api)
 			      "info.\n", session_word);
 		goto terminate;
 	}
-
+#endif
 	/* Step 4 */
 terminate:
 	/*
@@ -681,4 +746,4 @@ terminate_network:
 	gapi->yield_network_access();
 }
 
-#endif
+

@@ -98,6 +98,7 @@ bool has_secure_serial_out_access = false;
 bool has_secure_bluetooth_access = false;
 
 #ifdef ARCH_SEC_HW
+extern OCTOPOS_XMbox Mbox_tpm;
 extern sem_t interrupt_change;
 /* FIXME: during context switch, we cannot receive any interrupt.
  * This is an ad hoc solution before a solution is found.
@@ -539,7 +540,6 @@ void wait_until_empty(uint8_t queue_id, int queue_size)
 
 int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 {
-#ifndef ARCH_SEC_HW
 	uint8_t pcr_val[TPM_EXTEND_HASH_SIZE];
 	int ret;
 
@@ -555,7 +555,6 @@ int check_proc_pcr(uint8_t proc_id, uint8_t *expected_pcr)
 		       __func__);
 		return ERR_UNEXPECTED;
 	}
-#endif
 	return 0;
 }
 
@@ -1577,15 +1576,26 @@ static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_si
 	return 0;
 }
 
+#endif /* ARCH_UMODE */
+
 /* FIXME: why do we need this func? Why not just directly use
  * tpm_processor_read_pcr()?
  */
 int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 {
+#ifndef ARCH_SEC_HW
 	tpm_processor_read_pcr(PROC_TO_PCR(proc_id), pcr_val);
+#else 
+	uint8_t request_buf[32];
+	request_buf[0] = 0x1;
+	request_buf[1] = 0x1;
+	request_buf[2] = proc_id; /* TPM will PROC_TO_PCR() */
+
+	OCTOPOS_XMbox_WriteBlocking(&Mbox_tpm, (u32*)request_buf, 32);
+	OCTOPOS_XMbox_ReadBlocking(&Mbox_tpm, &pcr_val, 32);
+#endif 
 	return 0;
 }
-#endif
 
 #ifdef ARCH_SEC_HW_EVALUATION
 extern long long global_counter;
