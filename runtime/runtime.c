@@ -1592,7 +1592,7 @@ int read_tpm_pcr_for_proc(uint8_t proc_id, uint8_t *pcr_val)
 	request_buf[2] = proc_id; /* TPM will PROC_TO_PCR() */
 
 	OCTOPOS_XMbox_WriteBlocking(&Mbox_tpm, (u32*)request_buf, 32);
-	OCTOPOS_XMbox_ReadBlocking(&Mbox_tpm, &pcr_val, 32);
+	OCTOPOS_XMbox_ReadBlocking(&Mbox_tpm, pcr_val, 32);
 #endif 
 	return 0;
 }
