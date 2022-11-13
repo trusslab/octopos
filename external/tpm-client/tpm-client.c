@@ -72,6 +72,15 @@ int main(int argc, char const *argv[])
 	struct timespec start_t;
 	struct timespec end_t;
 	struct timespec diff_t;
+	
+	uint32_t *pcr_list;
+	size_t pcr_list_size;
+	uint8_t nonce[16];
+
+	uint8_t signature[4096];
+	size_t sig_size;
+	uint8_t quote[4096];
+	size_t quote_size;
 
 	//Zephyr >>>
 	struct timeval tv;
@@ -169,7 +178,36 @@ int main(int argc, char const *argv[])
 			break;	
 		case 2:
 			/* Return report */
-			// get nounce (how long is it? if it's bigger than 30 we need to enlarge TPM-domain queue
+			pcr_list_size = request[3];
+			pcr_list = calloc(pcr_list_size, sizeof(uint32_t));
+			for (int i = 0; i < pcr_list_size; i++)
+				pcr_list[i] = (uint32_t) request[4 + i];
+			
+			for (int i = 0; i < 16; i++)
+				nonce[i] = request[17 + i];
+
+			rc = tpm_attest(nonce, pcr_list, pcr_list_size, 
+					&signature, &sig_size, (char **) &quote);
+
+			if (rc) {
+				printf("Error: %s: couldn't attest.\n", __func__);
+			}
+
+			quote_size = strlen((char*) quote);	
+#ifdef DEBUG
+			printf("tx: attest report %d %d\n", sig_size, quote_size);
+			for (size_t i = 0; i < sig_size; i++) {
+				printf("%02x ", signature[i]);
+			}
+			printf("\n");
+			for (size_t i = 0; i < quote_size; i++) {
+				printf("%02x ", quote[i]);
+			}
+			printf("\n");
+			fflush(stdout);
+#endif
+
+			free(pcr_list);
 			// call tpm_attest()
 			break;
 		default:
