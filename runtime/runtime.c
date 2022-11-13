@@ -1560,23 +1560,49 @@ int bluetooth_recv_data(uint8_t am_addr, uint8_t *data, uint32_t len)
 
 	return 0;
 }
+#endif /* ARCH_UMODE */
 
+#ifndef ARCH_SEC_HW
+/* FIXME: use u8 for pcr_list */
 static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_size, 
+#else 
+int request_tpm_attestation_report(uint8_t *pcr_list, size_t pcr_list_size, 
+#endif 
 					  char* nonce, uint8_t **signature,
 					  size_t *sig_size, uint8_t **quote,
 					  size_t *quote_size)
 {
 	int rc = 0;
+#ifndef ARCH_SEC_HW
 	rc = tpm_attest((uint8_t *) nonce, pcr_list, pcr_list_size,
 			signature, sig_size, (char **) quote);
 	if (rc != 0)
 		return rc;
+#else 
+	uint8_t request_buf[32];
+	request_buf[0] = 0x2;
+	request_buf[1] = 0x2;
+	request_buf[2] = pcr_list_size;
+
+	_SEC_HW_ERROR("[1.1] %d %d", pcr_list_size, TPM_AT_NONCE_LENGTH);
 	
+	for (int i = 0; i < pcr_list_size; i++)
+		request_buf[3 + i] = pcr_list[i];
+
+	for (int i = 0; i < TPM_AT_NONCE_LENGTH; i++)
+		request_buf[16 + i] = nonce[i];
+
+	_SEC_HW_ERROR("[1.2]");
+
+	OCTOPOS_XMbox_WriteBlocking(&Mbox_tpm, (u32*)request_buf, 32);
+	while(1);
+//	OCTOPOS_XMbox_ReadBlocking(&Mbox_tpm, pcr_val, 32);
+#endif 
+
 	*quote_size = strlen((char *) *quote);
 	return 0;
 }
 
-#endif /* ARCH_UMODE */
 
 /* FIXME: why do we need this func? Why not just directly use
  * tpm_processor_read_pcr()?

@@ -15,6 +15,8 @@ void print_hash_buf(uint8_t *hash_buf);
 
 #else
 
+#define TPM_AT_ID_LENGTH 16
+#define TPM_AT_NONCE_LENGTH 16
 #define TPM_EXTEND_HASH_SIZE 32
 
 #endif

@@ -1,5 +1,3 @@
-#ifndef ARCH_SEC_HW
-
 #ifndef TPM_H_
 #define TPM_H_
 
@@ -9,9 +7,13 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdint.h>
+#ifndef ARCH_SEC_HW
 #include <tss2/tss2_fapi.h>
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_rc.h>
+#else
+#define ESYS_TR_PCR0      0U
+#endif
 #include <time.h>
 
 /* FIX: duplicate define */
@@ -63,6 +65,7 @@
         (S) = NULL;        \
     }
 
+#ifndef ARCH_SEC_HW
 #define TPM2_ERROR_FORMAT "(0x%08x), %s"
 #define TPM2_ERROR_TEXT(r) r, Tss2_RC_Decode(r)
 

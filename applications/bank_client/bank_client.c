@@ -331,7 +331,11 @@ static int perform_remote_attestation(void)
 	char success = 0;
 	char init_cmd = 1;
 	uint8_t runtime_proc_id = gapi->get_runtime_proc_id();
+#ifndef ARCH_SEC_HW
 	uint32_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
+#else
+	uint8_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
+#endif
 	uint8_t num_pcr_slots = 2;
 	int ret;
 
@@ -637,6 +641,21 @@ void bank_client(struct runtime_api *api)
 	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[20], tmp_buf[21], tmp_buf[22], tmp_buf[23]);
 	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[24], tmp_buf[25], tmp_buf[26], tmp_buf[27]);
 	_SEC_HW_ERROR("%02x%02x%02x%02x", tmp_buf[28], tmp_buf[29], tmp_buf[30], tmp_buf[31]);
+
+	char nonce[TPM_AT_NONCE_LENGTH];
+	nonce[0] = 0x01; nonce[15] = 0xff;
+	uint8_t *signature;
+	uint8_t *quote;
+	size_t sig_size, quote_size;
+	uint8_t runtime_proc_id = api->get_runtime_proc_id();
+	uint8_t pcr_slots[] = {0, (uint32_t) PROC_TO_PCR(runtime_proc_id)};
+	uint8_t num_pcr_slots = 2;
+
+	_SEC_HW_ERROR("[1]");
+	request_tpm_attestation_report(pcr_slots, num_pcr_slots, nonce,
+						 &signature, &sig_size, &quote,
+						 &quote_size);
+	_SEC_HW_ERROR("[2]");
 
 	// <<<<<<<<<<<<<<<<<<<<<
 

@@ -81,7 +81,12 @@ struct runtime_api {
 	int (*recv_msg_on_secure_ipc)(char *msg, int *size);
 
 	/* tpm attestation */
+#ifndef ARCH_SEC_HW
+	/* FIXME: use u8 for pcr_list */
 	int (*request_tpm_attestation_report)(uint32_t *pcr_list,
+#else 
+	int (*request_tpm_attestation_report)(uint8_t *pcr_list,
+#endif 
 					      size_t pcr_list_size, char* nonce,
 					      uint8_t **signature, size_t *sig_size,
 					      uint8_t **quote, size_t *quote_size);
