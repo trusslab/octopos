@@ -1,3 +1,9 @@
+/********************************************************************
+ * Copyright (c) 2019 - 2023, The OctopOS Authors
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ ********************************************************************/
 /* FIXME: consolidate with arch/mailbox.h of secure_hw */
 void mailbox_yield_to_previous_owner(uint8_t queue_id);
 int mailbox_attest_queue_access(uint8_t queue_id, limit_t limit,
