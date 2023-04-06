@@ -1,10 +1,3 @@
-/*
- * octopos_pmu_common.h
- *
- *  Created on: Jul 1, 2020
- *      Author: zephyr
- */
-
 #ifndef SRC_ARCH_OCTOPOS_PMU_COMMON_H_
 #define SRC_ARCH_OCTOPOS_PMU_COMMON_H_
 

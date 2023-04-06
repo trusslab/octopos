@@ -23,112 +23,11 @@ There is one Vitis project for all the bootloaders and another Vitis project for
 Steps to re-create Vitis project
 ================================
 
-Create a Vitis project for bootloaders
------------------------------------------
-#. (If you have not already done so) In Vivado, open the design. Navigate to File->Export->xsa file.
-#. Launch Vitis;
-#. Select a (new) path for Vitis project. We use `<xxx>/octopos_proj`;
-#. Import the hardware design by selecting the xsa file exported in Step 1.
-#. Create these subsystems:
-	
-* storage_bootloader, 
-* os_bootloader, 
-* keyboard_bootloader, 
-* serialout_bootloader, 
-* enclave0_bootloader, 
-* enclave1_bootloader, 
-* network_bootloader
+Please refer to Step 6-23 in OctopOS Hardware setup guide,
+https://github.com/trusslab/octopos_hardware/blob/main/README.md
 
-For each subsystem except storage_bootloader, select empty-project(c) as the template. For storage_bootloader, select empty-project(c++) as the template. Keep all other settings default. Please make sure to put each subsystem on correct FPGA cores, for example, storage_bootloader should be put on microblaze_storage. Adding subsystems might take a while.
-
-Create a Vitis project for domains
-----------------------------------
-#. Launch another Vitis;
-#. Select a (diffrent from the Vitis project path for bootloaders) path for project. We use `<xxx>/octopos_proj_dom`;
-#. Import the hardware design by selecting the same xsa file exported previously.
-#. Create these subsystems:
-	
-* storage, 
-* oss, 
-* keyboard, 
-* serialout, 
-* enclave0, 
-* enclave1,
-* network
-
-Note: "oss" means "os". Vitis requires at least 3 chars for subproject name.
-
-For each subsystem except storage, select empty-project(c) as the template. For storage, select empty-project(c++) as the template. Keep all other settings default. Please make sure to put each subsystem on correct FPGA cores, for example, storage should be put on microblaze_storage. Adding subsystems might take a while.
-
-Mount OctopOS
-----------------
-Run ". mount_octopos.sh <path_to_octopos_repo> <path_to_octopos_proj>"
-
-Run ". mount_octopos.sh <path_to_octopos_repo> <path_to_octopos_proj_dom>"
-
-This will mount OctopOS code to each repositories. Changes to the code in `<path_to_octopos_repo>` will be synced to Vitis project.
-
-Patching design wrapper
------------------------
-Run ". vitis_setup.sh <path_to_octopos_proj> <path_to_octopos_proj_dom>"
-
-Our script automatically patches the design wrapper, which do these behind the scene,
-
-#. Fix libsrc/Pmod Makefile and copy utility folder to include
-#. Replace all linkers to use our rom fuse and memory layout.
-#. Fix libsrc/DXSPIDVOL.cpp by defining XPAR_PMODSD_0_DEVICE_ID in xparameter.h
-#. Replace all interrupt handlers.
-
-Update build settings
----------------------
-For each subsystem (in both bootloader project and domain project), edit c/c++ build settings. To open c/c++ build settings, double click any subsystem (for example, storage_system in the octopos_proj_dom project), single click the first item opened for that subsystem (e.g., storage with a `c` icon on the left), right-click it, and select c/c++ build settings. 
-
-1. add definitions below, 
-
-For bootloaders,
-
-* Storage Bootloader
-  ARCH_SEC_HW_BOOT ARCH_SEC_HW PROJ_CPP ARCH_SEC_HW_BOOT_STORAGE ARCH_SEC_HW_STORAGE
-* OS Bootloader
-  ARCH_SEC_HW ARCH_SEC_HW_OS ARCH_SEC_HW_BOOT ARCH_SEC_HW_BOOT_OS
-* keyboard Bootloader
-  ARCH_SEC_HW ARCH_SEC_HW_KEYBOARD ARCH_SEC_HW_BOOT ARCH_SEC_HW_BOOT_KEYBOARD ARCH_SEC_HW_BOOT_OTHER
-* Serialout Bootloader
-  ARCH_SEC_HW ARCH_SEC_HW_SERIAL_OUT ARCH_SEC_HW_BOOT ARCH_SEC_HW_BOOT_SERIAL_OUT ARCH_SEC_HW_BOOT_OTHER
-* Enclave0 Bootloader
-  ARCH_SEC_HW ARCH_SEC_HW_RUNTIME ARCH_SEC_HW_BOOT ARCH_SEC_HW_BOOT_RUNTIME_1 ARCH_SEC_HW_BOOT_OTHER RUNTIME_ID=1
-* Enclave1 Bootloader
-  ARCH_SEC_HW ARCH_SEC_HW_RUNTIME ARCH_SEC_HW_BOOT ARCH_SEC_HW_BOOT_RUNTIME_2 ARCH_SEC_HW_BOOT_OTHER RUNTIME_ID=2
-* Network Bootloader
-  ARCH_SEC_HW ARCH_SEC_HW_NETWORK ARCH_SEC_HW_BOOT ARCH_SEC_HW_BOOT_OTHER ARCH_SEC_HW_BOOT_NETWORK
-
-For domains,
-
-* Storage
-  ARCH_SEC_HW PROJ_CPP ARCH_SEC_HW_STORAGE
-* OS
-  ARCH_SEC_HW ARCH_SEC_HW_OS ROLE_OS
-* keyboard
-  ARCH_SEC_HW_KEYBOARD
-* Serialout
-  ARCH_SEC_HW_SERIAL_OUT
-* Enclave0
-  RUNTIME_ID=1 ARCH_SEC_HW ARCH_SEC_HW_RUNTIME
-* Enclave1
-  RUNTIME_ID=2 ARCH_SEC_HW ARCH_SEC_HW_RUNTIME
-* Network
-  ARCH_SEC_HW ARCH_SEC_HW_NETWORK HW_MAILBOX_BLOCKING
-
-2. add include paths: `<octopos>/arch/include` and `<octopos>/include`, 
-3. select `optimize for size`
-4. Upon exit from each subsystem c/c++ setting, Vitis will ask you if you want to build it right away. Select No, and we will build all of them later.
-
-Build all
----------
-Select all subsystems in a project, right-click, select `Build`. The initial build may take longer.
-
-Debug
------
+Useful Debug Tips
+-----------------
 On the right corner of Vitis IDE, you can toggle to debug view. By default, debug view will not be enabled until you launch the project through this Vitis IDE window.
 
 To use debug view, you can create a dummy launch profile and launch it on the hardware. The dummy launch profile may not properly run OctopOS on hardware without other components in the sec_hw Makefile. However, it is enough for Vitis IDE to enable debug view.
@@ -144,30 +43,8 @@ If a Microblaze halt due to hardware exception (for example, accessing a registe
 
 mb-objdump is available at <Vitis_installation>/gnu/microblaze/lin/bin/mb-objdump -Ds <binary.elf>
 
-UART monitor
-------------
-Open three terminals, and run `sudo minicom -s` on each of them.
-
-In the first terminals, configure as ttyUSB0 - 115200 - no hardware flow control
-
-In the second terminals, configure as ttyUSB2 - 9600 - no hardware flow control
-
-In the first terminals, configure as ttyACM0 - 115200 - yes hardware flow control
-
-Note that your tty serial number may be different, replace ttyUSB0 with the first serial port from your board, and replace ttyUSB2 with the third port from your board, and replace ttyACM0 with the Arduino serial debugger port.
-
 Known Issues
 ============
-
-TPM does not respond
---------------------
-
-Ctrl-C to quit the TPM client program, and launch it again. If the TPM client terminal shows no inbound hash, reboot the TPM.
-
-SD card failure
----------------
-
-If the OctopOS system doesn't boot, first try to reprogram the SD cards and re-connect the cards to the board.
 
 Vitis stale build
 -----------------
@@ -187,11 +64,11 @@ Loose connectors can cause TPM communication failure. PMOD connectors are usuall
 JTAG affecting Untrusted Domain boot
 ------------------------------------
 
-We noticed Petalinux won't boot when JTAG is connected. The problem is gone. However, Untrusted domain may be able to access JTAG (which breaks isolation). We recommand unplugging JTAG unless you need it to debug.
+We noticed Petalinux sometimes won't boot when JTAG is connected. We recommand unplugging JTAG unless you need it to debug.
 
 USB Serial issues
 -----------------
 
-Pay attention to hardware flow control in the UART settings above. If it is not configured exactly as instructed, UART will fail to provide input to the board.
+Pay attention to hardware flow control (must be disabled) in the UART settings above. If it is not configured exactly as instructed, UART will fail to provide input to the board.
 
 In rare cases, USB serial does not work. Exit everything and unplug everything, try again.

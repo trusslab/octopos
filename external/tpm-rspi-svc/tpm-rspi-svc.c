@@ -73,13 +73,7 @@ int main(int argc, char const *argv[])
 	struct timespec end_t;
 	struct timespec diff_t;
 
-	//Zephyr >>>
 	struct timeval tv;
-	//Zephyr <<<
-
-	//Zephyr
-//	setvbuf(stdout, NULL, _IONBF, 0);
-//	setvbuf(stdin, NULL, _IONBF, 0);
 
 	// Open the device with read/write access
 	fd = open("/dev/ttyS0", O_RDWR | O_NOCTTY);
@@ -126,7 +120,6 @@ int main(int argc, char const *argv[])
 		}
 
 #ifdef DEBUG
-		//Zephyr
 		gettimeofday(&tv, NULL);
 		printf("BEG %lld\n", (tv.tv_sec) * 1000LL + (tv.tv_usec) / 1000);
 
@@ -149,7 +142,6 @@ int main(int argc, char const *argv[])
 		}
 		printf("%ld.%lds\n", diff_t.tv_sec, diff_t.tv_nsec);
 
-		//Zephyr
 		gettimeofday(&tv, NULL);
 		printf("END %lld\n", (tv.tv_sec) * 1000LL + (tv.tv_usec) / 1000);
 #endif
@@ -158,8 +150,6 @@ int main(int argc, char const *argv[])
 		printf(" %u\n", response[0]);
 #endif
 		rc = write(fd, response, 1);
-		//Zephyr
-//		usleep(3000);
 		if (rc != 1) {
 			perror("Failed to write the message to the device.");
 			return -1;

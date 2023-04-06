@@ -1,8 +1,10 @@
 =======================
-OctopOS SecHw Petalinux
+OctopOS SecHW Petalinux
 =======================
 
 :Author: - Zephyr Yao <z.yao@uci.edu>
+
+**This guide is stale. Please refer to https://github.com/trusslab/linux-xlnx**
 
 This guide covers the Petalinux setup for OctopOS Secure Hardware. 
 
@@ -19,7 +21,7 @@ After installation, add "source <path-to-installed-PetaLinux>/settings.sh" to ~/
 
 Create Petalinux Project
 ========================
-petalinux-create --type project -s /media/zephyr/d1s0/octopos/INSTALL/xilinx-zcu102-v2020.1-final.bsp --name untrusted
+petalinux-create --type project -s /PATH/TO/xilinx-zcu102-v2020.1-final.bsp --name untrusted
 
 Sync Hardware
 =============
