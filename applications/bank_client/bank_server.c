@@ -17,18 +17,22 @@
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <tss2/tss2_fapi.h>
-#include <tss2/tss2_rc.h>
+
+#include <wolftpm/tpm2.h>
+#include <wolftpm/tpm2_wrap.h>
+
 #include <openssl/sha.h>
-#include <json-c/json.h>
+#include <openssl/evp.h>
 /* octopos header files */
 #define APPLICATION
 #include <tpm/hash.h>
 
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
+#define TPM2_ATTEST_KEY_HANDLE \
+	0x81000202 /* Attestation Key Handle for common use */
 
 char username[32] = "BANK";
 char secret[32] = "SECRET";
@@ -39,7 +43,7 @@ uint8_t keyboard_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t serial_out_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t expected_pcr_digest[TPM_EXTEND_HASH_SIZE];
-char expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
+uint8_t expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
 
 static void error(const char *msg)
 {
@@ -48,9 +52,9 @@ static void error(const char *msg)
 	exit(1);
 }
 
-static void gen_random(char* buf, int size)
+static void gen_random(char *buf, int size)
 {
-	FILE* rand_handler = fopen("/dev/urandom", "r");
+	FILE *rand_handler = fopen("/dev/urandom", "r");
 	if (rand_handler) {
 		size_t ret = fread(buf, 1, size, rand_handler);
 		if (ret < 0) {
@@ -62,7 +66,8 @@ static void gen_random(char* buf, int size)
 	fclose(rand_handler);
 
 	for (int i = 0; i < size; i++) {
-		if (buf[i] < 0)  buf[i] += 128;
+		if (buf[i] < 0)
+			buf[i] += 128;
 	}
 }
 
@@ -78,7 +83,7 @@ static void gen_random(char* buf, int size)
  * C: 2 bytes length pcr number
  * D: 16 bytes length nonce
  */
-static void gen_attest_payload(char* msg, uint8_t* nonce_buf)
+static void gen_attest_payload(char *msg, uint8_t *nonce_buf)
 {
 	char uuid[TPM_AT_ID_LENGTH];
 	char nonce[TPM_AT_NONCE_LENGTH];
@@ -93,90 +98,43 @@ static void gen_attest_payload(char* msg, uint8_t* nonce_buf)
 	memcpy(nonce_buf, nonce, TPM_AT_NONCE_LENGTH);
 }
 
-static const char *extract_pcr_digest(json_object *jobj)
+static int verify_quote(uint8_t *nonce, uint8_t *quote_info, int quote_size,
+			uint8_t *signature, int sig_size)
 {
-	enum json_type type;
-	int found = 0;
+	int rc;
+	uint8_t hashed[SHA256_DIGEST_LENGTH];
+	TPMT_SIGNATURE sig;
+	WOLFTPM2_DEV dev;
+	WOLFTPM2_KEY aik;
 
-	json_object_object_foreach(jobj, key, val) {
-		type = json_object_get_type(val);
-		if (!strcmp(key, "pcrDigest"))
-		    found = 1;
-
-		switch (type) {
-		case json_type_string:
-			if (found) {
-				return json_object_get_string(val);
-			}
-			break;
-
-		case json_type_object: {
-			const char *ret = extract_pcr_digest(val);
-			if (ret)
-				return ret;
-			break;
-		}
-
-		default:
-			break;
-		}
-
-		found = 0;
+	rc = wolfTPM2_Init(&dev, NULL, NULL);
+	if (rc != TPM_RC_SUCCESS) {
+		fprintf(stderr, "Error: TPM initialization failed.\n");
+		return rc;
 	}
 
-	return NULL;
-}
+	rc = wolfTPM2_ReadPublicKey(&dev, &aik, TPM2_ATTEST_KEY_HANDLE);
+	if (rc) {
+		fprintf(stderr, "Error: Failed to read public key from TPM.\n");
+		return rc;
+	}
+	wolfTPM2_SetAuthHandle(&dev, 0, &aik.handle);
 
-static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
-			int size)
-{
-	FAPI_CONTEXT *context;
-	TSS2_RC rc = Fapi_Initialize(&context, NULL);
-	if (rc != TSS2_RC_SUCCESS) {
-		fprintf(stderr, "Fapi_Initialize: %s\n", Tss2_RC_Decode(rc));
-		return -1;
+	XMEMCPY(&sig, signature, sig_size);
+	hash_buffer(quote_info, quote_size, hashed);
+
+	rc = wolfTPM2_VerifyHash(&dev, &aik, sig.signature.rsassa.sig.buffer,
+				 sig.signature.rsassa.sig.size, hashed,
+				 SHA256_DIGEST_LENGTH);
+	if (rc != TPM_RC_SUCCESS) {
+		printf("Failed 0x%x: %s\n", rc, TPM2_GetRCString(rc));
+		return rc;
 	}
 
-	rc = Fapi_Provision(context, NULL, NULL, NULL);
-	if (rc == TSS2_FAPI_RC_ALREADY_PROVISIONED) {
-		fprintf(stdout, "INFO: Profile was provisioned.\n");
-	} else if (rc != TSS2_RC_SUCCESS) {
-		fprintf(stderr, "ERROR: Fapi_Provision: %s.\n", Tss2_RC_Decode(rc));
-		Fapi_Finalize(&context);
-		return -1;
-	}
-
-	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
-			      quote_info,
-			signature, size, NULL);
-	if (rc != TSS2_RC_SUCCESS) {
-		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
-		Fapi_Finalize(&context);
-		return -1;
-	}
-		
-	fprintf(stdout, "Quote is successfully verified.\n");
-
-	/* FIXME: verify the quote digest. */
-	json_object *quote_jobj = json_tokener_parse(quote_info);
-	const char *pcr_digest = extract_pcr_digest(quote_jobj); 
-	if (!pcr_digest) {
-		printf("Error: %s: couldn't find the PCR digest in quote\n",
-		       __func__);
-		Fapi_Finalize(&context);
-		return -1;
-	}
-
-	if (strcmp(pcr_digest, expected_pcr_digest_str)) {
-		printf("Error: %s: pcr_digest in the quote not verified\n",
-		       __func__);
-		Fapi_Finalize(&context);
-		return -1;
-	}
+	wolfTPM2_Shutdown(&dev, 0);
+	wolfTPM2_Cleanup(&dev);
 
 	printf("%s: pcr_digest is successfully verified\n", __func__);
-	Fapi_Finalize(&context);
-
 	return 0;
 }
 
@@ -192,31 +150,31 @@ static void generate_PCR_digests(void)
 
 	buffer_sizes[0] = TPM_EXTEND_HASH_SIZE;
 	buffer_sizes[1] = TPM_EXTEND_HASH_SIZE;
-	
+
 	/* Keyboard PCR */
-	hash_file((char *) "./installer/aligned_keyboard", file_hash);
+	hash_file((char *)"./installer/aligned_keyboard", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, keyboard_pcr);
 
 	/* Serial Out PCR */
-	hash_file((char *) "./installer/aligned_serial_out", file_hash);
+	hash_file((char *)"./installer/aligned_serial_out", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, serial_out_pcr);
 
 	/* Network PCR */
-	hash_file((char *) "./installer/aligned_network", file_hash);
+	hash_file((char *)"./installer/aligned_network", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, network_pcr);
 
 	/* App PCR: two hashes are extended to PCR in this case. */
-	hash_file((char *) "./installer/aligned_runtime", file_hash);
+	hash_file((char *)"./installer/aligned_runtime", file_hash);
 	buffers[0] = zero_pcr;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, temp_hash);
-	hash_file((char *) "applications/bank_client/bank_client.so", file_hash);
+	hash_file((char *)"applications/bank_client/bank_client.so", file_hash);
 	buffers[0] = temp_hash;
 	buffers[1] = file_hash;
 	hash_multiple_buffers(buffers, buffer_sizes, 2, app_pcr);
@@ -236,38 +194,36 @@ int main(int argc, char *argv[])
 	char buffer[32];
 	struct sockaddr_in serv_addr, cli_addr;
 	int n, ret;
-	
+
 	/* Non-buffering stdout */
 	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("%s: bank_server init\n", __func__);
 
-	generate_PCR_digests();	
+	generate_PCR_digests();
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sockfd < 0) 
+	if (sockfd < 0)
 		error("ERROR opening socket");
 	int enable = 1;
 	/* This will allow us to reuse the port:
 	 * https://stackoverflow.com/questions/24194961/how-do-i-use-setsockoptso-reuseaddr
 	 */
-	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) <
+	    0)
 		error("setsockopt(SO_REUSEADDR) failed");
-	bzero((char *) &serv_addr, sizeof(serv_addr));
+	bzero((char *)&serv_addr, sizeof(serv_addr));
 	portno = 12346;
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
 	serv_addr.sin_port = htons(portno);
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, 
-		 sizeof(serv_addr)) < 0) 
+	if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
 		error("ERROR on binding");
-	listen(sockfd,5);
+	listen(sockfd, 5);
 	clilen = sizeof(cli_addr);
 	printf("Waiting for a connection\n");
-	newsockfd = accept(sockfd,
-			   (struct sockaddr *) &cli_addr, 
-	                   &clilen);
+	newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
 	printf("Received a connection\n");
-	if (newsockfd < 0) 
+	if (newsockfd < 0)
 		error("ERROR on accept");
 
 	/* remote attestation */
@@ -291,7 +247,7 @@ int main(int argc, char *argv[])
 	n = write(newsockfd, msg, MSG_LENGTH);
 	if (n < 0)
 		error("ERROR writing to socket -- 2");
-	
+
 	uint8_t quote_buf[4096];
 	bzero(quote_buf, 4096);
 
@@ -309,22 +265,27 @@ int main(int argc, char *argv[])
 		package_size += n;
 	} while (n > 0 && count < 4);
 
-	int sig_size = quote_buf[0];
-	uint8_t signature[256];
-	bzero(signature, 256);
-	memcpy(signature, quote_buf + 1, sig_size);
+	int sig_size = (quote_buf[0] << 24) | (quote_buf[1] << 16) |
+		       (quote_buf[2] << 8) | quote_buf[3];
+	uint8_t *signature = (uint8_t *)malloc(sig_size);
+	bzero(signature, sig_size);
+	memcpy(signature, quote_buf + 4, sig_size);
 
-	int quote_size = package_size - 1 - sig_size;
-	char *quote_info = (char *) malloc(quote_size + 1);
-	bzero(quote_info, quote_size + 1);
-	memcpy(quote_info, quote_buf + 1 + sig_size, quote_size);
+	int quote_size = package_size - sig_size - 4;
+	uint8_t *quote_info = (uint8_t *)malloc(quote_size);
+	bzero(quote_info, quote_size);
+	memcpy(quote_info, quote_buf + 4 + sig_size, quote_size);
 
-	ret = verify_quote(nonce, quote_info, signature, sig_size);
+	ret = verify_quote(nonce, quote_info, quote_size, signature, sig_size);
 	if (ret) {
 		buffer[0] = 0;
 		write(newsockfd, buffer, 1);
+		free(signature);
+		free(quote_info);
 		error("ERROR quote verification failed");
 	}
+	free(signature);
+	free(quote_info);
 
 	buffer[0] = 1;
 	n = write(newsockfd, buffer, 1);
@@ -375,7 +336,7 @@ int main(int argc, char *argv[])
 		write(newsockfd, buffer, 1);
 		error("ERROR invalid username");
 	}
-		
+
 	buffer[0] = 1;
 	n = write(newsockfd, buffer, 1);
 	if (n < 0)
@@ -399,7 +360,7 @@ int main(int argc, char *argv[])
 		write(newsockfd, buffer, 1);
 		error("ERROR invalid password");
 	}
-		
+
 	buffer[0] = 1;
 	n = write(newsockfd, buffer, 1);
 	if (n < 0)
@@ -410,13 +371,13 @@ int main(int argc, char *argv[])
 	n = read(newsockfd, buffer, 1);
 	if (n < 0)
 		error("ERROR reading from socket -- 6");
-	
+
 	if (buffer[0] != 1) {
 		buffer[0] = 0;
 		write(newsockfd, buffer, 1);
 		error("ERROR invalid password");
 	}
-		
+
 	buffer[0] = 1;
 	n = write(newsockfd, buffer, 1);
 	if (n < 0)
@@ -431,6 +392,6 @@ int main(int argc, char *argv[])
 	close(newsockfd);
 	close(sockfd);
 
-	return 0; 
+	return 0;
 }
 #endif

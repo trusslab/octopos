@@ -8,7 +8,7 @@ APP = tpm-rspi-svc
 # Add any other object files to this list below
 APP_OBJS = tpm-rspi-svc.o tpm.o hash.o
 LDFLAGS = -ldl -lpthread -lrt
-LDLIBS = -ltss2-esys -ltss2-rc -ltss2-fapi -lcrypto -ljson-c
+LDLIBS = -lwolftpm -lcrypto
 
 all: build
 

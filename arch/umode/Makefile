@@ -14,7 +14,7 @@ umode:
 	done
 	for dir in $(LINUX_DIR); do \
 		$(MAKE) defconfig ARCH=um -C $$dir; \
-		$(MAKE) ARCH=um -C $$dir; \
+		$(MAKE) ARCH=um -j`nproc` -C $$dir; \
 	done
 
 clean:
@@ -24,3 +24,4 @@ clean:
 	for dir in $(LINUX_DIR); do \
 		$(MAKE) clean ARCH=um -C $$dir; \
 	done
+	cd $(LINUX_DIR) && git restore .

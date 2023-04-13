@@ -19,19 +19,27 @@
 #include <network/socket.h>
 #include <tpm/tpm.h>
 
-#define ID_LENGTH	16
-#define NONCE_LENGTH	16
-#define MSG_LENGTH	(1 + ID_LENGTH + 2 + NONCE_LENGTH)
-#define MAX_PACK_SIZE	256
+#define ID_LENGTH 16
+#define NONCE_LENGTH 16
+#define MSG_LENGTH (1 + ID_LENGTH + 2 + NONCE_LENGTH)
+#define MAX_PACK_SIZE 256
 
 /* FIXME: how does the app know the size of the buf? */
 char output_buf[256];
 int num_chars = 0;
-#define secure_printf(fmt, args...) {memset(output_buf, 0x0, 64); sprintf(output_buf, fmt, ##args);	\
-				     api->write_to_secure_serial_out(output_buf);}			\
+#define secure_printf(fmt, args...)                          \
+	{                                                    \
+		memset(output_buf, 0x0, 64);                 \
+		sprintf(output_buf, fmt, ##args);            \
+		api->write_to_secure_serial_out(output_buf); \
+	}
 
-#define insecure_printf(fmt, args...) {memset(output_buf, 0x0, 64); num_chars = sprintf(output_buf, fmt, ##args);\
-				     api->write_to_shell(output_buf, num_chars);}				 \
+#define insecure_printf(fmt, args...)                         \
+	{                                                     \
+		memset(output_buf, 0x0, 64);                  \
+		num_chars = sprintf(output_buf, fmt, ##args); \
+		api->write_to_shell(output_buf, num_chars);   \
+	}
 
 static struct socket *sock;
 static struct sock_addr skaddr;
@@ -62,14 +70,16 @@ static int _parse_ip_port(char *str, unsigned int *addr, unsigned short *nport)
 	return 0;
 }
 
-void send_large_packet(struct runtime_api *api, uint8_t* data, size_t size)
+void send_large_packet(struct runtime_api *api, uint8_t *data, size_t size)
 {
 	int packages = size / MAX_PACK_SIZE + 1;
 	for (int pack = 0; pack < packages; pack++) {
 		int pack_size = ((pack == packages - 1) ?
-			(size - pack * MAX_PACK_SIZE) : MAX_PACK_SIZE);
+					 (size - pack * MAX_PACK_SIZE) :
+					 MAX_PACK_SIZE);
 
-		if (api->write_to_socket(sock, data + pack * MAX_PACK_SIZE, pack_size) < 0) {
+		if (api->write_to_socket(sock, data + pack * MAX_PACK_SIZE,
+					 pack_size) < 0) {
 			printf("%s: Error: _write\n", __func__);
 			return;
 		}
@@ -95,32 +105,38 @@ static void send_receive(struct runtime_api *api)
 		char uuid[ID_LENGTH];
 		char pcr[3] = { 0 };
 		char nonce[NONCE_LENGTH];
-		
+
 		memcpy(uuid, buf + 1, ID_LENGTH);
 		memcpy(pcr, buf + 1 + ID_LENGTH, 2);
 		memcpy(nonce, buf + 1 + ID_LENGTH + 2, NONCE_LENGTH);
 
 		int pcr_selected = atoi(pcr);
-		uint32_t pcr_list[] = { (uint32_t) pcr_selected };
+		uint32_t pcr_list[] = { (uint32_t)pcr_selected };
 		rc = api->request_tpm_attestation_report(pcr_list, 1, nonce,
-						    &signature, &sig_size,
-						    &quote, &quote_size);
+							 &signature, &sig_size,
+							 &quote, &quote_size);
 		if (rc != 0) {
+			printf("Error: %s: couldn't get attestation report.\n",
+			       __func__);
 			goto out_attest;
 		}
 
-		packet = (uint8_t *) malloc(sig_size + quote_size + 1);
+		packet = (uint8_t *)malloc(sig_size + quote_size + 4);
 		if (!packet) {
 			printf("Error: %s: couldn't allocate memory for "
-			       "packet.\n", __func__);
+			       "packet.\n",
+			       __func__);
 			return;
 		}
-		
-		packet[0] = (uint8_t) sig_size;
-		memcpy(packet + 1, signature, sig_size);
-		memcpy(packet + 1 + sig_size, quote, quote_size);
 
-		send_large_packet(api, packet, 1 + sig_size + quote_size);
+		packet[0] = (uint8_t)(sig_size >> 24);
+		packet[1] = (uint8_t)(sig_size >> 16);
+		packet[2] = (uint8_t)(sig_size >> 8);
+		packet[3] = (uint8_t)(sig_size);
+		memcpy(packet + 4, signature, sig_size);
+		memcpy(packet + 4 + sig_size, quote, quote_size);
+
+		send_large_packet(api, packet, 4 + sig_size + quote_size);
 
 		free(packet);
 out_attest:
@@ -129,18 +145,17 @@ out_attest:
 	}
 }
 
-extern "C" __attribute__ ((visibility ("default")))
-void app_main(struct runtime_api *api)
+extern "C" __attribute__((visibility("default"))) void
+app_main(struct runtime_api *api)
 {
 	int err = 0;
 	/* init arguments */
 	memset(&skaddr, 0x0, sizeof(skaddr));
-	type = SOCK_STREAM;	/* default TCP stream */
+	type = SOCK_STREAM; /* default TCP stream */
 	sock = NULL;
-	
+
 	char addr[256] = "10.0.0.2:10001";
-	err = _parse_ip_port(addr, &skaddr.dst_addr,
-					&skaddr.dst_port);
+	err = _parse_ip_port(addr, &skaddr.dst_addr, &skaddr.dst_port);
 	if (err < 0) {
 		printf("address format is error\n");
 		return;
@@ -161,7 +176,7 @@ void app_main(struct runtime_api *api)
 	api->bind_socket(sock, &skaddr);
 	send_receive(api);
 
-out:	/* close and out */
+out: /* close and out */
 	struct socket *tmp;
 	if (sock) {
 		tmp = sock;

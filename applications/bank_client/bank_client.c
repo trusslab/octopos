@@ -342,19 +342,22 @@ static int perform_remote_attestation(void)
 		return -1;
 	}
 
-	packet = (uint8_t *) malloc(sig_size + quote_size + 1);
+	packet = (uint8_t *) malloc(sig_size + quote_size + 4);
 	if (!packet) { 
 		insecure_printf("Error: %s: couldn't allocate memory for "
 				"packet.\n", __func__);
 		return -1;
 	}
 	
-	packet[0] = (uint8_t) sig_size;
-	memcpy(packet + 1, signature, sig_size);
+	packet[0] = (uint8_t)(sig_size >> 24);
+	packet[1] = (uint8_t)(sig_size >> 16);
+	packet[2] = (uint8_t)(sig_size >> 8);
+	packet[3] = (uint8_t)(sig_size);
+	memcpy(packet + 4, signature, sig_size);
 
-	memcpy(packet + 1 + sig_size, quote, quote_size);
+	memcpy(packet + 4 + sig_size, quote, quote_size);
 
-	send_large_packet(packet, 1 + sig_size + quote_size);
+	send_large_packet(packet, 4 + sig_size + quote_size);
 	
 	free(packet);
 	free(quote);

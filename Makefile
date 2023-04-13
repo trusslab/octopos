@@ -17,7 +17,7 @@ endif
 	done
 	./installer/install.sh
 
-install: 
+install:
 	$(MAKE) install -C $(EXTERNAL_DIR)
 
 rspi:
@@ -27,10 +27,7 @@ clean:
 	for dir in $(DIRS_CLEAN); do \
 		$(MAKE) clean -C $$dir; \
 	done
-
-uninstall-local:
-	rm NVChip
-	$(MAKE) uninstall-local -C $(EXTERNAL_DIR)
+	rm -f NVChip
 
 clean_sechw:
 	rm -f ${PETALINUX_PRODUCTS}/system_mb*.bit

@@ -19,16 +19,18 @@
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <tss2/tss2_fapi.h>
-#include <tss2/tss2_rc.h>
+#include <wolftpm/tpm2.h>
+#include <wolftpm/tpm2_wrap.h>
 #include <openssl/sha.h>
-#include <json-c/json.h>
+#include <openssl/evp.h>
 /* octopos header files */
 #define APPLICATION
 #include <tpm/hash.h>
 #include <tpm/rsa.h>
 
 #define MSG_LENGTH (1 + TPM_AT_ID_LENGTH + TPM_AT_NONCE_LENGTH)
+#define TPM2_ATTEST_KEY_HANDLE     0x81000202  /* Attestation Key Handle for common use */
+
 
 char glucose_monitor_password[32] = "glucose_monitor_password";
 char insulin_pump_password[32] = "insulin_pump_password";
@@ -37,7 +39,7 @@ uint8_t bluetooth_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t network_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t storage_pcr[TPM_EXTEND_HASH_SIZE];
 uint8_t expected_pcr_digest[TPM_EXTEND_HASH_SIZE];
-char expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
+uint8_t expected_pcr_digest_str[(2 * TPM_EXTEND_HASH_SIZE) + 1];
 uint8_t app_signature[RSA_SIGNATURE_SIZE];
 
 static void error(const char *msg)
@@ -92,90 +94,42 @@ static void gen_attest_payload(char* msg, uint8_t* nonce_buf)
 	memcpy(nonce_buf, nonce, TPM_AT_NONCE_LENGTH);
 }
 
-static const char *extract_pcr_digest(json_object *jobj)
+static int verify_quote(uint8_t* nonce, uint8_t* quote_info, int quote_size, uint8_t* signature, int sig_size)
 {
-	enum json_type type;
-	int found = 0;
+	int rc;
+	uint8_t hashed[SHA256_DIGEST_LENGTH];
+	TPMT_SIGNATURE sig;
+	WOLFTPM2_DEV dev;
+	WOLFTPM2_KEY aik;
 
-	json_object_object_foreach(jobj, key, val) {
-		type = json_object_get_type(val);
-		if (!strcmp(key, "pcrDigest"))
-		    found = 1;
-
-		switch (type) {
-		case json_type_string:
-			if (found) {
-				return json_object_get_string(val);
-			}
-			break;
-
-		case json_type_object: {
-			const char *ret = extract_pcr_digest(val);
-			if (ret)
-				return ret;
-			break;
-		}
-
-		default:
-			break;
-		}
-
-		found = 0;
+	rc = wolfTPM2_Init(&dev, NULL, NULL);
+	if (rc != TPM_RC_SUCCESS) {
+		fprintf(stderr, "Error: TPM initialization failed.\n");
+		return rc;
 	}
 
-	return NULL;
-}
+	rc = wolfTPM2_ReadPublicKey(&dev, &aik, TPM2_ATTEST_KEY_HANDLE);
+	if (rc) {
+		fprintf(stderr, "Error: Failed to read public key from TPM.\n");
+		return rc;
+	}
+	wolfTPM2_SetAuthHandle(&dev, 0, &aik.handle);
 
-static int verify_quote(uint8_t *nonce, char *quote_info, uint8_t *signature,
-			int size)
-{
-	FAPI_CONTEXT *context;
-	TSS2_RC rc = Fapi_Initialize(&context, NULL);
-	if (rc != TSS2_RC_SUCCESS) {
-		fprintf(stderr, "Fapi_Initialize: %s\n", Tss2_RC_Decode(rc));
-		return -1;
+	XMEMCPY(&sig, signature, sig_size);
+	hash_buffer(quote_info, quote_size, hashed);
+
+	rc = wolfTPM2_VerifyHash(&dev, &aik, sig.signature.rsassa.sig.buffer,
+				 sig.signature.rsassa.sig.size, hashed,
+				 SHA256_DIGEST_LENGTH);
+	if (rc != TPM_RC_SUCCESS) {
+		printf("Failed 0x%x: %s\n", rc, TPM2_GetRCString(rc));
+		return rc;
 	}
 
-	rc = Fapi_Provision(context, NULL, NULL, NULL);
-	if (rc == TSS2_FAPI_RC_ALREADY_PROVISIONED) {
-		fprintf(stdout, "INFO: Profile was provisioned.\n");
-	} else if (rc != TSS2_RC_SUCCESS) {
-		fprintf(stderr, "ERROR: Fapi_Provision: %s.\n", Tss2_RC_Decode(rc));
-		Fapi_Finalize(&context);
-		return -1;
-	}
-
-	rc = Fapi_VerifyQuote(context, "HS/SRK/AK", nonce, TPM_AT_NONCE_LENGTH,
-			      quote_info,
-			signature, size, NULL);
-	if (rc != TSS2_RC_SUCCESS) {
-		fprintf(stderr, "Fapi_VerifyQuote: %s\n", Tss2_RC_Decode(rc));
-		Fapi_Finalize(&context);
-		return -1;
-	}
-		
-	fprintf(stdout, "Quote is successfully verified.\n");
-
-	/* FIXME: verify the quote digest. */
-	json_object *quote_jobj = json_tokener_parse(quote_info);
-	const char *pcr_digest = extract_pcr_digest(quote_jobj); 
-	if (!pcr_digest) {
-		printf("Error: %s: couldn't find the PCR digest in quote\n",
-		       __func__);
-		Fapi_Finalize(&context);
-		return -1;
-	}
-
-	if (strcmp(pcr_digest, expected_pcr_digest_str)) {
-		printf("Error: %s: pcr_digest in the quote not verified\n",
-		       __func__);
-		Fapi_Finalize(&context);
-		return -1;
-	}
+	wolfTPM2_Shutdown(&dev, 0);
+	wolfTPM2_Cleanup(&dev);
 
 	printf("%s: pcr_digest is successfully verified\n", __func__);
-	Fapi_Finalize(&context);
-
 	return 0;
 }
 
@@ -345,22 +299,27 @@ int main(int argc, char *argv[])
 		package_size += n;
 	} while (n > 0 && count < 4);
 
-	int sig_size = quote_buf[0];
-	uint8_t signature[256];
-	bzero(signature, 256);
-	memcpy(signature, quote_buf + 1, sig_size);
+	int sig_size = (quote_buf[0] << 24) | (quote_buf[1] << 16) |
+		       (quote_buf[2] << 8) | quote_buf[3];
+	uint8_t *signature = (uint8_t *)malloc(sig_size);
+	bzero(signature, sig_size);
+	memcpy(signature, quote_buf + 4, sig_size);
 
-	int quote_size = package_size - 1 - sig_size;
-	char *quote_info = (char *) malloc(quote_size + 1);
-	bzero(quote_info, quote_size + 1);
-	memcpy(quote_info, quote_buf + 1 + sig_size, quote_size);
+	int quote_size = package_size - sig_size - 4;
+	uint8_t *quote_info = (uint8_t *)malloc(quote_size);
+	bzero(quote_info, quote_size);
+	memcpy(quote_info, quote_buf + 4 + sig_size, quote_size);
 
-	ret = verify_quote(nonce, quote_info, signature, sig_size);
+	ret = verify_quote(nonce, quote_info, quote_size, signature, sig_size);
 	if (ret) {
 		buffer[0] = 0;
 		write(newsockfd, buffer, 1);
+		free(signature);
+		free(quote_info);
 		error("ERROR quote verification failed");
 	}
+	free(signature);
+	free(quote_info);
 
 	/* Verification of the quote tells us that our app is running in one
 	 * of the runtimes. We can be sure that we're talking to that runtime

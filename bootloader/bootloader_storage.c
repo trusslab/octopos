@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <time.h>
 #ifndef ARCH_SEC_HW_BOOT
 #include <dlfcn.h>
 #include <semaphore.h>
@@ -55,50 +57,6 @@ int write_boot_image_to_storage(int pid, void *ptr);
 extern FILE *filep;
 /* FIXME: why should we need the total_blocks in bootloader? */
 extern uint32_t total_blocks;
-
-#ifndef ARCH_SEC_HW_BOOT
-int fd_out, fd_intr;
-pthread_t mailbox_thread;
-
- /* Not all will be used */
-sem_t interrupts[NUM_QUEUES + 1];
-sem_t availables[NUM_QUEUES + 1];
-
-static void *handle_mailbox_interrupts(void *data)
-{
-	uint8_t interrupt;
-
-	while (1)
-		read(fd_intr, &interrupt, 1);
-}
-
-int init_mailbox(void)
-{
-	mkfifo(FIFO_STORAGE_OUT, 0666);
-	mkfifo(FIFO_STORAGE_INTR, 0666);
-
-	fd_out = open(FIFO_STORAGE_OUT, O_WRONLY);
-	fd_intr = open(FIFO_STORAGE_INTR, O_RDONLY);
-
-	int ret = pthread_create(&mailbox_thread, NULL,
-				 handle_mailbox_interrupts, NULL);
-	if (ret) {
-		printf("Error: couldn't launch the mailbox thread\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-void close_mailbox(void)
-{	
-	pthread_cancel(mailbox_thread);
-	pthread_join(mailbox_thread, NULL);
-	
-	close(fd_out);
-	close(fd_intr);
-}
-#endif /* ARCH_SEC_HW_BOOT */
 
 void prepare_bootloader(char *filename, int argc, char *argv[])
 {
@@ -192,7 +150,6 @@ void send_measurement_to_tpm(char *path)
 	enforce_running_process(P_STORAGE);
 	tpm_measure_service(path, 1);
 	cancel_running_process();
-	close_mailbox();
 }
 #endif /* ARCH_SEC_HW_BOOT */
 

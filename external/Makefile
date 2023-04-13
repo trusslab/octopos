@@ -3,41 +3,55 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-install: tss abrmd emu fin
+WOLF_REPO := wolfTPM
+WOLF_PATCH_FILE := wolfTPM.patch
 
-tss:
-	cd tpm2-tss && ./bootstrap
-	cd tpm2-tss && ./configure
-	make -j$(nproc) -C ./tpm2-tss
-	sudo make install -C ./tpm2-tss
-	sudo udevadm control --reload-rules && sudo udevadm trigger && sudo ldconfig
+SWTPM_REPO := ibmswtpm2
+SWTPM_PATCH_FILE := ibmswtpm2.patch
 
-abrmd:
-	cd tpm2-abrmd && ./bootstrap
-	cd tpm2-abrmd && ./configure \
-		--with-dbuspolicydir=/etc/dbus-1/system.d \
-		--with-systemdsystemunitdir=/lib/systemd/system \
-		--with-systemdpresetdir=/lib/systemd/system-preset
-	make -j$(nproc) -C ./tpm2-abrmd
-	sudo make install -C ./tpm2-abrmd
-	sudo ldconfig && sudo pkill -HUP dbus-daemon && sudo systemctl daemon-reload
+apply_patch:
+ifeq ("$(wildcard $(REPO)/.git)","")
+	@echo "Error: Run 'git submodule update --init --recursive' first"
+	exit 1
+endif
+	cd $(REPO) && \
+	if ! git apply --check --reverse ../$(PATCH) 2>/dev/null; then \
+		git apply ../$(PATCH); \
+	fi
 
-emu:
-	make -j$(nproc) -C ./ibmtpm
+revert_patch:
+	cd $(REPO) && \
+	if git apply --check --reverse ../$(PATCH) 2>/dev/null; then \
+		git apply -R ../$(PATCH); \
+	fi
 
-fin:
+wolf_install:
+	make apply_patch REPO=$(WOLF_REPO) PATCH=$(WOLF_PATCH_FILE)
+	cd $(WOLF_REPO) && \
+		./autogen.sh && \
+		./configure --disable-wolfcrypt --enable-swtpm --disable-examples && \
+		make -j$(nproc) && \
+		sudo make install
+
+wolf_clean:
+	sudo make uninstall -C ./wolfTPM
+	make clean -C ./wolfTPM
+	make revert_patch REPO=$(WOLF_REPO) PATCH=$(WOLF_PATCH_FILE)
+
+swtpm_install:
+	make apply_patch REPO=$(SWTPM_REPO) PATCH=$(SWTPM_PATCH_FILE)
+	make -j$(nproc) -C ./ibmswtpm2/src
+	mv ./ibmswtpm2/src/tpm_server ./ibmswtpm2/tpm_server
+
+swtpm_clean:
+	make clean -C ./ibmswtpm2/src
+	rm -f ./ibmswtpm2/tpm_server
+	make revert_patch REPO=$(SWTPM_REPO) PATCH=$(SWTPM_PATCH_FILE)
+
+install: wolf_install swtpm_install
 	touch INSTALLED
 
-clean:
-	make clean -C ./tpm2-tss
-	make clean -C ./tpm2-abrmd
-	make clean -C ./ibmtpm/src
+clean: wolf_clean swtpm_clean
+	rm -f INSTALLED
 
-uninstall:
-	make uninstall -C ./tpm2-abrmd
-	make uninstall -C ./tpm2-tss
-	rm ./ibmtpm/tpm_server
-	rm INSTALLED
-
-uninstall-local:
-	make uninstall-local -C ./tpm2-tss
+.PHONY: install clean

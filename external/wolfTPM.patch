@@ -1,0 +1,47 @@
+diff --git a/src/tpm2.c b/src/tpm2.c
+index 58c31d1..e825ea8 100644
+--- a/src/tpm2.c
++++ b/src/tpm2.c
+@@ -5542,7 +5542,7 @@ void TPM2_SetupPCRSel(TPML_PCR_SELECTION* pcr, TPM_ALG_ID alg, int pcrIndex)
+     if (pcr && pcrIndex >= (int)PCR_FIRST && pcrIndex <= (int)PCR_LAST) {
+         pcr->count = 1;
+         pcr->pcrSelections[0].hash = alg;
+-        pcr->pcrSelections[0].sizeofSelect = PCR_SELECT_MIN;
++        pcr->pcrSelections[0].sizeofSelect = PCR_SELECT_MAX;
+         pcr->pcrSelections[0].pcrSelect[pcrIndex >> 3] = (1 << (pcrIndex & 0x7));
+     }
+ }
+diff --git a/wolftpm/tpm2.h b/wolftpm/tpm2.h
+index 0aa25de..070cf9b 100644
+--- a/wolftpm/tpm2.h
++++ b/wolftpm/tpm2.h
+@@ -882,14 +882,14 @@ typedef struct TPM2B_NAME {
+ 
+ typedef struct TPMS_PCR_SELECT {
+     BYTE sizeofSelect;
+-    BYTE pcrSelect[PCR_SELECT_MIN];
++    BYTE pcrSelect[PCR_SELECT_MAX];
+ } TPMS_PCR_SELECT;
+ 
+ 
+ typedef struct TPMS_PCR_SELECTION {
+     TPMI_ALG_HASH hash;
+     BYTE sizeofSelect;
+-    BYTE pcrSelect[PCR_SELECT_MIN];
++    BYTE pcrSelect[PCR_SELECT_MAX];
+ } TPMS_PCR_SELECTION;
+ 
+ 
+diff --git a/wolftpm/tpm2_types.h b/wolftpm/tpm2_types.h
+index 6edbdee..3a1bc38 100644
+--- a/wolftpm/tpm2_types.h
++++ b/wolftpm/tpm2_types.h
+@@ -394,7 +394,7 @@ typedef int64_t  INT64;
+ #define BUFFER_ALIGNMENT 4
+ #endif
+ #ifndef IMPLEMENTATION_PCR
+-#define IMPLEMENTATION_PCR 24
++#define IMPLEMENTATION_PCR 40
+ #endif
+ #ifndef PLATFORM_PCR
+ #define PLATFORM_PCR 24
