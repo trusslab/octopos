@@ -105,6 +105,23 @@ Here is the second message (n = 1): 2 time passed=XXX
 
 The time is measured in the unit of microseconds. We notice the latency is higher in certain environments, possibly due to variations in the server's network stack and board factors (i.e., variation SFP adaptor and FPGA board).
 
+Next, launch the throughput server on the computer.
+
+After the board is booted, run the throughput client by typing `socket_client` from the keyboard domain terminal (assuming the `main` function is configured to run the throughput test).
+
+The throughput server (running on the computer) will print the following results:
+
+```
+socket_server init
+waiting for a connection
+Received a connection
+Here is the first message (n = 1): 1
+...(printing 0-99)...
+rounds=100, t_diff=XXX, tp=XXX MB/s
+```
+
+Note that the experiment measures half-duplex throughput. According to the definition of full throughput, the tp (throughput) number should be doubled.
+
 ### Untrusted Domain Network Performance
 
 Before the experiment, we need to install `iperf` either through Petalinux configuration (preferred, see: https://support.xilinx.com/s/question/0D52E00006hpspsSAA/how-to-get-iperf3-into-petalinux-20171?language=en_US), or by building from source and copy the binary into the rootfs image.
