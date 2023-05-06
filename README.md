@@ -1,7 +1,7 @@
 # OctopOS and the Split-Trust Hardware Design User Guide
 
 :paperclip: [OctopOS Paper *(to be updated)*]()
-:orange_book: [OctopOS Technical Reference Manual](https://github.com/trusslab/octopos_hardware/raw/main/docs/OctopOS-TRM-2023-04-03.pdf)
+:orange_book: [OctopOS Technical Reference Manual](https://github.com/trusslab/octopos_hardware/raw/main/docs/OctopOS-TRM.pdf)
 
 :computer: [OctopOS Repository](https://github.com/trusslab/octopos)
 :electric_plug: [Split-Trust Hardware Repository](https://github.com/trusslab/octopos_hardware)
@@ -10,9 +10,15 @@
 :beer: [Untrusted Domain Petalinux](https://github.com/trusslab/linux-xlnx)
 :beer: [OctopOS Emulator](https://github.com/trusslab/octopos/blob/main/docs/emulator.rst)
 
-To run OctopOS on ZCU102 board, please follow the instructions in the [Split-Trust Hardware Repository](https://github.com/trusslab/octopos_hardware).
+Authors: Zhihao "Zephyr" Yao, Seyed Mohammadjavad Seyed Talebi, Mingyi Chen, Ardalan Amiri Sani, Thomas Anderson (Collectively, "The OctopOS Authors")
 
-To run OctopOS on our emulator, please follow the instructions in the [OctopOS Emulator](https://github.com/trusslab/octopos/blob/main/docs/emulator.rst).
+The work was supported by NSF Awards #1617513, #1718923, #1846230, and #1953932.
+
+---
+
+**To run OctopOS on ZCU102 board, please follow the instructions in the [Split-Trust Hardware Repository](https://github.com/trusslab/octopos_hardware).**
+
+**To run OctopOS on our emulator, please follow the instructions in the [OctopOS Emulator](https://github.com/trusslab/octopos/blob/main/docs/emulator.rst).**
 
 ## Hardware Prototype Evaluation 
 
