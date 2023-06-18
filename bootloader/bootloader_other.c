@@ -13,8 +13,11 @@
 #include <stdlib.h>
 #include <string.h>
 #ifndef ARCH_SEC_HW_BOOT
+#include <errno.h>
 #include <dlfcn.h>
 #include <semaphore.h>
+#include <sys/select.h>
+#include <stdbool.h>
 #include <arch/mailbox.h>
 #include <tpm/tpm.h>
 #else
@@ -101,7 +104,7 @@ void read_from_storage_data_queue(uint8_t *buf)
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_STORAGE_DATA_OUT;
 	sem_wait(&interrupts[Q_STORAGE_DATA_OUT]);
-	write(fd_out, opcode, 2), 
+	write(fd_out, opcode, 2);
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
@@ -228,6 +231,38 @@ int init_mailbox(void)
 	} else {
 		printf("Error: %s: no proc specified\n", __func__);
 		exit(-1);
+	}
+
+	/* FIXME: Temporary fix for issue related to os/syscall.c Line 222
+	 *
+	 * The (possible) stale ret from the previous runtime will be put into
+	 * the named pipe. And when the bootloader tries to read the state, it
+	 * will read the stale ret instead of the state causing the bootloader
+	 * to hang.
+	 * 
+	 * There is no obvious way to reset the named pipe unless we close it.
+	 * However, closing the named pipe will break the other side. So we just
+	 * read the stale ret and ignore it.
+	 */
+	fd_set readfds;
+	struct timeval tv;
+	uint8_t stale_char[MAILBOX_QUEUE_MSG_SIZE];
+	int select_ret;
+
+	if (fd_in) {
+		FD_ZERO(&readfds);
+		FD_SET(fd_in, &readfds);
+		
+		tv.tv_sec = 0;
+		tv.tv_usec = 0;
+		
+		select_ret = select(fd_in + 1, &readfds, NULL, NULL, &tv);
+		if (select_ret == -1) {
+			printf("Error: %s: select() failed\n", __func__);
+			exit(-1);
+		} else if (select_ret) {
+			read(fd_in, stale_char, MAILBOX_QUEUE_MSG_SIZE);
+		}
 	}
 
 	int ret = pthread_create(&mailbox_thread, NULL,
@@ -406,8 +441,7 @@ int copy_file_from_boot_partition(char *filename, char *path)
 repeat:
 #ifndef ARCH_SEC_HW_BOOT
 	sem_wait(&availables[Q_STORAGE_DATA_OUT]);
-	limit_t count = 
-		mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
+	limit_t count = mailbox_get_queue_access_count(Q_STORAGE_DATA_OUT);
 #else
 	/* unpack buffer is full, but still, haven't finish a line */
 	if (unpack_buf_head > STORAGE_BOOT_UNPACK_BUF_SIZE - STORAGE_BLOCK_SIZE)

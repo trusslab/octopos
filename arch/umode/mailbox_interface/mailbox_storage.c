@@ -48,7 +48,7 @@ void read_data_from_queue(uint8_t *buf, uint8_t queue_id)
 
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = queue_id;
-	write(fd_out, opcode, 2), 
+	write(fd_out, opcode, 2); 
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
@@ -60,7 +60,7 @@ void write_data_to_queue(uint8_t *buf, uint8_t queue_id)
 
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = queue_id;
-	write(fd_out, opcode, 2), 
+	write(fd_out, opcode, 2); 
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 

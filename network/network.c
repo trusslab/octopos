@@ -500,7 +500,6 @@ void network_event_loop(void)
 			send_packet(dbuf);
 		}
 	}
-
 }
 
 int main(int argc, char **argv)

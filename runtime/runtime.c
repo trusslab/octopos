@@ -1575,11 +1575,10 @@ static int request_tpm_attestation_report(uint32_t *pcr_list, size_t pcr_list_si
 {
 	int rc = 0;
 	rc = tpm_attest((uint8_t *) nonce, pcr_list, pcr_list_size,
-			signature, sig_size, (char **) quote);
+			signature, sig_size, quote, quote_size);
 	if (rc != 0)
 		return rc;
-	
-	*quote_size = strlen((char *) *quote);
+
 	return 0;
 }
 

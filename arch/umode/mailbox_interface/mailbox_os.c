@@ -310,7 +310,7 @@ void read_from_storage_data_queue(uint8_t *buf)
 	opcode[0] = MAILBOX_OPCODE_READ_QUEUE;
 	opcode[1] = Q_STORAGE_DATA_OUT;
 	sem_wait(&interrupts[Q_STORAGE_DATA_OUT]);
-	write(fd_out, opcode, 2), 
+	write(fd_out, opcode, 2);
 	read(fd_in, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 
@@ -321,7 +321,7 @@ void write_to_storage_data_queue(uint8_t *buf)
 	opcode[0] = MAILBOX_OPCODE_WRITE_QUEUE;
 	opcode[1] = Q_STORAGE_DATA_IN;
 	sem_wait(&interrupts[Q_STORAGE_DATA_IN]);
-	write(fd_out, opcode, 2), 
+	write(fd_out, opcode, 2);
 	write(fd_out, buf, MAILBOX_QUEUE_MSG_SIZE_LARGE);
 }
 

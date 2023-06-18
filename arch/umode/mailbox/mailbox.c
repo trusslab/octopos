@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <sys/stat.h>
@@ -1033,7 +1034,7 @@ static void handle_proc_request(uint8_t requester)
 		handle_write_queue(queue_id, requester);
 		break;
 
-	case MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS:
+	case MAILBOX_OPCODE_DELEGATE_QUEUE_ACCESS: {
 		if (delegation_allowed && !queues[queue_id].delegation_disabled) {
 			mailbox_state_reg_t state;
 			memset(&state, 0x0, sizeof(mailbox_state_reg_t));
@@ -1043,6 +1044,7 @@ static void handle_proc_request(uint8_t requester)
 			printf("Error: %s: delegation disabled for queue %d.\n", __func__, queue_id);
 		}
 		break;
+	}
 
 	case MAILBOX_OPCODE_YIELD_QUEUE_ACCESS:
 		if (delegation_allowed && !queues[queue_id].delegation_disabled) {
@@ -1054,10 +1056,10 @@ static void handle_proc_request(uint8_t requester)
 		break;
 
 	case MAILBOX_OPCODE_ATTEST_QUEUE_ACCESS: {
-		mailbox_state_reg_t state = attest_queue_access(queue_id, requester);				
+		mailbox_state_reg_t state = attest_queue_access(queue_id, requester);
 		write(processors[requester].in_handle, &state, sizeof(mailbox_state_reg_t));
 		break;
-		}
+	}
 
 	case MAILBOX_OPCODE_DISABLE_QUEUE_DELEGATION:
 		disable_queue_delegation(queue_id, requester);

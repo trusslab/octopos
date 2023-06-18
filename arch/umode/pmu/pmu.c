@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <termios.h>
+#include <signal.h>
 #include <errno.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -32,7 +33,7 @@ int fd_mailbox_log, fd_tpm_log, fd_os_log, fd_keyboard_log,
 
 int fd_keyboard, fd_serial_out, fd_untrusted_in;
 
-pid_t mailbox_pid, tpm_server_pid, tpm2_abrmd_pid, os_pid,
+pid_t mailbox_pid, tpm_server_pid, os_pid,
       keyboard_pid, serial_out_pid, runtime1_pid, runtime2_pid, storage_pid,
       network_pid, bluetooth_pid, untrusted_pid, socket_server_pid,
       attest_server_pid, bank_server_pid, health_server_pid;
@@ -185,22 +186,8 @@ static int start_mailbox_proc(void)
 static int start_tpm_server_proc(void)
 {
 	int ret;
-	char *const args[] = {(char *) "tpm_server", NULL};
-	char path[] = "./external/ibmtpm/tpm_server";
-	
-	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
-
-	return ret;
-}
-
-static int start_tpm2_abrmd_proc(void)
-{
-	int ret;
-	/* FIXME: run as tss user (sudo -u tss ...) and remove --allow-root.
-	 * see docs/tpm.rst */
-	char *const args[] = {(char *) "tpm2-abrmd", (char *) "--tcti=mssim",
-			      (char *) "--allow-root", NULL};
-	char path[] = "/usr/local/sbin/tpm2-abrmd";
+	char *const args[] = {(char *) "tpm_server", (char *) "-rm", NULL};
+	char path[] = "./external/ibmswtpm2/tpm_server";
 	
 	ret = start_proc(path, args, fd_tpm_log, 0, 0, 0);
 
@@ -385,7 +372,6 @@ static void start_all_procs(void)
 	mailbox_pid = start_mailbox_proc();
 	tpm_server_pid = start_tpm_server_proc();
 	sleep(2);
-	tpm2_abrmd_pid = start_tpm2_abrmd_proc();
 	os_pid = start_os_proc();
 	keyboard_pid = start_keyboard_proc();
 	serial_out_pid = start_serial_out_proc();
@@ -487,7 +473,6 @@ static void halt_all_procs(void)
 	
 	halt_proc(P_OS);
 	
-	kill(tpm2_abrmd_pid, SIGKILL);
 	kill(tpm_server_pid, SIGKILL);
 
 	kill(mailbox_pid, SIGKILL);
@@ -510,10 +495,6 @@ static void *proc_reboot_handler(void *data)
 			sem_post(&reset_done[0]);
 		} else if (pid == tpm_server_pid) {
 			sprintf(proc_name, "TPM_server");
-			reboot_exception = 1;
-			sem_post(&reset_done[NUM_PROCESSORS + 1]);
-		} else if (pid == tpm2_abrmd_pid) {
-			sprintf(proc_name, "TPM_abrmd");
 			reboot_exception = 1;
 			sem_post(&reset_done[NUM_PROCESSORS + 1]);
 		} else if (pid == os_pid) {
@@ -734,7 +715,7 @@ static void *proc_reboot_handler(void *data)
 			if (do_restart)
 				health_server_pid = start_health_server_proc();
 		} else {
-			printf("Error: %s: unknown pid (%d)\n", __func__, pid);
+			printf("Warning: %s: unknown pid (%d)\n", __func__, pid);
 			continue;
 		}
 

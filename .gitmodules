@@ -2,12 +2,9 @@
 	path = arch/umode/untrusted_linux
 	url = https://github.com/trusslab/linux
 	branch = octopos_main
-[submodule "external/tpm2-abrmd"]
-	path = external/tpm2-abrmd
-	url = https://github.com/trusslab/octopos_tpm2_abrmd
-[submodule "external/tpm2-tss"]
-	path = external/tpm2-tss
-	url = https://github.com/trusslab/octopos_tpm2_tss
-[submodule "external/ibmtpm"]
-	path = external/ibmtpm
-	url = https://github.com/trusslab/octopos_ibmtpm.git
+[submodule "external/ibmswtpm2"]
+	path = external/ibmswtpm2
+	url = https://git.code.sf.net/p/ibmswtpm2/tpm2
+[submodule "external/wolfTPM"]
+	path = external/wolfTPM
+	url = https://github.com/wolfSSL/wolfTPM.git

@@ -27,16 +27,19 @@ int hash_file(char *path, uint8_t *hash_buf)
 	if(!buffer)
 		return EOF;
 
-	SHA256_CTX hash_ctx;
-	SHA256_Init(&hash_ctx);
+	EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+	const EVP_MD *md = EVP_sha256();
+	EVP_DigestInit_ex(mdctx, md, NULL);
 
 	int bytes_read = 0;
+	unsigned int hashLen = 0;
 
 	while ((bytes_read = fread(buffer, 1, per_buf_size, bin))) {
-		SHA256_Update(&hash_ctx, buffer, bytes_read);
+		EVP_DigestUpdate(mdctx, buffer, bytes_read);
 	}
 
-	SHA256_Final((unsigned char *) hash_buf, &hash_ctx);
+	EVP_DigestFinal_ex(mdctx, hash_buf, &hashLen);
+	EVP_MD_CTX_free(mdctx);
 
 	fclose(bin);
 	free(buffer);
@@ -48,10 +51,10 @@ int hash_file(char *path, uint8_t *hash_buf)
  * @hash_str: an array of char with a minimum size of
  *	      (2 * SHA256_DIGEST_LENGTH + 1).
  */
-void convert_hash_to_str(uint8_t *hash_buf, char *hash_str)
+void convert_hash_to_str(uint8_t *hash_buf, uint8_t *hash_str)
 {
 	for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-		sprintf(hash_str + (i * 2), "%02x", hash_buf[i]);
+		sprintf((char *)hash_str + (i * 2), "%02x", hash_buf[i]);
 	}
 
 	hash_str[2 * SHA256_DIGEST_LENGTH] = '\0';
@@ -62,11 +65,15 @@ void convert_hash_to_str(uint8_t *hash_buf, char *hash_str)
  */
 int hash_buffer(uint8_t *buffer, uint32_t buffer_size, uint8_t *hash_buf)
 {
-	SHA256_CTX hash_ctx;
+	unsigned int hashLen = 0;
+	EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+	const EVP_MD *md = EVP_sha256();
+	
+	EVP_DigestInit_ex(mdctx, md, NULL);
+	EVP_DigestUpdate(mdctx, buffer, buffer_size);
+	EVP_DigestFinal_ex(mdctx, hash_buf, &hashLen);
 
-	SHA256_Init(&hash_ctx);
-	SHA256_Update(&hash_ctx, buffer, buffer_size);
-	SHA256_Final((unsigned char *) hash_buf, &hash_ctx);
+	EVP_MD_CTX_free(mdctx);
 
 	return 0;
 }
@@ -74,15 +81,16 @@ int hash_buffer(uint8_t *buffer, uint32_t buffer_size, uint8_t *hash_buf)
 int hash_multiple_buffers(uint8_t **buffers, uint32_t *buffer_sizes,
 			  uint32_t num_buffers, uint8_t *hash_buf)
 {
-	SHA256_CTX hash_ctx;
-	uint32_t i;
-
-	SHA256_Init(&hash_ctx);
-
-	for (i = 0; i < num_buffers; i++)
-		SHA256_Update(&hash_ctx, buffers[i], buffer_sizes[i]);
-
-	SHA256_Final((unsigned char *) hash_buf, &hash_ctx);
+	unsigned int hashLen = 0;
+	EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+	const EVP_MD *md = EVP_sha256();
+	
+	EVP_DigestInit_ex(mdctx, md, NULL);
+	for (uint32_t i = 0; i < num_buffers; i++)
+		EVP_DigestUpdate(mdctx, buffers[i], buffer_sizes[i]);
+	EVP_DigestFinal_ex(mdctx, hash_buf, &hashLen);
+	
+	EVP_MD_CTX_free(mdctx);
 
 	return 0;
 }

@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 umode:
-	g++ -Wall -Werror -I ../../../include/ -I ../include/ pmu.c ../../../util/tpm/hash.c ../../../util/tpm/tpm.c -o pmu -lpthread -ltss2-esys -ltss2-rc -ltss2-fapi -lcrypto
+	g++ -Wall -Werror -I ../../../include/ -I ../include/ pmu.c ../../../util/tpm/hash.c ../../../util/tpm/tpm.c -o pmu -lpthread -lwolftpm -lcrypto
 
 clean:
 	rm pmu

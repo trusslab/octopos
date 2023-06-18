@@ -1,0 +1,330 @@
+diff --git a/src/AttestationCommands.c b/src/AttestationCommands.c
+index 72c10a0..8bd7cf0 100644
+--- a/src/AttestationCommands.c
++++ b/src/AttestationCommands.c
+@@ -187,6 +187,8 @@ TPM2_Quote(
+ 	return TPM_RCS_KEY + RC_Quote_signHandle;
+     if(!CryptSelectSignScheme(signObject, &in->inScheme))
+ 	return TPM_RCS_SCHEME + RC_Quote_inScheme;
++    if(!PCRIsQuoteAllowed(&(in->PCRselect)))
++	return TPM_RC_LOCALITY;
+     // Command Output
+     // Filling in attest information
+     // Common fields
+diff --git a/src/Global.h b/src/Global.h
+index 8b5cb17..b3f0f56 100644
+--- a/src/Global.h
++++ b/src/Global.h
+@@ -1171,10 +1171,20 @@ typedef struct
+ {
+     unsigned int    stateSave : 1;              // if the PCR value should be
+     // saved in state save
+-    unsigned int    resetLocality : 5;          // The locality that the PCR
++    unsigned int    resetLocality : 8;          // The locality that the PCR
+     // can be reset
+-    unsigned int    extendLocality : 5;         // The locality that the PCR
++    unsigned int    extendLocality : 8;         // The locality that the PCR
+     // can be extend
++    unsigned int    readLocality : 8;           // The locality that the PCR
++    // can be read
++    unsigned int    extResetLocality;           // The extended locality that the PCR
++    // can be reset
++    unsigned int    extExtendLocality;          // The extended locality that the PCR
++    // can be extend
++    unsigned int    extReadLocality;            // The extended locality that the PCR
++    // can be read
++    unsigned int    extAttestLocality;          // The extended locality that the PCR
++    // can be attested
+ } PCR_Attributes;
+ EXTERN PCR          s_pcrs[IMPLEMENTATION_PCR];
+ #endif // PCR_C
+diff --git a/src/IntegrityCommands.c b/src/IntegrityCommands.c
+index 3af80a7..ea963d1 100644
+--- a/src/IntegrityCommands.c
++++ b/src/IntegrityCommands.c
+@@ -161,6 +161,10 @@ TPM2_PCR_Read(
+ 	      PCR_Read_Out    *out            // OUT: output parameter list
+ 	      )
+ {
++    // Input Validation
++    // Check if the read operation is allowed by the current command locality
++    if(!PCRIsReadAllowed(&in->pcrSelectionIn))
++	return TPM_RC_LOCALITY;
+     // Command Output
+     // Call PCR read function.  input pcrSelectionIn parameter could be changed
+     // to reflect the actual PCR being returned
+diff --git a/src/LibSupport.h b/src/LibSupport.h
+index 6ea9c39..2cf807f 100644
+--- a/src/LibSupport.h
++++ b/src/LibSupport.h
+@@ -76,7 +76,7 @@
+ #   elif defined(__i386__) || defined(__i386) || defined(i386)		\
+     || defined(_WIN32) || defined(_M_IX86)				\
+     || defined(_M_ARM) || defined(__arm__) || defined(__thumb__)	\
+-    || defined(__powerpc__) || defined(__PPC__)
++    || defined(__powerpc__) || defined(__PPC__) || defined(__MICROBLAZE__)
+ #       define RADIX_BITS                      32
+ #   elif defined(__riscv) || defined(__riscv__)
+ #       if __riscv_xlen == 32
+diff --git a/src/PCR.c b/src/PCR.c
+index 464d9c0..e4ab88c 100644
+--- a/src/PCR.c
++++ b/src/PCR.c
+@@ -77,19 +77,40 @@
+ static const PCR_Attributes s_initAttributes[] =
+     {
+ 	// PCR 0 - 15, static RTM
+-	{1, 0, 0x1F}, {1, 0, 0x1F}, {1, 0, 0x1F}, {1, 0, 0x1F},
+-	{1, 0, 0x1F}, {1, 0, 0x1F}, {1, 0, 0x1F}, {1, 0, 0x1F},
+-	{1, 0, 0x1F}, {1, 0, 0x1F}, {1, 0, 0x1F}, {1, 0, 0x1F},
+-	{1, 0, 0x1F}, {1, 0, 0x1F}, {1, 0, 0x1F}, {1, 0, 0x1F},
+-	{0, 0x0F, 0x1F},        // PCR 16, Debug
+-	{0, 0x10, 0x1C},        // PCR 17, Locality 4
+-	{0, 0x10, 0x1C},        // PCR 18, Locality 3
+-	{0, 0x10, 0x0C},        // PCR 19, Locality 2
+-	{0, 0x14, 0x0E},        // PCR 20, Locality 1
+-	{0, 0x14, 0x04},        // PCR 21, Dynamic OS
+-	{0, 0x14, 0x04},        // PCR 22, Dynamic OS
+-	{0, 0x0F, 0x1F},        // PCR 23, Application specific
+-	{0, 0x0F, 0x1F}         // PCR 24, testing policy
++	{1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, {1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, 
++	{1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, {1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0},
++	{1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, {1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0},
++	{1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, {1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, 
++	{1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, {1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0},
++	{1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, {1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0},
++	{1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, {1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0},
++	{1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0}, {1, 0, 0x1F, 0x1F, 0, 0, 0, 0x0C0},
++	{0, 0x0F, 0x1F, 0x1F, 0, 0, 0, 0x0C0},              // PCR 16, Debug
++	{0, 0x10, 0x1C, 0x1F, 0, 0, 0, 0x0C0},              // PCR 17, Locality 4
++	{0, 0x10, 0x1C, 0x1F, 0, 0, 0, 0x0C0},              // PCR 18, Locality 3
++	{0, 0x10, 0x0C, 0x1F, 0, 0, 0, 0x0C0},              // PCR 19, Locality 2
++	{0, 0x14, 0x0E, 0x1F, 0, 0, 0, 0x0C0},              // PCR 20, Locality 1
++	{0, 0x14, 0x04, 0x1F, 0, 0, 0, 0x0C0},              // PCR 21, Dynamic OS
++	{0, 0x14, 0x04, 0x1F, 0, 0, 0, 0x0C0},              // PCR 22, Dynamic OS
++	{0, 0x0F, 0x1F, 0x1F, 0, 0, 0, 0x0C0},              // PCR 23, Application specific
++	{0, 0x0F, 0x1F, 0x1F, 0, 0, 0, 0x0C0},              // PCR 24, testing policy
++	// Extended PCR Slot
++	{0, 0x80, 0x80, 0x80, 0x200, 0x001, 0x009, 0x0C0},  // PCR 25, Locality 0x80, OS PCR
++	{0, 0x81, 0x81, 0x81, 0x200, 0x002, 0x0C2, 0x0C0},  // PCR 26, Locality 0x81, KEYBOARD PCR
++	{0, 0x82, 0x82, 0x82, 0x200, 0x004, 0x0C4, 0x0C0},  // PCR 27, Locality 0x82, SERIAL_OUT PCR
++	{0, 0x83, 0x83, 0x83, 0x200, 0x008, 0x0C8, 0x0C0},  // PCR 28, Locality 0x83, STORAGE PCR
++	{0, 0x84, 0x84, 0x84, 0x200, 0x010, 0x0D0, 0x0C0},  // PCR 29, Locality 0x84, NETWORK PCR
++	{0, 0x85, 0x85, 0x85, 0x200, 0x020, 0x0E0, 0x0C0},  // PCR 30, Locality 0x85, BLUETOOTH PCR
++	{0, 0x86, 0x86, 0x86, 0x200, 0x040, 0x17F, 0x040},  // PCR 31, Locality 0x86, RUNTIME1 PCR
++	{0, 0x87, 0x87, 0x87, 0x200, 0x080, 0x1BF, 0x080},  // PCR 32, Locality 0x87, RUNTIME2 PCR
++	{0, 0x88, 0x88, 0x88, 0x200, 0x100, 0x1C9, 0x0C0},  // PCR 33, Locality 0x88, UNTRUSTED PCR
++	{0, 0x89, 0x89, 0x89, 0x200, 0x200, 0x200, 0x0C0},  // PCR 34, Locality 0x89, PMU PCR
++	{0, 0, 0, 0, 0, 0, 0, 0},                           // PCR 35, placeholder
++	{0, 0, 0, 0, 0, 0, 0, 0},                           // PCR 36, placeholder
++	{0, 0, 0, 0, 0, 0, 0, 0},                           // PCR 37, placeholder
++	{0, 0, 0, 0, 0, 0, 0, 0},                           // PCR 38, placeholder
++	{0, 0, 0, 0, 0, 0, 0, 0},                           // PCR 39, placeholder
++	{0, 0, 0, 0, 0, 0, 0, 0}                            // PCR 40, END
+     };
+ /* 8.7.2 Functions */
+ /* 8.7.2.1 PCRBelongsAuthGroup() */
+@@ -606,6 +627,7 @@ PCRIsResetAllowed(
+ {
+     UINT8               commandLocality;
+     UINT8               localityBits = 1;
++    UINT32              extLocalityBits = 1;
+     UINT32              pcr = handle - PCR_FIRST;
+     // Check for the locality
+     commandLocality = _plat__LocalityGet();
+@@ -614,11 +636,19 @@ PCRIsResetAllowed(
+     if(commandLocality == 4)
+ 	return FALSE;
+ #endif
+-    localityBits = localityBits << commandLocality;
+-    if((localityBits & s_initAttributes[pcr].resetLocality) == 0)
+-	return FALSE;
+-    else
+-	return TRUE;
++    if((commandLocality & 0x80) == 0) {
++	localityBits = localityBits << commandLocality;
++	if((localityBits & s_initAttributes[pcr].resetLocality) == 0)
++		return FALSE;
++	else
++		return TRUE;
++    } else {
++	extLocalityBits = extLocalityBits << (commandLocality & 0x7F);
++	if((extLocalityBits & s_initAttributes[pcr].extResetLocality) == 0)
++		return FALSE;
++	else
++		return TRUE;
++    }
+ }
+ /* 8.7.2.19 PCRChanged() */
+ /* This function checks a PCR handle to see if the attributes for the PCR are set so that any change
+@@ -652,14 +682,23 @@ PCRIsExtendAllowed(
+ {
+     UINT8               commandLocality;
+     UINT8               localityBits = 1;
++    UINT32              extLocalityBits = 1;
+     UINT32              pcr = handle - PCR_FIRST;
+     // Check for the locality
+     commandLocality = _plat__LocalityGet();
+-    localityBits = localityBits << commandLocality;
+-    if((localityBits & s_initAttributes[pcr].extendLocality) == 0)
+-	return FALSE;
+-    else
+-	return TRUE;
++    if((commandLocality & 0x80) == 0) {
++	localityBits = localityBits << commandLocality;
++	if((localityBits & s_initAttributes[pcr].extendLocality) == 0)
++		return FALSE;
++	else
++		return TRUE;
++    } else {
++	extLocalityBits = extLocalityBits << (commandLocality & 0x7F);
++	if((extLocalityBits & s_initAttributes[pcr].extExtendLocality) == 0)
++		return FALSE;
++	else
++		return TRUE;
++    }
+ }
+ /* 8.7.2.21 PCRExtend() */
+ /* This function is used to extend a PCR in a specific bank. */
+@@ -733,6 +772,46 @@ PCRComputeCurrentDigest(
+     CryptHashEnd2B(&hashState, &digest->b);
+     return;
+ }
++/* 8.7.2.23_1 PCRIsReadAllowed() */
++/* This function indicates a PCR may be read at the current command locality. The return value
++   is based on PCR attributes, and not the PCR allocation. */
++/* Return Values Meaning */
++/* TRUE read is allowed */
++/* FALSE read is not allowed */
++BOOL
++PCRIsReadAllowed(
++	TPML_PCR_SELECTION      *selection         // IN: PCR selection to be read
++	)
++{
++	TPMS_PCR_SELECTION      *select;
++	UINT8               commandLocality;
++	UINT32              extLocalityBits = 1;
++	UINT32              pcr;
++	UINT32              i;
++	// Check for the locality
++	commandLocality = _plat__LocalityGet();
++	extLocalityBits = extLocalityBits << (commandLocality & 0x7F);
++	for(i = 0; i < selection->count; i++)
++	{
++	    // Point to the current selection
++	    select = &selection->pcrSelections[i]; // Point to the current selection
++	    FilterPcr(select);      // Clear out the bits for unimplemented PCR
++	    // Iterate through the selection
++	    for(pcr = 0; pcr < IMPLEMENTATION_PCR; pcr++)
++		{
++		    if(IsPcrSelected(pcr, select))         // Is this PCR selected
++			{
++				if((commandLocality & 0x80) != 0
++				 && (extLocalityBits & s_initAttributes[pcr].extReadLocality) == 0)
++				{
++					return FALSE;
++				}
++			}
++		}
++	}
++
++	return TRUE;
++}
+ /* 8.7.2.23 PCRRead() */
+ /* This function is used to read a list of selected PCR.  If the requested PCR number exceeds the
+    maximum number that can be output, the selection is adjusted to reflect the actual output PCR. */
+@@ -1183,3 +1262,42 @@ PCRCapGetHandles(
+ 	}
+     return more;
+ }
++/* This function indicates if a PCR may be quoted by the current command locality. The return value
++   is based on PCR attributes, and not the PCR allocation. */
++/* Return Values Meaning */
++/* TRUE TPM2_Quote() is allowed */
++/* FALSE TPM2_Quote() is not allowed */
++BOOL
++PCRIsQuoteAllowed(
++		  TPML_PCR_SELECTION      *selection         // IN: PCR handle to be quoted
++		  )
++{
++	TPMS_PCR_SELECTION      *select;
++	UINT8               commandLocality;
++	UINT32              extLocalityBits = 1;
++	UINT32              pcr;
++	UINT32              i;
++	// Check for the locality
++	commandLocality = _plat__LocalityGet();
++	extLocalityBits = extLocalityBits << (commandLocality & 0x7F);
++	for(i = 0; i < selection->count; i++)
++	{
++	    // Point to the current selection
++	    select = &selection->pcrSelections[i]; // Point to the current selection
++	    FilterPcr(select);      // Clear out the bits for unimplemented PCR
++	    // Iterate through the selection
++	    for(pcr = 0; pcr < IMPLEMENTATION_PCR; pcr++)
++		{
++		    if(IsPcrSelected(pcr, select))         // Is this PCR selected
++			{
++				if((commandLocality & 0x80) != 0
++				 && (extLocalityBits & s_initAttributes[pcr].extAttestLocality) == 0)
++				{
++					return FALSE;
++				}
++			}
++		}
++	}
++
++	return TRUE;
++}
+diff --git a/src/PCR_fp.h b/src/PCR_fp.h
+index cfad535..2f534b9 100644
+--- a/src/PCR_fp.h
++++ b/src/PCR_fp.h
+@@ -151,6 +151,10 @@ PCRComputeCurrentDigest(
+ 			//     output)
+ 			TPM2B_DIGEST        *digest         // OUT: digest
+ 			);
++BOOL
++PCRIsReadAllowed(
++	TPML_PCR_SELECTION      *selection         // IN: PCR handle to be read
++	);
+ void
+ PCRRead(
+ 	TPML_PCR_SELECTION  *selection,     // IN/OUT: PCR selection (filtered on
+@@ -192,6 +196,9 @@ PCRCapGetHandles(
+ 		 UINT32           count,         // IN: count of returned handles
+ 		 TPML_HANDLE     *handleList     // OUT: list of handle
+ 		 );
+-
++BOOL
++PCRIsQuoteAllowed(
++		  TPML_PCR_SELECTION      *selection         // IN: PCR handle to be quoted
++		 );
+ 
+ #endif
+diff --git a/src/TpmProfile.h b/src/TpmProfile.h
+index 9514939..b34f54d 100644
+--- a/src/TpmProfile.h
++++ b/src/TpmProfile.h
+@@ -143,7 +143,7 @@
+ #define MATH_LIB                        Ossl
+ #endif
+ #ifndef IMPLEMENTATION_PCR
+-#define IMPLEMENTATION_PCR              24
++#define IMPLEMENTATION_PCR              40
+ #endif
+ #ifndef PLATFORM_PCR
+ #define PLATFORM_PCR                    24
+@@ -186,7 +186,11 @@
+ #endif
+ #ifndef MAX_CONTEXT_SIZE
+ /* #define MAX_CONTEXT_SIZE             1344    */
+-#define MAX_CONTEXT_SIZE                2680	/* kgold RSA-3072 */
++#	if defined(__MICROBLAZE__)
++#		define MAX_CONTEXT_SIZE	2624
++#	else
++#		define MAX_CONTEXT_SIZE	2680	/* kgold RSA-3072 */
++#	endif
+ #endif
+ #ifndef MAX_DIGEST_BUFFER
+ #define MAX_DIGEST_BUFFER               1024

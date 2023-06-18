@@ -27,11 +27,6 @@
 #include <tpm/tpm.h>
 #include <arch/mailbox.h>
 
-/* FIXME: also repeated in runtime.c */
-typedef int bool;
-#define true	(int) 1
-#define false	(int) 0
-
 extern int p_runtime;
 extern int q_runtime;
 extern int q_os;

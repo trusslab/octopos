@@ -151,7 +151,7 @@ static int copy_file_from_partition(char *filename, char *copy_path,
 			break;
 	}
 
-	if (block_aligned) {
+	if (block_aligned && (_size > 0)) {
 		int rem = STORAGE_BLOCK_SIZE - _size;
 
 		memset(buf, 0x0, rem);
