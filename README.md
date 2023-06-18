@@ -22,6 +22,8 @@ The work was supported by NSF Awards #1617513, #1718923, #1846230, and #1953932.
 
 ## Hardware Prototype Evaluation 
 
+MobiSys 2023 artifact evaluation is done on OctopOS commit b332fef5bafb7ff95577d5d0b7eca9656f5f1578
+
 After the [hardware prototype](https://github.com/trusslab/octopos_hardware) is built, we evaluate the OctopOS performance on the hardware prototype on a ZCU102 board.
 
 ### Boot Time
